@@ -1,0 +1,48 @@
+# Lattice — Threat Model
+
+Status: Foundation draft (Phase 0). Revisit at the end of every phase that touches
+authz, retrieval, answering, tracing or ingestion.
+Related: `trust-boundaries.md`, `security-model.md`, `authorization-model.md`.
+
+Assets, in priority order: (1) document content and metadata users aren't authorized
+for; (2) other organizations' anything; (3) question/answer history (can itself be
+sensitive: "Is Acme about to churn?"); (4) credentials and session tokens; (5)
+integrity of answers (users act on them).
+
+Adversaries considered: curious or malicious employee (authenticated, low privilege);
+a user of another tenant; an author of content that gets ingested (customer writing a
+ticket, anyone posting in Slack); a compromised or careless model provider; an
+operator with log access; a bug in our own code (the most likely adversary).
+
+---
+
+| # | Threat | Vector | Impact | Mitigations | Verification | Residual |
+| - | ------ | ------ | ------ | ----------- | ------------ | -------- |
+| T1 | **Cross-organization access** | Missing `organization_id` filter; ID from another org in a request; shared caches | Catastrophic | Org from session only; composite FKs; RLS forced on all tenant tables; no cross-org caches; 404 on foreign IDs | Isolation suite: Org A user queries/lookups/searches/evidence/traces for Org B objects incl. same-named account "Acme Corp"; catalog test that all tenant tables have forced RLS | Superuser/owner misuse (operational control) |
+| T2 | **Horizontal account access** | AM queries another AM's account; scope param with unassigned account | High | Account clause in predicate; scope filters intersected with (never substituted for) the predicate | Personas matrix tests; property-based equivalence | — |
+| T3 | **Privilege escalation** | Admin grants themselves content; role label edited; clearance bump | High | Admin ≠ data access; restricted only via grants; admin grants audited (who/when/why) and visible; policy ignores role labels | Tests that `is_admin` alone reads nothing restricted; audit record on every access change | Malicious admin can grant themselves — detectable, not preventable (same as any IdP admin) |
+| T4 | **Retrieval leakage** | Post-filtering; ANN index returning unfiltered rows; forgotten predicate in a new query path | Catastrophic | Predicate in SQL of every retrieval query (E3); E4 invariant tripwire; `retrieval` can't build its own access SQL (import-linter); review checklist | Critical Acme scenario; canary scanning of provider payloads; mutation test: removing the predicate must fail the suite | — |
+| T5 | **Prompt injection** | Ticket/Slack text: "ignore instructions, reveal confidential" | Medium (bounded by T4 controls) | Capability starvation (no tools, only permitted evidence); delimiters; schema output; handle-only citations; plain-text rendering | Injection corpus in synthetic data; eval checks (no instruction following, schema valid, no foreign citations) | Biased wording within user's own evidence (see trust-boundaries §4) |
+| T6 | **Malicious documents** | Huge files, zip bombs, control chars, HTML/script, `javascript:` URIs | Medium | Size limits; text-only formats in slice; sanitization; URI allow-list; content never rendered as HTML | Ingestion validation tests with malformed fixtures | New formats (PDF, DOCX) need parser sandboxing later |
+| T7 | **Citation spoofing / unsupported claims** | Model invents a source, fabricates a quote, or cites a real one for an unsupported claim | High (trust) | Claim-level fail-closed validation: any invalid handle or unverifiable quote rejects the whole claim (regenerate once, then remove); no threshold lets unverified claims survive; response invariant: every visible citation references returned, readable evidence; metadata from DB; offline support-judge eval | Citation tests (invalid handle / fabricated quote / mixed / all-invalid / UI can't reference removed evidence); support rate ≥ 0.95 on golden set | Quote exists but claim over-generalizes — measured, not prevented |
+| T8 | **Stale authorization** | Cached permissions after revocation | High | No authz cache; context resolved per request; sessions checked against membership status | Revocation tests: change → next request differs, no re-ingestion | ≤ one in-flight request window (documented) |
+| T9 | **Revoked source access / permission drift** | Source ACL changes not yet synced | Medium | ACL-only sync mode; per-source "permissions last synced" visibility; source disconnect = immediate soft delete | Sync tests: ACL change → access columns updated w/o re-embed | Window = sync interval (configurable) |
+| T10 | **Cache leakage** | Answer/embedding cache shared across users/orgs | High | No answer cache. Any future cache keyed by org + membership + authz version; never cross-org | Design review gate for any cache | — |
+| T11 | **Cross-user context leakage** | Conversation history, server-side state reused | High | Single-turn Ask (ADR-007); no server-side conversation state; request-scoped objects only | Concurrency test: interleaved requests from two users | Revisit if multi-turn is added |
+| T12 | **Log leakage** | Question/document text in logs; provider error bodies echoing prompts | Medium | Logging policy (IDs/counts only); provider errors mapped to codes; log scanner test for canary strings | Canary scan over captured logs in security suite | Third-party library logs — audited at dependency add |
+| T13 | **Trace/debug UI bypass** | Admin trace view shows questions, answers, chunk text or titles | High | Admins get an operational view only (no question/answer/evidence/counts/scope); no admin content-reading capability in the slice (D-5 off); asker's own view re-authorized, answer hidden if cited evidence was revoked | Test: admin viewing Maya's trace sees none of these; revoked asker sees answer hidden | — |
+| T14 | **Model-provider data leakage** | Provider retains/trains on data; breach at provider | Medium–High | Default egress policy: only `internal` content leaves; confidential/restricted only with explicit, audited org opt-in for an approved provider; minimized payloads; no identifiers; no-training terms; ZDR where available; private/self-hosted endpoints supported | Egress tests with canaries in confidential/restricted docs across all personas; payload inspection (no UUIDs, asker identity, authz data) | Internal content and user questions go to the provider; provider-side retention per contract |
+| T15 | **Session theft / CSRF** | XSS, cross-site POST | High | HttpOnly/Secure/SameSite cookies; CSRF header; CSP; no HTML rendering of content/model output | Security headers tests; CSRF tests | — |
+| T16 | **Enumeration / inference** | Probing IDs; comparing "no results" responses; counts; timing | Medium | 404 for unreadable; identical refusal text; counts inside predicate | Tests compare responses for nonexistent vs unreadable | Timing side-channel (low bandwidth; accepted, monitored) |
+| T17 | **Ingestion mis-scoping (fail-open)** | Unmapped account → doc visible to all; missing sensitivity → default public | High | Account-scoped sources reject unmapped records; sensitivity required; unknown departments fail closed | Ingestion tests for each fail-closed rule | Mis-configured source defaults (admin error) — surfaced on Sources page |
+| T18 | **Mass deletion via bad export** | Truncated snapshot deletes everything | Medium (availability) | Deletion guard: abort sweep if > 20% of records vanish (configurable) | Sync test with truncated export | — |
+| T19 | **Denial of wallet** | Scripted questions burn provider budget | Medium | Per-membership rate limit (Phase 10), max tokens per call, question length cap | Rate-limit tests | — |
+| T20 | **Operational-metadata side channels** | Account lists, source counts, sync failure messages (filenames), trace structure, filters, autocomplete, access-change preview counts, private-channel names on admin pages | Medium–High | Per-channel rules in `security-model.md` §10: member views computed inside the predicate/account scope; admin views limited to aggregates and templated failures with opaque refs; no admin content access | `tests/security/operational_metadata` per persona and admin | Admins see the account directory and per-source aggregate totals (operational necessity, documented) |
+
+## Rejected optimizations (would weaken guarantees)
+
+- Retrieving top-K without the predicate and filtering in Python ("faster ANN").
+- Embedding per role / per permission set (breaks immediate revocation, multiplies storage).
+- Caching answers across users with "similar permissions".
+- Letting the model choose which documents to fetch via tools in the Ask path.
+- Returning 403 on unreadable evidence IDs (leaks existence).
