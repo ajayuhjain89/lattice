@@ -193,6 +193,8 @@ POLICY_FILES = ("context.py", "policy.py", "sql.py", "resolve.py")
 # formatting do not affect the fingerprint.
 POLICY_FINGERPRINTS = {
     "authz-1": "33ecc0dbf73c974351c7db1a4eb7d0366a53917782415a3bf3093641b8863499",
+    # D-8: visible_document_account (structured account metadata of readable documents).
+    "authz-2": "ddfdb0e29d3480d339e889a1481d7ef4c05c5c145bdff6fd32aa3da57ff5a846",
 }
 
 

@@ -9,6 +9,8 @@ without any model involvement. Its public contract:
 * ``readable_documents_predicate`` -- the same policy as SQL, for retrieval (E3).
 * ``account_visible`` / ``visible_accounts_predicate`` -- which accounts a member may
   know exist (lists, filters, autocomplete, mention detection).
+* ``visible_document_account`` -- the account a readable document may show as
+  structured metadata: none when the account is outside the member's scope (D-8).
 * ``explain`` (internal), ``explain_own_access``, ``explain_for_reviewer``.
 * ``assert_all_readable`` -- the pre-generation tripwire (E4).
 * ``POLICY_VERSION``.
@@ -38,6 +40,7 @@ from lattice.authz.policy import (
     GrantRef,
     account_visible,
     readable,
+    visible_document_account,
 )
 from lattice.authz.resolve import AuthorizationContextUnavailable, resolve_authorization_context
 from lattice.authz.sql import readable_documents_predicate, visible_accounts_predicate
@@ -66,4 +69,5 @@ __all__ = [
     "readable_documents_predicate",
     "resolve_authorization_context",
     "visible_accounts_predicate",
+    "visible_document_account",
 ]
