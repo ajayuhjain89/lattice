@@ -44,7 +44,12 @@ ACCESS_SQL = re.compile(
 )
 
 # module (relative to src/lattice, dotted) -> names it may use, with the reason.
-ALLOWED: dict[str, frozenset[str]] = {}
+ALLOWED: dict[str, frozenset[str]] = {
+    # The operator seed writes admin-defined access groups and their members from the
+    # organization manifest, upserting by the stable key (D-9). It writes no documents
+    # or grants and builds no access conditions.
+    "seed": frozenset({"AccessGroup", "AccessGroupMember"}),
+}
 
 
 @dataclass(frozen=True)

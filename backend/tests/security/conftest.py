@@ -1,8 +1,9 @@
 """The Halden persona world used by the persona, revocation and admin suites.
 
-People, departments, accounts and assignments come from the real seed manifests
-(data/synthetic/halden and veridian). Access groups and document access records are
-added here: they are Phase 2 test fixtures, not the Phase 3 dataset.
+People, departments, accounts, assignments and the admin-defined "Exec staff" group
+come from the real seed manifests (data/synthetic/halden and veridian). The other
+groups and the document access records are added here: they are authorization test
+fixtures, not the Phase 3 dataset (which is raw source data, ingested in Phase 4).
 """
 
 import uuid
@@ -72,11 +73,11 @@ async def halden(owner_db: Database) -> Halden:
     departments = await _ids(owner_db, org, "SELECT key, id FROM departments")
     accounts = await _ids(owner_db, org, "SELECT key, id FROM accounts")
 
+    seeded_groups = await _ids(owner_db, org, "SELECT key, id FROM access_groups")
     groups = {
-        # Admin-defined group; Leadership's typical grant principal.
-        "exec-staff": await create_group(
-            owner_db, org, "Exec staff", (members["grace"], members["arjun"])
-        ),
+        # Admin-defined group from the manifest (Grace, Arjun); Leadership's typical
+        # grant principal.
+        "exec-staff": seeded_groups["exec-staff"],
         # Mirrors a private Slack channel for the Acme account team.
         "acct-acme": await create_group(
             owner_db, org, "#acct-acme", (members["maya"], members["grace"]), origin="source"

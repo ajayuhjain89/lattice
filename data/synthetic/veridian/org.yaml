@@ -1,6 +1,8 @@
-# Veridian Analytics — exists only to prove tenant isolation. It deliberately has its
-# own "Acme Corp" account (same key as Halden's) so cross-organization tests run under
-# maximal similarity.
+# Veridian Analytics — exists to prove tenant isolation (docs/evaluation-plan.md §2).
+# It deliberately reuses Halden's identifiers: the same account keys and names
+# ("Acme Corp", "Brightwater Health"), the same access-group key (exec-staff), and in
+# its source data the same ticket IDs (HAL-4821 ...) and document IDs. Isolation must
+# never depend on globally unique names. See ../README.md.
 
 organization:
   slug: veridian
@@ -9,9 +11,12 @@ organization:
 departments:
   - {key: sales, name: Sales}
   - {key: support, name: Support}
+  - {key: leadership, name: Leadership}
 
 accounts:
   - {key: acme-corp, name: Acme Corp, aliases: [Acme]}
+  - {key: brightwater-health, name: Brightwater Health, aliases: [Brightwater]}
+  - {key: quarry-lane-media, name: Quarry Lane Media, aliases: [Quarry Lane]}
 
 members:
   - email: noor.haddad@veridian.example
@@ -28,3 +33,16 @@ members:
     clearance: internal
     account_scope: all
     departments: [support]
+
+  # Veridian's most privileged persona: cross-organization probes run as her too.
+  - email: ines.carvalho@veridian.example
+    display_name: Ines Carvalho
+    role_label: COO
+    clearance: confidential
+    account_scope: all
+    departments: [leadership]
+
+groups:
+  - key: exec-staff
+    name: Exec staff
+    members: [ines.carvalho@veridian.example]

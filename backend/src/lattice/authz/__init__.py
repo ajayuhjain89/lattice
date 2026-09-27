@@ -14,7 +14,9 @@ without any model involvement. Its public contract:
 * ``POLICY_VERSION``.
 
 Other modules import from ``lattice.authz`` only (never its submodules) and never
-build access conditions themselves (``tests/test_authz_boundary.py``).
+build access conditions themselves (``tests/test_authz_boundary.py``). The access-group
+models are exported for the few reviewed writers of access state (the seed, later
+ingestion and access management); the boundary test rejects their use anywhere else.
 """
 
 from lattice.authz.access import load_document_access
@@ -28,7 +30,7 @@ from lattice.authz.explain import (
     explain_own_access,
 )
 from lattice.authz.invariant import AuthorizationInvariantViolation, assert_all_readable
-from lattice.authz.models import Document
+from lattice.authz.models import AccessGroup, AccessGroupMember, Document
 from lattice.authz.policy import (
     POLICY_VERSION,
     AccountRef,
@@ -43,6 +45,8 @@ from lattice.authz.sql import readable_documents_predicate, visible_accounts_pre
 __all__ = [
     "POLICY_VERSION",
     "AccessExplanation",
+    "AccessGroup",
+    "AccessGroupMember",
     "AccessReason",
     "AccountRef",
     "AuthorizationContext",
