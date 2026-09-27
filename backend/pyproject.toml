@@ -1,0 +1,72 @@
+[project]
+name = "lattice"
+version = "0.1.0"
+description = "Lattice backend: permission-aware enterprise knowledge system (FastAPI)."
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.20.0",
+    "asyncpg>=0.31.0",
+    "fastapi>=0.141.1",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "pyyaml>=6.0.3",
+    "sqlalchemy[asyncio]>=2.1.1",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+lattice = "lattice.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F",     # pycodestyle, pyflakes
+  "I",               # import sorting
+  "B",               # bugbear
+  "UP",              # pyupgrade
+  "S",               # bandit (security)
+  "ASYNC",           # async pitfalls
+  "RUF",
+  "SIM",
+  "PT",              # pytest style
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use assert and hard-coded throwaway credentials for probe roles.
+"tests/**" = ["S101", "S105", "S106", "PT012"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+mypy_path = "src"
+plugins = ["pydantic.mypy"]
+files = ["src", "tests", "alembic"]
+
+[[tool.mypy.overrides]]
+module = ["asyncpg.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+addopts = "-ra --strict-markers"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.9",
+    "types-pyyaml>=6.0.12.20260906",
+]
