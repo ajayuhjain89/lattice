@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02TAZIZ00",
+    "text": ":mega: Decision: SCIM provisioning (Okta + Entra ID). Beta in October, GA planned Q1 2027. Record in Drive: Decision: SCIM provisioning. You can share \"beta in October, GA planned Q1 2027\".",
+    "ts": "1787218200.000100",
+    "thread_ts": "1787218200.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01NHADDAD"
+    ],
+    "latest_reply": "1787218860.000100",
+    "replies": [
+      {
+        "user": "U01NHADDAD",
+        "ts": "1787218860.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01NHADDAD",
+    "text": "Acme will be thrilled — Derek asked about this yesterday (HAL-4821)",
+    "ts": "1787218860.000100",
+    "thread_ts": "1787218200.000100",
+    "parent_user_id": "U02TAZIZ00"
+  }
+]

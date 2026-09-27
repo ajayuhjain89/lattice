@@ -1,0 +1,104 @@
+[
+  {
+    "id": "C0GENERAL01",
+    "name": "general",
+    "created": 1580515200,
+    "creator": "U02HLEFEVR",
+    "is_archived": false,
+    "is_general": true,
+    "members": [
+      "U01NHADDAD",
+      "U01FWAGNER",
+      "U01ICARVAL",
+      "U02TAZIZ00",
+      "U02SLINDGR",
+      "U02HLEFEVR",
+      "U02MNOVAK0"
+    ],
+    "topic": {
+      "value": "Company announcements",
+      "creator": "U02HLEFEVR",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Everyone at Veridian",
+      "creator": "U02HLEFEVR",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0SUPPORT01",
+    "name": "support",
+    "created": 1580515200,
+    "creator": "U01FWAGNER",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01FWAGNER",
+      "U02SLINDGR",
+      "U01NHADDAD",
+      "U02TAZIZ00"
+    ],
+    "topic": {
+      "value": "Support team",
+      "creator": "U01FWAGNER",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Support",
+      "creator": "U01FWAGNER",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0VACCTACME",
+    "name": "acct-acme",
+    "created": 1709251200,
+    "creator": "U01NHADDAD",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01NHADDAD",
+      "U01FWAGNER",
+      "U02TAZIZ00",
+      "U01ICARVAL"
+    ],
+    "topic": {
+      "value": "Acme Corp account",
+      "creator": "U01NHADDAD",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Acme Corp",
+      "creator": "U01NHADDAD",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0VPRODUCT1",
+    "name": "product",
+    "created": 1580515200,
+    "creator": "U02TAZIZ00",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01NHADDAD",
+      "U01FWAGNER",
+      "U01ICARVAL",
+      "U02TAZIZ00",
+      "U02SLINDGR",
+      "U02HLEFEVR",
+      "U02MNOVAK0"
+    ],
+    "topic": {
+      "value": "Product decisions and releases",
+      "creator": "U02TAZIZ00",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Product",
+      "creator": "U02TAZIZ00",
+      "last_set": 0
+    }
+  }
+]

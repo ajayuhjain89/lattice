@@ -1,0 +1,24 @@
+[
+  {
+    "id": "G0VLEADERS1",
+    "name": "leadership",
+    "created": 1580515200,
+    "creator": "U02HLEFEVR",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U02HLEFEVR",
+      "U01ICARVAL"
+    ],
+    "topic": {
+      "value": "Leadership",
+      "creator": "U02HLEFEVR",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Leadership team",
+      "creator": "U02HLEFEVR",
+      "last_set": 0
+    }
+  }
+]

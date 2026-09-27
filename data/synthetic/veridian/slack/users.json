@@ -1,0 +1,100 @@
+[
+  {
+    "id": "U01NHADDAD",
+    "team_id": "T0VERIDIAN",
+    "name": "noor.haddad",
+    "real_name": "Noor Haddad",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Noor Haddad",
+      "display_name": "noor",
+      "email": "noor.haddad@veridian.example",
+      "title": "Account Manager"
+    }
+  },
+  {
+    "id": "U01FWAGNER",
+    "team_id": "T0VERIDIAN",
+    "name": "felix.wagner",
+    "real_name": "Felix Wagner",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Felix Wagner",
+      "display_name": "felix",
+      "email": "felix.wagner@veridian.example",
+      "title": "Support Engineer"
+    }
+  },
+  {
+    "id": "U01ICARVAL",
+    "team_id": "T0VERIDIAN",
+    "name": "ines.carvalho",
+    "real_name": "Ines Carvalho",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Ines Carvalho",
+      "display_name": "ines",
+      "email": "ines.carvalho@veridian.example",
+      "title": "COO"
+    }
+  },
+  {
+    "id": "U02TAZIZ00",
+    "team_id": "T0VERIDIAN",
+    "name": "tariq.aziz",
+    "real_name": "Tariq Aziz",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Tariq Aziz",
+      "display_name": "tariq",
+      "email": "tariq.aziz@veridian.example",
+      "title": "Product Manager"
+    }
+  },
+  {
+    "id": "U02SLINDGR",
+    "team_id": "T0VERIDIAN",
+    "name": "sara.lindgren",
+    "real_name": "Sara Lindgren",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Sara Lindgren",
+      "display_name": "sara",
+      "email": "sara.lindgren@veridian.example",
+      "title": "Support Engineer"
+    }
+  },
+  {
+    "id": "U02HLEFEVR",
+    "team_id": "T0VERIDIAN",
+    "name": "hugo.lefevre",
+    "real_name": "Hugo Lefevre",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Hugo Lefevre",
+      "display_name": "hugo",
+      "email": "hugo.lefevre@veridian.example",
+      "title": "CEO"
+    }
+  },
+  {
+    "id": "U02MNOVAK0",
+    "team_id": "T0VERIDIAN",
+    "name": "mila.novak",
+    "real_name": "Mila Novak",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Mila Novak",
+      "display_name": "mila",
+      "email": "mila.novak@veridian.example",
+      "title": "Engineering Manager"
+    }
+  }
+]

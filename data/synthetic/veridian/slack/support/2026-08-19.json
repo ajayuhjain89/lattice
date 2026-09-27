@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U01FWAGNER",
+    "text": "Acme Corp is asking about SCIM for Okta (HAL-4821). do we have a date?",
+    "ts": "1787148000.000100",
+    "thread_ts": "1787148000.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02TAZIZ00"
+    ],
+    "latest_reply": "1787149200.000100",
+    "replies": [
+      {
+        "user": "U02TAZIZ00",
+        "ts": "1787149200.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02TAZIZ00",
+    "text": "decision record goes out tomorrow — beta October, GA Q1 2027. hold the reply until then",
+    "ts": "1787149200.000100",
+    "thread_ts": "1787148000.000100",
+    "parent_user_id": "U01FWAGNER"
+  }
+]

@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U01NHADDAD",
+    "text": "Priscilla (CIO) wants to talk to leadership about the outage. looping Ines",
+    "ts": "1789394400.000100",
+    "thread_ts": "1789394400.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01ICARVAL"
+    ],
+    "latest_reply": "1789395120.000100",
+    "replies": [
+      {
+        "user": "U01ICARVAL",
+        "ts": "1789395120.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01ICARVAL",
+    "text": "I'll call her tomorrow",
+    "ts": "1789395120.000100",
+    "thread_ts": "1789394400.000100",
+    "parent_user_id": "U01NHADDAD"
+  }
+]
