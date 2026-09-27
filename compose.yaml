@@ -1,0 +1,27 @@
+# Local infrastructure only. The API and CLI run on the host (see README).
+name: lattice
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.1-pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: postgres
+      # Consumed by infra/postgres/initdb.sh on first start of an empty volume.
+      LATTICE_OWNER_PASSWORD: ${LATTICE_OWNER_PASSWORD:?set LATTICE_OWNER_PASSWORD in .env}
+      LATTICE_APP_PASSWORD: ${LATTICE_APP_PASSWORD:?set LATTICE_APP_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${LATTICE_DB_HOST_PORT:-5433}:5432"
+    volumes:
+      - lattice-pgdata:/var/lib/postgresql/data
+      - ./infra/postgres:/bootstrap:ro
+      - ./infra/postgres/initdb.sh:/docker-entrypoint-initdb.d/10-lattice-bootstrap.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d lattice"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  lattice-pgdata:
