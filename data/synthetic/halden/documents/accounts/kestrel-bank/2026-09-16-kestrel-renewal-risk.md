@@ -30,7 +30,7 @@ fresh for Martin's team.
 
 ## What we will not offer
 
-- Contractual SCIM dates. Kestrel is not in the November beta.
+- Contractual SCIM dates. Kestrel is not in the planned November beta.
 - Further incident credits.
 
 ## Owners

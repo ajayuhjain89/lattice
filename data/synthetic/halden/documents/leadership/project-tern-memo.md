@@ -25,8 +25,8 @@ Workspace provisioning on one engine in 2027 instead of building each ourselves.
 
 ## Effect on the SCIM plan
 
-- The in-house rewrite continues until close; the December GA and November beta dates
-  stand and must not be changed because of Tern.
+- The in-house rewrite continues until close. The dates in Tom's draft decision record
+  (GA in December, a November beta for Acme) must not be changed because of Tern.
 - If Tern closes, SCIM for Acme Corp and other customers moves onto Quillmark's engine
   in Q1–Q2 2027. Customers would see no date change; migration would be invisible.
 - If Tern fails diligence, nothing changes.
