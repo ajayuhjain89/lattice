@@ -52,6 +52,7 @@ SUPERUSER_URL = _require_env("LATTICE_TEST_SUPERUSER_DATABASE_URL")
 def alembic_config(url: str = OWNER_URL) -> Config:
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     config.attributes["database_url"] = url
+    config.attributes["configure_logging"] = False
     return config
 
 

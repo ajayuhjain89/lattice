@@ -5,6 +5,7 @@ LATTICE_MIGRATION_DATABASE_URL. It is never written to alembic.ini or logged.
 """
 
 import asyncio
+from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import pool
@@ -18,6 +19,11 @@ from lattice.orgs import models as org_models  # noqa: F401 - register tables
 
 config = context.config
 target_metadata = Base.metadata
+
+# Show migration progress on the CLI. Programmatic callers (tests) set
+# attributes["configure_logging"] = False so their own logging setup is untouched.
+if config.config_file_name is not None and config.attributes.get("configure_logging", True):
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 
 def _database_url() -> str:
