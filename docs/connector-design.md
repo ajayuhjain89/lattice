@@ -1,6 +1,8 @@
 # Lattice — Connector Design
 
-Status: Foundation draft (Phase 0).
+Status: Foundation draft (Phase 0). The three export formats now exist as fixtures
+(`data/synthetic/<org>/documents|tickets|slack`, Phase 3); the details below marked
+"as built" are what those fixtures use. Connectors themselves arrive in Phase 4.
 Related: `ingestion-design.md`, `data-model.md` §3–5.
 
 ---
@@ -98,15 +100,28 @@ Front matter: `id`, `title`, `author`, `created`, `updated`, `account` (optional
 Parts: split at H1/H2 headings. Capabilities: snapshot ✔, incremental ✔ (mtime),
 acl_export ✔ (front matter).
 
+As built (Phase 3 fixtures): `departments` is a list of department keys (empty or
+absent = no restriction); `grants_only: true` expresses `AccessHints.grants_only`
+(implied by `sensitivity: restricted`); each grant is written `group:<key>` (an
+admin-defined access group, found by its stable key, D-9) or `department:<key>`;
+timestamps are ISO 8601 with a zone. Text before the first H1/H2 heading is the first
+part. Per-person grants are not expressible here (§5); a person-level share is an
+admin grant made in Lattice (`admin-grants.yaml` in the dataset, applied after
+ingestion).
+
 ### 3.2 `ticketing` — Zendesk-style JSON Lines
 
 ```
 data/synthetic/halden/tickets/tickets.jsonl
+data/synthetic/halden/tickets/tickets-bulk.jsonl
 ```
 
+The connector reads every `*.jsonl` file of the directory (pages of one export).
 Each line: `id`, `subject`, `organization_id` (customer org in the ticketing tool),
 `status`, `priority`, `created_at`, `updated_at`, `tags`, `requester`, `assignee`,
-`comments[{id, author, author_role, public, created_at, body}]`.
+`comments[{id, author, author_role, public, created_at, body}]`. As built the fixtures
+also carry Zendesk's `type`, `via` and `group`; `requester`/`assignee`/`author` are
+`{name, email}`; `author_role` is `end-user` or `agent`.
 Parts: a header part (subject, status, priority, requester) + one part per comment.
 Internal (non-public) comments are included; they are internal-level content.
 `account_ref` = ticketing organization ID → mapped through `account_external_refs`.
@@ -132,6 +147,11 @@ The real Slack export layout: `channels.json`, `groups.json` (private channels, 
   `confidential`.
 - Users are resolved from `users.json` for display names; message user IDs map to
   Lattice memberships by email for group membership.
+- As built (fixtures): folders are named by channel name; threads use `thread_ts`,
+  `reply_count`, `reply_users` and `replies`; replies are stored in the day file of the
+  day they were posted; bot posts use `subtype: bot_message`; a Slack Connect channel
+  includes external users from another `team_id`. Channel settings (account,
+  sensitivity) live in the source configuration (`sources.yaml` in the dataset).
 Capabilities: snapshot ✔, incremental ✗ (exports are full snapshots), acl_export ✔.
 
 ## 4. External identifier normalization

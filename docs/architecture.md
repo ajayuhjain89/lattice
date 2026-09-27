@@ -87,7 +87,8 @@ Package: `backend/src/lattice/`.
 | `db` ✔        | Engine, tenant-bound transactions (`set_config('app.org_id', …, true)`), base model, runtime-role safety check | config |
 | `identity` ✔  | Users, external identities, server-side sessions, identity providers (dev now, OIDC later) | db                          |
 | `orgs` ✔      | Organizations, memberships, departments, accounts, account assignments (models)           | db                          |
-| `seed` ✔      | Manifest model + idempotent upsert of orgs/users/memberships (Phase 1 subset)             | db, orgs, identity          |
+| `seed` ✔      | Manifest model + idempotent upsert of orgs, users, memberships and admin-defined access groups (by stable key, D-9) | db, orgs, identity, authz (group models only) |
+| `dataset` ✔   | Synthetic dataset tooling (Phase 3): loaders for the three raw export formats, the expected-access oracle (reference policy over fixture metadata), `lattice dataset lint`, the deterministic distractor generator. Never touches the database | authz (public API), seed (manifest model) |
 | `authz` ✔     | `AuthorizationContext` + resolver, reference policy, SQL predicate, account visibility, explanations, E4 tripwire, `POLICY_VERSION`; owns the access tables (`access_groups`, `access_group_members`, `documents` access record, `document_grants`) | orgs, db, errors, log |
 | `sources`     | Source records, source config validation, sync runs, sync failures                        | db, authz (admin capability)|
 | `connectors`  | Connector contract + three connectors (document, ticket, chat export)                     | — (pure; no DB access)      |
@@ -279,21 +280,26 @@ lattice/
   README.md                     ✔ verified local setup
   compose.yaml                  ✔ Postgres 16 + pgvector 0.8.1 only (bound to 127.0.0.1)
   Makefile                      ✔ setup, db-up/down/bootstrap/destroy, migrate, seed, api,
-                                  test, lint, format, typecheck, check-db-role
+                                  test, lint, format, typecheck, check-db-role,
+                                  dataset-lint, dataset-generate
   .env.example                  ✔ documented local-only placeholders
-  .github/workflows/ci.yml      ✔ lint, mypy, bootstrap, migration round-trip, seed, tests
+  .github/workflows/ci.yml      ✔ lint, mypy, dataset lint, bootstrap, migration round-trip,
+                                  seed, tests
   infra/postgres/               ✔ superuser bootstrap: roles, databases, extensions
   backend/
     pyproject.toml  uv.lock     ✔ (Python 3.12 pinned in .python-version)
-    alembic.ini  alembic/       ✔ 0001_baseline
-    src/lattice/                ✔ config, errors, log, db/, identity/, orgs/, api/, seed, cli
+    alembic.ini  alembic/       ✔ 0001–0004
+    src/lattice/                ✔ config, errors, log, db/, identity/, orgs/, authz/, dataset/,
+                                  api/, seed, cli
     tests/                      ✔ one module per concern, all against real PostgreSQL;
-                                  tests/security/ holds the authorization suites (Phase 2)
-  data/synthetic/
-    halden/org.yaml             ✔ people, departments, accounts (content: Phase 3)
-    veridian/org.yaml           ✔ isolation twin
+                                  tests/security/ holds the authorization suites (Phase 2);
+                                  tests/dataset/ validates the synthetic dataset (Phase 3)
+  data/synthetic/               ✔ README (ground truth for maintainers), canaries.yaml
+    halden/                     ✔ org.yaml, sources.yaml, admin-grants.yaml, ground-truth.yaml,
+                                  documents/ (Markdown), tickets/ (JSONL), slack/ (export)
+    veridian/                   ✔ isolation twin, same shape
   apps/web/                     Phase 7
-  evals/golden/*.yaml           Phase 3
+  evals/golden/*.yaml           ✔ golden set v1 (89 items)
   docs/ …
 ```
 

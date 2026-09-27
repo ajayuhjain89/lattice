@@ -60,6 +60,10 @@ group_ids)`.
 - Top `k_lex = 50`.
 - Identifier path: exact `display_ref` match (index on `(organization_id,
   display_ref)`) → those documents' chunks injected at the top of the lexical list.
+- Open question (decision D-10, before Phase 4): the header terms include the account
+  name, which is document-level and reader-independent. For a document read through a
+  grant on an out-of-scope account (D-8), a query naming that account would match it
+  through the header alone, hinting at the association. See implementation-plan §7.
 - Known weakness: the `english` stemmer can conflate proper nouns/product names.
   First mitigation if the eval shows it: add a second `simple`-config tsvector for
   titles/headers. Not added speculatively.
@@ -136,7 +140,10 @@ Each selected chunk becomes an `EvidenceChunk` with a request-local handle `E1�
   JSON parse + validation).
 - Prompt = fixed, versioned system instructions (`prompt_version` in trace) +
   `<question>` block + `<evidence id="E3" kind="ticket" title="…" ref="HAL-4821"
-  account="Acme Corp" date="2026-08-14" author="Priya N.">…</evidence>` blocks.
+  account="Acme Corp" date="2026-08-14" author="Priya N.">…</evidence>` blocks. The
+  `account` attribute is present only when `authz.visible_document_account` returns the
+  account for the asker (decision D-8); otherwise it is omitted, so a model cannot name
+  an account the asker may not see as structured metadata.
 - Evidence is ordered **chronologically** within the prompt (with rank retained as an
   attribute) — this makes temporal reasoning about conflicts easier for the model.
 - The instructions require: answer only from evidence; every factual claim cites ≥ 1

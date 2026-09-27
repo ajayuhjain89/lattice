@@ -3,8 +3,9 @@
 Status: §2 identity and tenancy tables are **implemented** (Phase 1, migration
 `backend/alembic/versions/0001_baseline.py`, hardened by 0002). `access_groups`,
 `access_group_members`, a Phase 2 subset of `documents` (§4) and `document_grants`
-(§5) are **implemented** (Phase 2, migration `0003_authorization_core.py`). §3, the
-remaining `documents` columns, §6 and §7 are still design.
+(§5) are **implemented** (Phase 2, migration `0003_authorization_core.py`);
+`access_groups.key` was added in Phase 3 (migration `0004_access_group_key.py`,
+decision D-9). §3, the remaining `documents` columns, §6 and §7 are still design.
 Related: `authorization-model.md`, `ingestion-design.md`, `retrieval-design.md`.
 
 Conventions:
@@ -166,6 +167,7 @@ Slack channel) or are defined by admins (e.g. "Exec staff").
 | --------------- | ------- | ------------------------------------------------------------ |
 | id              | uuid PK |                                                              |
 | organization_id | uuid    | UQ (organization_id, id) — target of composite FKs           |
+| key             | citext  | **Stable identity** (D-9): UQ (organization_id, key); CHECK `key::text ~ '^[a-z0-9][a-z0-9-]{0,62}$'` (on the text value — citext regex matching ignores case). Manifests and source sync find the group by it. Renaming changes `name` only; a different key is a different group (an identity/configuration change). **Not an authorization input**: grants and memberships use `id`. Existing rows were backfilled with `group-<id>` |
 | origin          | enum    | `source` (synced from a connector) \| `admin` (managed in Lattice) |
 | source_id       | uuid?   | Set when origin = `source`. **Added in Phase 4** with its composite FK to `sources` (the table does not exist yet; an unconstrained UUID would be a dangling cross-tenant reference) |
 | external_ref    | text?   | e.g. Slack channel ID. CHECK: set if and only if origin = `source` |
@@ -509,7 +511,7 @@ Defined once in the backend and exposed via OpenAPI where they cross HTTP.
 | `AuthorizationContext` | **Implemented (Phase 2)**, frozen, strictly validated: organization_id, membership_id, membership_status, clearance, account_scope, assigned_account_ids, department_ids, group_ids (frozensets), authz_updated_at, policy_version. No admin flag or role label, by design |
 | `RetrievalRequest`     | question, analyzed query (identifiers, phrases, account mentions, temporal intent), scope filters, k values |
 | `RetrievalCandidate`   | chunk_id, document_id, lexical_rank?, semantic_rank?, fused_score, rerank features |
-| `EvidenceChunk`        | Selected context item: chunk text, handle (E1…), document kind, title, display_ref, account name, occurred_at, authority, sensitivity, uri |
+| `EvidenceChunk`        | Selected context item: chunk text, handle (E1…), document kind, title, display_ref, account name (**only** when `authz.visible_document_account` returns it — decision D-8; otherwise absent), occurred_at, authority, sensitivity, uri |
 | `Citation`             | handle, chunk_id, quote, quote_start/end (verified offsets), document summary fields |
 | `Claim`                | text, role (`direct_answer` \| `supporting`), citations[] (all validated — SEC-13) |
 | `Conflict`             | kind (`superseded` — deterministic supersession link \| `potential_conflict` — model-proposed, code-verified, unresolved), topic, positions[{claim, citations, document_id, occurred_at, authority, version}], supersession? {superseded_document_id, superseding_document_id, since} |

@@ -61,6 +61,9 @@ avoidable. Every chunk carries a short **contextual header used for embedding an
 lexical title weighting, not stored in `text`**:
 `"{kind} · {title} · {account name} · {heading path} · {occurred_at date}"`.
 This lets "What did we promise Acme?" match a comment that never says "Acme".
+Open decision D-10 (implementation-plan §7): whether the account name belongs in the
+embedded header and in the shared `tsv`, given D-8 (a grant does not disclose the
+account) — the header is computed once per document, not per reader.
 
 | Kind | Strategy | `occurred_at` | `author_display` |
 | ---- | -------- | ------------- | ---------------- |

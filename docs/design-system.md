@@ -498,7 +498,11 @@ ALSO RETRIEVED (not cited)   ▸ expand
   tag, citation number, close (`x`, Esc). Title `h2` wraps to 3 lines max.
 - Metadata: definition list in 2 columns — `label` keys (`SOURCE`, `TYPE`, `DATE`,
   `AUTHOR`, `ACCOUNT`, `SENSITIVITY`, `AUTHORITY`, `REF`) and `metadata`/`body` values.
-  Rows 28 px. Absent values are omitted, not "N/A".
+  Rows 28 px. Absent values are omitted, not "N/A". `ACCOUNT` comes from
+  `authz.visible_document_account` (decision D-8): for a document the viewer reads
+  through an explicit grant while its account is outside their account scope, the row
+  is omitted -- never replaced by a substitute name. The same rule applies to the
+  evidence row's meta line and to any account facet.
 - Context: previous chunk (muted, 3-line clamp, expandable) → cited chunk (full,
   `bg.sunken`, radius `sm`, padding 12) with the verified quote in
   `<mark>` = `accent.lime` bg + `text.primary`, preceded by a mono label
