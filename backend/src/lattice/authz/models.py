@@ -21,7 +21,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from lattice.db.base import Base
@@ -34,12 +34,19 @@ class AccessGroup(Base):
     (``origin='source'``) or an admin-defined group such as "Exec staff"."""
 
     __tablename__ = "access_groups"
-    __table_args__ = (UniqueConstraint("organization_id", "id"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "id"),
+        UniqueConstraint("organization_id", "key"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_DEFAULT)
     organization_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE")
     )
+    # Stable, human-readable identity within the organization (decision D-9), used by
+    # manifests and source synchronization to find the group again. Renaming changes
+    # ``name`` only. Never an authorization input: grants name the group by ``id``.
+    key: Mapped[str] = mapped_column(CITEXT)
     origin: Mapped[str] = mapped_column(Text)
     # External identifier for source-synced groups (e.g. a Slack channel ID).
     external_ref: Mapped[str | None] = mapped_column(Text)

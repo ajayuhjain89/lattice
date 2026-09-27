@@ -1,6 +1,7 @@
 """Test data builders. They write as lattice_owner through row-level security, binding
 the target organization first -- the same way the seed tool does."""
 
+import re
 import uuid
 from dataclasses import dataclass
 
@@ -116,16 +117,20 @@ async def create_group(
     members: tuple[uuid.UUID, ...] = (),
     *,
     origin: str = "admin",
+    key: str | None = None,
 ) -> uuid.UUID:
+    if key is None:  # unique by default, so fixtures never collide with seeded groups
+        key = f"{re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')}-{uuid.uuid4().hex[:8]}"
     async with db.tenant_transaction(organization_id) as s:
         group_id: uuid.UUID = (
             await s.execute(
                 text(
-                    "INSERT INTO access_groups (organization_id, origin, external_ref, name) "
-                    "VALUES (:o, :origin, :ref, :n) RETURNING id"
+                    "INSERT INTO access_groups (organization_id, key, origin, external_ref, "
+                    "name) VALUES (:o, :key, :origin, :ref, :n) RETURNING id"
                 ),
                 {
                     "o": organization_id,
+                    "key": key,
                     "origin": origin,
                     "ref": f"ext-{name}" if origin == "source" else None,
                     "n": name,

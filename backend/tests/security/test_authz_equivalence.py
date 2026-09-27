@@ -210,10 +210,11 @@ async def _build(conn: AsyncConnection, spec: WorldSpec) -> World:
         groups = [
             await _insert_one(
                 conn,
-                "INSERT INTO access_groups (organization_id, origin, external_ref, name) "
-                "VALUES (:o, :origin, :ref, :n) RETURNING id",
+                "INSERT INTO access_groups (organization_id, key, origin, external_ref, name) "
+                "VALUES (:o, :k, :origin, :ref, :n) RETURNING id",
                 {
                     "o": org_id,
+                    "k": f"g{g}",
                     "origin": "source" if g % 2 else "admin",
                     "ref": f"C{g}" if g % 2 else None,
                     "n": f"g{g}",
