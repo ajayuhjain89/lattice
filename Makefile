@@ -5,7 +5,7 @@ UV_RUN := cd backend && uv run --env-file ../.env
 UV := cd backend && uv run
 MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/synthetic/veridian/org.yaml
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role dataset-lint dataset-generate
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -30,8 +30,14 @@ db-destroy: ## DELETE the local database volume (all local data)
 migrate: ## Apply migrations to the development database (as lattice_owner)
 	$(UV_RUN) alembic upgrade head
 
-seed: ## Upsert the Halden and Veridian manifests (idempotent)
+seed: ## Upsert the Halden and Veridian manifests: people, accounts, admin groups (idempotent)
 	$(UV_RUN) lattice seed $(MANIFESTS)
+
+dataset-lint: ## Validate the synthetic dataset and golden set (no database, no model)
+	$(UV) lattice dataset lint
+
+dataset-generate: ## Regenerate the deterministic bulk distractor tickets
+	$(UV) lattice dataset generate
 
 check-db-role: ## Verify the runtime role cannot bypass row-level security
 	$(UV_RUN) lattice check-db-role

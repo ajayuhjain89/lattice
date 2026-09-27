@@ -49,6 +49,12 @@ ALLOWED: dict[str, frozenset[str]] = {
     # organization manifest, upserting by the stable key (D-9). It writes no documents
     # or grants and builds no access conditions.
     "seed": frozenset({"AccessGroup", "AccessGroupMember"}),
+    # The dataset's expected-access oracle maps raw fixture metadata to DocumentAccess
+    # and asks the *reference* policy (readable, account_visible,
+    # visible_document_account) who may read each record. It builds no SQL and no
+    # access condition of its own; confining the vocabulary to this module keeps the
+    # rest of lattice.dataset clean.
+    "dataset.access": frozenset({"sensitivity", "access_mode", "department_ids"}),
 }
 
 
