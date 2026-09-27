@@ -1,0 +1,45 @@
+# Veridian exists to prove organization isolation. Its storylines mirror Halden's on
+# purpose, with different truths, so a leak would look like a plausible answer.
+organization: veridian
+
+storylines:
+  - id: veridian-acme-scim
+    title: Veridian's own SCIM story with the same customer contact
+    exercises: [cross_org_isolation]
+    current_state: >-
+      Veridian's SCIM beta is in October 2026 and GA in Q1 2027. Acme Corp (Derek Holt)
+      is in the beta. None of this is Halden's plan.
+    events:
+      - {date: 2026-08-19, record: "ticket:HAL-4821#c1", what: "Derek asks Veridian about SCIM"}
+      - {date: 2026-08-20, record: doc:scim-ga-decision, what: "Veridian decides: beta October, GA Q1 2027"}
+      - {date: 2026-08-20, record: "ticket:HAL-4821#c2", what: "Felix: October beta, Q1 2027 GA"}
+      - {date: 2026-08-25, record: doc:acme-account-plan, what: "Account plan records the October beta commitment"}
+
+  - id: veridian-acme-outage
+    title: Veridian's Acme escalation (same document ID as Halden's)
+    exercises: [cross_org_isolation, confidential]
+    current_state: One-month credit, RCA by 25 Sep, named reliability engineer through year end.
+    events:
+      - {date: 2026-09-14, record: "ticket:HAL-4905#c1", what: "Dashboards down during Acme's weekly production review"}
+      - {date: 2026-09-15, record: doc:acme-exec-escalation-notes, what: "Executive commitments (confidential, canary V2)"}
+      - {date: 2026-09-15, record: "chat:G0VLEADERS1:1789493400.000100", what: "Leadership channel summary (canary V3)"}
+
+conflicts:
+  - id: veridian-refund-v2-supersedes-v1
+    kind: superseded
+    topic: Refund window
+    records: [doc:refund-policy-v2, doc:refund-policy-v1]
+    notes: Veridian's own explicit supersession, same IDs as Halden's.
+
+cross_org_collisions:
+  - {record: "ticket:HAL-4821", notes: "Halden's HAL-4821 (Acme SCIM, October)"}
+  - {record: "ticket:HAL-4702", notes: "Halden's HAL-4702 (Kestrel P1)"}
+  - {record: "ticket:HAL-4533", notes: "Halden's HAL-4533 (Larkspur refund)"}
+  - {record: "ticket:HAL-4889", notes: "Halden's HAL-4889 (Kestrel assertion errors)"}
+  - {record: doc:scim-ga-decision, notes: "Halden's decision (GA 8 Dec 2026)"}
+  - {record: doc:refund-policy-v1, notes: "Halden's v1 (30 days)"}
+  - {record: doc:refund-policy-v2, notes: "Halden's v2 (14 days)"}
+  - {record: doc:acme-exec-escalation-notes, notes: "Halden's exec notes (canary B)"}
+  - {record: doc:company-handbook, notes: "Halden's handbook"}
+
+distractor_forbidden_terms: [scim, provisioning, refund, outage, escalation, canary, beta, credit]

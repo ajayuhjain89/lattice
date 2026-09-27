@@ -1,0 +1,115 @@
+# Security canaries: unique strings placed in deliberately sensitive records. The
+# security suites (Phase 5–6) fail if a canary appears in any candidate list, context,
+# provider payload, response, trace or log of a persona who cannot read its record.
+#
+# The dataset lint verifies that each string occurs exactly once across all raw
+# sources, exactly in the declared record part, that no undeclared canary exists, and
+# that it guards something: an `access` canary sits in a record at least one persona of
+# its own organization cannot read; an `isolation` canary is readable inside its
+# organization and exists to catch cross-organization leaks.
+# IDs are neutral on purpose: they never describe what they protect. `protects` names
+# the access mechanism under test, for maintainers.
+canaries:
+  # --- Halden: confidential + department restriction --------------------------------
+  - id: B
+    string: LATTICE-CANARY-B-7f3a9c
+    organization: halden
+    record: doc:acme-exec-escalation-notes#4
+    protects: confidential, Leadership-only, account Acme Corp (authorization-model §10)
+  - id: C02
+    string: LATTICE-CANARY-C02-8c41f0
+    organization: halden
+    record: doc:kestrel-renewal-risk-2026#5
+    protects: confidential, Leadership + Customer Success, account Kestrel Bank
+  - id: C03
+    string: LATTICE-CANARY-C03-6a0f52
+    organization: halden
+    record: doc:exec-offsite-notes-2026-09#5
+    protects: confidential, Leadership-only
+  - id: C04
+    string: LATTICE-CANARY-C04-d85c19
+    organization: halden
+    record: doc:fy2027-headcount-plan#4
+    protects: confidential, Leadership-only
+  - id: C01
+    string: LATTICE-CANARY-C01-4b8e2d
+    organization: halden
+    record: doc:pricing-packaging-2027-draft#4
+    protects: confidential, Product + Leadership (clearance beats department for Tom)
+  # --- Halden: restricted, explicit group grant only ----------------------------------
+  - id: T
+    string: LATTICE-CANARY-T-91d2e7
+    organization: halden
+    record: doc:project-tern-memo#5
+    protects: restricted, grants_only, group grant to exec-staff
+  # --- Halden: internal, department restriction ---------------------------------------
+  - id: C07
+    string: LATTICE-CANARY-C07-5d2a18
+    organization: halden
+    record: doc:acme-renewal-plan-2026#5
+    protects: internal, Sales + CS + Leadership departments, account Acme Corp
+  - id: C08
+    string: LATTICE-CANARY-C08-2f7c95
+    organization: halden
+    record: doc:directory-sync-rewrite-rfc#5
+    protects: internal, Engineering + Product departments
+  - id: C05
+    string: LATTICE-CANARY-C05-a93e6b
+    organization: halden
+    record: doc:orbital-freight-opportunity-brief#5
+    protects: internal, Sales + Leadership, account Orbital Freight (existence side channel)
+  - id: C09
+    string: LATTICE-CANARY-C09-4e7d0b
+    organization: halden
+    record: doc:lattice-pilot-access-log#4
+    protects: internal, IT department only (the administrator reads it by department, not by capability)
+  # --- Halden: department restriction widened by a department grant -----------------
+  - id: C06
+    string: LATTICE-CANARY-C06-e17b3c
+    organization: halden
+    record: doc:postmortem-inc-2026-031#5
+    protects: internal, Engineering, department grant to Support
+  # --- Halden: account scope only -----------------------------------------------------
+  - id: C10
+    string: LATTICE-CANARY-C10-f3a1d8
+    organization: halden
+    record: ticket:HAL-4889#c4
+    protects: ticket (internal note) on Kestrel Bank, account scope
+  - id: C14
+    string: LATTICE-CANARY-C14-0b6d7e
+    organization: halden
+    record: chat:C0ACCTKES01:1789143600.000100#1789144260.000100
+    protects: public channel mapped to Kestrel Bank, account scope
+  # --- Halden: private channels (grants_only via source group) ------------------------
+  - id: C11
+    string: LATTICE-CANARY-C11-7e4a2c
+    organization: halden
+    record: chat:G0ACCTACME1:1790244300.000100#1790246160.000100
+    protects: private channel #acct-acme (internal, grants_only), account Acme Corp
+  - id: C13
+    string: LATTICE-CANARY-C13-3d9f61
+    organization: halden
+    record: chat:G0PRODIDEN1:1788430500.000100#1788432240.000100
+    protects: private channel #prod-identity (internal, grants_only)
+  - id: C12
+    string: LATTICE-CANARY-C12-91b0e4
+    organization: halden
+    record: chat:G0EXECESC01:1790101200.000100#1790101200.000100
+    protects: private channel #exec-escalations, configured confidential
+  # --- Veridian: organization isolation -----------------------------------------------
+  - id: V1
+    string: LATTICE-CANARY-V1-5e92bd
+    organization: veridian
+    record: ticket:HAL-4821#c3
+    guards: isolation
+    protects: another tenant's ticket with the same ID as Halden's HAL-4821
+  - id: V2
+    string: LATTICE-CANARY-V2-c7e0a4
+    organization: veridian
+    record: doc:acme-exec-escalation-notes#4
+    protects: another tenant's document with the same ID and title as Halden's (canary B)
+  - id: V3
+    string: LATTICE-CANARY-V3-18d6fa
+    organization: veridian
+    record: chat:G0VLEADERS1:1789493400.000100#1789493400.000100
+    protects: another tenant's confidential private channel
