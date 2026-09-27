@@ -12,6 +12,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from lattice.authz import models as authz_models  # noqa: F401 - register tables
 from lattice.config import load_migration_settings
 from lattice.db.base import Base
 from lattice.identity import models as identity_models  # noqa: F401 - register tables

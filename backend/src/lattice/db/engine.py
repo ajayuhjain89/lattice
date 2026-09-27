@@ -12,6 +12,9 @@ Rules for callers:
 
 * Use :meth:`Database.tenant_transaction` for anything that touches tenant data. The
   organization ID must come from the server-side session, never from client input.
+* :meth:`Database.tenant_snapshot` is the same, but REPEATABLE READ and READ ONLY:
+  one consistent snapshot for a whole read path (authorization context, retrieval and
+  the pre-generation tripwire must all see the same permissions).
 * :meth:`Database.unscoped_transaction` exists only for health checks and the
   SECURITY DEFINER pre-authentication lookups; tenant tables are invisible inside it.
 * Do not keep using a session after its transaction block ends: autobegin would open
@@ -55,10 +58,21 @@ class Database:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
         self._sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+        self._snapshot_sessions = async_sessionmaker(
+            engine.execution_options(isolation_level="REPEATABLE READ", postgresql_readonly=True),
+            expire_on_commit=False,
+            autoflush=False,
+        )
 
     @asynccontextmanager
     async def tenant_transaction(self, organization_id: uuid.UUID) -> AsyncIterator[AsyncSession]:
         async with self._sessions() as session, session.begin():
+            await bind_organization(session, organization_id)
+            yield session
+
+    @asynccontextmanager
+    async def tenant_snapshot(self, organization_id: uuid.UUID) -> AsyncIterator[AsyncSession]:
+        async with self._snapshot_sessions() as session, session.begin():
             await bind_organization(session, organization_id)
             yield session
 
