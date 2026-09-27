@@ -1,0 +1,89 @@
+# Halden — the design customer (docs/product-brief.md, docs/evaluation-plan.md §2).
+# Phase 1 scope: organization, departments, accounts, people and memberships only.
+# Access groups (private channels, "Exec staff") and all content arrive in Phases 2–3.
+# Emails use the reserved .example domain.
+
+organization:
+  slug: halden
+  name: Halden
+
+departments:
+  - {key: sales, name: Sales}
+  - {key: customer-success, name: Customer Success}
+  - {key: support, name: Support}
+  - {key: product, name: Product}
+  - {key: engineering, name: Engineering}
+  - {key: leadership, name: Leadership}
+  - {key: it, name: IT}
+
+accounts:
+  - {key: acme-corp, name: Acme Corp, aliases: [Acme, ACME Corp]}
+  - {key: northpeak-logistics, name: Northpeak Logistics, aliases: [Northpeak]}
+  - {key: brightwater-health, name: Brightwater Health, aliases: [Brightwater]}
+  - {key: kestrel-bank, name: Kestrel Bank, aliases: [Kestrel]}
+  # Name collision with Acme Corp, for ambiguity handling.
+  - {key: acme-health, name: Acme Health, aliases: [Acme]}
+  - {key: larkspur-retail, name: Larkspur Retail, aliases: [Larkspur]}
+  - {key: tidewell-energy, name: Tidewell Energy, aliases: [Tidewell]}
+  - {key: orbital-freight, name: Orbital Freight, aliases: [Orbital], status: prospect}
+
+members:
+  - email: maya.okafor@halden.example
+    display_name: Maya Okafor
+    role_label: Account Manager
+    clearance: internal
+    account_scope: assigned
+    departments: [sales]
+    accounts: [acme-corp, northpeak-logistics]
+
+  - email: daniel.reyes@halden.example
+    display_name: Daniel Reyes
+    role_label: Account Manager
+    clearance: internal
+    account_scope: assigned
+    departments: [sales]
+    accounts: [brightwater-health, kestrel-bank]
+
+  - email: priya.natarajan@halden.example
+    display_name: Priya Natarajan
+    role_label: Support Engineer
+    clearance: internal
+    account_scope: all
+    departments: [support]
+
+  - email: tom.lindqvist@halden.example
+    display_name: Tom Lindqvist
+    role_label: Product Manager
+    clearance: internal
+    account_scope: all
+    departments: [product]
+
+  - email: sofia.marchetti@halden.example
+    display_name: Sofia Marchetti
+    role_label: Engineering Lead
+    clearance: internal
+    account_scope: all
+    departments: [engineering]
+
+  - email: grace.whitfield@halden.example
+    display_name: Grace Whitfield
+    role_label: VP Customer Success
+    clearance: confidential
+    account_scope: all
+    departments: [leadership, customer-success]
+
+  - email: arjun.mehta@halden.example
+    display_name: Arjun Mehta
+    role_label: CEO
+    clearance: confidential
+    account_scope: all
+    departments: [leadership]
+
+  # Administrator: manages Lattice; being an admin grants no content access (SEC-15).
+  - email: lena.brandt@halden.example
+    display_name: Lena Brandt
+    role_label: IT Administrator
+    is_admin: true
+    clearance: internal
+    account_scope: assigned
+    departments: [it]

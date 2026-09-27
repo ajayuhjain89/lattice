@@ -1,0 +1,30 @@
+# Veridian Analytics — exists only to prove tenant isolation. It deliberately has its
+# own "Acme Corp" account (same key as Halden's) so cross-organization tests run under
+# maximal similarity.
+
+organization:
+  slug: veridian
+  name: Veridian Analytics
+
+departments:
+  - {key: sales, name: Sales}
+  - {key: support, name: Support}
+
+accounts:
+  - {key: acme-corp, name: Acme Corp, aliases: [Acme]}
+
+members:
+  - email: noor.haddad@veridian.example
+    display_name: Noor Haddad
+    role_label: Account Manager
+    clearance: internal
+    account_scope: assigned
+    departments: [sales]
+    accounts: [acme-corp]
+
+  - email: felix.wagner@veridian.example
+    display_name: Felix Wagner
+    role_label: Support Engineer
+    clearance: internal
+    account_scope: all
+    departments: [support]
