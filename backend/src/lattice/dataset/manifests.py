@@ -334,7 +334,3 @@ class GoldenItem(_Strict):
             return sorted(self.expected_by_egress.items())
         assert self.expected is not None  # noqa: S101 - enforced by the validator
         return [(self.egress_config or "default", self.expected)]
-
-
-class GoldenFile(_Strict):
-    items: list[GoldenItem] = Field(min_length=1)
