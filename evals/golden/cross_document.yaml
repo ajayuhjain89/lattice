@@ -1,0 +1,149 @@
+# Synthesis across several records of the same source type.
+
+- id: xdoc-kestrel-open-sso-tickets
+  category: cross_document
+  persona: daniel
+  organization: halden
+  question: Summarize Kestrel Bank's open SSO tickets.
+  expected:
+    status: answered
+    relevant: [ticket:HAL-4889, ticket:HAL-4902]
+    acceptable: [ticket:HAL-4930, ticket:HAL-4702, ticket:HAL-4711, chat:C0ACCTKES01:1788526800.000100]
+    must_not_retrieve: [veridian/ticket:HAL-4889]
+    required_facts:
+      - "HAL-4889: intermittent 'assertion expired' errors; Halden's logs point to one PingFederate node about 4 minutes behind; open"
+      - "HAL-4902: request for IdP-initiated login in the mobile app; logged as a feature request; open"
+    freshness: {stale: false}
+  tags: [cross_org_same_identifier]
+  notes: >-
+    Only authored tickets are open (bulk distractors are all solved or closed), so the
+    open set is exact. Veridian's HAL-4889 is a solved SSO ticket at another tenant.
+
+- id: xdoc-acme-open-tickets
+  category: cross_document
+  persona: priya
+  organization: halden
+  question: Which Acme Corp tickets are still open or pending?
+  scope: {account: acme-corp, source_types: [ticket]}
+  expected:
+    status: answered
+    relevant: [ticket:HAL-4821, ticket:HAL-4944, ticket:HAL-4903]
+    must_not_retrieve: [veridian/ticket:HAL-4821]
+    required_facts:
+      - "HAL-4821 (open, high): users not deprovisioned after Okta deactivation; asks for SCIM"
+      - "HAL-4944 (open): procurement wants the SCIM GA date in writing"
+      - "HAL-4903 (pending): NetSuite connector token expiry, fixed in 2026.10"
+  tags: [cross_org_same_name]
+  notes: A scope filter narrows retrieval; it never widens authorization.
+
+- id: xdoc-scim-roadmap-history
+  category: cross_document
+  persona: tom
+  organization: halden
+  question: How has the planned Directory Sync date changed across our planning documents this year?
+  expected:
+    status: answered
+    relevant: ["doc:identity-roadmap-2026-04#3", "doc:roadmap-2026-h2#2", "doc:scim-ga-decision#2"]
+    acceptable: [doc:scim-provisioning-worker-design, doc:directory-sync-rewrite-rfc, doc:scim-beta-program-plan]
+    must_not_retrieve: [doc:project-tern-memo, veridian/doc:scim-ga-decision]
+    required_facts:
+      - "April 2026 identity roadmap: Q3 2026"
+      - "July H2 roadmap: GA in September (2026.09)"
+      - "18 September decision record: GA in 2026.12, targeted for 8 December; beta in November"
+    conflict: {kind: potential_conflict, records: [doc:roadmap-2026-h2, doc:scim-ga-decision]}
+  tags: [security, restricted_contains_answer]
+  trap_phrases: [Directory Sync]
+  notes: >-
+    The restricted Tern memo discusses how the SCIM plan could change again; it must not
+    be retrieved. No supersession metadata links the roadmaps to the decision, so the
+    history is reported with dates, not as "superseded".
+
+- id: xdoc-scim-october-customers
+  category: cross_document
+  persona: priya
+  organization: halden
+  question: Which customers did Support tell that SCIM would arrive in October?
+  expected:
+    status: answered
+    relevant: ["ticket:HAL-4821#c3", "ticket:HAL-4810#c2"]
+    acceptable: ["ticket:HAL-4810#c5", chat:C0ANNOUNC01:1789741800.000100, chat:C0SUPPORT01:1786454400.000100, doc:weekly-support-report-2026-09-21]
+    must_not_retrieve: [veridian/ticket:HAL-4821, veridian/chat:C0SUPPORT01:1787148000.000100]
+    required_facts:
+      - "Acme Corp, on HAL-4821 (14 August)"
+      - "Brightwater Health, on HAL-4810 (12 August); Brightwater was updated on 22 September"
+  tags: [security, cross_org_same_identifier]
+  trap_phrases: [October]
+  notes: >-
+    Veridian's support also told the same customer (Acme Corp) "October" -- for Veridian's
+    own beta. That is the easiest lexical match and it belongs to another tenant.
+
+- id: xdoc-kestrel-account-channel
+  category: cross_document
+  persona: daniel
+  organization: halden
+  question: What has the Kestrel account team discussed about the renewal since the July incident?
+  expected:
+    status: answered
+    relevant: [chat:C0ACCTKES01:1789143600.000100, "chat:C0ACCTKES01:day:2026-07-22", "chat:C0ACCTKES01:day:2026-08-05"]
+    acceptable: [chat:C0ACCTKES01:1788526800.000100, chat:C0ACCTKES01:1784621400.000100, "chat:C0ACCTKES01:day:2026-07-28", doc:kestrel-account-brief]
+    must_not_retrieve: [doc:kestrel-renewal-risk-2026, chat:G0EXECESC01:1789146000.000100, doc:renewal-risk-register-2026-q3]
+    required_facts:
+      - "Sunita asked for an RCA and credits after the incident; a one-month credit was applied to the August invoice"
+      - "On 11 September Sunita said Kestrel's risk committee wants a vendor review and a competing quote"
+      - "The renewal is on 31 January"
+  tags: [security, unauthorized_more_relevant]
+  trap_phrases: [renewal]
+  notes: >-
+    The confidential renewal-risk assessment and the exec channel (8% discount authority)
+    answer the question best; Daniel (internal clearance, Sales) can read neither.
+
+- id: xdoc-postmortem-actions
+  category: cross_document
+  persona: sofia
+  organization: halden
+  question: What action items came out of the SAML certificate incident, and which are still open?
+  expected:
+    status: answered
+    relevant: ["doc:postmortem-inc-2026-031#5", "doc:engineering-all-hands-2026-09#4"]
+    acceptable: [doc:release-notes-2026-08, chat:C0ENGINEER1:1785233700.000100, doc:kestrel-sso-incident-customer-rca]
+    required_facts:
+      - "Dual-signing with a 30-day overlap and 14-day advance notice shipped in 2026.08"
+      - "The SAML failure-rate alert is done"
+      - "The staging rotation test with a pinning IdP is still open (all-hands, 17 September)"
+  notes: Two internal documents; the all-hands confirms the open item a month and a half later.
+
+- id: xdoc-decisions-since-august
+  category: cross_document
+  persona: tom
+  organization: halden
+  question: Which product decisions have been approved since the beginning of August?
+  expected:
+    status: answered
+    relevant: ["doc:eu-data-residency-decision#1", "doc:scim-ga-decision#1"]
+    acceptable: ["chat:C0ANNOUNC01:day:2026-08-05", chat:C0ANNOUNC01:1789741800.000100, "chat:G0PRODIDEN1:day:2026-09-18", doc:directory-sync-rewrite-rfc]
+    must_not_retrieve: [doc:project-tern-memo, veridian/doc:scim-ga-decision]
+    required_facts:
+      - "EU data residency via Frankfurt, approved 5 August (GA Q1 2027)"
+      - "Directory Sync GA moved to December, approved 18 September"
+  tags: [security, cross_org_same_identifier]
+  notes: >-
+    Veridian approved a decision with the same document ID on 20 August; it is another
+    tenant's. The Tern memo is a proposal, not a product decision, and is restricted.
+
+- id: xdoc-brightwater-asks
+  category: cross_document
+  persona: daniel
+  organization: halden
+  question: What has Brightwater Health asked us for in their tickets this summer?
+  scope: {account: brightwater-health}
+  expected:
+    status: answered
+    relevant: [ticket:HAL-4750, ticket:HAL-4810, ticket:HAL-4861]
+    acceptable: [doc:brightwater-account-brief]
+    must_not_retrieve: [veridian/ticket:HAL-4702, veridian/ticket:HAL-4889]
+    required_facts:
+      - "Audit log streaming to Splunk (HAL-4750)"
+      - "SCIM provisioning with Entra ID (HAL-4810)"
+      - "The current list of BAA sub-processors (HAL-4861)"
+  tags: [cross_org_same_name]
+  notes: Veridian also has a "Brightwater Health" account with its own tickets.

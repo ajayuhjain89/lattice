@@ -1,0 +1,169 @@
+# Authorized but not egressed: Leadership can read confidential/restricted evidence, but
+# under the default AI egress policy (internal only) it never reaches the model provider.
+# It is returned as "Not used to draft this answer" (not_used_for_answer). Under
+# opt_in_confidential, confidential evidence may be sent; restricted never is.
+# Group "acme-commitments": the permanent critical scenario (authorization-model §10).
+
+- id: egress-acme-commitments-grace
+  category: ai_egress
+  persona: grace
+  organization: halden
+  question: What commitments have we made to Acme?
+  same_question_group: acme-commitments
+  scope: {account: acme-corp}
+  expected_by_egress:
+    default:
+      status: answered
+      relevant: ["doc:acme-kickoff-call-notes#3", "ticket:HAL-4821#c3", "doc:scim-ga-decision#2", chat:G0ACCTACME1:1790244300.000100]
+      not_used_for_answer: [doc:acme-exec-escalation-notes, chat:G0EXECESC01:1790101200.000100]
+      acceptable: [doc:acme-account-brief, doc:acme-q3-success-plan, chat:G0ACCTACME1:1781284800.000100, doc:acme-renewal-plan-2026, doc:renewal-risk-register-2026-q3, doc:pricing-packaging-2027-draft]
+      must_not_retrieve: [veridian/doc:acme-exec-escalation-notes, veridian/doc:acme-account-plan]
+      required_facts:
+        - "SCIM planned for Q3 and included in the Enterprise plan (June kickoff)"
+        - "Support: expected in October (HAL-4821)"
+        - "Decision record: beta from 9 November, GA 8 December"
+        - "Two confidential sources were not sent to the AI model (egress notice)"
+      must_not_contain: [LATTICE-CANARY-V2-c7e0a4]
+      conflict: {kind: potential_conflict, records: ["ticket:HAL-4821#c3", doc:scim-ga-decision]}
+    opt_in_confidential:
+      status: answered
+      relevant: ["doc:acme-kickoff-call-notes#3", "ticket:HAL-4821#c3", "doc:scim-ga-decision#2", "doc:acme-exec-escalation-notes#3", chat:G0EXECESC01:1790101200.000100]
+      acceptable: [doc:acme-account-brief, doc:acme-q3-success-plan, chat:G0ACCTACME1:1790244300.000100, doc:acme-renewal-plan-2026, doc:renewal-risk-register-2026-q3, doc:pricing-packaging-2027-draft]
+      must_not_retrieve: [veridian/doc:acme-exec-escalation-notes, veridian/doc:acme-account-plan]
+      required_facts:
+        - "Beta from 9 November with Kofi Mensah as dedicated engineer"
+        - "GA targeted for 8 December"
+        - "A service credit of two months' fees if GA is not delivered by 31 January 2027"
+        - "Renewal price held flat for FY27 (7% uplift waived)"
+      conflict: {kind: potential_conflict, records: ["ticket:HAL-4821#c3", doc:scim-ga-decision]}
+  tags: [critical_scenario, security, cross_org_same_identifier]
+  notes: >-
+    Grace has scope "all", so "Acme" alone would be ambiguous (Acme Corp / Acme Health);
+    the scenario runs with the Acme Corp scope selected. Veridian's document with the
+    same ID and title must never appear, for any egress setting.
+
+- id: egress-acme-offer-arjun
+  category: ai_egress
+  persona: arjun
+  organization: halden
+  question: What did we offer Acme on the executive escalation call?
+  scope: {account: acme-corp}
+  expected_by_egress:
+    default:
+      status: evidence_only
+      status_reason: egress_policy
+      not_used_for_answer: [doc:acme-exec-escalation-notes, chat:G0EXECESC01:1790101200.000100]
+      acceptable: [chat:G0EXECESC01:1789984800.000100]
+      must_not_retrieve: [veridian/doc:acme-exec-escalation-notes, veridian/chat:G0VLEADERS1:1789493400.000100]
+      must_not_contain: [LATTICE-CANARY-V2-c7e0a4, LATTICE-CANARY-V3-18d6fa]
+    opt_in_confidential:
+      status: answered
+      relevant: ["doc:acme-exec-escalation-notes#3", chat:G0EXECESC01:1790101200.000100]
+      acceptable: [chat:G0EXECESC01:1789984800.000100, "doc:acme-exec-escalation-notes#4"]
+      must_not_retrieve: [veridian/doc:acme-exec-escalation-notes, veridian/chat:G0VLEADERS1:1789493400.000100]
+      required_facts:
+        - "Beta 9 November with a dedicated engineer; GA targeted 8 December"
+        - "Two months' fees as a credit if not GA by 31 January 2027"
+        - "Flat renewal price for FY27"
+        - "A written description of the interim deprovisioning control"
+  tags: [security, cross_org_same_identifier]
+  notes: >-
+    All relevant evidence is confidential: under the default policy no model call is made
+    and the status is evidence_only. Veridian also had an Acme exec call (one-month
+    credit) -- a plausible-looking wrong answer from another tenant.
+
+- id: egress-tern-arjun
+  category: ai_egress
+  persona: arjun
+  organization: halden
+  question: What is Project Tern?
+  same_question_group: project-tern
+  expected_by_egress:
+    default:
+      status: evidence_only
+      status_reason: egress_policy
+      not_used_for_answer: [doc:project-tern-memo, doc:exec-offsite-notes-2026-09]
+    opt_in_confidential:
+      status: partial
+      relevant: ["doc:exec-offsite-notes-2026-09#4"]
+      not_used_for_answer: [doc:project-tern-memo]
+      required_facts: ["The offsite notes only say Arjun gave an update on Tern, with a decision at the 17 September board call"]
+  tags: [restricted]
+  notes: >-
+    Restricted content never leaves Lattice, even with the confidential opt-in; the
+    memo is shown to Arjun as evidence but never summarised by the model.
+
+- id: egress-kestrel-risk-grace
+  category: ai_egress
+  persona: grace
+  organization: halden
+  question: What is the renewal risk for Kestrel Bank?
+  expected_by_egress:
+    default:
+      status: answered
+      relevant: [chat:C0ACCTKES01:1789143600.000100, "doc:renewal-risk-register-2026-q3#1", "doc:kestrel-account-brief#5"]
+      not_used_for_answer: [doc:kestrel-renewal-risk-2026, chat:G0EXECESC01:1789146000.000100]
+      acceptable: [doc:kestrel-sso-incident-customer-rca, ticket:HAL-4889, chat:C0ACCTKES01:1788526800.000100, doc:exec-offsite-notes-2026-09]
+      required_facts:
+        - "High: the renewal on 31 January 2027 follows the July SSO incident"
+        - "Kestrel's risk committee wants a vendor review and a competing quote"
+    opt_in_confidential:
+      status: answered
+      relevant: [chat:C0ACCTKES01:1789143600.000100, "doc:kestrel-renewal-risk-2026#2", "doc:kestrel-renewal-risk-2026#3", chat:G0EXECESC01:1789146000.000100]
+      acceptable: [doc:renewal-risk-register-2026-q3, doc:kestrel-account-brief, doc:exec-offsite-notes-2026-09, ticket:HAL-4889]
+      required_facts:
+        - "Up to 8% discount on a two-year renewal if Kestrel signs by 15 December (approved by Arjun)"
+        - "Syncwell has approached Kestrel's IAM lead"
+  tags: [confidential]
+  notes: >-
+    Partial evidence is internal (account channel, CS register), so an answer is drafted;
+    the confidential assessment is listed but not sent under the default policy.
+
+- id: egress-scim-pricing-grace
+  category: ai_egress
+  persona: grace
+  organization: halden
+  question: Will Directory Sync cost extra after January 2027?
+  expected_by_egress:
+    default:
+      status: evidence_only
+      status_reason: egress_policy
+      not_used_for_answer: [doc:pricing-packaging-2027-draft]
+      acceptable: ["doc:acme-kickoff-call-notes#3"]
+    opt_in_confidential:
+      status: answered
+      relevant: ["doc:pricing-packaging-2027-draft#2", "doc:pricing-packaging-2027-draft#4"]
+      acceptable: ["doc:acme-kickoff-call-notes#3"]
+      required_facts:
+        - "Only a draft: an Enterprise add-on at $3 per user per month for contracts and renewals from 1 January 2027, not approved"
+        - "Open question: grandfathering customers told SCIM would be included (Acme Corp)"
+  tags: [confidential]
+  notes: The only direct evidence is a confidential draft; Acme's kickoff note is related but does not answer.
+
+- id: egress-scim-ga-date-arjun
+  category: ai_egress
+  persona: arjun
+  organization: halden
+  question: When will Directory Sync be generally available?
+  same_question_group: scim-ga-date
+  expected_by_egress:
+    default:
+      status: answered
+      relevant: ["doc:scim-ga-decision#2", "chat:C0SALES0001:day:2026-09-25"]
+      not_used_for_answer: [doc:project-tern-memo]
+      acceptable: [chat:C0ANNOUNC01:1789741800.000100, doc:scim-beta-program-plan, doc:exec-offsite-notes-2026-09, "doc:acme-exec-escalation-notes#3"]
+      required_facts:
+        - "GA targeted for 8 December 2026 (approved decision record)"
+        - "Unverified Slack speculation about early November"
+      conflict: {kind: potential_conflict, records: [doc:scim-ga-decision, "chat:C0SALES0001:day:2026-09-25"]}
+    opt_in_confidential:
+      status: answered
+      relevant: ["doc:scim-ga-decision#2", "chat:C0SALES0001:day:2026-09-25", "doc:exec-offsite-notes-2026-09#2"]
+      not_used_for_answer: [doc:project-tern-memo]
+      acceptable: [chat:C0ANNOUNC01:1789741800.000100, doc:scim-beta-program-plan, "doc:acme-exec-escalation-notes#3"]
+      required_facts: ["GA targeted for 8 December 2026", "Unverified speculation about early November"]
+      conflict: {kind: potential_conflict, records: [doc:scim-ga-decision, "chat:C0SALES0001:day:2026-09-25"]}
+  tags: [restricted]
+  notes: >-
+    The CEO can read the Tern memo, which says the dates stand; being restricted, it is
+    never sent to the provider, so the notice must mention evidence withheld by policy.

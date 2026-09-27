@@ -1,0 +1,52 @@
+# Ambiguous requests: two in-scope accounts match, or the question has no referent.
+# Ambiguity choices come only from accounts inside the asker's scope.
+# Group "promise-acme": the same question is ambiguous for scope-"all" personas and not
+# for Maya, who must never learn that Acme Health exists (account_visibility.yaml).
+
+- id: ambiguous-promise-acme-priya
+  category: ambiguous
+  persona: priya
+  organization: halden
+  question: What did we promise Acme?
+  same_question_group: promise-acme
+  expected:
+    status: ambiguous
+    clarification: {choices: [acme-corp, acme-health]}
+    acceptable: ["doc:acme-kickoff-call-notes#3", "doc:acme-health-account-brief#4", "chat:C0CSTEAM001:1787135400.000100"]
+  notes: '"Acme" matches Acme Corp and Acme Health (an unrelated clinics network), both in scope.'
+
+- id: ambiguous-promise-acme-tom
+  category: ambiguous
+  persona: tom
+  organization: halden
+  question: What did we promise Acme?
+  same_question_group: promise-acme
+  expected:
+    status: ambiguous
+    clarification: {choices: [acme-corp, acme-health]}
+    acceptable: ["doc:acme-kickoff-call-notes#3", "doc:acme-health-account-brief#4", ticket:HAL-4777]
+  notes: Acme Corp was promised SCIM timing; Acme Health a FHIR connector beta. Both are real answers.
+
+- id: ambiguous-acme-renewal-grace
+  category: ambiguous
+  persona: grace
+  organization: halden
+  question: When is the Acme renewal?
+  expected:
+    status: ambiguous
+    clarification: {choices: [acme-corp, acme-health]}
+    acceptable: ["doc:acme-account-brief#2", "doc:acme-health-account-brief#2", doc:renewal-risk-register-2026-q3]
+  notes: Acme Corp renews 15 December 2026; Acme Health 1 March 2027.
+
+- id: ambiguous-beta-them
+  category: ambiguous
+  persona: tom
+  organization: halden
+  question: What did we promise them about the beta?
+  expected:
+    status: ambiguous
+    clarification: {choices: [acme-corp, brightwater-health]}
+    acceptable: ["doc:scim-beta-program-plan#2", "doc:acme-health-account-brief#4"]
+  notes: >-
+    No referent ("them", "the beta"). A clarifying question should offer the Directory
+    Sync beta participants (and the answer must not guess). Choices come from Tom's scope.
