@@ -1,11 +1,19 @@
 # Lattice — Data Model
 
-Status: Foundation draft (Phase 0). Schema is intended, not migrated.
+Status: §2 identity and tenancy tables are **implemented** (Phase 1, migration
+`backend/alembic/versions/0001_baseline.py`); §3 onward are still design.
 Related: `authorization-model.md`, `ingestion-design.md`, `retrieval-design.md`.
 
 Conventions:
 
-- PostgreSQL 16 with extensions `vector` (pgvector ≥ 0.8), `citext`, `pgcrypto`.
+- PostgreSQL 16 with extensions `vector` (pgvector 0.8.1) and `citext`, created by the
+  superuser bootstrap (`infra/postgres/bootstrap.sql`), not by migrations. UUIDs use the
+  built-in `gen_random_uuid()` (PostgreSQL 13+), so `pgcrypto` is not needed.
+- Enumerated columns (`status`, `clearance`, `account_scope`, …) are `text` with named
+  `CHECK` constraints rather than PostgreSQL enum types: adding a value is a one-line
+  constraint change instead of an `ALTER TYPE` that cannot run in a transaction.
+- `updated_at` is maintained by a `BEFORE UPDATE` trigger, so every writer (API, seed,
+  manual SQL) keeps it correct.
 - Every tenant-owned table has `organization_id uuid NOT NULL` and an RLS policy
   (see §8). This column is present even where it is derivable through a join, because
   RLS policies must be evaluable on the row itself.
@@ -51,7 +59,9 @@ Core typed domain objects (Pydantic, not tables) are listed in §9.
 | name         | text      |      |                                                   |
 | status       | enum      | DEL  | `active`, `suspended`, `deleting`                 |
 
-Not RLS-scoped (it *is* the tenant). Read only via the session's org.
+RLS-protected despite being the tenant root (Phase 1 change): the runtime role sees
+only the bound organization's own row, so tenants cannot be enumerated. Operator tools
+(`lattice_owner`) may provision organizations.
 
 ### users
 
@@ -86,7 +96,13 @@ Server-side, opaque (ADR-005). Stored so they can be revoked immediately.
 | token_hash      | bytea UQ    |       | SHA-256 of the random cookie token; raw token never stored |
 | user_id         | uuid FK     |       |                                                 |
 | organization_id | uuid FK     | ISO   | The session's active org. Switching org = new session |
-| created_at, last_seen_at, expires_at, revoked_at | timestamptz | | Idle timeout 12 h, absolute 7 d (assumption) |
+| created_at, last_seen_at, expires_at, revoked_at | timestamptz | | Idle timeout 12 h, absolute 7 d (configurable) |
+
+Constraints (implemented): composite FK `(organization_id, user_id)` →
+`memberships(organization_id, user_id)` — a session can exist only for a real
+membership in its organization; `token_hash` must be exactly 32 bytes;
+`expires_at > created_at`. The runtime role may insert sessions and update only
+`last_seen_at` and `revoked_at`.
 
 ### memberships
 
@@ -328,29 +344,83 @@ updated_at`. Effective egress level for a call =
 `min(org_settings.external_egress_level, approved_for_level)`. Secrets are not stored
 here (environment / secret store only).
 
-## 8. Row-Level Security
+## 8. Row-Level Security (implemented in Phase 1)
 
-For every tenant table `t`:
+### Roles
+
+| Role | Login | Purpose | RLS |
+| ---- | ----- | ------- | --- |
+| `lattice_owner` | yes | Owns the schema; runs migrations and operator tools (seed) | Subject to FORCE RLS on tenant tables; has provisioning policies on the three global/root tables only |
+| `lattice_app` | yes | API (and later the worker). Never owns tables, never BYPASSRLS | Subject to every policy; least-privilege grants (below) |
+| `lattice_auth` | **no** | Owns the two SECURITY DEFINER pre-authentication functions | Role-targeted read policies on the tables those functions need |
+
+Roles, databases and extensions are created by `infra/postgres/bootstrap.sql` (run as
+superuser; idempotent). Migrations only verify they exist. `lattice_owner` is granted
+membership in `lattice_auth` `WITH INHERIT FALSE, SET TRUE` — enough to hand function
+ownership to it, without silently inheriting its RLS policies.
+
+### Binding the organization
 
 ```sql
-ALTER TABLE t ENABLE ROW LEVEL SECURITY;
-ALTER TABLE t FORCE ROW LEVEL SECURITY;
-CREATE POLICY tenant_isolation ON t
-  USING (organization_id = current_setting('app.org_id', true)::uuid)
-  WITH CHECK (organization_id = current_setting('app.org_id', true)::uuid);
+SELECT set_config('app.org_id', '<org uuid>', true);  -- transaction-local = SET LOCAL
 ```
 
-- The API/worker role (`lattice_app`) is not the table owner and lacks `BYPASSRLS`.
-- `app.org_id` is set with `SET LOCAL` inside each transaction by the `db` module from
-  the session's org; if unset, `current_setting(..., true)` is NULL and **no rows
-  match** (fail closed).
-- Pre-authentication lookups (session token → session, OIDC subject → user) use a
-  narrow set of `SECURITY DEFINER` functions rather than disabling RLS.
-- Integration tests assert: every table with an `organization_id` column has RLS
-  enabled and forced (catalog query), so a new table cannot silently skip it.
+Policies read it through a helper:
 
-RLS is for **organization isolation only**. Fine-grained authorization is compiled
-into retrieval SQL by `authz` (ADR-003).
+```sql
+CREATE FUNCTION lattice_current_org_id() RETURNS uuid LANGUAGE sql STABLE
+AS $$ SELECT NULLIF(current_setting('app.org_id', true), '')::uuid $$;
+```
+
+`NULLIF` is required (a Phase 1 finding): once `app.org_id` has been set on a pooled
+connection, `current_setting(..., true)` returns `''` — not NULL — after the
+transaction ends, and `''::uuid` raises. With `NULLIF`, an unbound transaction matches
+no tenant rows (fail closed) instead of erroring. A malformed value still raises
+(also fail closed). Both behaviours are regression-tested on a reused connection.
+
+### Policies
+
+| Table(s) | Policy | Applies to |
+| -------- | ------ | ---------- |
+| memberships, departments, membership_departments, accounts, account_assignments, sessions | `tenant_isolation`: `organization_id = lattice_current_org_id()` (USING + WITH CHECK) | everyone, incl. the owner |
+| organizations | `tenant_self`: `id = lattice_current_org_id()` | everyone |
+| users | `member_visible` (SELECT): a membership exists in the bound org | everyone |
+| external_identities | `member_visible` (SELECT): the user is visible | everyone |
+| organizations, users, external_identities | `owner_provisioning` (ALL) | `lattice_owner` |
+| organizations, users, external_identities, memberships, sessions | `auth_lookup` (SELECT) | `lattice_auth` |
+
+All ten application tables have RLS **enabled and forced** (verified by tests and by
+the API's startup check). `alembic_version` holds no tenant data and is not granted to
+the runtime role.
+
+### Runtime-role privileges (Phase 1)
+
+`SELECT` on organizations, users, external_identities, memberships, departments,
+membership_departments, accounts, account_assignments; `SELECT, INSERT` on sessions;
+`UPDATE (last_seen_at, revoked_at)` on sessions; `EXECUTE` on the two lookup
+functions. No `DELETE` anywhere. Later phases add grants as their features need them.
+
+### Pre-authentication lookups
+
+Before a request's organization is known, identity data is readable only through:
+
+- `lattice_resolve_session(token_hash bytea)` → the one session row with that hash
+  (the caller must already hold the secret token);
+- `lattice_identity_memberships(issuer, subject)` → the active (user, organization)
+  pairs of a verified identity, used to choose the organization at sign-in.
+
+Both are `SECURITY DEFINER`, owned by `lattice_auth`, with a fixed `search_path`, and
+executable only by `lattice_app`.
+
+### Startup safety check
+
+The API refuses to start (`lattice.db.role_check`) if its role is a superuser, has
+BYPASSRLS, is a member of a superuser/BYPASSRLS role, owns or is a member of the owner
+of any application table, or if any application table lacks enabled + forced RLS or
+the schema is unmigrated. `lattice check-db-role` runs the same check on demand.
+
+RLS is for **organization isolation only**. Fine-grained authorization will be compiled
+into retrieval SQL by `authz` (ADR-003, Phase 2).
 
 ## 9. Typed domain contracts (Pydantic)
 

@@ -43,32 +43,69 @@ replaced by `TRUE` must fail the security suite — proves the tests actually te
 
 ## 3. Organization isolation
 
-1. Org comes from the session only.
-2. Composite `(organization_id, id)` foreign keys between tenant tables.
-3. RLS forced on all tenant tables; app role is non-owner without `BYPASSRLS`;
-   `app.org_id` set via `SET LOCAL` per transaction (connection-pool safe).
-4. No process-level caches keyed without org.
-5. Tests: the isolation suite (Org A cannot retrieve / inspect / enumerate / search /
-   cite / infer Org B) runs in CI, using two orgs that share a customer name,
-   overlapping document titles and identical ticket numbers.
+1. Org comes from the session only. (Implemented: the only source of tenant context is
+   `lattice_resolve_session`; the dev-login `organization` field is a selector checked
+   against the identity's own active memberships, never tenant authority.)
+2. Composite `(organization_id, id)` foreign keys between tenant tables, and
+   `sessions (organization_id, user_id) → memberships`. Tested as superuser, so the
+   constraint — not RLS — is what rejects cross-org links.
+3. RLS enabled **and forced** on all ten application tables, including `organizations`,
+   `users` and `external_identities`; app role is non-owner without `BYPASSRLS`;
+   `app.org_id` set with `set_config(..., true)` (≡ `SET LOCAL`) per transaction.
+   Details and the `NULLIF` fail-closed finding: `data-model.md` §8.
+4. No process-level caches keyed without org (none exist in Phase 1).
+5. Tests (`backend/tests/test_rls.py`, `test_integrity.py`): Org A cannot select,
+   select-by-ID, update or insert Org B rows in any table; with no org bound nothing is
+   visible (also for the table owner on tenant tables); the binding does not survive
+   COMMIT, ROLLBACK or a database error on a reused pooled connection; 40 interleaved
+   concurrent transactions for two orgs never see each other's rows. The two test
+   orgs share a customer account name and key. Document/ticket-level isolation tests
+   arrive with those tables (Phases 4–6).
+
+Mutation checks performed in Phase 1: replacing the tenant policy with `USING (true)`
+fails 31 tests; removing `NULLIF` from `lattice_current_org_id()` fails every
+"no organization context" test.
 
 ## 4. Authentication & sessions
 
-See `authorization-model.md` §2. Additional controls: session rotation at login;
-idle 12 h / absolute 7 d (assumption, configurable); logout revokes server-side;
-membership suspension rejects existing sessions; security headers (CSP without
-`unsafe-inline` scripts, `frame-ancestors 'none'`, HSTS in production,
-`Referrer-Policy: same-origin`).
+See `authorization-model.md` §2. Implemented in Phase 1:
+
+- 256-bit random token in the cookie; only its SHA-256 stored (tested by scanning the
+  stored row for the raw and hex-encoded token).
+- Every request re-checks: not revoked, before absolute expiry (7 d), not idle longer
+  than 12 h (`last_seen_at` refreshed at most once a minute), and organization, user
+  and membership all `active`. All failures return the identical
+  `authentication_required` response and clear the cookie.
+- Session rotation: signing in revokes any session presented with the request.
+- Logout revokes server-side (a replayed token fails).
+- Cookie: `HttpOnly; SameSite=Lax; Path=/`, no `Domain`; in production also `Secure`
+  with the `__Host-` prefix (configuration refuses insecure cookies in production).
+- Security headers on every response: `Content-Security-Policy: default-src 'none';
+  frame-ancestors 'none'` (the dev-only API docs pages are exempt),
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: same-origin`, `Cache-Control: no-store`, and HSTS in production.
+  The web app's own CSP (with its scripts) is defined in Phase 7.
+
+CSRF (implemented): every non-GET/HEAD/OPTIONS request must send
+`X-Lattice-Request: 1`, and requests marked `Sec-Fetch-Site: cross-site` are rejected
+even with the header. It applies to all routes, including sign-in (login CSRF) and
+logout, and is checked before authentication.
 
 ## 5. Secrets and configuration
 
 - Secrets only via environment (local `.env`, never committed; `.env.example` has
-  placeholders). Deployment uses the platform's secret store.
-- Provider API keys are read by `providers` only and never logged, never placed in
-  prompts, never returned by any endpoint.
-- Startup validation rejects: missing secrets, `LATTICE_ENV=production` with dev auth
-  or fake providers enabled, DB role that bypasses RLS (checked at startup via
-  `SELECT rolbypassrls`).
+  documented local-only placeholders). Deployment uses the platform's secret store.
+- Database URLs are `SecretStr`: never in `repr`, logs or error messages. Configuration
+  errors name the variable and the problem but never echo the value.
+- Provider API keys (Phase 4+) are read by `providers` only and never logged, never
+  placed in prompts, never returned by any endpoint.
+- Startup validation (implemented) rejects: missing/invalid `LATTICE_*` settings;
+  `LATTICE_ENV` unset; `LATTICE_ENV=production` with dev auth enabled or insecure
+  cookies; a runtime DB role that is a superuser, has `BYPASSRLS`, is a member of such
+  a role, or owns/can act as owner of application tables; any application table
+  without forced RLS; an unmigrated schema. Dev login additionally is not routed in
+  production and its provider refuses to construct there.
+- In production the OpenAPI/docs endpoints are not served.
 
 ## 6. Model-provider data egress
 

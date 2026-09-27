@@ -1,6 +1,6 @@
 # Lattice — Implementation Plan
 
-Status: Foundation draft (Phase 0). **Awaiting approval before Phase 1.**
+Status: Phase 0 approved. **Phase 1 implemented** (awaiting review). Phase 2 not started.
 
 ---
 
@@ -105,6 +105,18 @@ affects later phases.
 following README; CI green; docs updated where reality differs.
 
 **Non-goals.** OIDC, web app, documents, authz policy beyond org isolation, admin UI.
+
+**Phase 1 as built — deviations from the plan above (all reflected in the docs):**
+
+| Planned | As built | Why |
+| ------- | -------- | --- |
+| Baseline migration creates extensions + roles | `infra/postgres/bootstrap.sql` (superuser, idempotent) creates roles, databases and extensions; the migration verifies them | Role creation needs passwords (secrets) and CREATEROLE; `vector` needs superuser. Migrations run as `lattice_owner` and hold neither |
+| Two roles (`lattice_owner`, `lattice_app`) | Plus NOLOGIN `lattice_auth` owning the SECURITY DEFINER lookups | With FORCE RLS a definer function owned by the table owner still sees nothing; a dedicated role with role-targeted read policies makes the documented pre-auth lookups work without BYPASSRLS anywhere |
+| Policy `organization_id = current_setting('app.org_id', true)::uuid` | `lattice_current_org_id()` with `NULLIF(..., '')` | On a reused pooled connection the setting reads `''`, which would make the documented cast raise. Regression-tested |
+| `organizations`, `users`, `external_identities` not RLS-scoped | RLS enabled + forced on all three | Otherwise the runtime role could enumerate other tenants and their people |
+| Seed: orgs/users/memberships | Also departments, accounts, account assignments, dev identities; `lattice check-db-role` added | Needed to exercise memberships realistically; the check makes the startup guard runnable on demand |
+| Error envelope field `trace_id` | `request_id` (+ `details` for validation) | Avoids confusion with query-trace IDs (Phase 6) |
+| Makefile: db-up, migrate, test | Also setup, seed, api, lint, format, typecheck, db-bootstrap, db-down, db-destroy, check-db-role | Every documented command is real |
 
 ---
 
@@ -280,20 +292,23 @@ author (or a fresh machine).
 | 13 | Next connectors | Call transcripts, CRM notes, GitHub issues, release notes |
 | — | Only if evals demand | HNSW tuning, model reranker, query rewriting, simple-config tsvector |
 
-## 5. Local development target (what README will document, Phase 1→8)
+## 5. Local development
 
-Prereqs: Docker, Python 3.12 (via `uv`), Node 22 LTS + pnpm.
+Phase 1 (verified; the README is the authoritative walkthrough). Prereqs: Docker with
+Compose v2, `uv`, `make`. Python 3.12 is installed by `uv`.
 ```
 cp .env.example .env
-make db-up          # postgres + pgvector
-make migrate        # alembic upgrade head (owner role)
-make seed           # synthetic orgs, users, sources
-make sync           # ingest synthetic sources (fake embeddings unless keys set)
-make api            # uvicorn on :8000
-make web            # next dev on :3000 (proxies /api → :8000)
-make test           # backend tests (+ web tests from Phase 7)
-make eval           # retrieval eval (no key needed with fake provider)
+make setup          # uv sync --locked
+make db-up          # postgres 16 + pgvector; first start runs the bootstrap
+make migrate        # alembic upgrade head (lattice_owner)
+make seed           # Halden + Veridian manifests (idempotent)
+make check-db-role  # runtime role cannot bypass RLS
+make api            # uvicorn on 127.0.0.1:8000
+make test           # 138 tests against the lattice_test database
+make lint typecheck
 ```
+Added in later phases: `make sync` (Phase 4), `make eval` (Phase 5), `make web`
+(Phase 7, Node 22 LTS + pnpm).
 
 ## 6. Phase 1 traceability check
 

@@ -1,6 +1,8 @@
 # Lattice — Architecture
 
-Status: Foundation draft (Phase 0). Describes the intended system; nothing is built yet.
+Status: Phase 1 implemented (config, db, errors, logging, identity/sessions, orgs, API
+skeleton, seed CLI). Later-phase modules below are still design; the
+"Implemented" column in §3 says which.
 Related: `data-model.md`, `authorization-model.md`, `retrieval-design.md`,
 `trust-boundaries.md`, ADRs 001–007.
 
@@ -79,11 +81,13 @@ Package: `backend/src/lattice/`.
 
 | Module        | Owns                                                                                      | Depends on                  |
 | ------------- | ----------------------------------------------------------------------------------------- | --------------------------- |
-| `config`      | Typed settings from env; fail fast on missing/invalid config at startup                   | —                           |
-| `errors`      | Error taxonomy (`LatticeError` + codes), mapping to HTTP                                  | —                           |
-| `db`          | Engine, sessions, tenant binding (`SET LOCAL app.org_id`), base model, migrations          | config                      |
-| `identity`    | Users, external identities, server-side sessions, identity providers (dev, OIDC later)     | db                          |
-| `orgs`        | Organizations, memberships, departments, accounts, account assignments                    | db                          |
+| `config` ✔    | Typed settings from env; fail fast on missing/invalid config at startup                   | —                           |
+| `errors` ✔    | Error taxonomy (`LatticeError` + codes), mapping to HTTP                                  | —                           |
+| `log` ✔       | JSON log formatter with redaction; `log_event` helper                                     | —                           |
+| `db` ✔        | Engine, tenant-bound transactions (`set_config('app.org_id', …, true)`), base model, runtime-role safety check | config |
+| `identity` ✔  | Users, external identities, server-side sessions, identity providers (dev now, OIDC later) | db                          |
+| `orgs` ✔      | Organizations, memberships, departments, accounts, account assignments (models)           | db                          |
+| `seed` ✔      | Manifest model + idempotent upsert of orgs/users/memberships (Phase 1 subset)             | db, orgs, identity          |
 | `authz`       | `AuthorizationContext`, reference policy, SQL predicate compiler, access explanations      | orgs, db                    |
 | `sources`     | Source records, source config validation, sync runs, sync failures                        | db, authz (admin capability)|
 | `connectors`  | Connector contract + three connectors (document, ticket, chat export)                     | — (pure; no DB access)      |
@@ -94,9 +98,11 @@ Package: `backend/src/lattice/`.
 | `tracing`     | Trace records, redaction, re-authorized trace reads                                      | authz, db                   |
 | `api`         | FastAPI app, routers (thin), request dependencies (session → identity → org → authz ctx)  | all service modules         |
 | `evals`       | Golden-set loader, retrieval/generation/security eval runners, reports                    | retrieval, answering        |
-| `cli`         | `lattice seed`, `lattice sync`, `lattice search`, `lattice ask`, `lattice eval`           | services                    |
+| `cli` ✔ (partial) | `lattice seed`, `lattice check-db-role` now; later `sync`, `search`, `ask`, `eval`   | services                    |
 
-Boundary rules (enforced by review and an import-linter contract):
+✔ = implemented in Phase 1. Alembic migrations live in `backend/alembic/`, outside the
+package. Boundary rules (enforced by review now; an import-linter contract is added in
+Phase 2, when `authz` exists and there is a rule worth enforcing mechanically):
 
 - `connectors` never touch the database or `authz`. They translate external data into
   typed records. This keeps the untrusted-input surface small and testable.
@@ -165,24 +171,42 @@ Three independent layers:
 1. **Session-derived org.** The org for a request comes only from the server-side
    session. No endpoint accepts an org ID from the client for data access.
 2. **Explicit predicates.** Every service query filters by `organization_id`.
-3. **Postgres Row-Level Security.** Every tenant table has an RLS policy
-   `organization_id = current_setting('app.org_id')::uuid`. The application connects
-   as a non-owner role without `BYPASSRLS`. A forgotten filter returns zero rows
-   instead of another org's rows.
+3. **Postgres Row-Level Security.** Every application table has RLS enabled and
+   forced; tenant tables use `organization_id = lattice_current_org_id()`. The
+   application connects as `lattice_app` — not an owner, no `BYPASSRLS` — and refuses
+   to start otherwise. A forgotten filter returns zero rows instead of another org's
+   rows. Exact policies, roles and grants: `data-model.md` §8.
 
-Migrations and the seed CLI run as the owner role; the API and worker never do.
+Implementation (Phase 1): `lattice.db.engine.Database.tenant_transaction(org_id)` opens
+a transaction and binds the organization with `set_config('app.org_id', …, true)`
+(transaction-local, so it cannot leak through the connection pool); the org ID must be
+a `uuid.UUID` from the server-side session. `unscoped_transaction()` exists only for
+health checks and the SECURITY DEFINER pre-authentication lookups, and sees no tenant
+rows. Migrations and the seed CLI run as `lattice_owner`; the API never does.
 
 ## 7. Error taxonomy
 
 All failures surfaced by the API use one envelope:
 
 ```json
-{ "error": { "code": "insufficient_evidence", "message": "…safe, user-facing…", "trace_id": "…" } }
+{ "error": { "code": "validation_failed", "message": "…safe, user-facing…",
+             "request_id": "…", "details": [{ "field": "subject", "issue": "string_too_long" }] } }
 ```
+
+`request_id` (Phase 1 rename from the draft's `trace_id`) is a server-generated
+correlation ID, also returned as the `X-Request-ID` header and present in every log
+line for the request; query traces (Phase 6) have their own `trace_id`. `details` is
+present only for validation failures and names the field and the pydantic error type —
+never the submitted value. `message` is a fixed sentence per code; exception text,
+SQL and paths never reach a response.
 
 | Code                           | HTTP | Meaning / notes                                                       |
 | ------------------------------ | ---- | --------------------------------------------------------------------- |
-| `authentication_required`      | 401  | No/expired/revoked session                                            |
+| `authentication_required`      | 401  | No/expired/idle/revoked session, or inactive user/membership/organization — all identical |
+| `authentication_failed`        | 401  | Sign-in attempt failed (generic: never says why)                      |
+| `csrf_rejected`                | 403  | State-changing request without CSRF proof                             |
+| `method_not_allowed`           | 405  | Route exists, method does not                                         |
+| `service_unavailable`          | 503  | Dependency (database) unavailable                                     |
 | `permission_denied`            | 403  | Missing *capability* (e.g. non-admin on admin route); only where existence is not secret |
 | `not_found`                    | 404  | Resource absent **or not readable** — the two are indistinguishable by design |
 | `validation_failed`            | 422  | Request failed schema/semantic validation                            |
@@ -208,9 +232,15 @@ response-invariant bug case (`retrieval-design.md` §9 step 10).
   process exits non-zero with a precise message. `LATTICE_ENV ∈ {development, test,
   production}`; development-only features (dev login, fake providers) refuse to start
   when `LATTICE_ENV=production`.
-- **Logging.** Structured JSON (`structlog` or stdlib `logging` with a JSON formatter —
-  decided in Phase 1 by what is smaller). Logs carry IDs, counts, durations and codes;
-  never question text, document text, embeddings, or provider payloads.
+- **Logging.** Structured JSON via stdlib `logging` and a small custom formatter
+  (`lattice.log`; decided in Phase 1 — no extra dependency). One `http.request` line
+  per request (method, path, status, duration, request ID; never query strings,
+  headers, cookies or bodies); uvicorn's access log is disabled. Sensitive field names
+  are redacted and credential-shaped values (URL passwords, bearer tokens, session
+  cookies) scrubbed as a safety net. Outside development, exceptions are logged as
+  type + stack frames only, because driver exceptions embed SQL parameters. Logs carry
+  IDs, counts, durations and codes; never question text, document text, embeddings, or
+  provider payloads.
 - **Time.** All timestamps `timestamptz`, stored UTC; the API emits ISO-8601 UTC.
 - **IDs.** UUIDs (`gen_random_uuid()`), except chunk IDs which are deterministic
   (`uuid5(document_id, chunk_content_hash, occurrence)`) so unchanged chunks keep their
@@ -231,28 +261,30 @@ response-invariant bug case (`retrieval-design.md` §9 step 10).
 | Separate services       | Independent scaling or ownership boundaries become real (e.g. ingestion needs 10× the API's compute) |
 | Kubernetes              | Multiple services with independent scaling; not before                               |
 
-## 10. Repository layout (target)
+## 10. Repository layout
+
+Implemented in Phase 1 (✔) and planned:
 
 ```
 lattice/
-  README.md
-  compose.yaml                  # postgres + pgvector for local dev (only infra)
-  Makefile                      # thin wrappers: setup, db-up, migrate, seed, test, eval, gen-api
-  .env.example
+  README.md                     ✔ verified local setup
+  compose.yaml                  ✔ Postgres 16 + pgvector 0.8.1 only (bound to 127.0.0.1)
+  Makefile                      ✔ setup, db-up/down/bootstrap/destroy, migrate, seed, api,
+                                  test, lint, format, typecheck, check-db-role
+  .env.example                  ✔ documented local-only placeholders
+  .github/workflows/ci.yml      ✔ lint, mypy, bootstrap, migration round-trip, seed, tests
+  infra/postgres/               ✔ superuser bootstrap: roles, databases, extensions
   backend/
-    pyproject.toml  uv.lock
-    alembic/  alembic.ini
-    src/lattice/…               # modules in §3
-    tests/  unit/ integration/ security/
-  apps/web/
-    package.json  pnpm-lock.yaml  tsconfig.json (strict)
-    src/app/…  src/components/…  src/styles/tokens.css  src/api/schema.d.ts (generated)
+    pyproject.toml  uv.lock     ✔ (Python 3.12 pinned in .python-version)
+    alembic.ini  alembic/       ✔ 0001_baseline
+    src/lattice/                ✔ config, errors, log, db/, identity/, orgs/, api/, seed, cli
+    tests/                      ✔ one module per concern, all against real PostgreSQL
   data/synthetic/
-    halden/  veridian/          # manifests + document/ticket/chat exports
-  evals/
-    golden/*.yaml               # golden questions
+    halden/org.yaml             ✔ people, departments, accounts (content: Phase 3)
+    veridian/org.yaml           ✔ isolation twin
+  apps/web/                     Phase 7
+  evals/golden/*.yaml           Phase 3
   docs/ …
 ```
 
-Tooling choices: `uv` for Python (lockfile + interpreter pinning, one tool), `pnpm` for
-Node (strict, fast, lockfile). Both are reversible.
+Tooling: `uv` for Python (lockfile + interpreter pinning), `pnpm` for Node (Phase 7).

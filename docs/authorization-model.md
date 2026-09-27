@@ -27,14 +27,20 @@ well-run Drive or Slack workspace.
   revocation is a requirement.
 - **Identity providers** behind one interface returning a verified `(issuer,
   subject, email, name)`:
-  - `DevIdentityProvider` — pick a seeded user; available only when
-    `LATTICE_ENV ∈ {development, test}`; the app refuses to start with it enabled in
-    production.
+  - `DevIdentityProvider` (implemented) — sign in as a seeded persona: `POST
+    /v1/auth/dev-login {"subject": "<email>", "organization": "<slug>"?}`. Available only
+    when `LATTICE_ENV ∈ {development, test}` and `LATTICE_DEV_AUTH_ENABLED=true`;
+    production with it enabled fails configuration, the route is not mounted, and the
+    provider refuses to construct. `organization` is needed only when the persona has
+    several memberships; it is a selector validated against the identity's own active
+    memberships (via `lattice_identity_memberships`), not tenant authority. Every
+    failure is one generic `authentication_failed`.
   - `OidcIdentityProvider` — generic OIDC authorization-code flow with PKCE (Okta,
     Entra ID, Google Workspace, Keycloak). Required before any non-local deployment.
 - No passwords are stored by Lattice.
 - CSRF: `SameSite=Lax` plus a required custom header (`X-Lattice-Request: 1`) on all
-  state-changing requests; the API rejects cross-site form posts.
+  state-changing requests, and rejection of `Sec-Fetch-Site: cross-site`; the API
+  rejects cross-site form posts (`security-model.md` §4).
 - Membership provisioning in the slice comes from the seed manifest. SCIM /
   just-in-time provisioning is a later phase.
 

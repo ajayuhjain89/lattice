@@ -1,15 +1,24 @@
 # Lattice — Operational Runbook
 
-Status: **Planned.** Nothing in this runbook is runnable yet. Each section is marked
-with the phase that makes it real; sections are rewritten against the actual system
+Status: §1 is implemented (Phase 1). Everything else is **planned**; each section is
+marked with the phase that makes it real; sections are rewritten against the actual system
 when that phase lands. Do not follow planned procedures on a live system.
 
 ---
 
-## 1. Local development — *Phase 1 (skeleton), completed in Phase 8*
+## 1. Local development — *implemented (Phase 1)*
 
-See `implementation-plan.md` §5 for the target command sequence. Required env vars
-will be listed in `.env.example`; the API refuses to start if any are missing.
+Follow the README "Local setup" section; it is verified from a clean clone. Useful
+operations:
+
+| Situation | Action |
+| --------- | ------ |
+| Changed a password in `.env` after the database volume was created | `make db-bootstrap` (idempotent; re-asserts roles, passwords, databases, extensions) |
+| API exits at startup with `Refusing to start: database role ... is unsafe` | `LATTICE_DATABASE_URL` must use `lattice_app`. Run `make check-db-role` for the list of problems. Never "fix" this by granting privileges to the runtime role |
+| API exits with `Invalid configuration:` | The message names each missing/invalid `LATTICE_*` variable (values are never printed). Compare with `.env.example` |
+| `database schema is not migrated` | `make migrate` |
+| Start over with an empty local database | `make db-destroy` (**deletes all local data**), then `make db-up migrate seed` |
+| Port 5433 already in use | Set `LATTICE_DB_HOST_PORT` in `.env` and update the ports in the `LATTICE_*_URL` values |
 
 ## 2. Procedures (planned)
 
