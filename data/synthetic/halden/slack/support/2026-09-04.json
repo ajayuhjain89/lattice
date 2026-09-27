@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02BADEYEM",
+    "text": "Kestrel again — 'assertion expired' errors on HAL-4889. clock skew?",
+    "ts": "1788519720.000100",
+    "thread_ts": "1788519720.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01PNATARJ"
+    ],
+    "latest_reply": "1788520140.000100",
+    "replies": [
+      {
+        "user": "U01PNATARJ",
+        "ts": "1788520140.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "probably. ask Martin to check NTP on their Ping servers, runbook has the steps",
+    "ts": "1788520140.000100",
+    "thread_ts": "1788519720.000100",
+    "parent_user_id": "U02BADEYEM"
+  }
+]

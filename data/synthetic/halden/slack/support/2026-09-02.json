@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02BADEYEM",
+    "text": "is there a way to bulk-transfer flow ownership when someone leaves? customer is asking",
+    "ts": "1788354000.000100",
+    "thread_ts": "1788354000.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02HCHO000"
+    ],
+    "latest_reply": "1788354840.000100",
+    "replies": [
+      {
+        "user": "U02HCHO000",
+        "ts": "1788354840.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02HCHO000",
+    "text": "Admin > Users > Transfer ownership, one user at a time. API for bulk. there's a help article",
+    "ts": "1788354840.000100",
+    "thread_ts": "1788354000.000100",
+    "parent_user_id": "U02BADEYEM"
+  }
+]

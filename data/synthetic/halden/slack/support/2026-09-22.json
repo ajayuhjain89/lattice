@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02HCHO000",
+    "text": "who's covering EU hours next week while Ben is out?",
+    "ts": "1790071200.000100",
+    "thread_ts": "1790071200.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01PNATARJ"
+    ],
+    "latest_reply": "1790071620.000100",
+    "replies": [
+      {
+        "user": "U01PNATARJ",
+        "ts": "1790071620.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "me Mon–Wed",
+    "ts": "1790071620.000100",
+    "thread_ts": "1790071200.000100",
+    "parent_user_id": "U02HCHO000"
+  }
+]

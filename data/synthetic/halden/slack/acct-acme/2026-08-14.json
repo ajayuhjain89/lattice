@@ -1,0 +1,42 @@
+[
+  {
+    "type": "message",
+    "user": "U02RKIM000",
+    "text": "saw HAL-4821 — Priya told Derek October. we said Q3 in June. are we aligned?",
+    "ts": "1786723800.000100",
+    "thread_ts": "1786723800.000100",
+    "reply_count": 2,
+    "reply_users_count": 2,
+    "reply_users": [
+      "U01MAYAOKF",
+      "U02RKIM000"
+    ],
+    "latest_reply": "1786725300.000100",
+    "replies": [
+      {
+        "user": "U01MAYAOKF",
+        "ts": "1786725120.000100"
+      },
+      {
+        "user": "U02RKIM000",
+        "ts": "1786725300.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01MAYAOKF",
+    "text": "Tom told support October on Tuesday, so that's the latest. Sept → Oct slip. I'll confirm with Tom",
+    "ts": "1786725120.000100",
+    "thread_ts": "1786723800.000100",
+    "parent_user_id": "U02RKIM000"
+  },
+  {
+    "type": "message",
+    "user": "U02RKIM000",
+    "text": "ok, I'll note it in the brief",
+    "ts": "1786725300.000100",
+    "thread_ts": "1786723800.000100",
+    "parent_user_id": "U02RKIM000"
+  }
+]

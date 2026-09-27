@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02WCHEN00",
+    "text": "dual-signing for SAML cert rotation is merged, lands in 2026.08",
+    "ts": "1785233700.000100",
+    "thread_ts": "1785233700.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01SMARCHT"
+    ],
+    "latest_reply": "1785234000.000100",
+    "replies": [
+      {
+        "user": "U01SMARCHT",
+        "ts": "1785234000.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01SMARCHT",
+    "text": ":clap: thanks Wei",
+    "ts": "1785234000.000100",
+    "thread_ts": "1785233700.000100",
+    "parent_user_id": "U02WCHEN00"
+  }
+]

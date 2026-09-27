@@ -1,0 +1,55 @@
+[
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": ":mega: Directory Sync (SCIM) timing update. GA moves to the 2026.12 release, targeted for 8 Dec. Beta starts 9 Nov with Acme Corp and 16 Nov with Brightwater Health. Why: load tests showed the v1 approach can't meet deprovisioning latency at enterprise scale, so we're rewriting the provisioning engine. Decision record: <https://drive.halden.example/d/scim-ga-decision|Decision: Directory Sync GA moves to December 2026>. AMs: please reach out to customers who were told October by 30 Sep. Support: updated macro coming tomorrow.",
+    "ts": "1789741800.000100",
+    "thread_ts": "1789741800.000100",
+    "reply_count": 3,
+    "reply_users_count": 3,
+    "reply_users": [
+      "U01PNATARJ",
+      "U01TLINDQV",
+      "U01DREYES0"
+    ],
+    "latest_reply": "1789743120.000100",
+    "replies": [
+      {
+        "user": "U01PNATARJ",
+        "ts": "1789742460.000100"
+      },
+      {
+        "user": "U01TLINDQV",
+        "ts": "1789742580.000100"
+      },
+      {
+        "user": "U01DREYES0",
+        "ts": "1789743120.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "Thanks. HAL-4821 (Acme) and HAL-4810 (Brightwater) both quoted October. I'll hold customer updates on those until the AMs have talked to them.",
+    "ts": "1789742460.000100",
+    "thread_ts": "1789741800.000100",
+    "parent_user_id": "U01TLINDQV"
+  },
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": "right call :+1:",
+    "ts": "1789742580.000100",
+    "thread_ts": "1789741800.000100",
+    "parent_user_id": "U01TLINDQV"
+  },
+  {
+    "type": "message",
+    "user": "U01DREYES0",
+    "text": "I'll call Karen at Brightwater tomorrow",
+    "ts": "1789743120.000100",
+    "thread_ts": "1789741800.000100",
+    "parent_user_id": "U01TLINDQV"
+  }
+]

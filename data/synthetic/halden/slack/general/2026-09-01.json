@@ -1,0 +1,42 @@
+[
+  {
+    "type": "message",
+    "user": "U01AMEHTA0",
+    "text": "Welcome to our six new starters this month :wave: Support, Platform and Sales — say hi in the thread!",
+    "ts": "1788255000.000100",
+    "thread_ts": "1788255000.000100",
+    "reply_count": 2,
+    "reply_users_count": 2,
+    "reply_users": [
+      "U02HCHO000",
+      "U01SMARCHT"
+    ],
+    "latest_reply": "1788256920.000100",
+    "replies": [
+      {
+        "user": "U02HCHO000",
+        "ts": "1788255660.000100"
+      },
+      {
+        "user": "U01SMARCHT",
+        "ts": "1788256920.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02HCHO000",
+    "text": "welcome! support folks, see you at 11 for onboarding",
+    "ts": "1788255660.000100",
+    "thread_ts": "1788255000.000100",
+    "parent_user_id": "U01AMEHTA0"
+  },
+  {
+    "type": "message",
+    "user": "U01SMARCHT",
+    "text": "welcome :wave:",
+    "ts": "1788256920.000100",
+    "thread_ts": "1788255000.000100",
+    "parent_user_id": "U01AMEHTA0"
+  }
+]

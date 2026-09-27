@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "Tidewell's 'assertion expired' (HAL-4655) was one of their two ADFS nodes running 5 min behind. NTP fixed it. adding the pattern to the SSO runbook",
+    "ts": "1783068000.000100",
+    "thread_ts": "1783068000.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02BADEYEM"
+    ],
+    "latest_reply": "1783068720.000100",
+    "replies": [
+      {
+        "user": "U02BADEYEM",
+        "ts": "1783068720.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02BADEYEM",
+    "text": "nice catch. that's the second clock skew case this year",
+    "ts": "1783068720.000100",
+    "thread_ts": "1783068000.000100",
+    "parent_user_id": "U01PNATARJ"
+  }
+]

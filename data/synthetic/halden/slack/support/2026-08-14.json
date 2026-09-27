@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02BADEYEM",
+    "text": "anyone have the workaround for deprovisioning without SCIM? Acme is asking on HAL-4821",
+    "ts": "1786700400.000100",
+    "thread_ts": "1786700400.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01PNATARJ"
+    ],
+    "latest_reply": "1786700760.000100",
+    "replies": [
+      {
+        "user": "U01PNATARJ",
+        "ts": "1786700760.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "Admin API bulk deactivate. Marcus has a script, I'll grab it and take the ticket",
+    "ts": "1786700760.000100",
+    "thread_ts": "1786700400.000100",
+    "parent_user_id": "U02BADEYEM"
+  }
+]

@@ -1,0 +1,45 @@
+# How Halden's three sources will be configured in Lattice (Phase 4 connector input).
+# This is Lattice-side configuration, not source data. The dataset lint uses it, with
+# the reference policy, to compute who may read every record (lattice.dataset.access).
+sources:
+  - key: drive
+    connector_type: document_repository
+    name: Halden Drive
+    path: documents
+    default_sensitivity: internal
+    authority: working
+    # Access comes from front matter: sensitivity, departments, grants_only, grants.
+
+  - key: support
+    connector_type: ticketing
+    name: Halden Support (Zendesk)
+    path: tickets
+    default_sensitivity: internal
+    # Every ticket must map to an account; unmapped tickets are not indexed (fail closed).
+    account_scoped: true
+    authority: working
+    account_refs:
+      360001001: acme-corp
+      360001002: northpeak-logistics
+      360001003: brightwater-health
+      360001004: kestrel-bank
+      360001005: acme-health
+      360001006: larkspur-retail
+      360001007: tidewell-energy
+      360001008: orbital-freight
+      # 360009913 (Fernhill Studios, signed up 24 Sep 2026) is deliberately unmapped.
+
+  - key: slack
+    connector_type: chat_export
+    name: Halden Slack
+    path: slack
+    default_sensitivity: internal
+    authority: conversational
+    # Private channels (groups.json) are grants_only: readable by their members only.
+    channels:
+      G0ACCTACME1: {account: acme-corp}
+      C0EXTACME01: {account: acme-corp}
+      C0ACCTKES01: {account: kestrel-bank}
+      C0ACCTNPK01: {account: northpeak-logistics}
+      C0ACCTBRW01: {account: brightwater-health}
+      G0EXECESC01: {sensitivity: confidential}

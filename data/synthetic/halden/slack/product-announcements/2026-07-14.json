@@ -1,0 +1,10 @@
+[
+  {
+    "type": "message",
+    "subtype": "bot_message",
+    "bot_id": "B09RELEASE",
+    "username": "Release Bot",
+    "text": "Halden Flow 2026.07 is live in all regions. Highlights: flow versioning, Snowflake connector performance improvements. Full notes in Drive.",
+    "ts": "1784012400.000100"
+  }
+]

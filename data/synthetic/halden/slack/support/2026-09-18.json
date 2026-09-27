@@ -1,0 +1,8 @@
+[
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": ":mega: Directory Sync (SCIM) timing update. GA moves to the 2026.12 release, targeted for 8 Dec. Beta starts 9 Nov with Acme Corp and 16 Nov with Brightwater Health. Why: load tests showed the v1 approach can't meet deprovisioning latency at enterprise scale, so we're rewriting the provisioning engine. Decision record: <https://drive.halden.example/d/scim-ga-decision|Decision: Directory Sync GA moves to December 2026>. AMs: please reach out to customers who were told October by 30 Sep. Support: updated macro coming tomorrow.",
+    "ts": "1789741860.000100"
+  }
+]

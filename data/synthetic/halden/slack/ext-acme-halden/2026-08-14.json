@@ -1,0 +1,8 @@
+[
+  {
+    "type": "message",
+    "user": "U03DHOLT00",
+    "text": "FYI opened HAL-4821 about users not being deprovisioned after we deactivate them in Okta",
+    "ts": "1786699200.000100"
+  }
+]

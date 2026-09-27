@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02BADEYEM",
+    "text": "NetSuite v2 connector tokens expiring after ~7 days for a few customers. Anyone seen this?",
+    "ts": "1787239800.000100",
+    "thread_ts": "1787239800.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02SPATEL0"
+    ],
+    "latest_reply": "1787240880.000100",
+    "replies": [
+      {
+        "user": "U02SPATEL0",
+        "ts": "1787240880.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02SPATEL0",
+    "text": "known issue, refresh token rotation bug. fix is in 2026.10. workaround: reconnect the connection",
+    "ts": "1787240880.000100",
+    "thread_ts": "1787239800.000100",
+    "parent_user_id": "U02BADEYEM"
+  }
+]

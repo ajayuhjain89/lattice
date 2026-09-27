@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02JBLAKE0",
+    "text": "friday song thread :musical_note:",
+    "ts": "1788543900.000100",
+    "thread_ts": "1788543900.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02WCHEN00"
+    ],
+    "latest_reply": "1788544200.000100",
+    "replies": [
+      {
+        "user": "U02WCHEN00",
+        "ts": "1788544200.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02WCHEN00",
+    "text": "something without lyrics, I'm debugging",
+    "ts": "1788544200.000100",
+    "thread_ts": "1788543900.000100",
+    "parent_user_id": "U02JBLAKE0"
+  }
+]

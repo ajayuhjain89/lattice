@@ -1,0 +1,42 @@
+[
+  {
+    "type": "message",
+    "user": "U02BADEYEM",
+    "text": "P1 from Kestrel Bank — all users failing SSO since ~07:40, 'signature validation failed'. HAL-4702. Paging on-call.",
+    "ts": "1784620680.000100",
+    "thread_ts": "1784620680.000100",
+    "reply_count": 2,
+    "reply_users_count": 2,
+    "reply_users": [
+      "U01PNATARJ",
+      "U02SPATEL0"
+    ],
+    "latest_reply": "1784621160.000100",
+    "replies": [
+      {
+        "user": "U01PNATARJ",
+        "ts": "1784620920.000100"
+      },
+      {
+        "user": "U02SPATEL0",
+        "ts": "1784621160.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "Larkspur just opened HAL-4704 with the same error",
+    "ts": "1784620920.000100",
+    "thread_ts": "1784620680.000100",
+    "parent_user_id": "U02BADEYEM"
+  },
+  {
+    "type": "message",
+    "user": "U02SPATEL0",
+    "text": "Incident declared, join #incidents",
+    "ts": "1784621160.000100",
+    "thread_ts": "1784620680.000100",
+    "parent_user_id": "U02BADEYEM"
+  }
+]

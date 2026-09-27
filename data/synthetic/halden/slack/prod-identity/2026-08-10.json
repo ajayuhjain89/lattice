@@ -1,0 +1,55 @@
+[
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": "status check for Sept GA?",
+    "ts": "1786352400.000100",
+    "thread_ts": "1786352400.000100",
+    "reply_count": 3,
+    "reply_users_count": 3,
+    "reply_users": [
+      "U02KMENSAH",
+      "U01TLINDQV",
+      "U01SMARCHT"
+    ],
+    "latest_reply": "1786354380.000100",
+    "replies": [
+      {
+        "user": "U02KMENSAH",
+        "ts": "1786353900.000100"
+      },
+      {
+        "user": "U01TLINDQV",
+        "ts": "1786354260.000100"
+      },
+      {
+        "user": "U01SMARCHT",
+        "ts": "1786354380.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02KMENSAH",
+    "text": "not happening. Okta PATCH handling needs another month. October is realistic",
+    "ts": "1786353900.000100",
+    "thread_ts": "1786352400.000100",
+    "parent_user_id": "U01TLINDQV"
+  },
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": "ok. I'll tell support October as a target, not a commitment",
+    "ts": "1786354260.000100",
+    "thread_ts": "1786352400.000100",
+    "parent_user_id": "U01TLINDQV"
+  },
+  {
+    "type": "message",
+    "user": "U01SMARCHT",
+    "text": ":+1:",
+    "ts": "1786354380.000100",
+    "thread_ts": "1786352400.000100",
+    "parent_user_id": "U01TLINDQV"
+  }
+]

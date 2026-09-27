@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U01DREYES0",
+    "text": "Karen's also asking about SCIM for Entra ID (HAL-4810). Support said expected in October",
+    "ts": "1786546800.000100",
+    "thread_ts": "1786546800.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02CMARTIN"
+    ],
+    "latest_reply": "1786548000.000100",
+    "replies": [
+      {
+        "user": "U02CMARTIN",
+        "ts": "1786548000.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02CMARTIN",
+    "text": "they'd be a great beta customer, Karen is super hands-on",
+    "ts": "1786548000.000100",
+    "thread_ts": "1786546800.000100",
+    "parent_user_id": "U01DREYES0"
+  }
+]

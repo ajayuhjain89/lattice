@@ -1,0 +1,55 @@
+[
+  {
+    "type": "message",
+    "user": "U01MAYAOKF",
+    "text": "kickoff done. Okta cutover is Aug 1. I told them SCIM is Q3 per the roadmap",
+    "ts": "1781284800.000100",
+    "thread_ts": "1781284800.000100",
+    "reply_count": 3,
+    "reply_users_count": 3,
+    "reply_users": [
+      "U02MFELD00",
+      "U01MAYAOKF",
+      "U02RKIM000"
+    ],
+    "latest_reply": "1781285700.000100",
+    "replies": [
+      {
+        "user": "U02MFELD00",
+        "ts": "1781285160.000100"
+      },
+      {
+        "user": "U01MAYAOKF",
+        "ts": "1781285280.000100"
+      },
+      {
+        "user": "U02RKIM000",
+        "ts": "1781285700.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02MFELD00",
+    "text": "Derek also asked if SCIM costs extra — you said included, right?",
+    "ts": "1781285160.000100",
+    "thread_ts": "1781284800.000100",
+    "parent_user_id": "U01MAYAOKF"
+  },
+  {
+    "type": "message",
+    "user": "U01MAYAOKF",
+    "text": "yes, included in their Enterprise plan",
+    "ts": "1781285280.000100",
+    "thread_ts": "1781284800.000100",
+    "parent_user_id": "U01MAYAOKF"
+  },
+  {
+    "type": "message",
+    "user": "U02RKIM000",
+    "text": "adding both to the success plan",
+    "ts": "1781285700.000100",
+    "thread_ts": "1781284800.000100",
+    "parent_user_id": "U01MAYAOKF"
+  }
+]

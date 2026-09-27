@@ -1,0 +1,8 @@
+[
+  {
+    "type": "message",
+    "user": "U02SPATEL0",
+    "text": "noting: webhook delivery delays ~20 min in us-east-1, 13:20–13:45 UTC, bad deploy rolled back. below incident threshold, no customer comms",
+    "ts": "1788962820.000100"
+  }
+]

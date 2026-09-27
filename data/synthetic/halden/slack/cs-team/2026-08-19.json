@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02CMARTIN",
+    "text": "PSA: searching Zendesk for \"Acme\" gives you both Acme Corp and Acme Health. They're different customers! Acme Health = clinics network, Paul Nguyen is their contact. Acme Corp = Maya's manufacturing account.",
+    "ts": "1787135400.000100",
+    "thread_ts": "1787135400.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01MAYAOKF"
+    ],
+    "latest_reply": "1787135640.000100",
+    "replies": [
+      {
+        "user": "U01MAYAOKF",
+        "ts": "1787135640.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01MAYAOKF",
+    "text": "thank you, this bites me every week",
+    "ts": "1787135640.000100",
+    "thread_ts": "1787135400.000100",
+    "parent_user_id": "U02CMARTIN"
+  }
+]

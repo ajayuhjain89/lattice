@@ -1,0 +1,8 @@
+[
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": ":mega: The H2 2026 roadmap is published: <https://drive.halden.example/d/roadmap-2026-h2|Halden Flow roadmap — H2 2026>. Highlights: Directory Sync (SCIM) GA in 2026.09, SAML cert auto-rollover in 2026.08, audit log streaming in Q4, FHIR connector beta in Q4. As always: these are targets. Customer-facing timing comes from decision records.",
+    "ts": "1782979500.000100"
+  }
+]

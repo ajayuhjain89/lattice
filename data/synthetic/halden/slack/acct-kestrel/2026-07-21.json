@@ -1,0 +1,42 @@
+[
+  {
+    "type": "message",
+    "user": "U01DREYES0",
+    "text": "Kestrel is down on SSO — Sunita already called me. following #incidents",
+    "ts": "1784621400.000100",
+    "thread_ts": "1784621400.000100",
+    "reply_count": 2,
+    "reply_users_count": 2,
+    "reply_users": [
+      "U02RKIM000",
+      "U01DREYES0"
+    ],
+    "latest_reply": "1784628300.000100",
+    "replies": [
+      {
+        "user": "U02RKIM000",
+        "ts": "1784621700.000100"
+      },
+      {
+        "user": "U01DREYES0",
+        "ts": "1784628300.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02RKIM000",
+    "text": "I'll ping Martin so he knows we're on it",
+    "ts": "1784621700.000100",
+    "thread_ts": "1784621400.000100",
+    "parent_user_id": "U01DREYES0"
+  },
+  {
+    "type": "message",
+    "user": "U01DREYES0",
+    "text": "they're back (web). mobile still catching up",
+    "ts": "1784628300.000100",
+    "thread_ts": "1784621400.000100",
+    "parent_user_id": "U01DREYES0"
+  }
+]

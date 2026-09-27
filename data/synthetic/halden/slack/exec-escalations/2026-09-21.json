@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U01GWHITFD",
+    "text": "Acme heads-up: Derek is escalating to Priscilla about SCIM moving to December. Setting up a call for tomorrow.",
+    "ts": "1789984800.000100",
+    "thread_ts": "1789984800.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01AMEHTA0"
+    ],
+    "latest_reply": "1789985100.000100",
+    "replies": [
+      {
+        "user": "U01AMEHTA0",
+        "ts": "1789985100.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01AMEHTA0",
+    "text": "I'll join",
+    "ts": "1789985100.000100",
+    "thread_ts": "1789984800.000100",
+    "parent_user_id": "U01GWHITFD"
+  }
+]

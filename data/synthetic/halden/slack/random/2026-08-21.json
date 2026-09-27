@@ -1,0 +1,42 @@
+[
+  {
+    "type": "message",
+    "user": "U02BADEYEM",
+    "text": "my dog just joined a customer call. customer was delighted, I was mortified",
+    "ts": "1787330400.000100",
+    "thread_ts": "1787330400.000100",
+    "reply_count": 2,
+    "reply_users_count": 2,
+    "reply_users": [
+      "U02HCHO000",
+      "U01PNATARJ"
+    ],
+    "latest_reply": "1787330700.000100",
+    "replies": [
+      {
+        "user": "U02HCHO000",
+        "ts": "1787330640.000100"
+      },
+      {
+        "user": "U01PNATARJ",
+        "ts": "1787330700.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02HCHO000",
+    "text": "this is the best possible outcome of any call",
+    "ts": "1787330640.000100",
+    "thread_ts": "1787330400.000100",
+    "parent_user_id": "U02BADEYEM"
+  },
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "pics or it didn't happen",
+    "ts": "1787330700.000100",
+    "thread_ts": "1787330400.000100",
+    "parent_user_id": "U02BADEYEM"
+  }
+]

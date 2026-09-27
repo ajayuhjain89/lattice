@@ -1,0 +1,8 @@
+[
+  {
+    "type": "message",
+    "user": "U03WZHAO00",
+    "text": "fixed — our app was sending a persistent NameID instead of email. all 20 test users fine now",
+    "ts": "1782124200.000100"
+  }
+]

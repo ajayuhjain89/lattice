@@ -1,0 +1,8 @@
+[
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "reminder for everyone: SSO error pages show a correlation ID since 2026.08. ask for it first, it saves a round trip",
+    "ts": "1787151600.000100"
+  }
+]

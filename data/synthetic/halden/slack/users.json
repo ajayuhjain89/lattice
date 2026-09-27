@@ -1,0 +1,368 @@
+[
+  {
+    "id": "U01MAYAOKF",
+    "team_id": "T0HALDEN01",
+    "name": "maya.okafor",
+    "real_name": "Maya Okafor",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Maya Okafor",
+      "display_name": "maya",
+      "email": "maya.okafor@halden.example",
+      "title": "Account Manager"
+    }
+  },
+  {
+    "id": "U01DREYES0",
+    "team_id": "T0HALDEN01",
+    "name": "daniel.reyes",
+    "real_name": "Daniel Reyes",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Daniel Reyes",
+      "display_name": "daniel",
+      "email": "daniel.reyes@halden.example",
+      "title": "Account Manager"
+    }
+  },
+  {
+    "id": "U01PNATARJ",
+    "team_id": "T0HALDEN01",
+    "name": "priya.natarajan",
+    "real_name": "Priya Natarajan",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Priya Natarajan",
+      "display_name": "priya",
+      "email": "priya.natarajan@halden.example",
+      "title": "Support Engineer"
+    }
+  },
+  {
+    "id": "U01TLINDQV",
+    "team_id": "T0HALDEN01",
+    "name": "tom.lindqvist",
+    "real_name": "Tom Lindqvist",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Tom Lindqvist",
+      "display_name": "tom",
+      "email": "tom.lindqvist@halden.example",
+      "title": "Product Manager, Identity"
+    }
+  },
+  {
+    "id": "U01SMARCHT",
+    "team_id": "T0HALDEN01",
+    "name": "sofia.marchetti",
+    "real_name": "Sofia Marchetti",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Sofia Marchetti",
+      "display_name": "sofia",
+      "email": "sofia.marchetti@halden.example",
+      "title": "Engineering Lead, Identity"
+    }
+  },
+  {
+    "id": "U01GWHITFD",
+    "team_id": "T0HALDEN01",
+    "name": "grace.whitfield",
+    "real_name": "Grace Whitfield",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Grace Whitfield",
+      "display_name": "grace",
+      "email": "grace.whitfield@halden.example",
+      "title": "VP Customer Success"
+    }
+  },
+  {
+    "id": "U01AMEHTA0",
+    "team_id": "T0HALDEN01",
+    "name": "arjun.mehta",
+    "real_name": "Arjun Mehta",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Arjun Mehta",
+      "display_name": "arjun",
+      "email": "arjun.mehta@halden.example",
+      "title": "CEO"
+    }
+  },
+  {
+    "id": "U01LBRANDT",
+    "team_id": "T0HALDEN01",
+    "name": "lena.brandt",
+    "real_name": "Lena Brandt",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Lena Brandt",
+      "display_name": "lena",
+      "email": "lena.brandt@halden.example",
+      "title": "IT Administrator"
+    }
+  },
+  {
+    "id": "U02RKIM000",
+    "team_id": "T0HALDEN01",
+    "name": "rachel.kim",
+    "real_name": "Rachel Kim",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Rachel Kim",
+      "display_name": "rachel",
+      "email": "rachel.kim@halden.example",
+      "title": "Customer Success Manager"
+    }
+  },
+  {
+    "id": "U02MFELD00",
+    "team_id": "T0HALDEN01",
+    "name": "marcus.feld",
+    "real_name": "Marcus Feld",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Marcus Feld",
+      "display_name": "marcus",
+      "email": "marcus.feld@halden.example",
+      "title": "Solutions Engineer"
+    }
+  },
+  {
+    "id": "U02CMARTIN",
+    "team_id": "T0HALDEN01",
+    "name": "chloe.martin",
+    "real_name": "Chloe Martin",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Chloe Martin",
+      "display_name": "chloe",
+      "email": "chloe.martin@halden.example",
+      "title": "Account Manager"
+    }
+  },
+  {
+    "id": "U02JBLAKE0",
+    "team_id": "T0HALDEN01",
+    "name": "jordan.blake",
+    "real_name": "Jordan Blake",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Jordan Blake",
+      "display_name": "jordan",
+      "email": "jordan.blake@halden.example",
+      "title": "Account Executive"
+    }
+  },
+  {
+    "id": "U02BADEYEM",
+    "team_id": "T0HALDEN01",
+    "name": "ben.adeyemi",
+    "real_name": "Ben Adeyemi",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Ben Adeyemi",
+      "display_name": "ben",
+      "email": "ben.adeyemi@halden.example",
+      "title": "Support Engineer"
+    }
+  },
+  {
+    "id": "U02HCHO000",
+    "team_id": "T0HALDEN01",
+    "name": "hannah.cho",
+    "real_name": "Hannah Cho",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Hannah Cho",
+      "display_name": "hannah",
+      "email": "hannah.cho@halden.example",
+      "title": "Support Team Lead"
+    }
+  },
+  {
+    "id": "U02JWEBER0",
+    "team_id": "T0HALDEN01",
+    "name": "jonas.weber",
+    "real_name": "Jonas Weber",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Jonas Weber",
+      "display_name": "jonas",
+      "email": "jonas.weber@halden.example",
+      "title": "Head of Support"
+    }
+  },
+  {
+    "id": "U02KMENSAH",
+    "team_id": "T0HALDEN01",
+    "name": "kofi.mensah",
+    "real_name": "Kofi Mensah",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Kofi Mensah",
+      "display_name": "kofi",
+      "email": "kofi.mensah@halden.example",
+      "title": "Staff Engineer, Identity"
+    }
+  },
+  {
+    "id": "U02WCHEN00",
+    "team_id": "T0HALDEN01",
+    "name": "wei.chen",
+    "real_name": "Wei Chen",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Wei Chen",
+      "display_name": "wei",
+      "email": "wei.chen@halden.example",
+      "title": "Software Engineer, Identity"
+    }
+  },
+  {
+    "id": "U02SPATEL0",
+    "team_id": "T0HALDEN01",
+    "name": "sam.patel",
+    "real_name": "Sam Patel",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Sam Patel",
+      "display_name": "sam",
+      "email": "sam.patel@halden.example",
+      "title": "Site Reliability Engineer"
+    }
+  },
+  {
+    "id": "U02NRAHMAN",
+    "team_id": "T0HALDEN01",
+    "name": "nadia.rahman",
+    "real_name": "Nadia Rahman",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Nadia Rahman",
+      "display_name": "nadia",
+      "email": "nadia.rahman@halden.example",
+      "title": "Product Marketing Manager"
+    }
+  },
+  {
+    "id": "U02OLIND00",
+    "team_id": "T0HALDEN01",
+    "name": "oskar.lind",
+    "real_name": "Oskar Lind",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Oskar Lind",
+      "display_name": "oskar",
+      "email": "oskar.lind@halden.example",
+      "title": "VP Engineering"
+    }
+  },
+  {
+    "id": "U02MSANTOS",
+    "team_id": "T0HALDEN01",
+    "name": "maria.santos",
+    "real_name": "Maria Santos",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Maria Santos",
+      "display_name": "maria",
+      "email": "maria.santos@halden.example",
+      "title": "People Partner"
+    }
+  },
+  {
+    "id": "U02OPRYCE0",
+    "team_id": "T0HALDEN01",
+    "name": "owen.pryce",
+    "real_name": "Owen Pryce",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Owen Pryce",
+      "display_name": "owen",
+      "email": "owen.pryce@halden.example",
+      "title": "Account Manager"
+    }
+  },
+  {
+    "id": "U03DHOLT00",
+    "team_id": "T0ACMECORP",
+    "name": "derek.holt",
+    "real_name": "Derek Holt",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Derek Holt",
+      "display_name": "derek",
+      "email": "derek.holt@acme.example",
+      "title": "Director, IT Operations (Acme Corp)"
+    },
+    "is_stranger": false
+  },
+  {
+    "id": "U03WZHAO00",
+    "team_id": "T0ACMECORP",
+    "name": "wen.zhao",
+    "real_name": "Wen Zhao",
+    "deleted": false,
+    "is_bot": false,
+    "profile": {
+      "real_name": "Wen Zhao",
+      "display_name": "wen",
+      "email": "wen.zhao@acme.example",
+      "title": "IAM Engineer (Acme Corp)"
+    },
+    "is_stranger": false
+  },
+  {
+    "id": "U09RELEASE",
+    "team_id": "T0HALDEN01",
+    "name": "release-bot",
+    "real_name": "Release Bot",
+    "deleted": false,
+    "is_bot": true,
+    "profile": {
+      "real_name": "Release Bot",
+      "display_name": "release",
+      "email": "",
+      "title": ""
+    }
+  },
+  {
+    "id": "U09PAGERDY",
+    "team_id": "T0HALDEN01",
+    "name": "pagerduty",
+    "real_name": "PagerDuty",
+    "deleted": false,
+    "is_bot": true,
+    "profile": {
+      "real_name": "PagerDuty",
+      "display_name": "pagerduty",
+      "email": "",
+      "title": ""
+    }
+  }
+]

@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U03DHOLT00",
+    "text": "Any news on the SCIM date? Our audit fieldwork starts 16 Nov.",
+    "ts": "1790173800.000100",
+    "thread_ts": "1790173800.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02MFELD00"
+    ],
+    "latest_reply": "1790175120.000100",
+    "replies": [
+      {
+        "user": "U02MFELD00",
+        "ts": "1790175120.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02MFELD00",
+    "text": "Maya will follow up with you directly this week",
+    "ts": "1790175120.000100",
+    "thread_ts": "1790173800.000100",
+    "parent_user_id": "U03DHOLT00"
+  }
+]

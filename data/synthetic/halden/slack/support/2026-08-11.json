@@ -1,0 +1,67 @@
+[
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "Customers keep asking when SCIM / Directory Sync ships — Acme and Brightwater this week. Roadmap says Sept but I heard it slipped? What can we tell them? <@U01TLINDQV>",
+    "ts": "1786454400.000100",
+    "thread_ts": "1786454400.000100",
+    "reply_count": 4,
+    "reply_users_count": 3,
+    "reply_users": [
+      "U01TLINDQV",
+      "U01PNATARJ",
+      "U02HCHO000"
+    ],
+    "latest_reply": "1786457100.000100",
+    "replies": [
+      {
+        "user": "U01TLINDQV",
+        "ts": "1786455660.000100"
+      },
+      {
+        "user": "U01PNATARJ",
+        "ts": "1786455840.000100"
+      },
+      {
+        "user": "U01TLINDQV",
+        "ts": "1786456320.000100"
+      },
+      {
+        "user": "U02HCHO000",
+        "ts": "1786457100.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": "Yes, Sept isn't happening. We're targeting October for GA now. It's a target, not a commitment — say \"expected\", don't promise a date.",
+    "ts": "1786455660.000100",
+    "thread_ts": "1786454400.000100",
+    "parent_user_id": "U01PNATARJ"
+  },
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": ":+1: \"expected in October\" it is. Should I update the macro?",
+    "ts": "1786455840.000100",
+    "thread_ts": "1786454400.000100",
+    "parent_user_id": "U01PNATARJ"
+  },
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": "Hold off on the macro until the load tests are done (end of Aug). Individual tickets are fine.",
+    "ts": "1786456320.000100",
+    "thread_ts": "1786454400.000100",
+    "parent_user_id": "U01PNATARJ"
+  },
+  {
+    "type": "message",
+    "user": "U02HCHO000",
+    "text": "tagging those tickets roadmap-question so the AMs see them",
+    "ts": "1786457100.000100",
+    "thread_ts": "1786454400.000100",
+    "parent_user_id": "U01PNATARJ"
+  }
+]

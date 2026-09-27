@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02CMARTIN",
+    "text": "Acme Health FHIR beta onboarding — <@U01TLINDQV> are you still the PM contact for the FHIR connector?",
+    "ts": "1787752800.000100",
+    "thread_ts": "1787752800.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01TLINDQV"
+    ],
+    "latest_reply": "1787754600.000100",
+    "replies": [
+      {
+        "user": "U01TLINDQV",
+        "ts": "1787754600.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": "yes, Q4 beta for design partners still stands. let's do the onboarding call in October",
+    "ts": "1787754600.000100",
+    "thread_ts": "1787752800.000100",
+    "parent_user_id": "U02CMARTIN"
+  }
+]

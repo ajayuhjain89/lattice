@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U01MAYAOKF",
+    "text": "proposal sent: 180 seats, $21.6k/yr, onboarding included. decision expected in April",
+    "ts": "1771947000.000100",
+    "thread_ts": "1771947000.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02RKIM000"
+    ],
+    "latest_reply": "1771947660.000100",
+    "replies": [
+      {
+        "user": "U02RKIM000",
+        "ts": "1771947660.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02RKIM000",
+    "text": "nice. I'll plan onboarding capacity for Gdańsk in April",
+    "ts": "1771947660.000100",
+    "thread_ts": "1771947000.000100",
+    "parent_user_id": "U01MAYAOKF"
+  }
+]
