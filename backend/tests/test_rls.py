@@ -27,6 +27,10 @@ TENANT_TABLES = (
     "accounts",
     "account_assignments",
     "sessions",
+    "access_groups",
+    "access_group_members",
+    "documents",
+    "document_grants",
 )
 GLOBAL_TABLES = ("organizations", "users", "external_identities")
 ALL_TABLES = (*GLOBAL_TABLES, *TENANT_TABLES)
@@ -72,6 +76,40 @@ async def _populate(db: Database, member: Member) -> None:
                 "VALUES (:o, :m, :a)"
             ),
             {"o": member.organization_id, "m": member.membership_id, "a": account},
+        )
+        group: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO access_groups (organization_id, origin, name) "
+                    "VALUES (:o, 'admin', 'Exec staff') RETURNING id"
+                ),
+                {"o": member.organization_id},
+            )
+        ).scalar_one()
+        await s.execute(
+            text(
+                "INSERT INTO access_group_members (organization_id, group_id, membership_id) "
+                "VALUES (:o, :g, :m)"
+            ),
+            {"o": member.organization_id, "g": group, "m": member.membership_id},
+        )
+        document: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO documents (organization_id, account_id, sensitivity, "
+                    "access_mode, department_ids) "
+                    "VALUES (:o, :a, 'restricted', 'grants_only', ARRAY[CAST(:d AS uuid)]) "
+                    "RETURNING id"
+                ),
+                {"o": member.organization_id, "a": account, "d": dept},
+            )
+        ).scalar_one()
+        await s.execute(
+            text(
+                "INSERT INTO document_grants (organization_id, document_id, principal_type, "
+                "group_id, origin) VALUES (:o, :d, 'group', :g, 'admin')"
+            ),
+            {"o": member.organization_id, "d": document, "g": group},
         )
 
 
@@ -166,6 +204,10 @@ async def test_org_b_rows_cannot_be_selected_by_id_from_org_a(
             ("SELECT 1 FROM external_identities WHERE user_id = :x", b.user_id),
             ("SELECT 1 FROM sessions WHERE organization_id = :x", b.organization_id),
             ("SELECT 1 FROM accounts WHERE organization_id = :x", b.organization_id),
+            ("SELECT 1 FROM documents WHERE organization_id = :x", b.organization_id),
+            ("SELECT 1 FROM document_grants WHERE organization_id = :x", b.organization_id),
+            ("SELECT 1 FROM access_groups WHERE organization_id = :x", b.organization_id),
+            ("SELECT 1 FROM access_group_members WHERE membership_id = :x", b.membership_id),
         ):
             assert (await s.execute(text(sql), {"x": param})).first() is None, sql
 
@@ -228,6 +270,18 @@ async def test_cannot_update_another_organizations_sessions(
         "INSERT INTO users (email, display_name) VALUES ('x@x.example', 'x')",
         "ALTER TABLE accounts DISABLE ROW LEVEL SECURITY",
         "SET ROLE lattice_auth",
+        # Phase 2: authorization facts are read-only at runtime.
+        "INSERT INTO access_groups (organization_id, origin, name) "
+        "VALUES (lattice_current_org_id(), 'admin', 'x')",
+        "DELETE FROM access_group_members",
+        "INSERT INTO documents (organization_id, sensitivity, access_mode) "
+        "VALUES (lattice_current_org_id(), 'internal', 'policy')",
+        "UPDATE documents SET access_mode = 'policy'",
+        "UPDATE documents SET sensitivity = 'internal'",
+        "DELETE FROM documents",
+        "DELETE FROM document_grants",
+        "UPDATE document_grants SET membership_id = NULL",
+        "ALTER TABLE documents NO FORCE ROW LEVEL SECURITY",
     ],
 )
 async def test_runtime_role_lacks_unneeded_privileges(

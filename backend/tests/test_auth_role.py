@@ -218,6 +218,10 @@ async def test_lattice_auth_cannot_create_objects(
         "SELECT 1 FROM membership_departments",
         "SELECT 1 FROM accounts",
         "SELECT 1 FROM account_assignments",
+        "SELECT 1 FROM access_groups",
+        "SELECT 1 FROM access_group_members",
+        "SELECT 1 FROM documents",
+        "SELECT 1 FROM document_grants",
         # No writes anywhere, including the tables it may read.
         "INSERT INTO organizations (slug, name) VALUES ('probe', 'Probe')",
         "UPDATE memberships SET is_admin = true",

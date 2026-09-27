@@ -76,3 +76,128 @@ async def login(
     if organization is not None:
         body["organization"] = organization
     return await client.post("/v1/auth/dev-login", json=body, headers=CSRF)
+
+
+# --- Authorization (Phase 2) ----------------------------------------------------------
+
+
+async def create_department(db: Database, organization_id: uuid.UUID, key: str) -> uuid.UUID:
+    async with db.tenant_transaction(organization_id) as s:
+        value: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO departments (organization_id, key, name) "
+                    "VALUES (:o, :k, :n) RETURNING id"
+                ),
+                {"o": organization_id, "k": key, "n": key.title()},
+            )
+        ).scalar_one()
+    return value
+
+
+async def create_account(db: Database, organization_id: uuid.UUID, key: str) -> uuid.UUID:
+    async with db.tenant_transaction(organization_id) as s:
+        value: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO accounts (organization_id, key, name) "
+                    "VALUES (:o, :k, :n) RETURNING id"
+                ),
+                {"o": organization_id, "k": key, "n": key.title()},
+            )
+        ).scalar_one()
+    return value
+
+
+async def create_group(
+    db: Database,
+    organization_id: uuid.UUID,
+    name: str,
+    members: tuple[uuid.UUID, ...] = (),
+    *,
+    origin: str = "admin",
+) -> uuid.UUID:
+    async with db.tenant_transaction(organization_id) as s:
+        group_id: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO access_groups (organization_id, origin, external_ref, name) "
+                    "VALUES (:o, :origin, :ref, :n) RETURNING id"
+                ),
+                {
+                    "o": organization_id,
+                    "origin": origin,
+                    "ref": f"ext-{name}" if origin == "source" else None,
+                    "n": name,
+                },
+            )
+        ).scalar_one()
+        for membership_id in members:
+            await s.execute(
+                text(
+                    "INSERT INTO access_group_members (organization_id, group_id, membership_id) "
+                    "VALUES (:o, :g, :m)"
+                ),
+                {"o": organization_id, "g": group_id, "m": membership_id},
+            )
+    return group_id
+
+
+async def create_document(
+    db: Database,
+    organization_id: uuid.UUID,
+    *,
+    sensitivity: str = "internal",
+    access_mode: str = "policy",
+    account_id: uuid.UUID | None = None,
+    department_ids: tuple[uuid.UUID, ...] = (),
+    status: str = "active",
+    grants: tuple[tuple[str, uuid.UUID], ...] = (),
+) -> uuid.UUID:
+    async with db.tenant_transaction(organization_id) as s:
+        document_id: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO documents (organization_id, account_id, sensitivity, "
+                    "access_mode, department_ids, status) "
+                    "VALUES (:o, :a, :s, :m, CAST(:d AS uuid[]), :st) RETURNING id"
+                ),
+                {
+                    "o": organization_id,
+                    "a": account_id,
+                    "s": sensitivity,
+                    "m": access_mode,
+                    "d": list(department_ids),
+                    "st": status,
+                },
+            )
+        ).scalar_one()
+    for principal_type, principal_id in grants:
+        await add_grant(db, organization_id, document_id, principal_type, principal_id)
+    return document_id
+
+
+async def add_grant(
+    db: Database,
+    organization_id: uuid.UUID,
+    document_id: uuid.UUID,
+    principal_type: str,
+    principal_id: uuid.UUID,
+    *,
+    origin: str = "admin",
+) -> None:
+    column = {"membership": "membership_id", "department": "department_id", "group": "group_id"}
+    async with db.tenant_transaction(organization_id) as s:
+        await s.execute(
+            text(
+                "INSERT INTO document_grants (organization_id, document_id, principal_type, "  # noqa: S608 - column from a fixed map
+                f"{column[principal_type]}, origin) VALUES (:o, :d, :t, :p, :origin)"
+            ),
+            {
+                "o": organization_id,
+                "d": document_id,
+                "t": principal_type,
+                "p": principal_id,
+                "origin": origin,
+            },
+        )
