@@ -58,6 +58,9 @@ jobs:
       - name: Type check (mypy --strict)
         run: uv run mypy
 
+      - name: Dataset lint (synthetic data + golden set; no database, no model)
+        run: uv run lattice dataset lint
+
       - name: Bootstrap database (roles, databases, extensions)
         working-directory: .
         run: >-

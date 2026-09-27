@@ -1,0 +1,73 @@
+[
+  {
+    "id": "G0ACCTACME1",
+    "name": "acct-acme",
+    "created": 1731888000,
+    "creator": "U01MAYAOKF",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01MAYAOKF",
+      "U01GWHITFD",
+      "U02RKIM000",
+      "U02MFELD00"
+    ],
+    "topic": {
+      "value": "Acme Corp account team (private)",
+      "creator": "U01MAYAOKF",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Internal account team for Acme Corp",
+      "creator": "U01MAYAOKF",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "G0PRODIDEN1",
+    "name": "prod-identity",
+    "created": 1768176000,
+    "creator": "U01TLINDQV",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01TLINDQV",
+      "U01SMARCHT",
+      "U02KMENSAH",
+      "U02WCHEN00"
+    ],
+    "topic": {
+      "value": "Identity & Access squad",
+      "creator": "U01TLINDQV",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Squad channel",
+      "creator": "U01TLINDQV",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "G0EXECESC01",
+    "name": "exec-escalations",
+    "created": 1714608000,
+    "creator": "U01GWHITFD",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01GWHITFD",
+      "U01AMEHTA0",
+      "U02JWEBER0"
+    ],
+    "topic": {
+      "value": "Customer escalations at exec level",
+      "creator": "U01GWHITFD",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Exec escalations",
+      "creator": "U01GWHITFD",
+      "last_set": 0
+    }
+  }
+]

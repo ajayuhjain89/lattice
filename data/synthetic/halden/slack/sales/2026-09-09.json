@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02OPRYCE0",
+    "text": "Tidewell: invoice dispute sorted, invoice was correct. their renewal is March, will start the conversation in November",
+    "ts": "1788951600.000100",
+    "thread_ts": "1788951600.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01GWHITFD"
+    ],
+    "latest_reply": "1788952200.000100",
+    "replies": [
+      {
+        "user": "U01GWHITFD",
+        "ts": "1788952200.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01GWHITFD",
+    "text": "thanks Owen. keep it simple with them, no concessions without a reason",
+    "ts": "1788952200.000100",
+    "thread_ts": "1788951600.000100",
+    "parent_user_id": "U02OPRYCE0"
+  }
+]

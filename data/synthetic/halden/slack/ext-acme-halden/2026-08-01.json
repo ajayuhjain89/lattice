@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U03DHOLT00",
+    "text": "Cutover done, all Halden logins now go through Okta :tada:",
+    "ts": "1785607200.000100",
+    "thread_ts": "1785607200.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01MAYAOKF"
+    ],
+    "latest_reply": "1785607500.000100",
+    "replies": [
+      {
+        "user": "U01MAYAOKF",
+        "ts": "1785607500.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01MAYAOKF",
+    "text": "congrats! great work Wen",
+    "ts": "1785607500.000100",
+    "thread_ts": "1785607200.000100",
+    "parent_user_id": "U03DHOLT00"
+  }
+]

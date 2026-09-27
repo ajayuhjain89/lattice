@@ -1,0 +1,8 @@
+[
+  {
+    "type": "message",
+    "user": "U02SPATEL0",
+    "text": "webhook delivery delays (~20 min) in us-east-1 between 13:20–13:45, queue backlog after a bad deploy. rolled back. no incident needed, noted in #incidents",
+    "ts": "1788962700.000100"
+  }
+]

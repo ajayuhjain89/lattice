@@ -1,0 +1,100 @@
+[
+  {
+    "type": "message",
+    "subtype": "bot_message",
+    "bot_id": "B09PAGERDY",
+    "username": "PagerDuty",
+    "text": "Incident INC-2026-031 triggered: SAML validation error rate > 20% (sso-edge).",
+    "ts": "1784621100.000100"
+  },
+  {
+    "type": "message",
+    "user": "U02SPATEL0",
+    "text": ":rotating_light: INC-2026-031 declared — SSO failures (SAML signature validation) for several workspaces since ~07:40 UTC. IC: Sam. Comms: Hannah. Affected so far: Kestrel Bank (P1, HAL-4702) and Larkspur Retail (HAL-4704).",
+    "ts": "1784621160.000100",
+    "thread_ts": "1784621160.000100",
+    "reply_count": 6,
+    "reply_users_count": 4,
+    "reply_users": [
+      "U02HCHO000",
+      "U01SMARCHT",
+      "U02SPATEL0",
+      "U02WCHEN00"
+    ],
+    "latest_reply": "1784629200.000100",
+    "replies": [
+      {
+        "user": "U02HCHO000",
+        "ts": "1784621520.000100"
+      },
+      {
+        "user": "U01SMARCHT",
+        "ts": "1784623200.000100"
+      },
+      {
+        "user": "U02SPATEL0",
+        "ts": "1784623620.000100"
+      },
+      {
+        "user": "U02WCHEN00",
+        "ts": "1784627700.000100"
+      },
+      {
+        "user": "U02SPATEL0",
+        "ts": "1784628900.000100"
+      },
+      {
+        "user": "U02HCHO000",
+        "ts": "1784629200.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02HCHO000",
+    "text": "status page updated",
+    "ts": "1784621520.000100",
+    "thread_ts": "1784621160.000100",
+    "parent_user_id": "U02SPATEL0"
+  },
+  {
+    "type": "message",
+    "user": "U01SMARCHT",
+    "text": "found it: this morning's signing cert rotation replaced the cert without dual-signing. IdPs that pin the old cert reject us",
+    "ts": "1784623200.000100",
+    "thread_ts": "1784621160.000100",
+    "parent_user_id": "U02SPATEL0"
+  },
+  {
+    "type": "message",
+    "user": "U02SPATEL0",
+    "text": "options: roll back to the previous cert, or ask customers to update metadata. rolling back. Wei on it",
+    "ts": "1784623620.000100",
+    "thread_ts": "1784621160.000100",
+    "parent_user_id": "U02SPATEL0"
+  },
+  {
+    "type": "message",
+    "user": "U02WCHEN00",
+    "text": "previous cert restored. web logins recovering",
+    "ts": "1784627700.000100",
+    "thread_ts": "1784621160.000100",
+    "parent_user_id": "U02SPATEL0"
+  },
+  {
+    "type": "message",
+    "user": "U02SPATEL0",
+    "text": "mobile sessions recovered too. resolving. postmortem owner: Sofia",
+    "ts": "1784628900.000100",
+    "thread_ts": "1784621160.000100",
+    "parent_user_id": "U02SPATEL0"
+  },
+  {
+    "type": "message",
+    "user": "U02HCHO000",
+    "text": "status page resolved. 5 workspaces affected in total",
+    "ts": "1784629200.000100",
+    "thread_ts": "1784621160.000100",
+    "parent_user_id": "U02SPATEL0"
+  }
+]

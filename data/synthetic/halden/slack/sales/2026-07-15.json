@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U01MAYAOKF",
+    "text": "quick one: is waiving the 7% renewal uplift counted as a discount? <@U01GWHITFD>",
+    "ts": "1784124000.000100",
+    "thread_ts": "1784124000.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01GWHITFD"
+    ],
+    "latest_reply": "1784125320.000100",
+    "replies": [
+      {
+        "user": "U01GWHITFD",
+        "ts": "1784125320.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01GWHITFD",
+    "text": "yes — waiving it counts as a 7% discount, so it's within AM authority (up to 10%). see the discounting guidelines",
+    "ts": "1784125320.000100",
+    "thread_ts": "1784124000.000100",
+    "parent_user_id": "U01MAYAOKF"
+  }
+]

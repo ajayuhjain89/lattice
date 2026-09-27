@@ -1,0 +1,31 @@
+# Veridian's source configuration. Same shapes as Halden's, deliberately overlapping
+# identifiers (ticket IDs, some channel IDs, document IDs).
+sources:
+  - key: drive
+    connector_type: document_repository
+    name: Veridian Drive
+    path: documents
+    default_sensitivity: internal
+    authority: working
+
+  - key: support
+    connector_type: ticketing
+    name: Veridian Support Desk
+    path: tickets
+    default_sensitivity: internal
+    account_scoped: true
+    authority: working
+    account_refs:
+      5100201: acme-corp
+      5100202: brightwater-health
+      5100203: quarry-lane-media
+
+  - key: slack
+    connector_type: chat_export
+    name: Veridian Slack
+    path: slack
+    default_sensitivity: internal
+    authority: conversational
+    channels:
+      C0VACCTACME: {account: acme-corp}
+      G0VLEADERS1: {sensitivity: confidential}

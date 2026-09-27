@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U03WZHAO00",
+    "text": "Okta preview tenant app is created from your metadata. SAML test tomorrow 15:00 UTC?",
+    "ts": "1781709600.000100",
+    "thread_ts": "1781709600.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02MFELD00"
+    ],
+    "latest_reply": "1781710260.000100",
+    "replies": [
+      {
+        "user": "U02MFELD00",
+        "ts": "1781710260.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02MFELD00",
+    "text": "works for me",
+    "ts": "1781710260.000100",
+    "thread_ts": "1781709600.000100",
+    "parent_user_id": "U03WZHAO00"
+  }
+]

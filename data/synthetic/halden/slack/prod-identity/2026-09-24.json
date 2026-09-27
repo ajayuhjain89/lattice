@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02WCHEN00",
+    "text": "rewrite update: event log + per-workspace ordering done, about 2 weeks ahead of plan on that part. group PATCH next",
+    "ts": "1790265600.000100",
+    "thread_ts": "1790265600.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01TLINDQV"
+    ],
+    "latest_reply": "1790266320.000100",
+    "replies": [
+      {
+        "user": "U01TLINDQV",
+        "ts": "1790266320.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": "nice! let's not change any dates though — GA stays 8 Dec until the beta exit criteria are met",
+    "ts": "1790266320.000100",
+    "thread_ts": "1790265600.000100",
+    "parent_user_id": "U02WCHEN00"
+  }
+]

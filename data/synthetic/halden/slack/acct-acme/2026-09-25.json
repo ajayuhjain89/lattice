@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02MFELD00",
+    "text": "Derek asked for news in the shared channel. told him you'd follow up, Maya",
+    "ts": "1790348400.000100",
+    "thread_ts": "1790348400.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01MAYAOKF"
+    ],
+    "latest_reply": "1790349120.000100",
+    "replies": [
+      {
+        "user": "U01MAYAOKF",
+        "ts": "1790349120.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01MAYAOKF",
+    "text": "calling him Monday",
+    "ts": "1790349120.000100",
+    "thread_ts": "1790348400.000100",
+    "parent_user_id": "U02MFELD00"
+  }
+]

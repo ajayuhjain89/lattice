@@ -1,0 +1,41 @@
+[
+  {
+    "type": "message",
+    "user": "U01FWAGNER",
+    "text": "Acme outage, all plant dashboards down (HAL-4905). paging eng",
+    "ts": "1789369800.000100",
+    "thread_ts": "1789369800.000100",
+    "reply_count": 2,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02MNOVAK0"
+    ],
+    "latest_reply": "1789391160.000100",
+    "replies": [
+      {
+        "user": "U02MNOVAK0",
+        "ts": "1789370700.000100"
+      },
+      {
+        "user": "U02MNOVAK0",
+        "ts": "1789391160.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02MNOVAK0",
+    "text": "on it. renderer pool is crash-looping after the 06:30 deploy",
+    "ts": "1789370700.000100",
+    "thread_ts": "1789369800.000100",
+    "parent_user_id": "U01FWAGNER"
+  },
+  {
+    "type": "message",
+    "user": "U02MNOVAK0",
+    "text": "fixed and rolled back, dashboards rendering",
+    "ts": "1789391160.000100",
+    "thread_ts": "1789369800.000100",
+    "parent_user_id": "U01FWAGNER"
+  }
+]

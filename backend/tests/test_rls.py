@@ -80,8 +80,8 @@ async def _populate(db: Database, member: Member) -> None:
         group: uuid.UUID = (
             await s.execute(
                 text(
-                    "INSERT INTO access_groups (organization_id, origin, name) "
-                    "VALUES (:o, 'admin', 'Exec staff') RETURNING id"
+                    "INSERT INTO access_groups (organization_id, key, origin, name) "
+                    "VALUES (:o, 'exec-staff', 'admin', 'Exec staff') RETURNING id"
                 ),
                 {"o": member.organization_id},
             )
@@ -271,8 +271,8 @@ async def test_cannot_update_another_organizations_sessions(
         "ALTER TABLE accounts DISABLE ROW LEVEL SECURITY",
         "SET ROLE lattice_auth",
         # Phase 2: authorization facts are read-only at runtime.
-        "INSERT INTO access_groups (organization_id, origin, name) "
-        "VALUES (lattice_current_org_id(), 'admin', 'x')",
+        "INSERT INTO access_groups (organization_id, key, origin, name) "
+        "VALUES (lattice_current_org_id(), 'x', 'admin', 'x')",
         "DELETE FROM access_group_members",
         "INSERT INTO documents (organization_id, sensitivity, access_mode) "
         "VALUES (lattice_current_org_id(), 'internal', 'policy')",

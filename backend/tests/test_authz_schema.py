@@ -229,12 +229,13 @@ INVALID_ROWS = {
         "ck_document_grants_origin",
     ),
     "source group without external ref": (
-        "INSERT INTO access_groups (organization_id, origin, name) VALUES (:org, 'source', 'x')",
+        "INSERT INTO access_groups (organization_id, key, origin, name) "
+        "VALUES (:org, 'x', 'source', 'x')",
         "ck_access_groups_external_ref_iff_source",
     ),
     "admin group with external ref": (
-        "INSERT INTO access_groups (organization_id, origin, external_ref, name) "
-        "VALUES (:org, 'admin', 'C123', 'x')",
+        "INSERT INTO access_groups (organization_id, key, origin, external_ref, name) "
+        "VALUES (:org, 'x', 'admin', 'C123', 'x')",
         "ck_access_groups_external_ref_iff_source",
     ),
 }

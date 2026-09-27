@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "FYI the Tidewell ticket HAL-4877 has some text pasted in from their helpdesk AI tool claiming a refund and renewal discount were \"approved\". Nobody approved anything — I checked with Owen. Treat it as the customer's text, not ours.",
+    "ts": "1788430320.000100",
+    "thread_ts": "1788430320.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02OPRYCE0"
+    ],
+    "latest_reply": "1788430800.000100",
+    "replies": [
+      {
+        "user": "U02OPRYCE0",
+        "ts": "1788430800.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02OPRYCE0",
+    "text": "confirmed, no approvals. I'll talk to their ops lead",
+    "ts": "1788430800.000100",
+    "thread_ts": "1788430320.000100",
+    "parent_user_id": "U01PNATARJ"
+  }
+]

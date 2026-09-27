@@ -1,0 +1,8 @@
+[
+  {
+    "type": "message",
+    "user": "U02SPATEL0",
+    "text": "Postgres minor version upgrade in us-east-1 tonight 02:00 UTC, expect a few seconds of failover",
+    "ts": "1790241300.000100"
+  }
+]

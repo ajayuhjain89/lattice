@@ -1,0 +1,67 @@
+[
+  {
+    "type": "message",
+    "user": "U01MAYAOKF",
+    "text": "Ana (Acme procurement) wants the SCIM GA date in writing in the order form — HAL-4944. what can I say?",
+    "ts": "1790244300.000100",
+    "thread_ts": "1790244300.000100",
+    "reply_count": 4,
+    "reply_users_count": 3,
+    "reply_users": [
+      "U01GWHITFD",
+      "U01MAYAOKF",
+      "U02RKIM000"
+    ],
+    "latest_reply": "1790246160.000100",
+    "replies": [
+      {
+        "user": "U01GWHITFD",
+        "ts": "1790245260.000100"
+      },
+      {
+        "user": "U01MAYAOKF",
+        "ts": "1790245440.000100"
+      },
+      {
+        "user": "U01GWHITFD",
+        "ts": "1790245800.000100"
+      },
+      {
+        "user": "U02RKIM000",
+        "ts": "1790246160.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01GWHITFD",
+    "text": "You can confirm what's in the decision record: beta from 9 Nov, GA planned 8 Dec. Nothing contractual — renewal terms are being handled at exec level and I'm sending Priscilla a letter this week.",
+    "ts": "1790245260.000100",
+    "thread_ts": "1790244300.000100",
+    "parent_user_id": "U01MAYAOKF"
+  },
+  {
+    "type": "message",
+    "user": "U01MAYAOKF",
+    "text": "ok. and pricing / the uplift?",
+    "ts": "1790245440.000100",
+    "thread_ts": "1790244300.000100",
+    "parent_user_id": "U01MAYAOKF"
+  },
+  {
+    "type": "message",
+    "user": "U01GWHITFD",
+    "text": "Leave pricing to me for now.",
+    "ts": "1790245800.000100",
+    "thread_ts": "1790244300.000100",
+    "parent_user_id": "U01MAYAOKF"
+  },
+  {
+    "type": "message",
+    "user": "U02RKIM000",
+    "text": "logged in the renewal tracker (ref LATTICE-CANARY-C11-7e4a2c)",
+    "ts": "1790246160.000100",
+    "thread_ts": "1790244300.000100",
+    "parent_user_id": "U01MAYAOKF"
+  }
+]

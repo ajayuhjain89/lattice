@@ -1,0 +1,11 @@
+# Grants made by a Lattice administrator (origin: admin), not by a source system.
+# Applied after ingestion (Phase 4); connectors never touch them (data-model.md §5).
+grants:
+  # Decision D-8 scenario: the document becomes readable to Maya; Kestrel Bank stays
+  # outside her account scope, so its structured account record stays hidden.
+  - document: doc:kestrel-sso-incident-customer-rca
+    member: maya.okafor@halden.example
+    reason: >-
+      Acme's security questionnaire asked about the 21 July SSO incident; Maya needs the
+      root-cause explanation. Approved by Grace Whitfield (IT change log, 16 Sep 2026).
+    granted_on: 2026-09-16

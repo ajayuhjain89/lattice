@@ -4,6 +4,10 @@
         Upsert organizations/users/memberships from manifests (as lattice_owner).
     lattice check-db-role
         Run the API's startup safety check against LATTICE_DATABASE_URL and report.
+    lattice dataset lint [--data DIR] [--golden DIR]
+        Validate the synthetic dataset and the golden set (no database, no model).
+    lattice dataset generate [--data DIR]
+        Regenerate the deterministic bulk distractor tickets.
 
 Exit codes: 0 success, 1 check failed, 2 configuration or input error.
 """
@@ -18,6 +22,8 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from lattice.config import ConfigurationError, load_migration_settings, load_settings
+from lattice.dataset.distractors import DATA, write_bulk_tickets
+from lattice.dataset.lint import lint, load_dataset, summary
 from lattice.db.engine import Database, create_engine
 from lattice.db.role_check import inspect_runtime_role
 from lattice.seed import load_manifest, seed_manifest
@@ -86,14 +92,42 @@ async def _check_db_role() -> int:
     return 0
 
 
+def _dataset_lint(data_dir: Path, golden_dir: Path) -> int:
+    dataset = load_dataset(data_dir, golden_dir)
+    problems = lint(dataset)
+    for problem in problems:
+        print(problem, file=sys.stderr)
+    facts = summary(dataset)
+    for name, value in facts.items():
+        print(f"{name}: {value}")
+    if problems:
+        print(f"FAILED: {len(problems)} problem(s)", file=sys.stderr)
+        return 1
+    print("OK: dataset and golden set are valid")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="lattice", description="Lattice operator tools")
     commands = parser.add_subparsers(dest="command", required=True)
     seed = commands.add_parser("seed", help="Seed organizations from YAML manifests")
     seed.add_argument("--manifest", type=Path, action="append", required=True)
     commands.add_parser("check-db-role", help="Verify the runtime database role is safe")
+    dataset = commands.add_parser("dataset", help="Synthetic dataset tools")
+    dataset_commands = dataset.add_subparsers(dest="dataset_command", required=True)
+    lint_cmd = dataset_commands.add_parser("lint", help="Validate the dataset and golden set")
+    lint_cmd.add_argument("--data", type=Path, default=DATA)
+    lint_cmd.add_argument("--golden", type=Path, default=DATA.parents[1] / "evals" / "golden")
+    generate = dataset_commands.add_parser("generate", help="Regenerate bulk distractor tickets")
+    generate.add_argument("--data", type=Path, default=DATA)
     args = parser.parse_args(argv)
 
+    if args.command == "dataset":
+        if args.dataset_command == "lint":
+            return _dataset_lint(args.data, args.golden)
+        for path in write_bulk_tickets(args.data):
+            print(f"wrote {path}")
+        return 0
     try:
         if args.command == "seed":
             return asyncio.run(_seed(args.manifest))

@@ -4,6 +4,8 @@ Status: §1–2 implemented in Phase 1 (dev identity provider, sessions). §3–
 account-visibility rules of §9 are **implemented in Phase 2** (`backend/src/lattice/authz`,
 migration 0003) and proven by the suites listed in §6; enforcement points E3 and E4
 exist as library functions that retrieval (Phase 5) and answering (Phase 6) will call.
+Phase 3 added decision D-8 (structured account metadata, §6 and §9, policy version
+`authz-2`) and D-9 (a stable key for access groups, migration 0004).
 Related: `data-model.md` §2–5, `security-model.md`, ADR-003, ADR-005.
 
 ---
@@ -56,7 +58,7 @@ well-run Drive or Slack workspace.
 | Clearance        | `memberships.clearance`         | `internal` < `confidential` |
 | Account scope    | `memberships.account_scope` + `account_assignments` | `all`, or only assigned accounts |
 | Department       | `membership_departments`        | Satisfies department-restricted documents |
-| Access group     | `access_groups` + members       | Principal for grants (e.g. private channel members, "Exec staff") |
+| Access group     | `access_groups` + members       | Principal for grants (e.g. private channel members, "Exec staff"). Identified in manifests and sync by its stable organization-scoped `key` (D-9); the policy uses only its ID |
 | Sensitivity      | `documents.sensitivity`         | *How sensitive*: `internal`, `confidential`, `restricted`. Checked against clearance. Separately used by the AI egress policy (not an authorization rule; `security-model.md` §6) |
 | Access mode      | `documents.access_mode`         | *Who decides*: `policy` (rules below) or `grants_only` (explicit grants only). Restricted ⇒ grants_only |
 | Department restriction | `documents.department_ids` | Empty = none |
@@ -227,7 +229,17 @@ reasons (SEC-8). Alerting on that event is Phase 11.
   account in the member's lists, filters, mention detection or autocomplete. Proven
   equivalent in the same property test. The admin account directory is a separate,
   capability-gated view (Phase 9).
-- **Policy version.** `POLICY_VERSION` (`"authz-1"`) is carried by every
+- **Structured account metadata (decision D-8)**:
+  `visible_document_account(ctx, doc)` returns a document's account only when the
+  document is readable **and** `account_visible` holds; otherwise `None`. Evidence
+  cards, the inspector's account field, the `account` attribute of prompt evidence and
+  account facets use it, so an explicit grant on a document of an out-of-scope account
+  makes the document (and the customer name in its text) readable without disclosing
+  the structured account record or making the account discoverable. Nothing is
+  substituted for the omitted account. Retrieval's SQL form is a `LEFT JOIN accounts`
+  whose `ON` clause carries `visible_accounts_predicate`; both forms are tested against
+  every persona × document pair (`tests/security/test_account_metadata.py`).
+- **Policy version.** `POLICY_VERSION` (`"authz-2"` since D-8; `"authz-1"` was Phase 2) is carried by every
   `AuthorizationContext` and explanation, and will be stored in traces (Phase 6).
   `tests/test_authz_boundary.py` pins a fingerprint (SHA-256 of the docstring-free
   AST) of `context.py`, `policy.py`, `sql.py` and `resolve.py` to each version: any
@@ -290,6 +302,9 @@ source name, author, account, date, count, or existence. Concretely:
 
 - "No accessible evidence" responses are identical whether evidence is nonexistent or
   unreadable. No "you may not have access" hints.
+- Readable documents disclose their account as structured metadata only when the
+  account is in the reader's scope (D-8, §6). An explicit grant is a decision to share
+  one document, not the account record.
 - Counts, facets and "sources searched" summaries are computed inside the user's
   predicate.
 - Direct lookups return 404 (not 403) for unreadable IDs.
@@ -310,7 +325,13 @@ source name, author, account, date, count, or existence. Concretely:
   department restriction). Contains canary string `LATTICE-CANARY-B-7f3a9c`.
 - User 1 (Maya, Account Manager, assigned Acme, internal) and User 2 (Grace,
   Leadership, confidential).
-- Both ask "What commitments have we made to Acme?"
+- Both ask "What commitments have we made to Acme?" Grace's account scope is `all`, so
+  for her "Acme" also matches Acme Health and the unscoped question is `ambiguous`
+  (retrieval-design §2); her run selects the Acme Corp scope (a filter that only
+  narrows). For Maya, Acme Health is invisible, so her question is not ambiguous and
+  must not offer it as a choice. The Phase 3 golden set encodes both
+  (`evals/golden/ai_egress.yaml` `egress-acme-commitments-grace`,
+  `account_visibility.yaml` `visibility-commitments-maya`), plus Priya and Daniel.
 
 Assertions (automated, `tests/security/test_critical_acme.py`):
 

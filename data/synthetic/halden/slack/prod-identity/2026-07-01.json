@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": "Sept GA is in the H2 roadmap going out tomorrow — still ok?",
+    "ts": "1782900000.000100",
+    "thread_ts": "1782900000.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01SMARCHT"
+    ],
+    "latest_reply": "1782901200.000100",
+    "replies": [
+      {
+        "user": "U01SMARCHT",
+        "ts": "1782901200.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01SMARCHT",
+    "text": "tight but yes, if the load tests in August are fine",
+    "ts": "1782901200.000100",
+    "thread_ts": "1782900000.000100",
+    "parent_user_id": "U01TLINDQV"
+  }
+]

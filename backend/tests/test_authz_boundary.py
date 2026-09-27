@@ -44,7 +44,18 @@ ACCESS_SQL = re.compile(
 )
 
 # module (relative to src/lattice, dotted) -> names it may use, with the reason.
-ALLOWED: dict[str, frozenset[str]] = {}
+ALLOWED: dict[str, frozenset[str]] = {
+    # The operator seed writes admin-defined access groups and their members from the
+    # organization manifest, upserting by the stable key (D-9). It writes no documents
+    # or grants and builds no access conditions.
+    "seed": frozenset({"AccessGroup", "AccessGroupMember"}),
+    # The dataset's expected-access oracle maps raw fixture metadata to DocumentAccess
+    # and asks the *reference* policy (readable, account_visible,
+    # visible_document_account) who may read each record. It builds no SQL and no
+    # access condition of its own; confining the vocabulary to this module keeps the
+    # rest of lattice.dataset clean.
+    "dataset.access": frozenset({"sensitivity", "access_mode", "department_ids"}),
+}
 
 
 @dataclass(frozen=True)
@@ -188,6 +199,8 @@ POLICY_FILES = ("context.py", "policy.py", "sql.py", "resolve.py")
 # formatting do not affect the fingerprint.
 POLICY_FINGERPRINTS = {
     "authz-1": "33ecc0dbf73c974351c7db1a4eb7d0366a53917782415a3bf3093641b8863499",
+    # D-8: visible_document_account (structured account metadata of readable documents).
+    "authz-2": "ddfdb0e29d3480d339e889a1481d7ef4c05c5c145bdff6fd32aa3da57ff5a846",
 }
 
 

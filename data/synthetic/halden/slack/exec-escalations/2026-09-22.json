@@ -1,0 +1,42 @@
+[
+  {
+    "type": "message",
+    "user": "U01GWHITFD",
+    "text": "Acme call done. Priscilla treats October as a commitment we broke. We agreed: beta 9 Nov with Kofi dedicated, GA 8 Dec, a credit of two months' fees if we're not GA by 31 Jan, and a flat renewal (no uplift). Letter to Priscilla by Friday. (tracker LATTICE-CANARY-C12-91b0e4)",
+    "ts": "1790101200.000100",
+    "thread_ts": "1790101200.000100",
+    "reply_count": 2,
+    "reply_users_count": 2,
+    "reply_users": [
+      "U01AMEHTA0",
+      "U02JWEBER0"
+    ],
+    "latest_reply": "1790102400.000100",
+    "replies": [
+      {
+        "user": "U01AMEHTA0",
+        "ts": "1790101860.000100"
+      },
+      {
+        "user": "U02JWEBER0",
+        "ts": "1790102400.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01AMEHTA0",
+    "text": "good. keep the credit out of writing until Isabel has reviewed",
+    "ts": "1790101860.000100",
+    "thread_ts": "1790101200.000100",
+    "parent_user_id": "U01GWHITFD"
+  },
+  {
+    "type": "message",
+    "user": "U02JWEBER0",
+    "text": "I'll make sure support stops quoting dates on Acme tickets",
+    "ts": "1790102400.000100",
+    "thread_ts": "1790101200.000100",
+    "parent_user_id": "U01GWHITFD"
+  }
+]

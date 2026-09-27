@@ -1,4 +1,4 @@
-"""Phase 1 seed tooling: deterministic, idempotent, RLS-respecting."""
+"""Seed tooling: deterministic, idempotent, RLS-respecting."""
 
 from pathlib import Path
 
@@ -37,7 +37,7 @@ async def test_seeded_tenants_are_isolated(owner_db: Database, app_db: Database)
     await seed_manifest(owner_db, load_manifest(VERIDIAN))
     halden = await _org_id(owner_db, "halden")
     veridian = await _org_id(owner_db, "veridian")
-    for org, expected_members in ((halden, 8), (veridian, 2)):
+    for org, expected_members in ((halden, 8), (veridian, 3)):
         async with app_db.tenant_transaction(org) as s:  # type: ignore[arg-type]
             members: int = (await s.execute(text("SELECT count(*) FROM memberships"))).scalar_one()
             accounts: int = (
@@ -116,6 +116,9 @@ async def test_access_changes_bump_authz_updated_at(owner_db: Database) -> None:
         (lambda m: m["organization"].update(slug="Not Valid"), "lowercase"),
         (lambda m: m["members"][0].update(clearance="restricted"), "clearance"),
         (lambda m: m["members"][0].update(unexpected=True), "Extra inputs"),
+        (lambda m: m["groups"][0].update(members=["nobody@halden.example"]), "unknown members"),
+        (lambda m: m["groups"].append(dict(m["groups"][0])), "duplicate group"),
+        (lambda m: m["groups"][0].update(key="Exec Staff"), "lowercase"),
     ],
 )
 def test_invalid_manifests_are_rejected(mutation: object, message: str) -> None:
@@ -136,3 +139,115 @@ def test_seed_cli_reports_invalid_manifest(tmp_path: Path, monkeypatch: pytest.M
     bad = tmp_path / "org.yaml"
     bad.write_text("organization: {slug: x}\nmembers: 3\n")
     assert main(["seed", "--manifest", str(bad)]) == 2
+
+
+# --- Admin-defined access groups (D-9: identified by their stable key) --------------------
+
+
+async def _groups(db: Database, org: object) -> dict[str, tuple[object, str, set[str]]]:
+    """key -> (id, name, member emails)."""
+    async with db.tenant_transaction(org) as s:  # type: ignore[arg-type]
+        rows = (
+            await s.execute(
+                text(
+                    "SELECT g.key, g.id, g.name, g.origin, u.email FROM access_groups g "
+                    "LEFT JOIN access_group_members gm ON gm.group_id = g.id "
+                    "LEFT JOIN memberships m ON m.id = gm.membership_id "
+                    "LEFT JOIN users u ON u.id = m.user_id"
+                )
+            )
+        ).all()
+    groups: dict[str, tuple[object, str, set[str]]] = {}
+    for key, group_id, name, origin, email in rows:
+        assert origin == "admin"
+        entry = groups.setdefault(str(key), (group_id, str(name), set()))
+        if email is not None:
+            entry[2].add(str(email))
+    return groups
+
+
+async def test_groups_are_seeded_by_key_in_each_organization(owner_db: Database) -> None:
+    await seed_manifest(owner_db, load_manifest(HALDEN))
+    await seed_manifest(owner_db, load_manifest(VERIDIAN))
+    halden = await _groups(owner_db, await _org_id(owner_db, "halden"))
+    veridian = await _groups(owner_db, await _org_id(owner_db, "veridian"))
+    assert {k: v[1:] for k, v in halden.items()} == {
+        "exec-staff": (
+            "Exec staff",
+            {"grace.whitfield@halden.example", "arjun.mehta@halden.example"},
+        )
+    }
+    # The same key in another organization is a different group.
+    assert veridian["exec-staff"][2] == {"ines.carvalho@veridian.example"}
+    assert veridian["exec-staff"][0] != halden["exec-staff"][0]
+
+
+async def test_renaming_a_group_keeps_its_identity(owner_db: Database) -> None:
+    base = load_manifest(HALDEN).model_dump()
+    await seed_manifest(owner_db, Manifest.model_validate(base))
+    org = await _org_id(owner_db, "halden")
+    before = await _groups(owner_db, org)
+    base["groups"][0]["name"] = "Executive staff"
+    report = await seed_manifest(owner_db, Manifest.model_validate(base))
+    after = await _groups(owner_db, org)
+    assert report.counts["group.written"] == 1
+    assert after["exec-staff"][0] == before["exec-staff"][0]
+    assert after["exec-staff"][1:] == ("Executive staff", before["exec-staff"][2])
+
+
+async def test_a_new_key_is_a_new_group_and_the_old_one_is_left_alone(
+    owner_db: Database,
+) -> None:
+    """Changing a key is an identity change, not a rename: the seed creates a group under
+    the new key and never deletes or rewires the old one (it may carry grants)."""
+    base = load_manifest(HALDEN).model_dump()
+    await seed_manifest(owner_db, Manifest.model_validate(base))
+    org = await _org_id(owner_db, "halden")
+    old = await _groups(owner_db, org)
+    base["groups"][0]["key"] = "leadership-team"
+    await seed_manifest(owner_db, Manifest.model_validate(base))
+    groups = await _groups(owner_db, org)
+    assert set(groups) == {"exec-staff", "leadership-team"}
+    assert groups["exec-staff"] == old["exec-staff"]
+    assert groups["leadership-team"][0] != old["exec-staff"][0]
+
+
+async def test_group_membership_changes_bump_authz_updated_at(owner_db: Database) -> None:
+    base = load_manifest(HALDEN).model_dump()
+    await seed_manifest(owner_db, Manifest.model_validate(base))
+    org = await _org_id(owner_db, "halden")
+
+    async def stamps() -> dict[str, object]:
+        async with owner_db.tenant_transaction(org) as s:  # type: ignore[arg-type]
+            rows = await s.execute(
+                text(
+                    "SELECT u.email, m.authz_updated_at FROM memberships m "
+                    "JOIN users u ON u.id = m.user_id"
+                )
+            )
+            return {str(email): stamp for email, stamp in rows.all()}
+
+    before = await stamps()
+    base["groups"][0]["members"] = ["arjun.mehta@halden.example"]  # Grace leaves
+    await seed_manifest(owner_db, Manifest.model_validate(base))
+    after = await stamps()
+    changed = {email for email in after if after[email] != before[email]}
+    assert changed == {"grace.whitfield@halden.example"}
+    assert (await _groups(owner_db, org))["exec-staff"][2] == {"arjun.mehta@halden.example"}
+
+
+async def test_seed_never_takes_over_a_source_synced_group(owner_db: Database) -> None:
+    await seed_manifest(owner_db, load_manifest(HALDEN))
+    org = await _org_id(owner_db, "halden")
+    async with owner_db.tenant_transaction(org) as s:  # type: ignore[arg-type]
+        await s.execute(
+            text(
+                "INSERT INTO access_groups (organization_id, key, origin, external_ref, name) "
+                "VALUES (:o, 'acct-acme', 'source', 'G0ACCTACME1', '#acct-acme')"
+            ),
+            {"o": org},
+        )
+    base = load_manifest(HALDEN).model_dump()
+    base["groups"].append({"key": "acct-acme", "name": "Acme team", "members": []})
+    with pytest.raises(ValueError, match="not admin-defined"):
+        await seed_manifest(owner_db, Manifest.model_validate(base))

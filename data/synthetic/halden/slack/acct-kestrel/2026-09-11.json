@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02RKIM000",
+    "text": "Sunita said their risk committee wants a vendor review \"because of July\" and asked for a competing quote. flagging to Grace",
+    "ts": "1789143600.000100",
+    "thread_ts": "1789143600.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01DREYES0"
+    ],
+    "latest_reply": "1789144260.000100",
+    "replies": [
+      {
+        "user": "U01DREYES0",
+        "ts": "1789144260.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01DREYES0",
+    "text": "ugh. renewal is Jan 31. opened a renewal-risk case, ref LATTICE-CANARY-C14-0b6d7e",
+    "ts": "1789144260.000100",
+    "thread_ts": "1789143600.000100",
+    "parent_user_id": "U02RKIM000"
+  }
+]

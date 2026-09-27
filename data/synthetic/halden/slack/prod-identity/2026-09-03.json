@@ -1,0 +1,80 @@
+[
+  {
+    "type": "message",
+    "user": "U02KMENSAH",
+    "text": "load test round 2: p95 provisioning lag still 38 min at 20k users, and 0.4% of users land in the wrong groups because user and group jobs aren't ordered. I don't think v1 can ship",
+    "ts": "1788430500.000100",
+    "thread_ts": "1788430500.000100",
+    "reply_count": 5,
+    "reply_users_count": 4,
+    "reply_users": [
+      "U01SMARCHT",
+      "U01TLINDQV",
+      "U02WCHEN00",
+      "U02KMENSAH"
+    ],
+    "latest_reply": "1788432900.000100",
+    "replies": [
+      {
+        "user": "U01SMARCHT",
+        "ts": "1788431460.000100"
+      },
+      {
+        "user": "U01TLINDQV",
+        "ts": "1788432000.000100"
+      },
+      {
+        "user": "U02WCHEN00",
+        "ts": "1788432240.000100"
+      },
+      {
+        "user": "U01TLINDQV",
+        "ts": "1788432720.000100"
+      },
+      {
+        "user": "U02KMENSAH",
+        "ts": "1788432900.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01SMARCHT",
+    "text": "agree. tuning won't fix ordering. we need a dedicated provisioning service, ~8 weeks",
+    "ts": "1788431460.000100",
+    "thread_ts": "1788430500.000100",
+    "parent_user_id": "U02KMENSAH"
+  },
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": "so October is off. Acme is the one I'm worried about — Priya told them October on HAL-4821",
+    "ts": "1788432000.000100",
+    "thread_ts": "1788430500.000100",
+    "parent_user_id": "U02KMENSAH"
+  },
+  {
+    "type": "message",
+    "user": "U02WCHEN00",
+    "text": "could do a beta early Nov if we start now. load test notes are in the doc (LATTICE-CANARY-C13-3d9f61)",
+    "ts": "1788432240.000100",
+    "thread_ts": "1788430500.000100",
+    "parent_user_id": "U02KMENSAH"
+  },
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": "ok. Kofi can you write the RFC? I'll draft a decision record for next week",
+    "ts": "1788432720.000100",
+    "thread_ts": "1788430500.000100",
+    "parent_user_id": "U02KMENSAH"
+  },
+  {
+    "type": "message",
+    "user": "U02KMENSAH",
+    "text": "RFC by Monday",
+    "ts": "1788432900.000100",
+    "thread_ts": "1788430500.000100",
+    "parent_user_id": "U02KMENSAH"
+  }
+]

@@ -2,7 +2,9 @@
 
 Status: Foundation draft (Phase 0). Implemented so far: §3–5 (Phase 1) and the
 authorization controls behind SEC-3, SEC-4, SEC-5 (explanations), SEC-14 (account
-visibility) and SEC-15 at the policy layer (Phase 2); see §9 for which suites exist.
+visibility, including D-8 structured account metadata) and SEC-15 at the policy layer
+(Phase 2); see §9 for which suites exist. The Phase 3 synthetic dataset places 19
+canaries for the canary suites (`data/synthetic/canaries.yaml`).
 Related: `authorization-model.md`, `trust-boundaries.md`, `threat-model.md`.
 
 ---
@@ -231,6 +233,8 @@ evidence (D-5: off/deferred).
 | `tests/security/test_admin_not_content_access.py` ✔ | CI | SEC-15 at the policy layer: no capability field in the context; toggling admin changes no one's access; no explanation oracle |
 | `tests/security/test_authz_fail_closed.py` ✔ | CI | Unknown/malformed/cross-tenant state denied, including with the schema's guards removed |
 | `tests/security/test_authz_explain.py`, `test_authz_invariant.py`, `test_authz_context.py` ✔ | CI | Explanation semantics; E4 aborts and never filters; context resolution |
+| `tests/security/test_account_metadata.py`, `test_access_group_key.py` ✔ | CI | D-8: structured account metadata only when readable and visible (reference and SQL join form); D-9: group keys never affect access |
+| `tests/dataset/` ✔ | CI | The synthetic dataset and golden set validated against the reference policy; canaries unique and placed; the dataset's access oracle equals the seeded resolver |
 | `tests/security/critical_acme` | CI | The permanent scenario (`authorization-model.md` §10) |
 | `tests/security/canary` | CI | Recording fake providers capture every payload; canary strings from restricted/confidential docs must never appear for unauthorized personas — in payloads, responses, traces or captured logs |
 | `tests/security/test_authz_revocation.py` ✔ | CI | Each access change type → next check differs, no document rewritten; snapshot consistency |
@@ -256,6 +260,7 @@ channel or document can itself be sensitive. Rules per channel:
 | **Ingestion status / "source out of date" notices** | Only for sources they can read | All sources |
 | **Sync failure messages** | Not shown | Stage + error code + templated message (never free text from the record). The record's external ID / filename / title / URL is shown only if the admin can read the corresponding active document; otherwise an opaque reference (`rec_7f3a…`, a keyed hash) is shown. Raw identifiers are available only to infrastructure operators via CLI with database access. One exception: `access_unmappable:account` shows the unmapped *external account reference*, because mapping it is the admin's task and the account directory is already admin-visible — never the record's title or content |
 | **Filenames, titles, external IDs, URLs** | Only for readable documents (evidence, inspector) | Same rule — admin pages never show document-level metadata for documents the admin can't read |
+| **Structured account metadata of readable documents** (decision D-8) | The account field of an evidence card or inspector, the `account` attribute of prompt evidence, account facets: only when the account is inside the member's scope (`authz.visible_document_account`). A document readable through an explicit grant on an out-of-scope account shows no account at all — no substitute name — and the grant does not put the account into lists, filters, mention detection or autocomplete. Text *inside* the document that names the customer is content, readable because the document is | Same rule for their own evidence |
 | **Access groups** (e.g. private channels) | Their own memberships only | Admin-created groups: name + members. Source-synced groups: name shown only if the admin is a member; otherwise "Private channel (synced from Slack)" + opaque reference + member list (needed to explain a member's access) |
 | **Access-change previews** | — | Counts only over documents the admin can read; beyond that, effects are described as rules ("Maya will lose access to all Kestrel Bank content"), without counts |
 | **Filters / facets** | Values and counts computed inside the predicate; source-type options only for types with readable documents | Same |

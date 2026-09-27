@@ -40,7 +40,7 @@ from typing import Final
 
 from lattice.authz.context import AuthorizationContext
 
-POLICY_VERSION: Final = "authz-1"
+POLICY_VERSION: Final = "authz-2"
 
 # Clearance levels and the sensitivities they cover. "restricted" is deliberately
 # absent: no clearance ever reaches restricted content.
@@ -158,3 +158,25 @@ def account_visible(ctx: AuthorizationContext, account: AccountRef) -> bool:
     if ctx.account_scope == "assigned":
         return account.id in ctx.assigned_account_ids
     return False
+
+
+def visible_document_account(ctx: AuthorizationContext, doc: DocumentAccess) -> uuid.UUID | None:
+    """The account to show as *structured metadata* of ``doc`` (an evidence card's
+    account field, the account attribute of prompt evidence, a facet value) -- or
+    ``None`` when it must be omitted (decision D-8).
+
+    Document readability and account visibility are separate decisions. A member may
+    read a document through an explicit grant while its account is outside their
+    account scope; the document and its content stay readable, but the grant does not
+    disclose the structured account record: it is omitted here, never replaced by a
+    substitute name, and the account stays out of the member's lists, filters,
+    mention detection and autocomplete (``account_visible``). Text inside the
+    document that names the customer is content, and is governed by ``readable``.
+
+    Unreadable documents disclose nothing, so they yield ``None`` as well.
+    """
+    if doc.account_id is None or not readable(ctx, doc):
+        return None
+    if account_visible(ctx, AccountRef(doc.account_id, doc.organization_id)):
+        return doc.account_id
+    return None

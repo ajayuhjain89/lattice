@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02BADEYEM",
+    "text": "Derek from Acme replied on HAL-4821 asking if October is still the plan. do we answer?",
+    "ts": "1790175720.000100",
+    "thread_ts": "1790175720.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01PNATARJ"
+    ],
+    "latest_reply": "1790176200.000100",
+    "replies": [
+      {
+        "user": "U01PNATARJ",
+        "ts": "1790176200.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "no dates on that ticket for now. Maya and Grace are handling Acme directly. I'll tell Derek his AM will follow up",
+    "ts": "1790176200.000100",
+    "thread_ts": "1790175720.000100",
+    "parent_user_id": "U02BADEYEM"
+  }
+]

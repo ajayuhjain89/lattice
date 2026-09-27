@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U01GWHITFD",
+    "text": "Kestrel escalation — Sunita called Daniel during the incident. I'll call her tomorrow.",
+    "ts": "1784635200.000100",
+    "thread_ts": "1784635200.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01AMEHTA0"
+    ],
+    "latest_reply": "1784636040.000100",
+    "replies": [
+      {
+        "user": "U01AMEHTA0",
+        "ts": "1784636040.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01AMEHTA0",
+    "text": "offer the contractual credit, nothing more",
+    "ts": "1784636040.000100",
+    "thread_ts": "1784635200.000100",
+    "parent_user_id": "U01GWHITFD"
+  }
+]

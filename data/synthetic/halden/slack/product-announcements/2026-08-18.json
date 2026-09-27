@@ -1,0 +1,10 @@
+[
+  {
+    "type": "message",
+    "subtype": "bot_message",
+    "bot_id": "B09RELEASE",
+    "username": "Release Bot",
+    "text": "Halden Flow 2026.08 is live in all regions. Highlights: SAML signing certificate rollover with a 30-day overlap and 14-day admin notice, NetSuite connector v2, \"Wait for approval\" step.",
+    "ts": "1787036400.000100"
+  }
+]

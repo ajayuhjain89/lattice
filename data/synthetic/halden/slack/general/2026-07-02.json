@@ -1,0 +1,42 @@
+[
+  {
+    "type": "message",
+    "user": "U01AMEHTA0",
+    "text": "Thanks everyone for the H2 kickoff :pray: The roadmap doc is in Drive (Halden Flow roadmap — H2 2026). Big bets for the half: Directory Sync, the EU region decision, audit log streaming. Questions → #product-announcements",
+    "ts": "1783007880.000100",
+    "thread_ts": "1783007880.000100",
+    "reply_count": 2,
+    "reply_users_count": 2,
+    "reply_users": [
+      "U02MSANTOS",
+      "U02NRAHMAN"
+    ],
+    "latest_reply": "1783008660.000100",
+    "replies": [
+      {
+        "user": "U02MSANTOS",
+        "ts": "1783008300.000100"
+      },
+      {
+        "user": "U02NRAHMAN",
+        "ts": "1783008660.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02MSANTOS",
+    "text": ":tada:",
+    "ts": "1783008300.000100",
+    "thread_ts": "1783007880.000100",
+    "parent_user_id": "U01AMEHTA0"
+  },
+  {
+    "type": "message",
+    "user": "U02NRAHMAN",
+    "text": "slides are linked in the doc too",
+    "ts": "1783008660.000100",
+    "thread_ts": "1783007880.000100",
+    "parent_user_id": "U01AMEHTA0"
+  }
+]

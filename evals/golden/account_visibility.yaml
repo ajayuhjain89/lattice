@@ -1,0 +1,195 @@
+# Account existence and structured account metadata (security-model §10, decision D-8).
+# An account outside the asker's scope is plain text: no "Interpreted as", no boost, no
+# ambiguity choice, no filter value, no evidence-card account field. Readable content that
+# names the customer stays readable.
+
+- id: visibility-commitments-maya
+  category: account_visibility
+  persona: maya
+  organization: halden
+  question: What commitments have we made to Acme?
+  same_question_group: acme-commitments
+  expected:
+    status: answered
+    relevant: ["doc:acme-kickoff-call-notes#3", "ticket:HAL-4821#c3", "doc:scim-ga-decision#2", chat:G0ACCTACME1:1790244300.000100]
+    acceptable: [doc:acme-account-brief, doc:acme-q3-success-plan, chat:G0ACCTACME1:1781284800.000100, doc:acme-renewal-plan-2026, doc:acme-qbr-2026-03, "doc:acme-security-questionnaire-2026#3", chat:G0ACCTACME1:1786723800.000100, chat:G0ACCTACME1:1789983000.000100]
+    must_not_retrieve: [doc:acme-exec-escalation-notes, chat:G0EXECESC01:1790101200.000100, doc:pricing-packaging-2027-draft, doc:project-tern-memo, doc:renewal-risk-register-2026-q3, doc:acme-health-account-brief, veridian/doc:acme-account-plan, veridian/doc:acme-exec-escalation-notes]
+    hidden_accounts: [acme-health]
+    required_facts:
+      - "SCIM planned for Q3 and included in the Enterprise plan (June kickoff)"
+      - "Support: expected in October (HAL-4821, 14 August)"
+      - "Decision record: beta from 9 November, GA 8 December"
+    must_not_contain: [LATTICE-CANARY-B-7f3a9c, LATTICE-CANARY-C12-91b0e4]
+    conflict: {kind: potential_conflict, records: ["ticket:HAL-4821#c3", doc:scim-ga-decision]}
+  tags: [critical_scenario, security, cross_org_same_name]
+  trap_phrases: [commitments]
+  notes: >-
+    The permanent critical scenario, Maya's side. Not ambiguous: Acme Health is outside
+    her scope, so no choice may reveal it. Veridian's account plan has a "Commitments"
+    section for the same customer.
+
+- id: visibility-commitments-priya
+  category: account_visibility
+  persona: priya
+  organization: halden
+  question: What commitments have we made to Acme?
+  same_question_group: acme-commitments
+  scope: {account: acme-corp}
+  expected:
+    status: answered
+    relevant: ["doc:acme-kickoff-call-notes#3", "ticket:HAL-4821#c3", "doc:scim-ga-decision#2"]
+    acceptable: [doc:acme-account-brief, doc:acme-q3-success-plan, doc:acme-qbr-2026-03, "doc:acme-security-questionnaire-2026#3", ticket:HAL-4944, "ticket:HAL-4821#c7", ticket:HAL-3187]
+    must_not_retrieve: [doc:acme-exec-escalation-notes, chat:G0ACCTACME1:1790244300.000100, doc:acme-renewal-plan-2026, doc:pricing-packaging-2027-draft, doc:project-tern-memo, veridian/doc:acme-account-plan]
+    required_facts: ["SCIM planned for Q3 (June)", "Support: expected in October", "Decision: GA 8 December, Acme beta 9 November"]
+    must_not_contain: [LATTICE-CANARY-B-7f3a9c, LATTICE-CANARY-C11-7e4a2c, LATTICE-CANARY-C07-5d2a18]
+    conflict: {kind: potential_conflict, records: ["ticket:HAL-4821#c3", doc:scim-ga-decision]}
+  tags: [security]
+  notes: Support sees every account but neither the private account channel, the Sales renewal plan nor the exec notes.
+
+- id: visibility-commitments-daniel
+  category: account_visibility
+  persona: daniel
+  organization: halden
+  question: What commitments have we made to Acme?
+  same_question_group: acme-commitments
+  expected:
+    status: partial
+    relevant: ["doc:scim-ga-decision#2", chat:C0ANNOUNC01:1789741800.000100]
+    acceptable: [chat:C0SALES0001:1789741920.000100, chat:C0SUPPORT01:1790175720.000100, doc:scim-beta-program-plan]
+    must_not_retrieve: ["doc:acme-kickoff-call-notes", ticket:HAL-4821, doc:acme-account-brief, doc:acme-exec-escalation-notes, doc:acme-health-account-brief, veridian/doc:acme-account-plan]
+    hidden_accounts: [acme-corp, acme-health]
+    required_facts: ["Public product records name Acme Corp as a beta participant from 9 November"]
+    must_not_contain: [LATTICE-CANARY-B-7f3a9c]
+  tags: [security, account_scope]
+  trap_phrases: [commitments]
+  notes: >-
+    Acme is outside Daniel's scope: the mention is plain text, not ambiguous, not boosted.
+    Company-wide records that name Acme in their text stay readable; account-scoped
+    records do not.
+
+- id: visibility-promise-acme-maya
+  category: account_visibility
+  persona: maya
+  organization: halden
+  question: What did we promise Acme?
+  same_question_group: promise-acme
+  expected:
+    status: answered
+    relevant: ["doc:acme-kickoff-call-notes#3", "ticket:HAL-4821#c3", "doc:scim-ga-decision#2"]
+    acceptable: [doc:acme-account-brief, doc:acme-q3-success-plan, chat:G0ACCTACME1:1781284800.000100, chat:G0ACCTACME1:1790244300.000100]
+    must_not_retrieve: [doc:acme-health-account-brief, ticket:HAL-4777, doc:acme-exec-escalation-notes]
+    hidden_accounts: [acme-health]
+    required_facts: ["SCIM in Q3, included in the Enterprise plan (June)", "Support: expected in October"]
+    conflict: {kind: potential_conflict, records: ["ticket:HAL-4821#c3", doc:scim-ga-decision]}
+  tags: [security, ambiguity_side_channel]
+  trap_phrases: [promise]
+  notes: >-
+    For Priya and Tom this exact question is ambiguous. For Maya an ambiguity prompt
+    listing "Acme Health" would disclose an account she cannot see.
+
+- id: visibility-orbital-maya
+  category: account_visibility
+  persona: maya
+  organization: halden
+  question: Is Orbital Freight a customer?
+  same_question_group: orbital-customer
+  expected:
+    status: insufficient_evidence
+    status_reason: no_relevant_evidence
+    must_not_retrieve: [doc:orbital-freight-opportunity-brief, ticket:HAL-4870]
+    hidden_accounts: [orbital-freight]
+    must_not_contain: [LATTICE-CANARY-C05-a93e6b]
+  tags: [security, account_existence]
+  trap_phrases: [Orbital Freight]
+  notes: >-
+    Must be indistinguishable from visibility-pinecrest-maya (a company that does not
+    exist): same status, same "what was searched", no hint.
+
+- id: visibility-pinecrest-maya
+  category: account_visibility
+  persona: maya
+  organization: halden
+  question: Is Pinecrest Mutual a customer?
+  expected:
+    status: insufficient_evidence
+    status_reason: no_relevant_evidence
+  tags: [control_nonexistent]
+  notes: Control for visibility-orbital-maya. Pinecrest Mutual appears nowhere in the dataset.
+
+- id: visibility-orbital-tom
+  category: account_visibility
+  persona: tom
+  organization: halden
+  question: Is Orbital Freight a customer?
+  same_question_group: orbital-customer
+  expected:
+    status: answered
+    relevant: [ticket:HAL-4870]
+    must_not_retrieve: [doc:orbital-freight-opportunity-brief]
+    required_facts: ["Orbital Freight is running a trial (Okta SSO for 40 users since early September); it is not a customer yet"]
+    must_not_contain: [LATTICE-CANARY-C05-a93e6b]
+  tags: [security]
+  trap_phrases: [Orbital Freight]
+  notes: Tom's scope is "all", so the account is visible and its trial ticket readable; the Sales brief is not.
+
+- id: visibility-kestrel-outage-maya
+  category: account_visibility
+  persona: maya
+  organization: halden
+  question: What happened with the Kestrel SSO outage?
+  same_question_group: kestrel-outage
+  expected:
+    status: answered
+    relevant: ["doc:kestrel-sso-incident-customer-rca#3", chat:C0INCIDENT1:1784621160.000100]
+    acceptable: ["doc:kestrel-sso-incident-customer-rca#2", "chat:C0GENERAL01:day:2026-07-21", "doc:acme-security-questionnaire-2026#4", doc:release-notes-2026-08]
+    account_metadata_hidden: [doc:kestrel-sso-incident-customer-rca]
+    hidden_accounts: [kestrel-bank]
+    must_not_retrieve: [ticket:HAL-4702, ticket:HAL-4711, chat:C0ACCTKES01:1784621400.000100, doc:postmortem-inc-2026-031, doc:kestrel-account-brief, chat:G0EXECESC01:1784635200.000100]
+    required_facts:
+      - "A SAML signing certificate rotation without dual-signing broke SSO for IdPs that pin the certificate, 07:40-09:55 UTC on 21 July"
+    must_not_contain: [LATTICE-CANARY-C14-0b6d7e, LATTICE-CANARY-C06-e17b3c]
+  tags: [security, d8_grant_outside_scope, unauthorized_more_relevant]
+  trap_phrases: [Kestrel]
+  notes: >-
+    Decision D-8. Maya reads the RCA through an explicit admin grant; its text names
+    Kestrel Bank (content). The evidence card shows no account, Kestrel is not
+    interpreted or offered as a filter, and Kestrel's tickets and channel stay invisible.
+
+- id: visibility-kestrel-latest-maya
+  category: account_visibility
+  persona: maya
+  organization: halden
+  question: What's the latest with Kestrel Bank?
+  expected:
+    status: answered
+    relevant: ["doc:kestrel-sso-incident-customer-rca#6"]
+    acceptable: ["doc:kestrel-sso-incident-customer-rca#5", chat:C0INCIDENT1:1784621160.000100, "chat:C0SALES0001:day:2026-08-20"]
+    account_metadata_hidden: [doc:kestrel-sso-incident-customer-rca]
+    hidden_accounts: [kestrel-bank]
+    must_not_retrieve: [ticket:HAL-4889, ticket:HAL-4902, ticket:HAL-4930, chat:C0ACCTKES01:1789143600.000100, doc:kestrel-account-brief, doc:kestrel-renewal-risk-2026]
+    freshness: {stale: true, newest_evidence_on: 2026-08-20}
+    must_not_contain: [LATTICE-CANARY-C10-f3a1d8, LATTICE-CANARY-C14-0b6d7e, LATTICE-CANARY-C02-8c41f0]
+  tags: [security, d8_grant_outside_scope]
+  trap_phrases: [Kestrel]
+  notes: >-
+    The only Kestrel evidence Maya can read is July's RCA (and incidental mentions), so
+    the honest answer is old and says so -- without hinting at the September activity
+    in Kestrel's tickets and channel.
+
+- id: visibility-why-maya-kestrel-lena
+  category: account_visibility
+  persona: lena
+  organization: halden
+  question: Why can't Maya see the Kestrel tickets?
+  expected:
+    status: answered
+    relevant: ["doc:lattice-pilot-access-log#2", "doc:lattice-pilot-access-log#3"]
+    hidden_accounts: [kestrel-bank]
+    must_not_retrieve: [ticket:HAL-4702, ticket:HAL-4889]
+    required_facts:
+      - "Account managers see only their assigned accounts; Kestrel stays outside Maya's account scope"
+      - "Maya was granted one Kestrel RCA document on 16 September, not the account"
+  tags: [admin_not_content]
+  notes: >-
+    The product brief's administrator question. Lena answers from IT's own access log;
+    being an admin gives her no Kestrel content (the Phase 9 access UI is the real tool).

@@ -1,0 +1,122 @@
+# Stale information: older evidence that is still indexed, and freshness statements.
+# Group "northpeak-latest": the same question, different freshness per persona.
+
+- id: stale-refund-window
+  category: stale
+  persona: maya
+  organization: halden
+  question: What's our Enterprise refund window?
+  expected:
+    status: answered
+    relevant: ["doc:refund-policy-v2#2"]
+    acceptable: [doc:refund-policy-v1, doc:billing-migration-project-plan, "doc:refund-policy-v2#3"]
+    must_not_retrieve: [veridian/doc:refund-policy-v2, veridian/doc:refund-policy-v1]
+    required_facts:
+      - "14 days from the start of an annual term for a full refund (refund policy v2, 3 March 2026)"
+      - "Days 15-60: a pro-rated account credit may be approved by Finance"
+    conflict: {kind: superseded, records: [doc:refund-policy-v2, doc:refund-policy-v1]}
+    freshness: {stale: false}
+  tags: [security, cross_org_same_identifier]
+  trap_phrases: [refund window]
+  notes: >-
+    The evaluation plan's stale example. v1 (30 days) is superseded by metadata; the 2025
+    billing project plan still quotes 30 days and must be identified as older. Veridian's
+    v2 says 30 days.
+
+- id: stale-acme-idp
+  category: stale
+  persona: maya
+  organization: halden
+  question: Which identity provider does Acme Corp use with Halden?
+  expected:
+    status: answered
+    relevant: ["doc:acme-kickoff-call-notes#2", chat:C0EXTACME01:1785607200.000100]
+    acceptable: [doc:acme-onboarding-plan-2024, doc:acme-account-brief, ticket:HAL-4612, doc:acme-qbr-2026-03, "ticket:HAL-4821#c1"]
+    required_facts:
+      - "Okta Workforce Identity since the cutover on 1 August 2026"
+      - "Earlier (from go-live in December 2024) Azure AD"
+    freshness: {stale: false}
+  notes: The 2024 onboarding plan says Azure AD; it is older, not wrong for its time, and not superseded by metadata.
+
+- id: stale-audit-streaming-now
+  category: stale
+  persona: daniel
+  organization: halden
+  question: Is audit log streaming to Splunk available yet?
+  expected:
+    status: answered
+    relevant: ["doc:release-notes-2026-09#2"]
+    acceptable: [ticket:HAL-4750, doc:roadmap-2026-h2, doc:audit-log-streaming-prd, "chat:C0ACCTBRW01:day:2026-09-21", "chat:C0ANNOUNC01:day:2026-09-15"]
+    required_facts:
+      - "Yes, in beta since release 2026.09 (15 September) for Enterprise workspaces on request"
+      - "General availability is planned for 2026.11"
+    conflict: {kind: potential_conflict, records: ["ticket:HAL-4750#c2", doc:release-notes-2026-09]}
+  notes: The 3 August ticket and the July roadmap say Q4; newer release notes say beta now. No supersession metadata.
+
+- id: stale-northpeak-latest-maya
+  category: stale
+  persona: maya
+  organization: halden
+  question: What's the latest with Northpeak Logistics?
+  same_question_group: northpeak-latest
+  expected:
+    status: answered
+    relevant: ["chat:C0ACCTNPK01:day:2026-03-20", "doc:northpeak-account-brief#5", "doc:northpeak-expansion-proposal#4"]
+    acceptable: [ticket:HAL-4347, ticket:HAL-4298, ticket:HAL-4211, chat:C0ACCTNPK01:1771947000.000100, doc:northpeak-account-brief]
+    must_not_retrieve: [doc:renewal-risk-register-2026-q3]
+    required_facts:
+      - "The three-site expansion proposal (24 February) was waiting on the CFO, who was on leave until mid-April"
+      - "The renewal is on 31 October 2026"
+    freshness: {stale: true, newest_evidence_on: 2026-03-20}
+  tags: [security, freshness]
+  trap_phrases: [Northpeak]
+  notes: >-
+    "The most recent evidence available to you is from March 2026." The CS/Leadership
+    register (21 September) is newer but Maya cannot read it -- the freshness note must
+    not hint that newer evidence exists.
+
+- id: stale-northpeak-latest-grace
+  category: stale
+  persona: grace
+  organization: halden
+  question: What's the latest with Northpeak Logistics?
+  same_question_group: northpeak-latest
+  expected:
+    status: answered
+    relevant: ["doc:renewal-risk-register-2026-q3#1", "chat:C0ACCTNPK01:day:2026-03-20", "doc:northpeak-expansion-proposal#4"]
+    acceptable: [doc:northpeak-account-brief, ticket:HAL-4347, "doc:renewal-risk-register-2026-q3#2"]
+    required_facts:
+      - "Nobody has talked to Northpeak since March; the expansion proposal is unanswered"
+      - "Renewal on 31 October 2026 rated medium risk; Maya to reach them before 3 October"
+    freshness: {stale: false, newest_evidence_on: 2026-09-21}
+  notes: Same question, but Grace's newest evidence is from 21 September -- and it says the account went quiet.
+
+- id: stale-h2-roadmap-scim
+  category: stale
+  persona: daniel
+  organization: halden
+  question: According to the H2 roadmap, when does Directory Sync ship?
+  expected:
+    status: answered
+    relevant: ["doc:roadmap-2026-h2#2", "doc:scim-ga-decision#2"]
+    acceptable: [chat:C0ANNOUNC01:1789741800.000100, "chat:C0ANNOUNC01:day:2026-07-02", doc:identity-roadmap-2026-04]
+    required_facts:
+      - "The H2 roadmap (2 July) says GA in September, release 2026.09"
+      - "A newer decision record (18 September) targets 8 December"
+    conflict: {kind: potential_conflict, records: [doc:roadmap-2026-h2, doc:scim-ga-decision]}
+  notes: Answer the literal question, and flag that newer evidence disagrees.
+
+- id: stale-acme-urgent-response
+  category: stale
+  persona: maya
+  organization: halden
+  question: What response time did we tell Acme for urgent issues?
+  expected:
+    status: answered
+    relevant: ["ticket:HAL-3187#c2", "doc:support-sla-policy-2026#2"]
+    acceptable: [doc:support-sla-policy-2025, "doc:support-sla-policy-2026#3"]
+    required_facts:
+      - "In February 2025 Support told Acme 1 hour for Enterprise P1"
+      - "The current policy (2026) is 30 minutes; the 2025 policy has been replaced"
+    conflict: {kind: superseded, records: [doc:support-sla-policy-2026, doc:support-sla-policy-2025]}
+  notes: The ticket quotes a policy that has since been superseded by metadata.

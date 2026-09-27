@@ -5,15 +5,17 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–2 are implemented.** What runs today: a FastAPI backend with typed
+**Status: Phases 1–3 are implemented** (Phase 3 awaits review). What runs today: a FastAPI backend with typed
 fail-fast configuration, PostgreSQL 16 + pgvector with forced row-level security for
 organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
-for the synthetic organizations, CI — and (Phase 2) the authorization core: access
+for the synthetic organizations, CI — (Phase 2) the authorization core: access
 groups and grants, a deterministic reference policy, its SQL predicate for retrieval,
 a property-based proof that the two agree, explanations, and the pre-generation
-tripwire. There is no content, ingestion, retrieval, AI or web UI yet — see the
-[implementation plan](docs/implementation-plan.md).
+tripwire — and (Phase 3) a synthetic enterprise dataset of two organizations as raw
+document, ticket and Slack exports, with a golden question set and a lint that checks
+both against the real authorization policy. Nothing is ingested yet, and there is no
+retrieval, AI or web UI — see the [implementation plan](docs/implementation-plan.md).
 
 ## Local setup
 
@@ -26,7 +28,7 @@ cp .env.example .env      # local-only placeholder credentials; review before us
 make setup                # install backend dependencies from the lockfile
 make db-up                # Postgres 16 + pgvector on 127.0.0.1:5433; first start bootstraps roles
 make migrate              # apply migrations as lattice_owner
-make seed                 # Halden and Veridian synthetic orgs/people (safe to re-run)
+make seed                 # Halden and Veridian orgs, people, admin groups (safe to re-run)
 make check-db-role        # confirm the runtime role cannot bypass row-level security
 make api                  # http://127.0.0.1:8000 (interactive docs at /docs)
 ```
@@ -59,15 +61,18 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 | ------- | ------------ |
 | `make test` | All tests, against the separate `lattice_test` database (real PostgreSQL; the schema is rebuilt from a clean state each run). Includes the property-based authorization proof (500 examples; set `LATTICE_AUTHZ_EXAMPLES` to run more) |
 | `make lint` | `ruff check` + `ruff format --check` |
+| `make dataset-lint` | Validate the synthetic dataset and golden set against the reference policy (no database, no model) |
+| `make dataset-generate` | Regenerate the deterministic bulk distractor tickets after editing authored tickets |
 | `make format` | Apply formatting and safe lint fixes |
 | `make typecheck` | `mypy --strict` over source, tests and migrations |
 | `make db-bootstrap` | Re-run the idempotent superuser bootstrap (e.g. after changing passwords in `.env`) |
 | `make db-down` / `make db-destroy` | Stop Postgres / **delete** the local database volume |
 | `make help` | List all targets |
 
-CI (`.github/workflows/ci.yml`) runs lint, strict type checking, the bootstrap, a
-migration round-trip on a clean database with a model-drift check, the seed (twice),
-the runtime-role check, and the test suite against `pgvector/pgvector:0.8.1-pg16`.
+CI (`.github/workflows/ci.yml`) runs lint, strict type checking, the dataset lint, the
+bootstrap, a migration round-trip on a clean database with a model-drift check, the
+seed (twice), the runtime-role check, and the test suite against
+`pgvector/pgvector:0.8.1-pg16`.
 
 ## How isolation works (Phase 1)
 
@@ -97,7 +102,9 @@ unknown or malformed is denied; permission changes apply to the very next check.
 ```
 backend/            FastAPI app (src/lattice), Alembic migrations, tests
 infra/postgres/     superuser bootstrap: roles, databases, extensions
-data/synthetic/     synthetic organization manifests
+data/synthetic/     synthetic organizations: manifests, raw source exports, ground truth
+                    (see data/synthetic/README.md)
+evals/golden/       golden question set
 docs/               product, architecture, security and design documentation
 compose.yaml        local Postgres only
 Makefile            developer commands (thin wrappers; read before running)
@@ -115,7 +122,8 @@ Makefile            developer commands (thin wrappers; read before running)
 | [Connector design](docs/connector-design.md) · [Ingestion design](docs/ingestion-design.md) | Getting data in, idempotently and fail-closed |
 | [Retrieval design](docs/retrieval-design.md) | Hybrid retrieval, ranking, generation, citations, freshness, conflicts, refusals |
 | [Evaluation plan](docs/evaluation-plan.md) | Synthetic dataset, golden set, metrics |
+| [Synthetic dataset](data/synthetic/README.md) | Halden and Veridian: personas, storylines, timeline, access design, canaries, golden set |
 | [Design system](docs/design-system.md) | Reference analysis, tokens, components, states |
-| [Implementation plan](docs/implementation-plan.md) | Phases, traceability, open decisions, Phase 1 as-built notes |
+| [Implementation plan](docs/implementation-plan.md) | Phases, traceability, open decisions, as-built notes per phase |
 | [Decisions](docs/decisions/README.md) | ADRs |
 | [Runbook](docs/runbook.md) | Local operations (implemented) and later procedures (planned) |

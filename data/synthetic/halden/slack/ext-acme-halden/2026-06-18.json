@@ -1,0 +1,8 @@
+[
+  {
+    "type": "message",
+    "user": "U02MFELD00",
+    "text": "test logins work for 3 users, the 4th gets a redirect loop. opening a ticket so it's tracked (HAL-4612)",
+    "ts": "1781798700.000100"
+  }
+]

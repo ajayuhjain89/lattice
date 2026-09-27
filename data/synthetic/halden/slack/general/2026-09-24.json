@@ -1,0 +1,42 @@
+[
+  {
+    "type": "message",
+    "user": "U01LBRANDT",
+    "text": "IT note: we're piloting Lattice (question answering over Drive, Zendesk and Slack) with 8 people. If you're in the pilot you got an email. It only shows you things you can already access — it doesn't open anything up.",
+    "ts": "1790247600.000100",
+    "thread_ts": "1790247600.000100",
+    "reply_count": 2,
+    "reply_users_count": 2,
+    "reply_users": [
+      "U01TLINDQV",
+      "U01LBRANDT"
+    ],
+    "latest_reply": "1790248140.000100",
+    "replies": [
+      {
+        "user": "U01TLINDQV",
+        "ts": "1790247960.000100"
+      },
+      {
+        "user": "U01LBRANDT",
+        "ts": "1790248140.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01TLINDQV",
+    "text": "can it read private channels?",
+    "ts": "1790247960.000100",
+    "thread_ts": "1790247600.000100",
+    "parent_user_id": "U01LBRANDT"
+  },
+  {
+    "type": "message",
+    "user": "U01LBRANDT",
+    "text": "only ones you're a member of. same rules as Slack itself",
+    "ts": "1790248140.000100",
+    "thread_ts": "1790247600.000100",
+    "parent_user_id": "U01LBRANDT"
+  }
+]

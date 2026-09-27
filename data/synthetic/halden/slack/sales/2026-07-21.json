@@ -1,0 +1,42 @@
+[
+  {
+    "type": "message",
+    "user": "U02JBLAKE0",
+    "text": "anyone have a good NetSuite reference customer? prospect wants to talk to someone running it at scale",
+    "ts": "1784649600.000100",
+    "thread_ts": "1784649600.000100",
+    "reply_count": 2,
+    "reply_users_count": 2,
+    "reply_users": [
+      "U02MFELD00",
+      "U01MAYAOKF"
+    ],
+    "latest_reply": "1784650800.000100",
+    "replies": [
+      {
+        "user": "U02MFELD00",
+        "ts": "1784650320.000100"
+      },
+      {
+        "user": "U01MAYAOKF",
+        "ts": "1784650800.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02MFELD00",
+    "text": "Acme runs their supplier invoice routing on it, but ask Maya before we volunteer them",
+    "ts": "1784650320.000100",
+    "thread_ts": "1784649600.000100",
+    "parent_user_id": "U02JBLAKE0"
+  },
+  {
+    "type": "message",
+    "user": "U01MAYAOKF",
+    "text": "let's not ask Acme right now, they're mid Okta migration. try Tidewell?",
+    "ts": "1784650800.000100",
+    "thread_ts": "1784649600.000100",
+    "parent_user_id": "U02JBLAKE0"
+  }
+]

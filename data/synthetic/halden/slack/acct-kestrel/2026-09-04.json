@@ -1,0 +1,42 @@
+[
+  {
+    "type": "message",
+    "user": "U01DREYES0",
+    "text": "new ticket HAL-4889 — 'assertion expired' errors. Martin's team sees it as the incident continuing :face_with_head_bandage:",
+    "ts": "1788526800.000100",
+    "thread_ts": "1788526800.000100",
+    "reply_count": 2,
+    "reply_users_count": 2,
+    "reply_users": [
+      "U01PNATARJ",
+      "U01DREYES0"
+    ],
+    "latest_reply": "1788527700.000100",
+    "replies": [
+      {
+        "user": "U01PNATARJ",
+        "ts": "1788527520.000100"
+      },
+      {
+        "user": "U01DREYES0",
+        "ts": "1788527700.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "it's clock skew on their side. sent the runbook steps",
+    "ts": "1788527520.000100",
+    "thread_ts": "1788526800.000100",
+    "parent_user_id": "U01DREYES0"
+  },
+  {
+    "type": "message",
+    "user": "U01DREYES0",
+    "text": "thanks, I'll set up a call with Martin",
+    "ts": "1788527700.000100",
+    "thread_ts": "1788526800.000100",
+    "parent_user_id": "U01DREYES0"
+  }
+]

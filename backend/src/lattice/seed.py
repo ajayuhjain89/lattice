@@ -1,12 +1,18 @@
-"""Minimal Phase 1 seed: organizations, departments, accounts, users and memberships
-from a YAML manifest (e.g. data/synthetic/halden/org.yaml).
+"""Operator seed: organizations, departments, accounts, users, memberships and
+admin-defined access groups from a YAML manifest (e.g. data/synthetic/halden/org.yaml).
 
 * Runs as lattice_owner (operator tool), but tenant rows are still written through
   row-level security: the organization is bound before any tenant table is touched.
-* Idempotent and deterministic: upserts by natural keys (organization slug, department
-  and account keys, user email). Re-running an unchanged manifest writes nothing.
-  Department and account assignments are made to match the manifest exactly for the
-  members it lists. Entities absent from the manifest are left alone (never deleted).
+* Idempotent and deterministic: upserts by natural keys (organization slug, department,
+  account and access-group keys, user email). Re-running an unchanged manifest writes
+  nothing. Department and account assignments, and the members of each listed group,
+  are made to match the manifest exactly. Entities absent from the manifest are left
+  alone (never deleted).
+* Access groups (``origin = 'admin'``) are identified by their stable key (D-9):
+  renaming a group in the manifest updates its name in place; a different key is a
+  different group, and the group under the old key is left untouched with its members
+  and grants -- removing it is a deliberate operator action, not a side effect.
+  Documents and grants are not seeded: they arrive through ingestion (Phase 4).
 * Creates development identities (issuer ``dev``, subject = email) so the personas can
   use the development login. Refuses to run when LATTICE_ENV=production.
 """
@@ -25,6 +31,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
+from lattice.authz import AccessGroup, AccessGroupMember
 from lattice.db.engine import Database, bind_organization
 from lattice.identity.dev_provider import DEV_ISSUER, normalize_subject
 from lattice.identity.models import ExternalIdentity, User
@@ -101,11 +108,28 @@ class MemberSpec(_Strict):
         return self
 
 
+class GroupSpec(_Strict):
+    """An admin-defined access group, e.g. "Exec staff". Source-synced groups (private
+    channels) come from their connector, not from the manifest."""
+
+    key: str
+    name: str = Field(min_length=1)
+    members: list[str] = Field(default_factory=list)
+
+    _key = field_validator("key")(_check_key)
+
+    @field_validator("members")
+    @classmethod
+    def _emails(cls, value: list[str]) -> list[str]:
+        return [normalize_subject(v) for v in value]
+
+
 class Manifest(_Strict):
     organization: OrganizationSpec
     departments: list[DepartmentSpec] = Field(default_factory=list)
     accounts: list[AccountSpec] = Field(default_factory=list)
     members: list[MemberSpec] = Field(default_factory=list)
+    groups: list[GroupSpec] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _references_resolve(self) -> Self:
@@ -113,6 +137,7 @@ class Manifest(_Strict):
             ("department", [d.key for d in self.departments]),
             ("account", [a.key for a in self.accounts]),
             ("member email", [m.email for m in self.members]),
+            ("group", [g.key for g in self.groups]),
         ):
             dupes = [k for k, n in Counter(keys).items() if n > 1]
             if dupes:
@@ -124,6 +149,12 @@ class Manifest(_Strict):
                 raise ValueError(f"{member.email}: unknown departments {sorted(missing)}")
             if missing := set(member.accounts) - accounts:
                 raise ValueError(f"{member.email}: unknown accounts {sorted(missing)}")
+        emails = {m.email for m in self.members}
+        for group in self.groups:
+            if missing := set(group.members) - emails:
+                raise ValueError(f"group {group.key}: unknown members {sorted(missing)}")
+            if len(set(group.members)) != len(group.members):
+                raise ValueError(f"group {group.key}: duplicate members")
         return self
 
 
@@ -222,6 +253,8 @@ async def seed_manifest(db: Database, manifest: Manifest) -> SeedReport:
     memberships = _table(Membership)
     member_departments = _table(MembershipDepartment)
     assignments = _table(AccountAssignment)
+    groups = _table(AccessGroup)
+    group_members = _table(AccessGroupMember)
 
     async with db.unscoped_transaction() as session:
         # Organizations: owner_provisioning policy lets the operator find/create tenants.
@@ -285,6 +318,7 @@ async def seed_manifest(db: Database, manifest: Manifest) -> SeedReport:
                 session, accounts, organization_id=organization_id, key=acct.key
             )
 
+        membership_ids: dict[str, uuid.UUID] = {}
         for member in manifest.members:
             report.note(
                 "user",
@@ -332,6 +366,7 @@ async def seed_manifest(db: Database, manifest: Manifest) -> SeedReport:
             membership_id = await _id_of(
                 session, memberships, organization_id=organization_id, user_id=user_id
             )
+            membership_ids[member.email] = membership_id
             links_changed = await _sync_links(
                 session,
                 member_departments,
@@ -359,4 +394,69 @@ async def seed_manifest(db: Database, manifest: Manifest) -> SeedReport:
                     .values(authz_updated_at=func.now())
                 )
             report.note("membership", membership_changed or links_changed)
+
+        for group in manifest.groups:
+            group_changed = await _upsert(
+                session,
+                groups,
+                {
+                    "organization_id": organization_id,
+                    "key": group.key,
+                    "origin": "admin",
+                    "name": group.name,
+                },
+                ["organization_id", "key"],
+                ["name"],
+            )
+            group_id, origin = (
+                await session.execute(
+                    select(groups.c.id, groups.c.origin).where(
+                        groups.c.organization_id == organization_id, groups.c.key == group.key
+                    )
+                )
+            ).one()
+            if origin != "admin":
+                # Never take over a group mirrored from a source system.
+                raise ValueError(f"group {group.key!r} exists and is not admin-defined")
+            affected = await _sync_group_members(
+                session,
+                group_members,
+                organization_id,
+                group_id,
+                {membership_ids[email] for email in group.members},
+            )
+            if affected:
+                await session.execute(
+                    memberships.update()
+                    .where(memberships.c.id.in_(affected))
+                    .values(authz_updated_at=func.now())
+                )
+            report.note("group", group_changed or bool(affected))
     return report
+
+
+async def _sync_group_members(
+    session: AsyncSession,
+    table: Table,
+    organization_id: uuid.UUID,
+    group_id: uuid.UUID,
+    wanted: set[uuid.UUID],
+) -> set[uuid.UUID]:
+    """Make the group's members exactly ``wanted``; return the memberships whose group
+    membership changed (their access changed)."""
+    current: set[uuid.UUID] = set(
+        (
+            await session.execute(select(table.c.membership_id).where(table.c.group_id == group_id))
+        ).scalars()
+    )
+    if stale := current - wanted:
+        await session.execute(
+            delete(table).where(table.c.group_id == group_id, table.c.membership_id.in_(stale))
+        )
+    for membership_id in wanted - current:
+        await session.execute(
+            insert(table).values(
+                organization_id=organization_id, group_id=group_id, membership_id=membership_id
+            )
+        )
+    return stale | (wanted - current)

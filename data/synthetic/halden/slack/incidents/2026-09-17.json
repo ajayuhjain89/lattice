@@ -1,0 +1,42 @@
+[
+  {
+    "type": "message",
+    "user": "U02SPATEL0",
+    "text": "game day next week: we'll practice a certificate rotation in staging with a pinning IdP. volunteers?",
+    "ts": "1789637400.000100",
+    "thread_ts": "1789637400.000100",
+    "reply_count": 2,
+    "reply_users_count": 2,
+    "reply_users": [
+      "U02WCHEN00",
+      "U01SMARCHT"
+    ],
+    "latest_reply": "1789638240.000100",
+    "replies": [
+      {
+        "user": "U02WCHEN00",
+        "ts": "1789638060.000100"
+      },
+      {
+        "user": "U01SMARCHT",
+        "ts": "1789638240.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02WCHEN00",
+    "text": "I'm in",
+    "ts": "1789638060.000100",
+    "thread_ts": "1789637400.000100",
+    "parent_user_id": "U02SPATEL0"
+  },
+  {
+    "type": "message",
+    "user": "U01SMARCHT",
+    "text": "me too, it closes the last postmortem action item",
+    "ts": "1789638240.000100",
+    "thread_ts": "1789637400.000100",
+    "parent_user_id": "U02SPATEL0"
+  }
+]

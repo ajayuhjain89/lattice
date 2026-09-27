@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02HCHO000",
+    "text": "Directory Sync macro updated per the 18 Sep decision: \"planned for general availability in December 2026, beta with selected customers in November\". Please stop using \"expected in October\".",
+    "ts": "1790003100.000100",
+    "thread_ts": "1790003100.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02BADEYEM"
+    ],
+    "latest_reply": "1790003520.000100",
+    "replies": [
+      {
+        "user": "U02BADEYEM",
+        "ts": "1790003520.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02BADEYEM",
+    "text": ":+1:",
+    "ts": "1790003520.000100",
+    "thread_ts": "1790003100.000100",
+    "parent_user_id": "U02HCHO000"
+  }
+]

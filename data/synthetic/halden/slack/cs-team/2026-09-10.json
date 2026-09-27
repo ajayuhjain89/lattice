@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02OPRYCE0",
+    "text": "Tidewell: invoice dispute in progress, will update here",
+    "ts": "1789052400.000100",
+    "thread_ts": "1789052400.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02CMARTIN"
+    ],
+    "latest_reply": "1789053600.000100",
+    "replies": [
+      {
+        "user": "U02CMARTIN",
+        "ts": "1789053600.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02CMARTIN",
+    "text": "the one with the AI summary thing? good luck :sweat_smile:",
+    "ts": "1789053600.000100",
+    "thread_ts": "1789052400.000100",
+    "parent_user_id": "U02OPRYCE0"
+  }
+]

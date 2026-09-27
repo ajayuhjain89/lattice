@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02BADEYEM",
+    "text": "anyone seen 'invalid_grant' from the Google Sheets connector? customer says it started this morning",
+    "ts": "1785342000.000100",
+    "thread_ts": "1785342000.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U01PNATARJ"
+    ],
+    "latest_reply": "1785342840.000100",
+    "replies": [
+      {
+        "user": "U01PNATARJ",
+        "ts": "1785342840.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "usually the Google account that authorized it changed password. suggest a service account",
+    "ts": "1785342840.000100",
+    "thread_ts": "1785342000.000100",
+    "parent_user_id": "U02BADEYEM"
+  }
+]

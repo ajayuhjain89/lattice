@@ -1,0 +1,14 @@
+[
+  {
+    "type": "message",
+    "user": "U02SPATEL0",
+    "text": "2026.08 deployed to all regions. watching SSO error rates closely today given the cert rollover changes",
+    "ts": "1787035500.000100"
+  },
+  {
+    "type": "message",
+    "user": "U02SPATEL0",
+    "text": "SSO error rate normal all morning after the 2026.08 deploy",
+    "ts": "1787054400.000100"
+  }
+]

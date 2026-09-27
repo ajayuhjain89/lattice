@@ -1,7 +1,9 @@
 # Lattice — Implementation Plan
 
 Status: Phase 0 approved. Phase 1 approved and closed (after the `lattice_auth`
-hardening below). **Phase 2 implemented** (awaiting review). Phase 3 not started.
+hardening below). Phase 2 approved, with decisions D-8 and D-9 (implemented at the start
+of Phase 3). **Phase 3 implemented** (awaiting review, branch
+`phase/3-synthetic-dataset`). Phase 4 not started.
 
 ---
 
@@ -163,7 +165,7 @@ data access; restricted reachable only by grant; fail-closed on unknown departme
 | `explain()` | `explain` (internal), `explain_own_access`, `explain_for_reviewer` | Explanations reveal document facts; the two public forms return `None` identically for missing and unreadable documents |
 | — | `account_visible` / `visible_accounts_predicate` | Account existence is authorized too (security-model §10); needed by lists, filters, mention detection and autocomplete from Phase 5 on |
 | — | `Database.tenant_snapshot` (REPEATABLE READ, READ ONLY) | The one-snapshot rule for context → retrieval → E4 (authorization-model §5) |
-| Seed | Unchanged: groups and documents exist only as test fixtures | Groups and content are the Phase 3 dataset |
+| Seed | Unchanged: groups and documents exist only as test fixtures | Groups and content are the Phase 3 dataset (Phase 3: the seed now upserts admin-defined groups by key; documents still come only from ingestion) |
 
 Evidence: `tests/security/` (equivalence, personas, admin ≠ content, fail-closed,
 revocation, explanations, tripwire, context), `tests/test_authz_schema.py`,
@@ -213,6 +215,44 @@ every canary appears exactly once; manifests validate.
 **Non-goals.** Generating filler with a model without review — every storyline
 document is authored/reviewed deliberately (bulk distractor tickets may be
 template-generated, then spot-checked).
+
+**Phase 3 as built — decisions applied first, then the dataset:**
+
+- **D-8** (structured account metadata): `authz.visible_document_account` —
+  a readable document shows its account only when `account_visible`; `POLICY_VERSION`
+  `authz-2`; `tests/security/test_account_metadata.py` (reference and SQL `LEFT JOIN`
+  form, every persona × document). Documented in authorization-model §6/§9,
+  security-model §10, data-model §9, retrieval-design §8, design-system §B12.
+- **D-9** (stable access-group key): migration `0004_access_group_key.py`
+  (`key citext NOT NULL`, UNIQUE per organization, slug-format CHECK on the text value,
+  backfill `group-<id>` binding each organization under forced RLS); the seed upserts
+  admin groups by key, renames in place, treats a new key as a new group and never takes
+  over a source group. Tests: `tests/test_access_group_key.py`,
+  `tests/security/test_access_group_key.py` (renaming or re-keying changes no access),
+  `tests/test_seed.py`.
+- **Dataset** (`data/synthetic/`, README there): Halden — 48 documents, 148 tickets
+  (28 authored, 120 generated), a 237-message Slack export in 15 channels; Veridian — 7
+  documents, 37 tickets, 19 messages; eleven storylines; 19 canaries; 89 golden items
+  in 14 categories.
+- **Tooling** (`lattice.dataset`, `lattice dataset lint|generate`, `make dataset-lint`,
+  CI step): loaders for the three formats, the expected-access oracle (the reference
+  policy over fixture metadata), the lint, the distractor generator.
+
+| Planned | As built | Why |
+| ------- | -------- | --- |
+| Org manifests incl. groups and source configs | `org.yaml` gains `groups` (seeded); source configs in `sources.yaml` and person-level shares in `admin-grants.yaml`, validated but not seeded | `sources` and documents arrive in Phase 4; seeding them now would blur fixtures with ingested content |
+| Dataset lint: keys exist, canaries once, manifests validate | Plus an expected-access oracle that asks the **reference policy** who can read each record; golden expectations checked against it (relevant readable, prohibited not, egress levels, hidden accounts, D-8, ambiguity choices, trap phrases); ground-truth checks (dates, order, supersession metadata, staleness, authority, quiet periods, collisions); 44 mutation tests prove each check fires | "Do not create records that contradict the real policy implementation" — enforced, not reviewed |
+| Canaries appear exactly once | Plus a manifest locating each canary in a record part, detection of undeclared canaries, and `access` vs `isolation` canaries that must protect something | Tripwires only work where they are expected |
+| Golden schema per evaluation-plan §3 | Extended: `organization`, category slugs incl. new `account_visibility`, `hidden_accounts`, `account_metadata_hidden`, `forbidden_claims`, `must_not_contain`, `trap_phrases`, `same_question_group`, provisional status `unsupported_request` (D-11) | Needed to express account side channels, security traps and refusals; documented in evaluation-plan §3–4 |
+| ~120 documents, ~600 tickets, ~1,200 messages | 48 / 148 / 237 for Halden | Quality over volume (Phase 3 brief); grow where retrieval evals show a need |
+| Sync-failure fixtures with sensitive filenames | Deferred to Phase 4 (connector fixtures); one unmapped ticket (HAL-4951) is in the corpus | They test connector/ingestion failure handling |
+| Persona table (evaluation-plan §2) | Unchanged, plus Grace in #acct-acme (as in the Phase 2 fixture); Veridian gains Ines (COO, confidential) | Critical scenario realism; cross-org probes by the most privileged persona |
+| Phase 2 persona fixture | Uses the seeded `exec-staff` group instead of creating a duplicate; the factory generates unique keys | The manifest now defines that group |
+
+Findings while building it, fixed in the documents: the critical scenario
+(authorization-model §10) was ambiguous for Grace — with scope `all`, "Acme" matches
+Acme Corp and Acme Health — so her run selects the Acme Corp scope; and the
+account-name terms in the shared index header conflict with D-8 (open decision D-10).
 
 ---
 
@@ -363,8 +403,9 @@ make migrate        # alembic upgrade head (lattice_owner)
 make seed           # Halden + Veridian manifests (idempotent)
 make check-db-role  # runtime role cannot bypass RLS
 make api            # uvicorn on 127.0.0.1:8000
-make test           # 378 tests against the lattice_test database (incl. 500-example authz proof)
+make test           # 475 tests against the lattice_test database (incl. 500-example authz proof)
 make lint typecheck
+make dataset-lint   # the synthetic dataset and golden set (no database, no model)
 ```
 Added in later phases: `make sync` (Phase 4), `make eval` (Phase 5), `make web`
 (Phase 7, Node 22 LTS + pnpm).
@@ -402,8 +443,11 @@ Added in later phases: `make sync` (Phase 4), `make eval` (Phase 5), `make web`
 | D-5 | Admin access to other members' question/answer/evidence content | — | **Decided: OFF / deferred.** Admins get operational structure only. A future support/audit content capability would be designed separately (least privilege, explicit authorization, audit trail, clear UI, content re-authorization) | Product owner — decided |
 | D-6 | Progress transport for Ask (SSE vs polling) | Phase 7 | SSE from FastAPI (`StreamingResponse`), proxied same-origin | Engineering |
 | D-7 | Design-customer domain (B2B SaaS "Halden") | Phase 3 | Keep unless you prefer a domain you know better (legal, healthcare, developer tools) | Product owner |
-| D-8 | A document readable **only through a grant** belongs to an account outside the reader's scope: may its evidence card / inspector show that account's name? (Account lists, filters and mention detection stay scope-bound either way — `account_visible`.) | Phase 5 (evidence), Phase 7 (UI) | Show it: a grant is an explicit decision to share that document, including its own metadata; never add the account to the reader's lists | Product owner |
-| D-9 | Stable key for admin-defined access groups in seed manifests (Phase 3 needs idempotent group upserts; source groups will key on `(source_id, external_ref)` in Phase 4) | Phase 3 | Add `access_groups.key` (citext, unique per organization), mirroring departments and accounts | Engineering |
+| D-8 | A document readable **only through a grant** belongs to an account outside the reader's scope: may its evidence card / inspector show that account's name? | Phase 5 (evidence), Phase 7 (UI) | **Decided: no.** The document and its content stay readable; its structured account field is omitted (no substitute), and the account never enters lists, filters, mention detection or autocomplete. Implemented as `authz.visible_document_account` (authz-2) | Product owner — decided |
+| D-9 | Stable key for access groups | Phase 3 | **Decided:** `access_groups.key` (citext, unique per organization, slug format); stable across renames; a key change is an identity change; never an authorization input. Migration 0004 | Engineering — decided |
+| D-10 | The chunk contextual header (embedded, and in the shared `tsv`) includes the document's account name, per document, not per reader. After D-8, a query naming an out-of-scope account would still match a granted document of that account through the header alone, hinting at the association | Phase 4 (header design) | Keep account names out of the embedded header; index account-derived terms in a separate lexical field applied only when `account_visible` (and keep the account-match rerank feature scope-bound, as designed). Golden item `visibility-kestrel-latest-maya` pins the expected behaviour | Engineering + Product owner |
+| D-11 | Answer status for requests Lattice does not perform (draft an email, change access, update a ticket, read others' questions) | Phase 6 | Add `unsupported_request` (reason `action_request`), decided by the model under a fixed rubric and validated like any status; never used for unreadable evidence. The golden set uses it provisionally | Product owner |
+| D-12 | How Phase 4 applies admin grants that exist before the Phase 9 access UI (the dataset's `admin-grants.yaml`) | Phase 4 | A seed step after ingestion resolves `(source, external_id)` to documents and writes `origin = admin` grants; unresolvable entries fail loudly | Engineering |
 
 ## 8. Self-review log (Phase 0)
 

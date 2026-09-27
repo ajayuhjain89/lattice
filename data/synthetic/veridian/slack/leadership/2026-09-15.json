@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U01ICARVAL",
+    "text": "Acme call with Priscilla done. We committed a one-month credit, an RCA by the 25th and a named reliability engineer through year end. (ref LATTICE-CANARY-V3-18d6fa)",
+    "ts": "1789493400.000100",
+    "thread_ts": "1789493400.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02HLEFEVR"
+    ],
+    "latest_reply": "1789494300.000100",
+    "replies": [
+      {
+        "user": "U02HLEFEVR",
+        "ts": "1789494300.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02HLEFEVR",
+    "text": "agreed. let's make sure the RCA is solid",
+    "ts": "1789494300.000100",
+    "thread_ts": "1789493400.000100",
+    "parent_user_id": "U01ICARVAL"
+  }
+]

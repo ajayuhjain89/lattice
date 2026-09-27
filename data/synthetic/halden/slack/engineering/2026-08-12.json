@@ -1,0 +1,29 @@
+[
+  {
+    "type": "message",
+    "user": "U02WCHEN00",
+    "text": "flaky Okta integration test in CI is fixed (it was relying on wall-clock time)",
+    "ts": "1786528800.000100",
+    "thread_ts": "1786528800.000100",
+    "reply_count": 1,
+    "reply_users_count": 1,
+    "reply_users": [
+      "U02SPATEL0"
+    ],
+    "latest_reply": "1786529100.000100",
+    "replies": [
+      {
+        "user": "U02SPATEL0",
+        "ts": "1786529100.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U02SPATEL0",
+    "text": ":pray:",
+    "ts": "1786529100.000100",
+    "thread_ts": "1786528800.000100",
+    "parent_user_id": "U02WCHEN00"
+  }
+]

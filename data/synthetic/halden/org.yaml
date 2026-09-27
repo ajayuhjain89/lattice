@@ -1,6 +1,8 @@
 # Halden — the design customer (docs/product-brief.md, docs/evaluation-plan.md §2).
-# Phase 1 scope: organization, departments, accounts, people and memberships only.
-# Access groups (private channels, "Exec staff") and all content arrive in Phases 2–3.
+# Lattice-side configuration: organization, departments, accounts, the eight persona
+# memberships and admin-defined access groups. Seeded by `lattice seed`.
+# Source content and source-synced groups (private Slack channels) are raw source data
+# under documents/, tickets/ and slack/, ingested in Phase 4; see ../README.md.
 # Emails use the reserved .example domain.
 
 organization:
@@ -87,3 +89,11 @@ members:
     clearance: internal
     account_scope: assigned
     departments: [it]
+
+# Admin-defined access groups, identified by their stable key (D-9). Documents grant
+# to them by key (front matter `grants: [group:<key>]`). Private Slack channels are
+# source-synced groups defined by the export (slack/groups.json), not here.
+groups:
+  - key: exec-staff
+    name: Exec staff
+    members: [grace.whitfield@halden.example, arjun.mehta@halden.example]

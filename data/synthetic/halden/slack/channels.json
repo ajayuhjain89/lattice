@@ -1,0 +1,378 @@
+[
+  {
+    "id": "C0GENERAL01",
+    "name": "general",
+    "created": 1551398400,
+    "creator": "U01AMEHTA0",
+    "is_archived": false,
+    "is_general": true,
+    "members": [
+      "U01MAYAOKF",
+      "U01DREYES0",
+      "U01PNATARJ",
+      "U01TLINDQV",
+      "U01SMARCHT",
+      "U01GWHITFD",
+      "U01AMEHTA0",
+      "U01LBRANDT",
+      "U02RKIM000",
+      "U02MFELD00",
+      "U02CMARTIN",
+      "U02JBLAKE0",
+      "U02BADEYEM",
+      "U02HCHO000",
+      "U02JWEBER0",
+      "U02KMENSAH",
+      "U02WCHEN00",
+      "U02SPATEL0",
+      "U02NRAHMAN",
+      "U02OLIND00",
+      "U02MSANTOS",
+      "U02OPRYCE0"
+    ],
+    "topic": {
+      "value": "Company-wide announcements",
+      "creator": "U01AMEHTA0",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Everyone at Halden",
+      "creator": "U01AMEHTA0",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0RANDOM001",
+    "name": "random",
+    "created": 1551398400,
+    "creator": "U01AMEHTA0",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01MAYAOKF",
+      "U01DREYES0",
+      "U01PNATARJ",
+      "U01TLINDQV",
+      "U01SMARCHT",
+      "U01GWHITFD",
+      "U01AMEHTA0",
+      "U01LBRANDT",
+      "U02RKIM000",
+      "U02MFELD00",
+      "U02CMARTIN",
+      "U02JBLAKE0",
+      "U02BADEYEM",
+      "U02HCHO000",
+      "U02JWEBER0",
+      "U02KMENSAH",
+      "U02WCHEN00",
+      "U02SPATEL0",
+      "U02NRAHMAN",
+      "U02OLIND00",
+      "U02MSANTOS",
+      "U02OPRYCE0"
+    ],
+    "topic": {
+      "value": "",
+      "creator": "U01AMEHTA0",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Non-work banter",
+      "creator": "U01AMEHTA0",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0ANNOUNC01",
+    "name": "product-announcements",
+    "created": 1612915200,
+    "creator": "U01TLINDQV",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01MAYAOKF",
+      "U01DREYES0",
+      "U01PNATARJ",
+      "U01TLINDQV",
+      "U01SMARCHT",
+      "U01GWHITFD",
+      "U01AMEHTA0",
+      "U01LBRANDT",
+      "U02RKIM000",
+      "U02MFELD00",
+      "U02CMARTIN",
+      "U02JBLAKE0",
+      "U02BADEYEM",
+      "U02HCHO000",
+      "U02JWEBER0",
+      "U02KMENSAH",
+      "U02WCHEN00",
+      "U02SPATEL0",
+      "U02NRAHMAN",
+      "U02OLIND00",
+      "U02MSANTOS",
+      "U02OPRYCE0"
+    ],
+    "topic": {
+      "value": "Releases, roadmap and product decisions",
+      "creator": "U01TLINDQV",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Product news for everyone",
+      "creator": "U01TLINDQV",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0SUPPORT01",
+    "name": "support",
+    "created": 1559347200,
+    "creator": "U02JWEBER0",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01PNATARJ",
+      "U02BADEYEM",
+      "U02HCHO000",
+      "U02JWEBER0",
+      "U01TLINDQV",
+      "U01SMARCHT",
+      "U02SPATEL0",
+      "U01MAYAOKF",
+      "U01DREYES0",
+      "U02CMARTIN"
+    ],
+    "topic": {
+      "value": "Support team channel · macros in Drive",
+      "creator": "U02JWEBER0",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Support questions and escalations",
+      "creator": "U02JWEBER0",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0SALES0001",
+    "name": "sales",
+    "created": 1559347200,
+    "creator": "U01AMEHTA0",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01MAYAOKF",
+      "U01DREYES0",
+      "U02JBLAKE0",
+      "U02MFELD00",
+      "U02CMARTIN",
+      "U02OPRYCE0",
+      "U01GWHITFD",
+      "U01TLINDQV",
+      "U01AMEHTA0"
+    ],
+    "topic": {
+      "value": "Deals, pipeline, questions for SE",
+      "creator": "U01AMEHTA0",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Sales team",
+      "creator": "U01AMEHTA0",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0ENGINEER1",
+    "name": "engineering",
+    "created": 1551398400,
+    "creator": "U02OLIND00",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01SMARCHT",
+      "U02KMENSAH",
+      "U02WCHEN00",
+      "U02SPATEL0",
+      "U02OLIND00",
+      "U01TLINDQV",
+      "U01LBRANDT"
+    ],
+    "topic": {
+      "value": "Deploys, release train, eng questions",
+      "creator": "U02OLIND00",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Engineering",
+      "creator": "U02OLIND00",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0INCIDENT1",
+    "name": "incidents",
+    "created": 1579046400,
+    "creator": "U02SPATEL0",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01MAYAOKF",
+      "U01DREYES0",
+      "U01PNATARJ",
+      "U01TLINDQV",
+      "U01SMARCHT",
+      "U01GWHITFD",
+      "U01AMEHTA0",
+      "U01LBRANDT",
+      "U02RKIM000",
+      "U02MFELD00",
+      "U02CMARTIN",
+      "U02JBLAKE0",
+      "U02BADEYEM",
+      "U02HCHO000",
+      "U02JWEBER0",
+      "U02KMENSAH",
+      "U02WCHEN00",
+      "U02SPATEL0",
+      "U02NRAHMAN",
+      "U02OLIND00",
+      "U02MSANTOS",
+      "U02OPRYCE0"
+    ],
+    "topic": {
+      "value": "Active incidents. Customer names OK here, nowhere else.",
+      "creator": "U02SPATEL0",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Incident response",
+      "creator": "U02SPATEL0",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0CSTEAM001",
+    "name": "cs-team",
+    "created": 1620000000,
+    "creator": "U01GWHITFD",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01GWHITFD",
+      "U02RKIM000",
+      "U02CMARTIN",
+      "U01MAYAOKF",
+      "U01DREYES0",
+      "U02OPRYCE0"
+    ],
+    "topic": {
+      "value": "Customer Success",
+      "creator": "U01GWHITFD",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "CS team",
+      "creator": "U01GWHITFD",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0ACCTKES01",
+    "name": "acct-kestrel",
+    "created": 1741651200,
+    "creator": "U01DREYES0",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01DREYES0",
+      "U02RKIM000",
+      "U01PNATARJ",
+      "U01GWHITFD",
+      "U02MFELD00"
+    ],
+    "topic": {
+      "value": "Kestrel Bank account team",
+      "creator": "U01DREYES0",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Kestrel Bank",
+      "creator": "U01DREYES0",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0ACCTNPK01",
+    "name": "acct-northpeak",
+    "created": 1696204800,
+    "creator": "U01MAYAOKF",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01MAYAOKF",
+      "U02RKIM000"
+    ],
+    "topic": {
+      "value": "Northpeak Logistics account team",
+      "creator": "U01MAYAOKF",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Northpeak Logistics",
+      "creator": "U01MAYAOKF",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0ACCTBRW01",
+    "name": "acct-brightwater",
+    "created": 1750377600,
+    "creator": "U01DREYES0",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U01DREYES0",
+      "U02CMARTIN",
+      "U01PNATARJ"
+    ],
+    "topic": {
+      "value": "Brightwater Health account team",
+      "creator": "U01DREYES0",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Brightwater Health",
+      "creator": "U01DREYES0",
+      "last_set": 0
+    }
+  },
+  {
+    "id": "C0EXTACME01",
+    "name": "ext-acme-halden",
+    "created": 1781481600,
+    "creator": "U02MFELD00",
+    "is_archived": false,
+    "is_general": false,
+    "members": [
+      "U02MFELD00",
+      "U01MAYAOKF",
+      "U02RKIM000",
+      "U01PNATARJ",
+      "U03DHOLT00",
+      "U03WZHAO00"
+    ],
+    "topic": {
+      "value": "Acme Corp <> Halden · Okta migration",
+      "creator": "U02MFELD00",
+      "last_set": 0
+    },
+    "purpose": {
+      "value": "Shared with Acme Corp (Slack Connect)",
+      "creator": "U02MFELD00",
+      "last_set": 0
+    }
+  }
+]

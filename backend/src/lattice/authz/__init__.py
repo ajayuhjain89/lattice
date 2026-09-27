@@ -9,12 +9,16 @@ without any model involvement. Its public contract:
 * ``readable_documents_predicate`` -- the same policy as SQL, for retrieval (E3).
 * ``account_visible`` / ``visible_accounts_predicate`` -- which accounts a member may
   know exist (lists, filters, autocomplete, mention detection).
+* ``visible_document_account`` -- the account a readable document may show as
+  structured metadata: none when the account is outside the member's scope (D-8).
 * ``explain`` (internal), ``explain_own_access``, ``explain_for_reviewer``.
 * ``assert_all_readable`` -- the pre-generation tripwire (E4).
 * ``POLICY_VERSION``.
 
 Other modules import from ``lattice.authz`` only (never its submodules) and never
-build access conditions themselves (``tests/test_authz_boundary.py``).
+build access conditions themselves (``tests/test_authz_boundary.py``). The access-group
+models are exported for the few reviewed writers of access state (the seed, later
+ingestion and access management); the boundary test rejects their use anywhere else.
 """
 
 from lattice.authz.access import load_document_access
@@ -28,7 +32,7 @@ from lattice.authz.explain import (
     explain_own_access,
 )
 from lattice.authz.invariant import AuthorizationInvariantViolation, assert_all_readable
-from lattice.authz.models import Document
+from lattice.authz.models import AccessGroup, AccessGroupMember, Document
 from lattice.authz.policy import (
     POLICY_VERSION,
     AccountRef,
@@ -36,6 +40,7 @@ from lattice.authz.policy import (
     GrantRef,
     account_visible,
     readable,
+    visible_document_account,
 )
 from lattice.authz.resolve import AuthorizationContextUnavailable, resolve_authorization_context
 from lattice.authz.sql import readable_documents_predicate, visible_accounts_predicate
@@ -43,6 +48,8 @@ from lattice.authz.sql import readable_documents_predicate, visible_accounts_pre
 __all__ = [
     "POLICY_VERSION",
     "AccessExplanation",
+    "AccessGroup",
+    "AccessGroupMember",
     "AccessReason",
     "AccountRef",
     "AuthorizationContext",
@@ -62,4 +69,5 @@ __all__ = [
     "readable_documents_predicate",
     "resolve_authorization_context",
     "visible_accounts_predicate",
+    "visible_document_account",
 ]

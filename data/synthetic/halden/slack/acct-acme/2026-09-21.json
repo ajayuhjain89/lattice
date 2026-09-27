@@ -1,0 +1,42 @@
+[
+  {
+    "type": "message",
+    "user": "U01MAYAOKF",
+    "text": "read the SCIM decision on Friday — Dec GA :grimacing: called Derek informally this morning, he's not happy. he's escalating to Priscilla",
+    "ts": "1789983000.000100",
+    "thread_ts": "1789983000.000100",
+    "reply_count": 2,
+    "reply_users_count": 2,
+    "reply_users": [
+      "U01GWHITFD",
+      "U01MAYAOKF"
+    ],
+    "latest_reply": "1789983780.000100",
+    "replies": [
+      {
+        "user": "U01GWHITFD",
+        "ts": "1789983660.000100"
+      },
+      {
+        "user": "U01MAYAOKF",
+        "ts": "1789983780.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01GWHITFD",
+    "text": "Thanks Maya. I'll take the exec side. Please don't commit anything new until we've talked to Priscilla.",
+    "ts": "1789983660.000100",
+    "thread_ts": "1789983000.000100",
+    "parent_user_id": "U01MAYAOKF"
+  },
+  {
+    "type": "message",
+    "user": "U01MAYAOKF",
+    "text": "understood",
+    "ts": "1789983780.000100",
+    "thread_ts": "1789983000.000100",
+    "parent_user_id": "U01MAYAOKF"
+  }
+]

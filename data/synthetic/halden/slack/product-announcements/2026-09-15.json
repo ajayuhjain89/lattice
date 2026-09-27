@@ -1,0 +1,10 @@
+[
+  {
+    "type": "message",
+    "subtype": "bot_message",
+    "bot_id": "B09RELEASE",
+    "username": "Release Bot",
+    "text": "Halden Flow 2026.09 is live in all regions. Highlights: audit log streaming (beta) to Splunk and Datadog, run history search, parallel branch merge.",
+    "ts": "1789455600.000100"
+  }
+]

@@ -1,0 +1,42 @@
+[
+  {
+    "type": "message",
+    "user": "U02HCHO000",
+    "text": "Queue check: 14 open P3s older than 2 days. can Tier 2 grab a few after standup?",
+    "ts": "1784196120.000100",
+    "thread_ts": "1784196120.000100",
+    "reply_count": 2,
+    "reply_users_count": 2,
+    "reply_users": [
+      "U01PNATARJ",
+      "U02BADEYEM"
+    ],
+    "latest_reply": "1784196720.000100",
+    "replies": [
+      {
+        "user": "U01PNATARJ",
+        "ts": "1784196600.000100"
+      },
+      {
+        "user": "U02BADEYEM",
+        "ts": "1784196720.000100"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "user": "U01PNATARJ",
+    "text": "taking the three connector ones",
+    "ts": "1784196600.000100",
+    "thread_ts": "1784196120.000100",
+    "parent_user_id": "U02HCHO000"
+  },
+  {
+    "type": "message",
+    "user": "U02BADEYEM",
+    "text": "I'll take the billing ones",
+    "ts": "1784196720.000100",
+    "thread_ts": "1784196120.000100",
+    "parent_user_id": "U02HCHO000"
+  }
+]
