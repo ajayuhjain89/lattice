@@ -1,6 +1,7 @@
 # Lattice — Operational Runbook
 
-Status: §1 is implemented (Phase 1). Everything else is **planned**; each section is
+Status: §1 is implemented (Phases 1–2). Everything else is **planned** unless marked
+otherwise; each section is
 marked with the phase that makes it real; sections are rewritten against the actual system
 when that phase lands. Do not follow planned procedures on a live system.
 
@@ -51,9 +52,9 @@ fails even for the owner). In a new migration, as `lattice_owner`:
 | --------- | ------------------- | ----- |
 | A sync run is `partial` or `failed` | Sources page → run → failures by code. `access_unmappable:*` → fix source config (account/department/group mapping) then `lattice sync <source>`. `source_unavailable` → check export path/credentials | 4 / 8 |
 | Deletion guard tripped | Inspect export completeness; if the deletions are genuine, re-run with `--allow-mass-deletion` after confirming with the source owner | 4 |
-| Urgently revoke a person's access | Suspend membership (sessions rejected on next request); remove account assignments / group membership as needed. No re-index needed | 2 / 9 |
+| Urgently revoke a person's access | **Works today (Phase 2), without a UI:** set the member's `status: suspended` in the org manifest and `make seed`, or as `lattice_owner` with the organization bound: `UPDATE memberships SET status = 'suspended', authz_updated_at = now() WHERE id = …`. Sessions are rejected and no authorization context can be resolved on the very next request. Narrower changes (account assignment, department, group membership, grant) are single-row writes with the same immediacy. No re-index, re-embed or cache flush exists or is needed. Admin UI: Phase 9 | 2 / 9 |
 | Remove a source's content now | `lattice source disconnect <source>` → immediate soft delete; purge runs asynchronously | 4 |
-| `security_invariant_violated` alert | Treat as incident: the retrieval predicate returned an unreadable chunk. Capture trace ID; disable Ask for the org (`org_settings.ask_enabled=false`); investigate `authz` changes; add a regression test before re-enabling | 6 / 11 |
+| `security_invariant_violated` alert | Treat as incident: the retrieval predicate returned an unreadable chunk. The `security.invariant_violated` log event (emitted by `assert_all_readable` since Phase 2) carries organization, membership, `policy_version`, counts and the offending document UUIDs. Capture trace ID; disable Ask for the org (`org_settings.ask_enabled=false`); investigate `authz` changes (compare `policy_version`); add a regression test before re-enabling | 6 / 11 |
 | Provider outage | Ask returns `provider_unavailable`; evidence still shown. Switch provider via config if an approved alternative exists | 6 |
 | Change embedding model | `lattice reindex --reembed` per source; monitor cost estimate first | 4 |
 | Organization deletion | Set status `deleting`; purge job; run verification query (0 rows per table for org) | 11 |

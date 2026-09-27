@@ -1,8 +1,8 @@
 # Lattice — Architecture
 
 Status: Phase 1 implemented (config, db, errors, logging, identity/sessions, orgs, API
-skeleton, seed CLI). Later-phase modules below are still design; the
-"Implemented" column in §3 says which.
+skeleton, seed CLI); Phase 2 implemented `authz` (no HTTP surface yet). Later-phase
+modules below are still design; the ✔ marks in §3 say which.
 Related: `data-model.md`, `authorization-model.md`, `retrieval-design.md`,
 `trust-boundaries.md`, ADRs 001–007.
 
@@ -88,7 +88,7 @@ Package: `backend/src/lattice/`.
 | `identity` ✔  | Users, external identities, server-side sessions, identity providers (dev now, OIDC later) | db                          |
 | `orgs` ✔      | Organizations, memberships, departments, accounts, account assignments (models)           | db                          |
 | `seed` ✔      | Manifest model + idempotent upsert of orgs/users/memberships (Phase 1 subset)             | db, orgs, identity          |
-| `authz`       | `AuthorizationContext`, reference policy, SQL predicate compiler, access explanations      | orgs, db                    |
+| `authz` ✔     | `AuthorizationContext` + resolver, reference policy, SQL predicate, account visibility, explanations, E4 tripwire, `POLICY_VERSION`; owns the access tables (`access_groups`, `access_group_members`, `documents` access record, `document_grants`) | orgs, db, errors, log |
 | `sources`     | Source records, source config validation, sync runs, sync failures                        | db, authz (admin capability)|
 | `connectors`  | Connector contract + three connectors (document, ticket, chat export)                     | — (pure; no DB access)      |
 | `ingestion`   | Normalization, chunking, hashing, embedding orchestration, persistence, deletion sweep     | connectors, sources, providers, db |
@@ -100,14 +100,21 @@ Package: `backend/src/lattice/`.
 | `evals`       | Golden-set loader, retrieval/generation/security eval runners, reports                    | retrieval, answering        |
 | `cli` ✔ (partial) | `lattice seed`, `lattice check-db-role` now; later `sync`, `search`, `ask`, `eval`   | services                    |
 
-✔ = implemented in Phase 1. Alembic migrations live in `backend/alembic/`, outside the
-package. Boundary rules (enforced by review now; an import-linter contract is added in
-Phase 2, when `authz` exists and there is a rule worth enforcing mechanically):
+✔ = implemented (Phases 1–2). Alembic migrations live in `backend/alembic/`, outside the
+package. Boundary rules (enforced by review; the `authz` rule is also enforced
+mechanically since Phase 2):
 
 - `connectors` never touch the database or `authz`. They translate external data into
   typed records. This keeps the untrusted-input surface small and testable.
 - Only `authz` constructs authorization predicates. `retrieval` must call
   `authz.readable_documents_predicate(ctx)`; it never writes its own access SQL.
+  Enforced by `backend/tests/test_authz_boundary.py`, an AST check over every module
+  outside `lattice/authz/`: imports only from `lattice.authz`'s public `__all__`, and
+  no attribute, keyword argument or SQL string naming `sensitivity`, `access_mode`,
+  `department_ids`, `principal_type` or the grant/group tables. This replaces the
+  planned import-linter contract, which could only see imports — not
+  `Document.sensitivity == "internal"` written in retrieval. Writers of access state
+  (ingestion) get an explicit, reviewed allowance in that test.
 - `answering` receives `EvidenceChunk`s, never database sessions. It cannot fetch more
   content than retrieval gave it.
 - Route handlers parse input, call one service function, and map the result. No SQL,
@@ -183,6 +190,8 @@ a transaction and binds the organization with `set_config('app.org_id', …, tru
 a `uuid.UUID` from the server-side session. `unscoped_transaction()` exists only for
 health checks and the SECURITY DEFINER pre-authentication lookups, and sees no tenant
 rows. Migrations and the seed CLI run as `lattice_owner`; the API never does.
+`tenant_snapshot(org_id)` (Phase 2) is the same binding in a REPEATABLE READ, READ
+ONLY transaction: the one snapshot that Ask steps 3–9 share.
 
 ## 7. Error taxonomy
 
@@ -278,7 +287,8 @@ lattice/
     pyproject.toml  uv.lock     ✔ (Python 3.12 pinned in .python-version)
     alembic.ini  alembic/       ✔ 0001_baseline
     src/lattice/                ✔ config, errors, log, db/, identity/, orgs/, api/, seed, cli
-    tests/                      ✔ one module per concern, all against real PostgreSQL
+    tests/                      ✔ one module per concern, all against real PostgreSQL;
+                                  tests/security/ holds the authorization suites (Phase 2)
   data/synthetic/
     halden/org.yaml             ✔ people, departments, accounts (content: Phase 3)
     veridian/org.yaml           ✔ isolation twin

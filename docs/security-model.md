@@ -1,6 +1,8 @@
 # Lattice — Security Model
 
-Status: Foundation draft (Phase 0).
+Status: Foundation draft (Phase 0). Implemented so far: §3–5 (Phase 1) and the
+authorization controls behind SEC-3, SEC-4, SEC-5 (explanations), SEC-14 (account
+visibility) and SEC-15 at the policy layer (Phase 2); see §9 for which suites exist.
 Related: `authorization-model.md`, `trust-boundaries.md`, `threat-model.md`.
 
 ---
@@ -40,6 +42,9 @@ Related: `authorization-model.md`, `trust-boundaries.md`, `threat-model.md`.
 Removing any single layer must not cause a leak in the tested scenarios; removing E3
 must make the test suite fail (mutation check in CI: a test build with the predicate
 replaced by `TRUE` must fail the security suite — proves the tests actually test).
+Phase 2 performed this and eleven other policy mutations by hand; results are in
+`implementation-plan.md` (Phase 2 as built). The automated nightly mutation job
+arrives with retrieval (Phase 5), when there is a retrieval path to mutate.
 
 ## 3. Organization isolation
 
@@ -220,11 +225,15 @@ evidence (D-5: off/deferred).
 
 | Suite | Runs | Contents |
 | ----- | ---- | -------- |
-| `tests/security/isolation` | CI, every PR | Cross-org matrix over every read endpoint and CLI search |
-| `tests/security/authz_equivalence` | CI | Property-based SQL ⇔ reference policy |
+| `tests/security/isolation` | CI, every PR | Cross-org matrix over every read endpoint and CLI search (Phase 1: table-level isolation in `tests/test_rls.py`, now covering the Phase 2 tables) |
+| `tests/security/test_authz_equivalence.py` ✔ | CI | Property-based SQL ⇔ reference policy (500 examples) |
+| `tests/security/test_authz_personas.py` ✔ | CI | Halden persona matrix with explicit denials; account visibility; filters only narrow |
+| `tests/security/test_admin_not_content_access.py` ✔ | CI | SEC-15 at the policy layer: no capability field in the context; toggling admin changes no one's access; no explanation oracle |
+| `tests/security/test_authz_fail_closed.py` ✔ | CI | Unknown/malformed/cross-tenant state denied, including with the schema's guards removed |
+| `tests/security/test_authz_explain.py`, `test_authz_invariant.py`, `test_authz_context.py` ✔ | CI | Explanation semantics; E4 aborts and never filters; context resolution |
 | `tests/security/critical_acme` | CI | The permanent scenario (`authorization-model.md` §10) |
 | `tests/security/canary` | CI | Recording fake providers capture every payload; canary strings from restricted/confidential docs must never appear for unauthorized personas — in payloads, responses, traces or captured logs |
-| `tests/security/revocation` | CI | Each access change type → next request differs, no re-ingest |
+| `tests/security/test_authz_revocation.py` ✔ | CI | Each access change type → next check differs, no document rewritten; snapshot consistency |
 | `tests/security/injection` | CI (deterministic parts) + eval harness (real model) | Schema validity, foreign-handle rejection, no instruction following |
 | `tests/security/citations` | CI | Claim-level fail-closed: invalid handle → claim absent; fabricated quote → claim absent; mixed valid/invalid → only validated claims survive (and a claim with one valid + one invalid citation is absent); all material claims invalid → answer withheld (`insufficient_evidence`, reason `claims_unverified`); every rendered citation references an evidence item present in the response and readable by the user |
 | `tests/security/egress` | CI | Default policy: recording provider never receives confidential/restricted chunk text or canaries, for any persona including Leadership; opt-in + approved provider: confidential reaches the provider, restricted still does not; excluded evidence still returned to the authorized user with the egress notice; `evidence_only` when all evidence excluded |

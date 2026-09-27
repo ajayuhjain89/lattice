@@ -1,7 +1,10 @@
 # Lattice — Data Model
 
 Status: §2 identity and tenancy tables are **implemented** (Phase 1, migration
-`backend/alembic/versions/0001_baseline.py`); §3 onward are still design.
+`backend/alembic/versions/0001_baseline.py`, hardened by 0002). `access_groups`,
+`access_group_members`, a Phase 2 subset of `documents` (§4) and `document_grants`
+(§5) are **implemented** (Phase 2, migration `0003_authorization_core.py`). §3, the
+remaining `documents` columns, §6 and §7 are still design.
 Related: `authorization-model.md`, `ingestion-design.md`, `retrieval-design.md`.
 
 Conventions:
@@ -162,13 +165,15 @@ Slack channel) or are defined by admins (e.g. "Exec staff").
 | Field           | Type    | Notes                                                        |
 | --------------- | ------- | ------------------------------------------------------------ |
 | id              | uuid PK |                                                              |
-| organization_id | uuid    |                                                              |
+| organization_id | uuid    | UQ (organization_id, id) — target of composite FKs           |
 | origin          | enum    | `source` (synced from a connector) \| `admin` (managed in Lattice) |
-| source_id       | uuid?   | Set when origin = `source`                                   |
-| external_ref    | text?   | e.g. Slack channel ID                                        |
+| source_id       | uuid?   | Set when origin = `source`. **Added in Phase 4** with its composite FK to `sources` (the table does not exist yet; an unconstrained UUID would be a dangling cross-tenant reference) |
+| external_ref    | text?   | e.g. Slack channel ID. CHECK: set if and only if origin = `source` |
 | name            | text    | Shown to admins; may itself be sensitive → only admins see it |
 
-`access_group_members(organization_id, group_id, membership_id)`.
+`access_group_members(organization_id, group_id, membership_id)`: PK (group_id,
+membership_id); composite FKs to `access_groups` and `memberships` (CASCADE); index
+(organization_id, membership_id) for per-request context resolution.
 
 Why groups exist: revoking a user from a private channel must be one row deletion,
 not an update to thousands of documents; and permission changes must never require
@@ -218,6 +223,21 @@ admin can read the corresponding active document, otherwise `opaque_ref`
 
 One row per source record (a doc file, a ticket, a Slack thread or channel-day).
 
+**Implemented in Phase 2 (authorization record only):** `id`, `organization_id`,
+`account_id`, `sensitivity`, `access_mode`, `department_ids`, `status`, `created_at`,
+`updated_at`, with CHECKs on every enumerated column, `restricted ⇒ grants_only`, no
+NULL elements in `department_ids`, the composite account FK, the GIN index on
+`department_ids` and (organization_id, account_id). `account_id`'s FK has **no ON
+DELETE action**: deleting an account that documents reference is refused, because
+clearing `account_id` would silently make account-specific content visible to
+everyone. Arrays cannot carry foreign keys, so trigger
+`trg_documents_department_ids` rejects (as a `foreign_key_violation`) any
+`department_ids` element that is not a department of the document's organization,
+on insert and whenever `organization_id` or `department_ids` changes. A department
+deleted later leaves a dangling ID, which only makes the document less visible. The
+source, content, provenance and versioning columns below arrive with ingestion
+(Phase 4).
+
 | Field               | Type        | Req             | Notes |
 | ------------------- | ----------- | --------------- | ----- |
 | id                  | uuid PK     | CITE            | |
@@ -263,18 +283,31 @@ and revocable.
 Explicit grants. The **only** path to `restricted` documents; also usable to extend
 access to non-restricted documents.
 
+Implemented in Phase 2 with one deliberate change from the draft: the draft's
+polymorphic `principal_id` cannot carry a foreign key, so a grant could have named a
+membership, department or group of **another organization**, or kept naming one after
+it was deleted. Each principal kind has its own column instead:
+
 | Field           | Type    | Notes |
 | --------------- | ------- | ----- |
+| id              | uuid PK | Surrogate key (the principal columns are nullable) |
 | organization_id | uuid    | |
-| document_id     | uuid    | Cascade delete with document |
+| document_id     | uuid    | Composite FK → documents (CASCADE) |
 | principal_type  | enum    | `membership`, `department`, `group` |
-| principal_id    | uuid    | |
+| membership_id   | uuid?   | Composite FK → memberships (CASCADE) |
+| department_id   | uuid?   | Composite FK → departments (CASCADE) |
+| group_id        | uuid?   | Composite FK → access_groups (CASCADE) |
 | origin          | enum    | `source` (from connector ACL), `admin` |
-| granted_by      | uuid?   | Admin membership, when origin = admin |
 | created_at      | timestamptz | |
 
-PK (document_id, principal_type, principal_id). Index (organization_id,
-principal_type, principal_id).
+CHECK `ck_document_grants_one_principal`: `principal_type` names exactly one populated
+principal column and the others are NULL. UQ (document_id, membership_id),
+(document_id, department_id), (document_id, group_id). Indexes (organization_id,
+membership_id | department_id | group_id). Deleting a principal deletes its grants.
+
+`granted_by` (the granting admin) is **deferred to Phase 9**: it is audit data, not a
+policy input, and what happens to it when that admin's membership is deleted belongs
+with the `audit_events` design.
 
 Source-origin grants are replaced wholesale on each ACL sync; admin-origin grants are
 never touched by sync (so an admin grant is not silently wiped by a connector).
@@ -412,15 +445,15 @@ no tenant rows (fail closed) instead of erroring. A malformed value still raises
 
 | Table(s) | Policy | Applies to |
 | -------- | ------ | ---------- |
-| memberships, departments, membership_departments, accounts, account_assignments, sessions | `tenant_isolation`: `organization_id = lattice_current_org_id()` (USING + WITH CHECK) | everyone, incl. the owner |
+| memberships, departments, membership_departments, accounts, account_assignments, sessions, access_groups, access_group_members, documents, document_grants | `tenant_isolation`: `organization_id = lattice_current_org_id()` (USING + WITH CHECK) | everyone, incl. the owner |
 | organizations | `tenant_self`: `id = lattice_current_org_id()` | everyone |
 | users | `member_visible` (SELECT): a membership exists in the bound org | everyone |
 | external_identities | `member_visible` (SELECT): the user is visible | everyone |
 | organizations, users, external_identities | `owner_provisioning` (ALL) | `lattice_owner` |
 | organizations, users, external_identities, memberships, sessions | `auth_lookup` (SELECT) | `lattice_auth` |
 
-All ten application tables have RLS **enabled and forced** (verified by tests and by
-the API's startup check). `alembic_version` holds no tenant data and is not granted to
+All thirteen application tables (nine from Phase 1, four from Phase 2; `alembic_version` holds no tenant data) have RLS **enabled and forced** (verified by tests
+and by the API's startup check, which covers every table in `public`). `alembic_version` holds no tenant data and is not granted to
 the runtime role.
 
 ### Runtime-role privileges (Phase 1)
@@ -428,7 +461,10 @@ the runtime role.
 `SELECT` on organizations, users, external_identities, memberships, departments,
 membership_departments, accounts, account_assignments; `SELECT, INSERT` on sessions;
 `UPDATE (last_seen_at, revoked_at)` on sessions; `EXECUTE` on the two lookup
-functions. No `DELETE` anywhere. Later phases add grants as their features need them.
+functions. Phase 2: `SELECT` only on access_groups, access_group_members, documents
+and document_grants — nothing writes them at runtime yet (ingestion, Phase 4; access
+management, Phase 9). No `DELETE` anywhere. Later phases add grants as their features
+need them.
 
 ### Pre-authentication lookups
 
@@ -460,8 +496,9 @@ BYPASSRLS, is a member of a superuser/BYPASSRLS role, owns or is a member of the
 of any application table, or if any application table lacks enabled + forced RLS or
 the schema is unmigrated. `lattice check-db-role` runs the same check on demand.
 
-RLS is for **organization isolation only**. Fine-grained authorization will be compiled
-into retrieval SQL by `authz` (ADR-003, Phase 2).
+RLS is for **organization isolation only**. Fine-grained authorization is compiled
+into retrieval SQL by `authz` (ADR-003; implemented in Phase 2 as
+`readable_documents_predicate`, see `authorization-model.md` §6).
 
 ## 9. Typed domain contracts (Pydantic)
 
@@ -469,7 +506,7 @@ Defined once in the backend and exposed via OpenAPI where they cross HTTP.
 
 | Type                   | Purpose |
 | ---------------------- | ------- |
-| `AuthorizationContext` | Resolved per request: org_id, membership_id, clearance, account_scope, assigned_account_ids, department_ids, group_ids, authz_updated_at, policy_version |
+| `AuthorizationContext` | **Implemented (Phase 2)**, frozen, strictly validated: organization_id, membership_id, membership_status, clearance, account_scope, assigned_account_ids, department_ids, group_ids (frozensets), authz_updated_at, policy_version. No admin flag or role label, by design |
 | `RetrievalRequest`     | question, analyzed query (identifiers, phrases, account mentions, temporal intent), scope filters, k values |
 | `RetrievalCandidate`   | chunk_id, document_id, lexical_rank?, semantic_rank?, fused_score, rerank features |
 | `EvidenceChunk`        | Selected context item: chunk text, handle (E1…), document kind, title, display_ref, account name, occurred_at, authority, sensitivity, uri |

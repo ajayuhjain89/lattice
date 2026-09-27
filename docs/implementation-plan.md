@@ -1,6 +1,7 @@
 # Lattice — Implementation Plan
 
-Status: Phase 0 approved. **Phase 1 implemented** (awaiting review). Phase 2 not started.
+Status: Phase 0 approved. Phase 1 approved and closed (after the `lattice_auth`
+hardening below). **Phase 2 implemented** (awaiting review). Phase 3 not started.
 
 ---
 
@@ -147,6 +148,52 @@ CI); persona matrix (brief roles); revocation per change type; admin-capability 
 data access; restricted reachable only by grant; fail-closed on unknown department.
 
 **Non-goals.** Access management UI or endpoints (Phase 9), deny rules.
+
+**Phase 2 as built — deviations and additions (all reflected in the docs):**
+
+| Planned | As built | Why |
+| ------- | -------- | --- |
+| `document_grants(principal_type, principal_id)`, PK (document_id, principal_type, principal_id) | Typed nullable `membership_id` / `department_id` / `group_id`, each with a composite FK; CHECK ties `principal_type` to exactly one; surrogate `id` PK; three per-document unique constraints | A polymorphic ID cannot carry a foreign key, so a grant could name another organization's principal or a deleted one. Now structurally impossible (tested as superuser) |
+| `document_grants.granted_by` | Deferred to Phase 9 | Audit data, not a policy input; its lifecycle belongs with `audit_events` |
+| `access_groups.source_id` | Deferred to Phase 4 | No `sources` table yet; an unconstrained UUID would be an unchecked reference. `external_ref` present, CHECK: set iff `origin = 'source'` |
+| `documents` (access columns + minimal fields) | Exactly: id, organization_id, account_id, sensitivity, access_mode, department_ids, status, timestamps. Account FK with no ON DELETE action; trigger validates `department_ids` against the document's organization | SET NULL on account deletion would widen access; arrays cannot have FKs |
+| import-linter contract | AST test `tests/test_authz_boundary.py`: public-API-only imports **and** no access columns/tables named outside `authz` (attributes, keywords, SQL strings) | Import rules cannot see `Document.sensitivity == …` written in retrieval, the failure the rule exists to prevent. No new dependency |
+| `AuthorizationContext` fields per data-model §9 | Plus `membership_status`; explicitly no admin flag or role label | The policy's `m.status = 'active'` clause needs an input; capability must be unreachable from the policy |
+| `policy_version` constant | Plus a fingerprint test pinning each version to the AST of `context.py`, `policy.py`, `sql.py`, `resolve.py` | Makes "bump on any policy change" mechanical |
+| `explain()` | `explain` (internal), `explain_own_access`, `explain_for_reviewer` | Explanations reveal document facts; the two public forms return `None` identically for missing and unreadable documents |
+| — | `account_visible` / `visible_accounts_predicate` | Account existence is authorized too (security-model §10); needed by lists, filters, mention detection and autocomplete from Phase 5 on |
+| — | `Database.tenant_snapshot` (REPEATABLE READ, READ ONLY) | The one-snapshot rule for context → retrieval → E4 (authorization-model §5) |
+| Seed | Unchanged: groups and documents exist only as test fixtures | Groups and content are the Phase 3 dataset |
+
+Evidence: `tests/security/` (equivalence, personas, admin ≠ content, fail-closed,
+revocation, explanations, tripwire, context), `tests/test_authz_schema.py`,
+`tests/test_authz_boundary.py`, and the Phase 1 isolation suite extended to the new
+tables.
+
+**Phase 2 mutation check** (performed by hand, never committed; each defect applied
+alone to a pristine `lattice/authz`, then the authorization, security, isolation and
+role suites run). "Failed" counts include the policy-version fingerprint test, which
+fails for every mutation of the policy modules; every mutation is also caught by at
+least one behavioural test:
+
+| # | Defect introduced | Tests failed | Caught by (besides the fingerprint) |
+| - | ----------------- | -----------: | ----------------------------------- |
+| M1 | Account check removed from the reference only | 21 | equivalence, personas, revocation, explain, admin, fail-closed |
+| M2 | Account check removed from reference **and** SQL (equivalence cannot see it) | 12 | personas, revocation, explain, admin, fail-closed |
+| M3 | `grants_only` treated as `policy` (both) | 20 | personas, fail-closed, revocation, admin |
+| M4 | Department restriction ignored (both) | 16 | personas, revocation, fail-closed, admin |
+| M5 | Admins implicitly widened by the resolver (scope all, confidential) | 8 | admin ≠ content, equivalence, personas, explain |
+| M6 | SQL predicate replaced by `TRUE` | 42 | equivalence, personas, revocation, fail-closed, admin |
+| M7 | Membership-status check removed from SQL only | 2 | equivalence |
+| M8 | Tripwire returns (filters) instead of aborting | 6 | tripwire suite |
+| M9 | `restricted` reachable through confidential clearance (both) | 3 | fail-closed (reference, and SQL with the CHECK removed); the CHECK itself prevents the state |
+| M10 | Grant-organization check removed from SQL only | 2 | fail-closed (cross-tenant grant row with the FKs removed) |
+| M11 | `explain_own_access` answers for unreadable documents | 6 | explanation oracle tests |
+| M12 | Resolver accepts suspended/removed memberships as active | 4 | equivalence, revocation (deactivation) |
+
+M9 was initially caught only by the reference-level test; its SQL-level twin used an
+internal-clearance reader, which masked the defect. It now uses a confidential reader
+and fails on the SQL side too.
 
 ---
 
@@ -316,7 +363,7 @@ make migrate        # alembic upgrade head (lattice_owner)
 make seed           # Halden + Veridian manifests (idempotent)
 make check-db-role  # runtime role cannot bypass RLS
 make api            # uvicorn on 127.0.0.1:8000
-make test           # 138 tests against the lattice_test database
+make test           # 378 tests against the lattice_test database (incl. 500-example authz proof)
 make lint typecheck
 ```
 Added in later phases: `make sync` (Phase 4), `make eval` (Phase 5), `make web`
@@ -355,6 +402,8 @@ Added in later phases: `make sync` (Phase 4), `make eval` (Phase 5), `make web`
 | D-5 | Admin access to other members' question/answer/evidence content | — | **Decided: OFF / deferred.** Admins get operational structure only. A future support/audit content capability would be designed separately (least privilege, explicit authorization, audit trail, clear UI, content re-authorization) | Product owner — decided |
 | D-6 | Progress transport for Ask (SSE vs polling) | Phase 7 | SSE from FastAPI (`StreamingResponse`), proxied same-origin | Engineering |
 | D-7 | Design-customer domain (B2B SaaS "Halden") | Phase 3 | Keep unless you prefer a domain you know better (legal, healthcare, developer tools) | Product owner |
+| D-8 | A document readable **only through a grant** belongs to an account outside the reader's scope: may its evidence card / inspector show that account's name? (Account lists, filters and mention detection stay scope-bound either way — `account_visible`.) | Phase 5 (evidence), Phase 7 (UI) | Show it: a grant is an explicit decision to share that document, including its own metadata; never add the account to the reader's lists | Product owner |
+| D-9 | Stable key for admin-defined access groups in seed manifests (Phase 3 needs idempotent group upserts; source groups will key on `(source_id, external_ref)` in Phase 4) | Phase 3 | Add `access_groups.key` (citext, unique per organization), mirroring departments and accounts | Engineering |
 
 ## 8. Self-review log (Phase 0)
 

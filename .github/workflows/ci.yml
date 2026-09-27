@@ -35,6 +35,8 @@ jobs:
       LATTICE_TEST_DATABASE_URL: postgresql+asyncpg://lattice_app:ci-app-password@localhost:5432/lattice_test
       LATTICE_TEST_MIGRATION_DATABASE_URL: postgresql+asyncpg://lattice_owner:ci-owner-password@localhost:5432/lattice_test
       LATTICE_TEST_SUPERUSER_DATABASE_URL: postgresql+asyncpg://postgres:ci-superuser-password@localhost:5432/lattice_test
+      # Property-based SQL <-> reference policy proof: the plan's CI minimum.
+      LATTICE_AUTHZ_EXAMPLES: "500"
 
     defaults:
       run:

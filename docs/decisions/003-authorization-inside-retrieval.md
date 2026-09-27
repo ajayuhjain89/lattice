@@ -35,7 +35,10 @@ Unauthorized rows never leave Postgres; the policy is one small, reviewable func
 with a proven SQL twin; revocation is immediate.
 
 ## Consequences
-- Only `authz` may build access SQL (import-linter contract).
+- Only `authz` may build access SQL. Enforced since Phase 2 by an AST test
+  (`backend/tests/test_authz_boundary.py`) rather than an import-linter contract: the
+  failure to prevent is access conditions written outside `authz`, which import rules
+  cannot see.
 - New retrieval paths must use the predicate; the mutation test catches omissions.
 - The join chunks→documents is on the hot path; measured.
 

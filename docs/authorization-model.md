@@ -1,6 +1,9 @@
 # Lattice — Authentication & Authorization Model
 
-Status: Foundation draft (Phase 0).
+Status: §1–2 implemented in Phase 1 (dev identity provider, sessions). §3–7 and the
+account-visibility rules of §9 are **implemented in Phase 2** (`backend/src/lattice/authz`,
+migration 0003) and proven by the suites listed in §6; enforcement points E3 and E4
+exist as library functions that retrieval (Phase 5) and answering (Phase 6) will call.
 Related: `data-model.md` §2–5, `security-model.md`, ADR-003, ADR-005.
 
 ---
@@ -58,7 +61,7 @@ well-run Drive or Slack workspace.
 | Access mode      | `documents.access_mode`         | *Who decides*: `policy` (rules below) or `grants_only` (explicit grants only). Restricted ⇒ grants_only |
 | Department restriction | `documents.department_ids` | Empty = none |
 | Account          | `documents.account_id`          | Null = not account-specific |
-| Explicit grant   | `document_grants`               | To membership, department or group |
+| Explicit grant   | `document_grants`               | To membership, department or group (one typed, foreign-keyed column per principal kind — `data-model.md` §5) |
 | Role label       | `memberships.role_label`        | **Display only.** Role templates set defaults for the fields above |
 
 Deliberately excluded for the first release: explicit deny rules, time-bound grants,
@@ -95,6 +98,21 @@ granted(m, d) := ∃ grant g on d where
 ```
 
 Chunks inherit their document's readability. There is no chunk-level exception.
+
+Implemented exactly as written, twice (§6). Details the formula leaves implicit, as
+built:
+
+- A **deleted** document is unreadable even to a grantee (`status` is checked before
+  the grant path).
+- A grant counts only if it belongs to the document's organization *and* the reader's
+  (`g.organization_id` is checked in SQL and in Python, in addition to the composite
+  foreign keys that make such a row impossible).
+- Unknown values fail closed at every layer: the schema refuses them (CHECK
+  constraints); the resolver refuses a membership with an unknown clearance or scope;
+  the policy denies an unknown sensitivity, access mode, status or principal type;
+  `restricted` + `policy` (forbidden by CHECK) is denied by both implementations.
+- `AuthorizationContext` carries **no** administrator flag or role label, and the
+  resolver does not read them, so the policy cannot consult them even by mistake.
 
 Design properties:
 
@@ -145,8 +163,8 @@ Mapping to the scenarios in the brief:
 | - | ----- | --------- | ------- |
 | E1 | Every request | Session → active membership check | Suspended/removed users stop immediately |
 | E2 | Every DB transaction | RLS on `app.org_id` | Structural org isolation |
-| E3 | Retrieval SQL | `authz.readable_documents_predicate(ctx)` joined into **both** lexical and semantic queries | Unauthorized rows never leave Postgres |
-| E4 | Before prompt construction | `authz.assert_all_readable(ctx, evidence)` using the Python reference policy, re-reading access columns | Invariant check; a failure is a bug → abort, alert, no generation |
+| E3 | Retrieval SQL | `authz.readable_documents_predicate(ctx, documents)` joined into **both** lexical and semantic queries | Unauthorized rows never leave Postgres |
+| E4 | Before prompt construction | `authz.assert_all_readable(session, ctx, document_ids)` using the Python reference policy, re-reading access columns | Invariant check; a failure is a bug → abort, alert, no generation |
 | E5 | Evidence / inspector endpoints | Same predicate on direct lookups by ID; unreadable = 404 | No enumeration via IDs |
 | E6 | Trace reads | Trace references re-authorized against the *viewer's* current context | Debug tools can't bypass access |
 | E7 | Admin routes | `is_admin` capability | Management actions |
@@ -157,31 +175,88 @@ resolution, retrieval and E4 run in one `REPEATABLE READ` read-only snapshot, so
 permission change committing mid-request cannot cause a false tripwire (or a
 check against different permissions than the search used).
 
+As built (Phase 2): the snapshot is `Database.tenant_snapshot(org_id)` (REPEATABLE
+READ, READ ONLY, organization bound). `assert_all_readable` raises
+`AuthorizationInvariantViolation` (`security_invariant_violated`, HTTP 500, fixed
+message naming nothing) when any ID is unreadable **or cannot be found in the
+reader's organization**, even if the other evidence is fine. It logs one
+`security.invariant_violated` event with organization, membership, policy version,
+counts and the offending document UUIDs — never titles, access attributes or policy
+reasons (SEC-8). Alerting on that event is Phase 11.
+
 ## 6. One policy, two implementations, proven equal
 
-- `authz.policy.readable(ctx, doc_access) -> bool` — the **reference** implementation,
-  pure Python, trivially reviewable.
-- `authz.sql.readable_documents_predicate(ctx)` — the SQLAlchemy expression used in
-  queries.
-- **Equivalence test** (property-based, `hypothesis`): generate random members
-  (clearance, scope, assignments, departments, groups) and random documents
-  (sensitivity, account, departments, grants), insert them, and assert the SQL result
-  set equals the set the reference function accepts. Runs in CI on every change to
-  `authz`.
-- `authz.explain(ctx, doc) -> AccessExplanation` reuses the reference policy to
-  produce the human reasons shown in the access UI.
-
-`policy_version` (a constant bumped on any change to the policy code) is stored in
-traces so behaviour changes are auditable.
+- `lattice.authz.policy.readable(ctx, doc) -> bool` — the **reference**
+  implementation, pure Python, no I/O, readable top to bottom. `DocumentAccess` keeps
+  stored values as plain strings so that an unrecognised value can reach the policy
+  and be denied.
+- `lattice.authz.sql.readable_documents_predicate(ctx, documents=…)` — the SQLAlchemy
+  expression used in queries; `documents` may be an alias (retrieval will join
+  chunks → documents). It is written independently of the reference (its own
+  clearance table, no shared helpers) so the equivalence test compares two
+  implementations, not one with itself. Context values are bound parameters (arrays
+  for ID sets); the SQL text depends only on the policy.
+- **Equivalence test** (`tests/security/test_authz_equivalence.py`, `hypothesis`):
+  generated two-organization worlds — members across status, clearance, scope,
+  assignments, departments, groups and the admin flag; documents across sensitivity,
+  access mode, status, account, departments (including departments deleted after the
+  fact) and grants to applicable, unrelated and deleted principals. For every (member,
+  document) pair: the resolved context equals the one implied by the spec; the SQL
+  predicate as `lattice_app` under RLS equals `readable()` per row and as a WHERE
+  set; the predicate with RLS bypassed still equals `readable()` for both
+  organizations (so its own organization clause is tested); account visibility,
+  the access loader and `explain()` agree too. 500 examples in CI (≈ 5,000 document
+  decisions and ≈ 6,500 account decisions per run); the test fails if any policy path
+  was exercised fewer than 10 times.
+- **Explanations** (`lattice.authz.explain`), with the existence rules of §9:
+  - `explain(ctx, doc)` — internal, every clause (granting and denying) as
+    `AccessReason` codes, plus the matched grants and `policy_version`. Trusted
+    callers only; never returned to an API caller directly. Its `readable` field is
+    `readable()` itself, so an explanation cannot disagree with the decision.
+  - `explain_own_access(ctx, doc | None)` — "why can I see this?": only granting
+    reasons, no principal IDs or group names; `None` for unreadable **and** for
+    missing documents, identically.
+  - `explain_for_reviewer(reviewer, subject, doc | None)` — for the Phase 9 access
+    UI: `None` unless the reviewer can read the document and both are in the same
+    organization, so it is not an oracle over documents the reviewer cannot see.
+    The administrator-capability check stays in the route (E7).
+- **Account visibility** (§9, `security-model.md` §10): `account_visible(ctx,
+  account)` and `visible_accounts_predicate(ctx)` — the account's organization, an
+  active membership, and scope `all` or an assignment. Deliberately independent of
+  `readable`: a grant on one document of an out-of-scope account does not put that
+  account in the member's lists, filters, mention detection or autocomplete. Proven
+  equivalent in the same property test. The admin account directory is a separate,
+  capability-gated view (Phase 9).
+- **Policy version.** `POLICY_VERSION` (`"authz-1"`) is carried by every
+  `AuthorizationContext` and explanation, and will be stored in traces (Phase 6).
+  `tests/test_authz_boundary.py` pins a fingerprint (SHA-256 of the docstring-free
+  AST) of `context.py`, `policy.py`, `sql.py` and `resolve.py` to each version: any
+  behavioural change to those modules fails CI until the version is bumped and the new
+  fingerprint recorded. Comments and formatting do not count as changes.
+- **Boundary.** Only `lattice.authz` builds access conditions. Enforced by
+  `tests/test_authz_boundary.py` over every module outside `lattice/authz/`: imports
+  only from the package's public `__all__`, and no attribute, keyword or SQL string
+  naming the access columns or grant/group tables. A future writer of access state
+  (ingestion) needs an explicit, reviewed allowance there.
 
 ## 7. Freshness of authorization
 
 - The `AuthorizationContext` is **resolved from the database on every request.** No
-  cache in the first release. Cost: ~3 indexed queries (membership, departments,
-  assignments, groups — combinable into one), well under 5 ms.
+  cache in the first release. As built: one statement (membership, user and
+  organization status, and the three ID sets as array subqueries) —
+  `lattice.authz.resolve_authorization_context`, given only the organization and
+  membership IDs of the server-side session. It refuses (fails closed with
+  `authentication_required`) when the membership is missing from the bound
+  organization, is not active, its user or organization is not active, or an attribute
+  is outside the vocabulary.
 - Consequence: revocation, reassignment, clearance changes and group membership
   changes take effect on the very next request, including an in-flight user's next
-  question. There is no stale-permission window to manage.
+  question. There is no stale-permission window to manage. Tested per change type in
+  `tests/security/test_authz_revocation.py` (assignment, department membership, group
+  membership, group deletion, member/department/group grant removal, clearance,
+  account scope, suspension/removal/user disablement, organization suspension, and
+  document-side sensitivity/mode/status/department changes), each a single row write
+  with no document rewritten.
 - If profiling ever justifies a cache: key = (org_id, membership_id,
   `authz_updated_at`), and every access-affecting write bumps `authz_updated_at` on the
   affected memberships (and an org-wide counter for group/grant changes) in the same
@@ -251,3 +326,10 @@ Assertions (automated, `tests/security/test_critical_acme.py`):
 4. User 1 requesting `/v1/evidence/{docB_chunk_id}` gets 404.
 5. The same holds after Maya is re-assigned away from Acme (then Doc A disappears
    too) and after Grace's clearance is lowered (Doc B disappears) — without re-ingestion.
+
+Phase 2 already proves the authorization half of this scenario, before any content
+exists: Maya reads Doc A but not Doc B and Grace reads both
+(`tests/security/test_authz_personas.py`), and assertion 5 at the policy level —
+un-assigning Maya from Acme removes Doc A, lowering Grace's clearance removes Doc B —
+in `tests/security/test_authz_revocation.py`. The retrieval, payload, canary and 404
+assertions arrive with Phases 5–6.

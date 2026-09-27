@@ -5,12 +5,14 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phase 1 (engineering foundation) is implemented.** What runs today: a FastAPI
-backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced
-row-level security for organization isolation, server-side revocable sessions with a
-development-only persona login, CSRF protection, a typed error contract, redacting
-structured logs, a seed tool for the synthetic organizations, CI, and the tests that
-prove these. There is no ingestion, retrieval, AI or web UI yet — see the
+**Status: Phases 1–2 are implemented.** What runs today: a FastAPI backend with typed
+fail-fast configuration, PostgreSQL 16 + pgvector with forced row-level security for
+organization isolation, server-side revocable sessions with a development-only persona
+login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
+for the synthetic organizations, CI — and (Phase 2) the authorization core: access
+groups and grants, a deterministic reference policy, its SQL predicate for retrieval,
+a property-based proof that the two agree, explanations, and the pre-generation
+tripwire. There is no content, ingestion, retrieval, AI or web UI yet — see the
 [implementation plan](docs/implementation-plan.md).
 
 ## Local setup
@@ -55,7 +57,7 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 
 | Command | What it does |
 | ------- | ------------ |
-| `make test` | All tests, against the separate `lattice_test` database (real PostgreSQL; the schema is rebuilt from a clean state each run) |
+| `make test` | All tests, against the separate `lattice_test` database (real PostgreSQL; the schema is rebuilt from a clean state each run). Includes the property-based authorization proof (500 examples; set `LATTICE_AUTHZ_EXAMPLES` to run more) |
 | `make lint` | `ruff check` + `ruff format --check` |
 | `make format` | Apply formatting and safe lint fixes |
 | `make typecheck` | `mypy --strict` over source, tests and migrations |
@@ -78,6 +80,17 @@ the runtime-role check, and the test suite against `pgvector/pgvector:0.8.1-pg16
 - Cross-organization references are rejected by composite foreign keys.
 
 Details: [data model §8](docs/data-model.md), [security model §3–5](docs/security-model.md).
+
+## How authorization works (Phase 2)
+
+Inside an organization, what a member may read is decided by one small deterministic
+policy ([authorization model §4](docs/authorization-model.md)) — never by a model —
+implemented twice: `lattice.authz.readable()` in plain Python, and
+`readable_documents_predicate()` as SQL that retrieval will put inside its queries,
+so unauthorized rows never leave PostgreSQL. A property-based test proves the two
+agree on thousands of generated cases each run. Administrator capability grants no
+content access; `restricted` content is reachable only by explicit grant; anything
+unknown or malformed is denied; permission changes apply to the very next check.
 
 ## Repository layout
 
