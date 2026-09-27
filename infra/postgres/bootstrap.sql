@@ -13,7 +13,8 @@
 --                  BYPASSRLS; the API refuses to start otherwise.
 --   lattice_auth   NOLOGIN. Owns the narrow SECURITY DEFINER pre-authentication
 --                  lookup functions; has role-targeted read policies. Nobody logs
---                  in as it and lattice_app is not a member of it.
+--                  in as it and lattice_app is not a member of it. It holds no
+--                  CREATE privilege on any schema or database at rest.
 
 \set ON_ERROR_STOP on
 

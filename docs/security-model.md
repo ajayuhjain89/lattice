@@ -49,8 +49,10 @@ replaced by `TRUE` must fail the security suite — proves the tests actually te
 2. Composite `(organization_id, id)` foreign keys between tenant tables, and
    `sessions (organization_id, user_id) → memberships`. Tested as superuser, so the
    constraint — not RLS — is what rejects cross-org links.
-3. RLS enabled **and forced** on all ten application tables, including `organizations`,
+3. RLS enabled **and forced** on all application tables, including `organizations`,
    `users` and `external_identities`; app role is non-owner without `BYPASSRLS`;
+   the NOLOGIN definer role `lattice_auth` owns only the two pre-auth lookups, holds no
+   object-creation privilege at rest and reads only what they need (`data-model.md` §8);
    `app.org_id` set with `set_config(..., true)` (≡ `SET LOCAL`) per transaction.
    Details and the `NULLIF` fail-closed finding: `data-model.md` §8.
 4. No process-level caches keyed without org (none exist in Phase 1).

@@ -11,7 +11,9 @@ GRANT CONNECT ON DATABASE :"DBNAME" TO lattice_app;
 ALTER SCHEMA public OWNER TO lattice_owner;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO lattice_app, lattice_auth;
--- Required for migrations to transfer ownership of the SECURITY DEFINER lookup
--- functions to lattice_auth (a new owner must hold CREATE on the function's schema).
--- lattice_auth is NOLOGIN and its functions never create objects.
-GRANT CREATE ON SCHEMA public TO lattice_auth;
+-- lattice_auth never holds CREATE at steady state. The migration that hands it the
+-- SECURITY DEFINER lookup functions grants CREATE and revokes it again inside the
+-- same transaction (a new owner must hold CREATE on the schema only at the moment of
+-- ALTER ... OWNER TO). Re-running this bootstrap removes a grant left behind by an
+-- older version of it.
+REVOKE CREATE ON SCHEMA public FROM lattice_auth;

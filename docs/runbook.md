@@ -19,6 +19,31 @@ operations:
 | `database schema is not migrated` | `make migrate` |
 | Start over with an empty local database | `make db-destroy` (**deletes all local data**), then `make db-up migrate seed` |
 | Port 5433 already in use | Set `LATTICE_DB_HOST_PORT` in `.env` and update the ports in the `LATTICE_*_URL` values |
+| Database created before the `lattice_auth` hardening (`\dn+ public` shows `lattice_auth=UC`, or the lookup functions show `=X/lattice_auth`) | `make db-bootstrap` and `make migrate` (migration 0002). Both are idempotent. Verify with `make test` (`tests/test_auth_role.py`) |
+
+### Database roles and credentials
+
+| Role | Used by | Rule |
+| ---- | ------- | ---- |
+| `lattice_app` | API (and later the worker) via `LATTICE_DATABASE_URL` | The only runtime identity. The API refuses to start with any other kind of role; it never falls back to another credential |
+| `lattice_owner` | `make migrate`, `make seed`, operator tools via `LATTICE_MIGRATION_DATABASE_URL` | Migration/bootstrap/administrative role. Never configured as the API's `LATTICE_DATABASE_URL`. In production its credential lives in a different secret from the runtime one and is available only to the migration job |
+| `lattice_auth` | Nobody (NOLOGIN) | Owns the two pre-authentication lookup functions only. Holds no `CREATE` anywhere at rest |
+
+### Changing a pre-authentication lookup function
+
+`lattice_resolve_session` and `lattice_identity_memberships` are owned by `lattice_auth`,
+which cannot create objects, so they cannot be changed in place (`CREATE OR REPLACE`
+fails even for the owner). In a new migration, as `lattice_owner`:
+
+1. `DROP FUNCTION …` (the schema owner may drop it) and `CREATE FUNCTION …` again with
+   `SECURITY DEFINER` and `SET search_path = pg_catalog, public, pg_temp`.
+2. While `lattice_owner` still owns it: `REVOKE ALL … FROM PUBLIC` and
+   `GRANT EXECUTE … TO lattice_app`. (After the ownership transfer these statements
+   would silently do nothing.)
+3. `GRANT CREATE ON SCHEMA public TO lattice_auth`, `ALTER FUNCTION … OWNER TO
+   lattice_auth`, `REVOKE CREATE ON SCHEMA public FROM lattice_auth` — all in the same
+   migration transaction.
+4. Run `make test`: `tests/test_auth_role.py` fails if any privilege is left behind.
 
 ## 2. Procedures (planned)
 

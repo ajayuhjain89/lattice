@@ -118,6 +118,18 @@ following README; CI green; docs updated where reality differs.
 | Error envelope field `trace_id` | `request_id` (+ `details` for validation) | Avoids confusion with query-trace IDs (Phase 6) |
 | Makefile: db-up, migrate, test | Also setup, seed, api, lint, format, typecheck, db-bootstrap, db-down, db-destroy, check-db-role | Every documented command is real |
 
+**Phase 1 closing hardening (before Phase 2).** `lattice_auth` held `CREATE` on
+`public` permanently (granted by the bootstrap so migrations could transfer function
+ownership to it). It now receives `CREATE` only inside migration 0001's transaction,
+for the ownership transfer, and loses it before commit; the bootstrap revokes any
+leftover grant and migration 0002 repairs existing databases. The review also found
+that the lookup functions were executable by `PUBLIC` (0001's ACL statements ran after
+the ownership transfer and were silently ignored); fixed in 0001 and repaired by 0002.
+Final state and rationale: `data-model.md` §8; regression test
+`backend/tests/test_auth_role.py` (26 tests, including behaviour probes run as
+`lattice_auth` and a repair test from the original Phase 1 state); mutation check: the
+original 0001/bootstrap behaviour fails 8 of them.
+
 ---
 
 ### Phase 2 — Authorization core

@@ -370,12 +370,21 @@ def upgrade() -> None:
         $$
         """
     )
-    op.execute("ALTER FUNCTION lattice_resolve_session(bytea) OWNER TO lattice_auth")
-    op.execute("ALTER FUNCTION lattice_identity_memberships(text, text) OWNER TO lattice_auth")
+    # Set the ACL while lattice_owner still owns the functions: after the transfer it
+    # can no longer change it (it does not inherit lattice_auth's privileges), and
+    # PostgreSQL would reduce these statements to warnings. ALTER ... OWNER TO carries
+    # the ACL over to the new owner.
     op.execute("REVOKE ALL ON FUNCTION lattice_resolve_session(bytea) FROM PUBLIC")
     op.execute("REVOKE ALL ON FUNCTION lattice_identity_memberships(text, text) FROM PUBLIC")
     op.execute("GRANT EXECUTE ON FUNCTION lattice_resolve_session(bytea) TO lattice_app")
     op.execute("GRANT EXECUTE ON FUNCTION lattice_identity_memberships(text, text) TO lattice_app")
+    # A new function owner must hold CREATE on the schema at the moment of the ownership
+    # transfer, and never afterwards. The grant and the revoke run in this migration's
+    # transaction, so no other session ever observes lattice_auth holding CREATE.
+    op.execute("GRANT CREATE ON SCHEMA public TO lattice_auth")
+    op.execute("ALTER FUNCTION lattice_resolve_session(bytea) OWNER TO lattice_auth")
+    op.execute("ALTER FUNCTION lattice_identity_memberships(text, text) OWNER TO lattice_auth")
+    op.execute("REVOKE CREATE ON SCHEMA public FROM lattice_auth")
 
 
 def downgrade() -> None:

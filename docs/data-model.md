@@ -352,12 +352,42 @@ here (environment / secret store only).
 | ---- | ----- | ------- | --- |
 | `lattice_owner` | yes | Owns the schema; runs migrations and operator tools (seed) | Subject to FORCE RLS on tenant tables; has provisioning policies on the three global/root tables only |
 | `lattice_app` | yes | API (and later the worker). Never owns tables, never BYPASSRLS | Subject to every policy; least-privilege grants (below) |
-| `lattice_auth` | **no** | Owns the two SECURITY DEFINER pre-authentication functions | Role-targeted read policies on the tables those functions need |
+| `lattice_auth` | **no** | Owns the two SECURITY DEFINER pre-authentication functions — and nothing else | Role-targeted read policies on the tables those functions need |
 
 Roles, databases and extensions are created by `infra/postgres/bootstrap.sql` (run as
 superuser; idempotent). Migrations only verify they exist. `lattice_owner` is granted
 membership in `lattice_auth` `WITH INHERIT FALSE, SET TRUE` — enough to hand function
-ownership to it, without silently inheriting its RLS policies.
+ownership to it and to administer those functions' ACL (by `SET ROLE`, inside a
+migration), without silently inheriting its privileges or RLS policies.
+
+`lattice_owner` is the migration/bootstrap/operator identity. It is never the runtime
+identity: the API connects as `lattice_app` only, has no fallback to another role, and
+refuses to start as the owner (startup check below). Production keeps the two
+credentials separate.
+
+**Steady-state privileges of `lattice_auth`** (hardened before Phase 2; regression test
+`backend/tests/test_auth_role.py`):
+
+| Privilege | Held | Why |
+| --------- | ---- | --- |
+| LOGIN, SUPERUSER, BYPASSRLS, CREATEROLE, CREATEDB | no | Never a session identity |
+| Membership in any role | none | Its only member is `lattice_owner` (SET only, no INHERIT) |
+| `USAGE` on schema `public` | yes | The definer functions resolve `public.*` as `lattice_auth` |
+| `CREATE` on any schema; `CREATE`/`TEMPORARY`/`CONNECT` on the database | **no** | Object creation is not needed at rest |
+| `SELECT` on organizations, users, external_identities, memberships, sessions | yes | Exactly what the two lookups read (plus the `auth_lookup` policies) |
+| Any other table privilege, on any table | no | Including every Phase 2 authorization table |
+| Owns | the two lookup functions | No tables, types, schemas or other functions |
+
+PostgreSQL requires the *new* owner of a function to hold `CREATE` on its schema only
+at the moment of `ALTER FUNCTION … OWNER TO`. Migration 0001 therefore grants `CREATE`
+to `lattice_auth`, transfers ownership and revokes `CREATE` in the same transaction —
+no other session can observe the grant, and the privilege is not needed afterwards
+(owning and executing a function does not use it). The alternative, a dedicated schema
+for the two functions, would have required `lattice_auth` (or its schema owner) to keep
+`CREATE` there, i.e. still a standing object-creation capability, plus a second schema
+on every search path; it was not needed. A side effect worth keeping: because
+`CREATE OR REPLACE FUNCTION` also requires `CREATE` on the schema, even the owner cannot
+redefine a lookup outside a migration.
 
 ### Binding the organization
 
@@ -410,7 +440,18 @@ Before a request's organization is known, identity data is readable only through
   pairs of a verified identity, used to choose the organization at sign-in.
 
 Both are `SECURITY DEFINER`, owned by `lattice_auth`, with a fixed `search_path`, and
-executable only by `lattice_app`.
+executable only by `lattice_app` (their ACL is `{lattice_auth=X, lattice_app=X}`; no
+`PUBLIC` execute).
+
+Finding during the pre-Phase-2 hardening: the original 0001 issued `REVOKE … FROM
+PUBLIC` / `GRANT EXECUTE … TO lattice_app` *after* handing the functions to
+`lattice_auth`. `lattice_owner` was then no longer the owner (and does not inherit from
+`lattice_auth`), so PostgreSQL reduced both statements to warnings and left the default
+`PUBLIC` execute in place. Exposure was limited — `CONNECT` on the databases is revoked
+from `PUBLIC`, so only `lattice_owner`, `lattice_app` and superusers could connect — but
+it contradicted this section. 0001 now sets the ACL before the ownership transfer, and
+migration 0002 repairs databases created by the original 0001 (acting as
+`lattice_auth` for the ACL statements).
 
 ### Startup safety check
 
