@@ -18,13 +18,20 @@
         Make a source's content unretrievable at once, then purge it.
     lattice apply-admin-grants --org SLUG --grants FILE [--dry-run] [--prune]
         Apply Lattice administrator grants (D-12), after ingestion.
+    lattice search --org SLUG --as EMAIL [--account KEY] [--source-type T ...]
+                   [--embedding none|fake|openai] [--text] [--pool] [--json] QUESTION
+        Retrieve permitted evidence as that member (development/test only).
+    lattice eval retrieval [--embedding none|fake|openai] [--category C ...]
+                           [--persona P ...] [--item ID ...] [--out DIR]
+        Retrieval metrics over the golden set (development/test only).
 
 Ingestion commands run as lattice_owner (operator tools, through row-level security)
 and print counts and fixed codes only -- never record content, titles or filenames.
 
 Exit codes: 0 success; 1 check failed, a sync failed or was aborted, or admin grants
-were not applied; 2 configuration or input error; 3 a sync completed as ``partial``
-(records rejected, embeddings failed or the deletion guard tripped -- details printed).
+were not applied, or a retrieval evaluation found a security violation; 2
+configuration or input error; 3 a sync completed as ``partial`` (records rejected,
+embeddings failed or the deletion guard tripped -- details printed).
 """
 
 import argparse
@@ -36,6 +43,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from lattice import cli_retrieval
 from lattice.admin_grants import apply_admin_grants, load_admin_grants
 from lattice.config import (
     ConfigurationError,
@@ -313,6 +321,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     grants.add_argument("--grants", type=Path, required=True)
     grants.add_argument("--dry-run", action="store_true")
     grants.add_argument("--prune", action="store_true")
+    cli_retrieval.add_parsers(commands)
     args = parser.parse_args(argv)
 
     if args.command == "dataset":
@@ -332,6 +341,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return asyncio.run(_disconnect(args))
         if args.command == "apply-admin-grants":
             return asyncio.run(_apply_admin_grants(args))
+        if args.command == "search":
+            return asyncio.run(cli_retrieval.search(args))
+        if args.command == "eval":
+            return asyncio.run(cli_retrieval.eval_retrieval(args))
         return asyncio.run(_check_db_role())
     except ConfigurationError as exc:
         return _fail(str(exc))
