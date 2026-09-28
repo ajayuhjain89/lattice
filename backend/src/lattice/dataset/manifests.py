@@ -23,6 +23,17 @@ from typing import Any, Literal, Self
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from lattice.admin_grants import AdminGrant, AdminGrantsFile
+from lattice.sources.config import ChannelConfig, SourceConfig, SourcesFile
+
+__all__ = [
+    "AdminGrant",
+    "AdminGrantsFile",
+    "ChannelConfig",
+    "SourceConfig",
+    "SourcesFile",
+]
+
 AS_OF = datetime.fromisoformat("2026-09-27T23:59:59+00:00")
 """The dataset's "now". No record may be dated after it."""
 
@@ -40,53 +51,9 @@ def load_yaml(path: Path) -> Any:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-# --- sources.yaml ------------------------------------------------------------------------
-
-
-class ChannelConfig(_Strict):
-    account: str | None = None
-    sensitivity: Literal["internal", "confidential"] | None = None
-
-
-class SourceConfig(_Strict):
-    key: str
-    connector_type: Literal["document_repository", "ticketing", "chat_export"]
-    name: str
-    path: str
-    default_sensitivity: Literal["internal", "confidential"]
-    default_departments: list[str] = Field(default_factory=list)
-    account_scoped: bool = False
-    authority: Literal["system_of_record", "working", "conversational"]
-    # ticketing: the ticketing tool's organization ID -> account key.
-    account_refs: dict[int, str] = Field(default_factory=dict)
-    # chat_export: channel ID -> settings.
-    channels: dict[str, ChannelConfig] = Field(default_factory=dict)
-
-
-class SourcesFile(_Strict):
-    sources: list[SourceConfig] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def _unique(self) -> Self:
-        keys = [s.key for s in self.sources]
-        if len(keys) != len(set(keys)):
-            raise ValueError("duplicate source key")
-        return self
-
-
-# --- admin-grants.yaml -------------------------------------------------------------------
-
-
-class AdminGrant(_Strict):
-    document: str
-    member: str
-    reason: str = Field(min_length=1)
-    granted_on: date
-
-
-class AdminGrantsFile(_Strict):
-    grants: list[AdminGrant] = Field(default_factory=list)
-
+# --- sources.yaml and admin-grants.yaml ----------------------------------------------
+# Lattice-side configuration shared with ingestion (Phase 4): the models live with their
+# consumers and are re-exported here for the lint.
 
 # --- ground-truth.yaml -------------------------------------------------------------------
 

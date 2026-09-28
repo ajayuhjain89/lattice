@@ -117,3 +117,21 @@ def load_migration_settings(**overrides: object) -> MigrationSettings:
         return MigrationSettings(**overrides)  # type: ignore[arg-type]
     except ValidationError as exc:
         raise ConfigurationError(_describe(exc)) from None
+
+
+class ProviderSettings(BaseSettings):
+    """Model-provider settings for operator tools (ingestion). Secrets only here, from
+    the environment; never in the database or source configuration."""
+
+    model_config = SettingsConfigDict(env_prefix=ENV_PREFIX, extra="ignore", frozen=True)
+
+    env: Environment
+    openai_api_key: SecretStr | None = None
+    openai_embedding_model: str = "text-embedding-3-small"
+
+
+def load_provider_settings(**overrides: object) -> ProviderSettings:
+    try:
+        return ProviderSettings(**overrides)  # type: ignore[arg-type]
+    except ValidationError as exc:
+        raise ConfigurationError(_describe(exc)) from None

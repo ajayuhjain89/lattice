@@ -12,7 +12,8 @@ Two mechanical rules over every module of the ``lattice`` package outside
    cannot re-create permission conditions ad hoc, even in raw SQL.
 
 A module that legitimately *writes* access state (ingestion, Phase 4; access
-management, Phase 9) needs an explicit, reviewed entry in ``ALLOWED`` below.
+management, Phase 9) needs an explicit, reviewed entry in ``ALLOWED`` below. No module
+outside ``lattice.authz`` may build a *read* condition, allowance or not.
 
 This replaces the import-linter contract named in the implementation plan: import
 rules alone cannot see ``Document.sensitivity == "internal"`` written outside authz,
@@ -55,6 +56,41 @@ ALLOWED: dict[str, frozenset[str]] = {
     # access condition of its own; confining the vocabulary to this module keeps the
     # rest of lattice.dataset clean.
     "dataset.access": frozenset({"sensitivity", "access_mode", "department_ids"}),
+    # --- Phase 4: ingestion writes access state; it never decides who may read. ---
+    # The document-repository connector reports the classification its front matter
+    # states, as an untrusted ``AccessHints`` value. No database, no condition.
+    "connectors.markdown": frozenset({"sensitivity"}),
+    # MAP ACCESS: turns untrusted hints into the access record to store (the same rules
+    # as the dataset oracle, compared record by record in tests/ingestion). Pure
+    # functions over a record and the source configuration; no SQL. The strings are the
+    # keys of the canonical access hash.
+    "ingestion.access": frozenset({"sensitivity", "access_mode", "department_ids"}),
+    # The embedding decision asks the AI egress policy whether a document's
+    # classification may be sent to the provider (SEC-10). A data policy, not
+    # authorization: it never admits or hides a document for a reader.
+    "ingestion.sync": frozenset({"sensitivity"}),
+    # PERSIST: the one writer of a document's access columns, its source-origin grants
+    # and source-synced groups and their members. Its reads of ``sensitivity`` in SQL
+    # are egress-policy filters over chunks to embed or un-embed (never a read path).
+    # It never touches admin-origin grants.
+    "ingestion.store": frozenset(
+        {
+            "sensitivity",
+            "access_mode",
+            "department_ids",
+            "principal_type",
+            "document_grants",
+            "access_groups",
+            "access_group_members",
+        }
+    ),
+    # Source disconnect: counts the grants and groups that the purge removes and bumps
+    # ``authz_updated_at`` of members who lose a source-synced group. The purge itself is
+    # the foreign-key cascade from ``sources``.
+    "ingestion.lifecycle": frozenset({"document_grants", "access_groups", "access_group_members"}),
+    # D-12: applies admin-grants.yaml as admin-origin membership grants, all or nothing.
+    # Never reads or writes source-origin grants.
+    "admin_grants": frozenset({"document_grants", "principal_type"}),
 }
 
 
@@ -118,14 +154,14 @@ def check_source(module: str, source: str) -> list[Violation]:
             flag(node, f"sets access attribute {node.arg}=")
         elif isinstance(node, ast.Name) and node.id in ACCESS_NAMES - allowed:
             flag(node, f"uses access table model {node.id}")
-        elif (
-            isinstance(node, ast.Constant)
-            and isinstance(node.value, str)
-            and id(node) not in docstrings
-            and (match := ACCESS_SQL.search(node.value))
-            and match.group(1) not in allowed
-        ):
-            flag(node, f"names access column/table {match.group(1)!r} in a string")
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if id(node) in docstrings:
+                continue
+            # Every access name in the string: an allowed name early in a statement
+            # must not hide a disallowed one later in it.
+            for name in dict.fromkeys(m.group(1) for m in ACCESS_SQL.finditer(node.value)):
+                if name not in allowed:
+                    flag(node, f"names access column/table {name!r} in a string")
     return found
 
 
@@ -172,6 +208,15 @@ def test_only_authz_builds_document_access_conditions() -> None:
 )
 def test_the_boundary_check_catches_violations(source: str) -> None:
     assert check_source("retrieval.search", source), source
+
+
+def test_an_allowed_name_does_not_hide_a_disallowed_one_in_the_same_string() -> None:
+    source = (
+        "q = text('DELETE FROM document_grants WHERE group_id IN (SELECT id FROM access_groups)')"
+    )
+    assert [v.detail for v in check_source("admin_grants", source)] == [
+        "names access column/table 'access_groups' in a string"
+    ]
 
 
 @pytest.mark.parametrize(
