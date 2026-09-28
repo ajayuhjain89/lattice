@@ -9,9 +9,17 @@ pydantic's default error text echoes the input.
 """
 
 from enum import StrEnum
+from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    Field,
+    SecretStr,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ENV_PREFIX = "LATTICE_"
@@ -120,14 +128,33 @@ def load_migration_settings(**overrides: object) -> MigrationSettings:
 
 
 class ProviderSettings(BaseSettings):
-    """Model-provider settings for operator tools (ingestion). Secrets only here, from
-    the environment; never in the database or source configuration."""
+    """Model-provider settings for operator tools (ingestion, search, evaluation).
+    Secrets only here, from the environment; never in the database or source
+    configuration. A credential here is never an approval (security-model §6): what may
+    be sent to a provider is decided per organization by the egress policy.
 
-    model_config = SettingsConfigDict(env_prefix=ENV_PREFIX, extra="ignore", frozen=True)
+    This is the single-deployment stop-gap; organization-owned provider credentials
+    (BYOK) replace it before any multi-tenant deployment (ADR-011)."""
+
+    model_config = SettingsConfigDict(
+        env_prefix=ENV_PREFIX, extra="ignore", frozen=True, populate_by_name=True
+    )
 
     env: Environment
     openai_api_key: SecretStr | None = None
     openai_embedding_model: str = "text-embedding-3-small"
+    # Google's documented variable name is accepted as well as Lattice's own.
+    gemini_api_key: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("LATTICE_GEMINI_API_KEY", "GEMINI_API_KEY")
+    )
+    gemini_embedding_model: str = "gemini-embedding-2"
+    # unpaid | paid: the tier of the key's project (ADR-010). Lattice cannot check it;
+    # unpaid (Google may use the content) is the safe default.
+    gemini_data_use: Literal["unpaid", "paid"] = "unpaid"
+    # Local open-weight models (ADR-009): the weights cache and the model to run.
+    model_dir: Path = Path("~/.cache/lattice/models")
+    local_embedding_model: str = "mxbai-embed-large-v1"
+    local_embedding_threads: int = Field(default=0, ge=0, le=64)  # 0: runtime default
 
 
 def load_provider_settings(**overrides: object) -> ProviderSettings:

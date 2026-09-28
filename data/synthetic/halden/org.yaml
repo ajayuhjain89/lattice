@@ -8,6 +8,8 @@
 organization:
   slug: halden
   name: Halden
+  # Generated data: may reach a development-only provider (ADR-010).
+  data_origin: synthetic
 
 departments:
   - {key: sales, name: Sales}

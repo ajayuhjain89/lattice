@@ -1,9 +1,20 @@
 # ADR-008: Embedding provider for the first vertical slice
 
 Status: Accepted (Phase 4, 2026-09-27). Implements decision D-2 within the egress
-policy D-3. Revisit after the Phase 5 retrieval evaluation -- which could not run with
-the real provider (no API key available; `evaluation-plan.md` §9), so this ADR stands
-unchanged and the Voyage comparison was not triggered.
+policy D-3.
+
+**Scope note (Phase 5 closure, 2026-09-28).** This ADR is the *external API*
+embedding decision, and it remains valid: when an organization uses an external
+provider for embeddings, OpenAI `text-embedding-3-small` at 1024 dimensions is the
+reference choice. OpenAI support is kept and documented. It is **optional**: it is an
+organization bring-your-own-key provider (ADR-011), and Lattice does not require it.
+The OpenAI real-provider evaluation has not run, because no credential is available
+and none is required. Two further providers now sit behind the same Protocol, for
+other deployment needs:
+[ADR-009](009-local-embedding-provider.md) (local, zero-cost, no egress) and
+[ADR-010](010-gemini-embedding-provider.md) (Gemini, optional BYOK; unpaid key =
+synthetic only). The real semantic benchmark was run with those
+(`evaluation-plan.md` §9). The Voyage comparison below was not triggered.
 
 ## Context
 

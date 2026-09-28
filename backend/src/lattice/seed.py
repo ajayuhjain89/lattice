@@ -42,6 +42,7 @@ from lattice.orgs.models import (
     Membership,
     MembershipDepartment,
     Organization,
+    OrgSettings,
 )
 
 _KEY = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
@@ -62,6 +63,10 @@ class OrganizationSpec(_Strict):
     slug: str
     name: str = Field(min_length=1)
     status: Literal["active", "suspended"] = "active"
+    # ``synthetic`` marks generated data (Halden, Veridian): the only content a provider
+    # that may use submitted content can receive (ADR-010). Omitted: left as is (a new
+    # organization is ``customer``, the safe default).
+    data_origin: Literal["customer", "synthetic"] | None = None
 
     _slug = field_validator("slug")(_check_key)
 
@@ -279,6 +284,17 @@ async def seed_manifest(db: Database, manifest: Manifest) -> SeedReport:
                 ["name", "status"],
             ),
         )
+        if spec.data_origin is not None:
+            report.note(
+                "settings",
+                await _upsert(
+                    session,
+                    _table(OrgSettings),
+                    {"organization_id": organization_id, "data_origin": spec.data_origin},
+                    ["organization_id"],
+                    ["data_origin"],
+                ),
+            )
 
         department_ids: dict[str, uuid.UUID] = {}
         for dept in manifest.departments:

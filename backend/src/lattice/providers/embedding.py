@@ -8,12 +8,21 @@ that list under the AI egress policy (``lattice.providers.egress``).
 Implementations here:
 
 * ``FakeEmbeddingProvider`` -- deterministic hashed bag-of-words vectors, for tests,
-  CI and local development without a network. Treated as an *external* provider
-  (``deployment = "external_api"``) so the egress policy is exercised exactly as in
-  production. Refused when ``LATTICE_ENV=production``.
+  CI and local development without a network. A test double, not a semantic model: its
+  retrieval numbers say nothing about semantic quality. It makes no network call, but
+  it is *declared* ``external_api`` so the egress policy is exercised exactly as for an
+  external provider. Refused when ``LATTICE_ENV=production``.
 * ``RecordingEmbeddingProvider`` -- wraps another provider and keeps every payload, so
   security tests can inspect exactly what would have left Lattice.
-* ``lattice.providers.openai_embedding.OpenAIEmbeddingProvider`` -- the real provider.
+* ``lattice.providers.local_embedding.LocalEmbeddingProvider`` -- a real open-weight
+  model run in-process (ONNX Runtime); ``deployment = "local"`` (ADR-009).
+* ``lattice.providers.gemini_embedding.GeminiEmbeddingProvider`` and
+  ``lattice.providers.openai_embedding.OpenAIEmbeddingProvider`` -- external APIs,
+  optional, organization BYOK (ADR-010, ADR-008, ADR-011).
+
+The retrieval and ingestion pipelines see only this Protocol: no provider-specific code
+exists outside the provider modules. Query/document task semantics (instructions,
+prefixes, task types) are the provider's own business, mapped from ``purpose``.
 """
 
 import hashlib
@@ -23,8 +32,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
+from lattice.providers.egress import Deployment as Deployment  # re-exported
+
 Purpose = Literal["document", "query"]
-Deployment = Literal["external_api", "private"]
 
 _WORD = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 
@@ -66,7 +76,8 @@ class EmbeddingProvider(Protocol):
 
     async def embed(self, texts: Sequence[str], purpose: Purpose) -> list[list[float]]:
         """One vector per text, in order. ``purpose`` lets providers that distinguish
-        queries from documents (e.g. Voyage ``input_type``) do so; others ignore it."""
+        queries from documents (a query instruction, a task type or prefix) do so;
+        others ignore it."""
         ...
 
 

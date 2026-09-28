@@ -12,4 +12,7 @@ not recorded here. Status values: Proposed · Accepted · Superseded.
 | [005](005-server-side-sessions.md) | Server-side sessions; dev identity for the slice; OIDC before deployment | Proposed |
 | [006](006-structured-answers-verified-citations.md) | Structured answers with quote-verified citations; no streaming of unvalidated text | Proposed |
 | [007](007-single-turn-ask.md) | Single-turn Ask; no conversational memory in the first release | Proposed |
-| [008](008-embedding-provider.md) | Embedding provider for the first slice: OpenAI `text-embedding-3-small` at 1024 dimensions; Voyage AI kept compatible and re-evaluated after a real-provider retrieval evaluation (blocked in Phase 5) | Accepted |
+| [008](008-embedding-provider.md) | External embedding provider: OpenAI `text-embedding-3-small` at 1024 dimensions (optional, BYOK); Voyage AI kept compatible | Accepted |
+| [009](009-local-embedding-provider.md) | Local/self-hosted embedding provider: `mxbai-embed-large-v1` (1024 native) on ONNX Runtime, pinned weights fetched explicitly | Accepted |
+| [010](010-gemini-embedding-provider.md) | Gemini as an optional external embedding provider: `gemini-embedding-2` at 1024; unpaid key = synthetic data only | Accepted |
+| [011](011-provider-configuration-byok.md) | Provider configuration, deployment modes and organization BYOK; a credential is never an approval | Accepted (policy built; BYOK storage/UI not yet) |

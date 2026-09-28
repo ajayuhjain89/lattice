@@ -146,8 +146,8 @@ class AccountAssignment(Base):
 
 
 class OrgSettings(Base):
-    """Per-organization settings (docs/data-model.md §7). Phase 4 needs only the
-    external AI egress level; an organization without a row uses the defaults."""
+    """Per-organization settings (docs/data-model.md §7): the AI egress policy. An
+    organization without a row uses the defaults."""
 
     __tablename__ = "org_settings"
 
@@ -156,5 +156,10 @@ class OrgSettings(Base):
     )
     # internal | confidential | restricted; raising it is an explicit admin action.
     external_egress_level: Mapped[str] = mapped_column(Text, server_default="internal")
+    # D-13: the trusted minimum sensitivity of a question; a caller can only raise it.
+    default_query_sensitivity: Mapped[str] = mapped_column(Text, server_default="internal")
+    # customer | synthetic: only synthetic content may reach a provider that may use
+    # submitted content (training_opt_out = false; ADR-010).
+    data_origin: Mapped[str] = mapped_column(Text, server_default="customer")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())

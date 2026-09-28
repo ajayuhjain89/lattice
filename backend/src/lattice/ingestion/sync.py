@@ -45,7 +45,14 @@ from lattice.ingestion.canonical import CanonicalDocument, NormalizeFailure, can
 from lattice.ingestion.chunking import chunk, estimate_tokens
 from lattice.ingestion.embedding_input import embedding_input, input_hash, lexical_header
 from lattice.log import log_event
-from lattice.providers.egress import DEFAULT_LEVEL, effective_level, may_send
+from lattice.providers import records
+from lattice.providers.egress import (
+    DEFAULT_LEVEL,
+    ProviderRecord,
+    effective_level,
+    may_send,
+    provider_decision,
+)
 from lattice.providers.embedding import EmbeddingError, EmbeddingProvider
 from lattice.sources.config import SourceConfig
 
@@ -91,6 +98,8 @@ class SyncResult:
     embedding_failures: int = 0
     memberships_regrouped: int = 0
     deletion_guard_tripped: bool = False
+    # Why the configured provider may receive nothing (egress policy), if so.
+    egress_block: str | None = None
     failure_codes: Counter[str] = field(default_factory=Counter)
 
     def run_counts(self) -> dict[str, int | bool | str | None]:
@@ -333,18 +342,12 @@ class Syncer:
         conn.check()
 
         async with self._tx() as s:
-            org_level = await store.org_egress_level(s, self.org)
-            approved: str = DEFAULT_LEVEL
-            if self.provider is not None:
-                if self.options.dry_run:
-                    approved = (
-                        await store.provider_approved_level(
-                            s, self.org, self.provider.provider, self.provider.model
-                        )
-                        or DEFAULT_LEVEL
-                    )
-                else:
-                    approved = await store.register_provider(
+            org = await records.org_egress(s, self.org)
+            if self.provider is None:
+                self.level = effective_level(org.external_egress_level, DEFAULT_LEVEL)
+            else:
+                if not self.options.dry_run:
+                    await store.register_provider(
                         s,
                         self.org,
                         provider=self.provider.provider,
@@ -353,7 +356,26 @@ class Syncer:
                         retention_mode=self.provider.retention_mode,
                         training_opt_out=self.provider.training_opt_out,
                     )
-            self.level = effective_level(org_level, approved)
+                record = await records.embedding_record(
+                    s, self.org, self.provider.provider, self.provider.model
+                )
+                if record is None and self.options.dry_run:
+                    # What the first real run would record: approved for the default.
+                    record = ProviderRecord(
+                        self.provider.provider,
+                        self.provider.model,
+                        self.provider.deployment,
+                        DEFAULT_LEVEL,
+                        self.provider.training_opt_out,
+                    )
+                decision = provider_decision(
+                    org,
+                    record,
+                    deployment=self.provider.deployment,
+                    training_opt_out=self.provider.training_opt_out,
+                )
+                self.level = decision.level
+                self.result.egress_block = decision.reason
             self.allowed = [lvl for lvl in LEVELS if may_send(lvl, self.level)]
 
             groups = conn.access_groups()

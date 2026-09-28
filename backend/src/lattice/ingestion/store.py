@@ -175,16 +175,6 @@ async def upsert_source(
 # --- egress settings -------------------------------------------------------------------
 
 
-async def org_egress_level(session: AsyncSession, org: uuid.UUID) -> str:
-    value = (
-        await session.execute(
-            text("SELECT external_egress_level FROM org_settings WHERE organization_id = :o"),
-            {"o": org},
-        )
-    ).scalar_one_or_none()
-    return str(value) if value is not None else "internal"
-
-
 async def provider_approved_level(
     session: AsyncSession, org: uuid.UUID, provider: str, model: str
 ) -> str | None:

@@ -1,20 +1,22 @@
 # Lattice developer commands. Every target is a thin, visible wrapper; read it before
 # running it. Backend commands load the repository .env via `uv run --env-file`.
 
-UV_RUN := cd backend && uv run --env-file ../.env
-UV := cd backend && uv run
+# `--extra local`: the optional local-inference runtime (onnxruntime, tokenizers, numpy;
+# ADR-009). Model weights are never installed by it -- see `make models-fetch`.
+UV_RUN := cd backend && uv run --extra local --env-file ../.env
+UV := cd backend && uv run --extra local
 MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/synthetic/veridian/org.yaml
 
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role dataset-lint dataset-generate sync sync-dry-run admin-grants eval
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role dataset-lint dataset-generate sync sync-dry-run admin-grants eval models-fetch
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
 
-setup: ## Install backend dependencies (Python 3.12 via uv) from the lockfile
-	cd backend && uv sync --locked
+setup: ## Install backend dependencies (Python 3.12 via uv) from the lockfile, incl. the local-inference runtime
+	cd backend && uv sync --locked --extra local
 
 db-up: ## Start Postgres 16 + pgvector (first start runs the bootstrap)
 	docker compose up -d --wait
@@ -42,7 +44,7 @@ sync-dry-run: ## Show what `make sync` would create, update, reject and delete (
 	    --sources ../data/synthetic/$$org/sources.yaml --dry-run) || exit $$?; \
 	done
 
-sync: ## Ingest both organizations' sources (EMBEDDING=fake|openai|none), then apply admin grants
+sync: ## Ingest both organizations' sources (EMBEDDING=fake|local|gemini|openai|none), then apply admin grants
 	@for org in $(ORGS); do \
 	  (cd backend && uv run --env-file ../.env lattice sync --org $$org \
 	    --sources ../data/synthetic/$$org/sources.yaml --embedding $(EMBEDDING)); \
@@ -56,8 +58,11 @@ admin-grants: ## Apply each organization's admin-grants.yaml (decision D-12; aft
 	    --grants ../data/synthetic/$$org/admin-grants.yaml) || exit $$?; \
 	done
 
-eval: ## Retrieval metrics over the golden set as each persona (EMBEDDING=fake|openai|none; after `make sync`)
+eval: ## Retrieval metrics over the golden set as each persona (EMBEDDING=fake|local|gemini|openai|none; after `make sync`)
 	$(UV_RUN) lattice eval retrieval --embedding $(EMBEDDING)
+
+models-fetch: ## Download and verify the pinned local embedding model (1.34 GB, once; ADR-009)
+	cd backend && LATTICE_ENV=development uv run --extra local lattice models fetch mxbai-embed-large-v1
 
 dataset-lint: ## Validate the synthetic dataset and golden set (no database, no model)
 	$(UV) lattice dataset lint
