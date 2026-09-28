@@ -63,11 +63,12 @@ logger = logging.getLogger(__name__)
 
 EVIDENCE_LIMIT: Final = 12  # the prompt budget's item count (retrieval-design §7.1)
 GENERATION_TIMEOUT_SECONDS: Final = 360.0  # outer bound; adapters have their own
-# The relevance floor (retrieval-design §7.1, §11): the model is called only if some
-# evidence was matched by the exact or lexical channel, or semantically at or above a
-# similarity calibrated for that embedding model. No model is calibrated yet, so a
-# semantic-only match never passes the floor on its own (nearest neighbours always
-# exist; they are not evidence of relevance).
+# The relevance floor (retrieval-design §7.1, §11): an evidence item may enter the
+# prompt only if the exact or lexical channel matched it, or its semantic similarity is
+# at or above a threshold calibrated for that embedding model; with no such item, no
+# model is called (insufficient_evidence). No model is calibrated yet, so a
+# semantic-only match never passes on its own (nearest neighbours always exist; they
+# are not evidence of relevance). Items below the floor stay in the asker's list.
 SEMANTIC_FLOOR: Final[dict[str, float]] = {}
 # Reasons meaning "the policy forbids it", as opposed to "nothing is available".
 POLICY_REASONS: Final = frozenset(
@@ -144,14 +145,16 @@ async def _generate(
     return validation
 
 
-def _passes_floor(retrieval: RetrievalResult) -> bool:
+def _relevant(retrieval: RetrievalResult) -> set[uuid.UUID]:
+    """Chunk IDs that pass the relevance floor."""
     floor = SEMANTIC_FLOOR.get(retrieval.semantic.model or "")
     semantic = {c.chunk_id: c.score for c in retrieval.trace.stages.get("semantic", ())}
-    return any(
-        {"exact", "lexical"} & set(e.matched_by)
-        or (floor is not None and semantic.get(e.chunk_id, -1.0) >= floor)
+    return {
+        e.chunk_id
         for e in retrieval.evidence
-    )
+        if {"exact", "lexical"} & set(e.matched_by)
+        or (floor is not None and semantic.get(e.chunk_id, -1.0) >= floor)
+    }
 
 
 def _response_invariant(claims: list[Claim], evidence: list[EvidenceItem]) -> bool:
@@ -203,7 +206,8 @@ async def answer_question(
             config=config,
             now=now,
         )
-        relevant = _passes_floor(retrieval)
+        relevant_ids = _relevant(retrieval)
+        relevant = bool(relevant_ids)
         ambiguous = len(retrieval.account_mentions) >= 2 and request.scope.account is None
         policy_started = time.perf_counter()
         access = await resolve_generation(
@@ -219,8 +223,9 @@ async def answer_question(
     timings["retrieval"] = retrieval.trace.timings_ms
 
     evidence = list(retrieval.evidence)
-    permitted = [e for e in evidence if access.permits(e)]
-    excluded = [e for e in evidence if not access.permits(e)] if access.level else []
+    candidates = [e for e in evidence if e.chunk_id in relevant_ids]
+    permitted = [e for e in candidates if access.permits(e)]
+    excluded = [e for e in candidates if not access.permits(e)] if access.level else []
     fits, _ = budget(permitted)
     calls = _Calls()
     validation: Validation | None = None
@@ -268,7 +273,8 @@ async def answer_question(
         evidence,
         access.classifications,
         used_ids,
-        {e.chunk_id for e in excluded},
+        excluded_by_egress={e.chunk_id for e in evidence if not access.permits(e)},
+        relevant=relevant_ids,
     )
     show_claims = status in ("answered", "partial")
     claims = [assemble.to_claim(c) for c in validation.claims] if validation and show_claims else []
@@ -340,6 +346,7 @@ async def answer_question(
             "question_sensitivity": retrieval.question_sensitivity,
             "excluded_by_egress_policy": len(excluded),
             "excluded_by_prompt_budget": len(permitted) - len(fits),
+            "below_relevance_floor": len(evidence) - len(candidates),
             "prompt_version": PROMPT_VERSION if prompt else None,
         },
         "validation": {

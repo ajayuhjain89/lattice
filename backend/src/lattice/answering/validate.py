@@ -21,8 +21,10 @@ with the bad citation stripped. Rules, in order, for each claim:
 4. **Support floor** -- deterministic checks that one valid quote cannot legitimize an
    unrelated statement: every number in the claim occurs in the text or metadata of the
    evidence the claim cites (``unsupported_number``), and a claim with content words
-   shares at least one with its quotes (``no_shared_terms``). Whether a quote really
-   *entails* its claim is a language judgement, measured by the evaluation judge.
+   (not counting the cited sources' own titles, authors, references, dates and generic
+   attribution words) shares at least one with the sentence around one of its quotes
+   (``no_shared_terms``). Whether a quote really *entails* its claim is a language
+   judgement, measured by the evaluation judge.
 5. **Safe content** -- no URLs, web or email addresses, markdown links/images or HTML
    in anything shown (``unsafe_content``): exfiltration through rendered links is
    impossible even if the model repeats an injected payload.
@@ -330,6 +332,16 @@ def _strip_quote(quote: str) -> str:
     return q
 
 
+_BOUNDARY = re.compile(r"[.!?](?=\s)|\n")
+
+
+def _sentence(text: str, start: int, end: int) -> str:
+    """The sentence(s) around a verified quote: its context for the shared-terms check."""
+    before = [m.end() for m in _BOUNDARY.finditer(text, 0, start)]
+    after = _BOUNDARY.search(text, end)
+    return text[(before[-1] if before else 0) : (after.end() if after else len(text))]
+
+
 def is_safe(text: str) -> bool:
     return _UNSAFE.search(text) is None
 
@@ -496,7 +508,10 @@ def _claim(
         - set().union(*(_terms(evidence_facts(e)) for e in cited))
         - _ATTRIBUTION
     )
-    if claim_terms and not claim_terms & set().union(*(_terms(c.quote) for c in verified)):
+    context = set().union(
+        *(_terms(_sentence(by_handle[c.handle].text, c.start, c.end)) for c in verified)
+    )
+    if claim_terms and not claim_terms & context:
         return None, Rejection(location, "no_shared_terms")
     return ValidClaim(text=text, role=claim.role, citations=tuple(verified)), None
 

@@ -95,7 +95,9 @@ def evidence_items(
     evidence: Sequence[Evidence],
     classifications: dict[uuid.UUID, str],
     used: set[uuid.UUID],
+    *,
     excluded_by_egress: set[uuid.UUID],
+    relevant: set[uuid.UUID],
 ) -> list[EvidenceItem]:
     out: list[EvidenceItem] = []
     for e in evidence:
@@ -104,6 +106,8 @@ def evidence_items(
             if e.chunk_id in used
             else "egress_policy"
             if e.chunk_id in excluded_by_egress
+            else "relevance_floor"
+            if e.chunk_id not in relevant
             else "prompt_budget"
         )
         out.append(

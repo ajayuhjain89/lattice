@@ -205,8 +205,10 @@ class EvidenceItem(_Strict):
     superseded_by_document_ids: list[uuid.UUID]
     used_for_answer: bool
     # Why an item was not sent to the model: ``egress_policy`` (above the level the
-    # organization allows for this provider) or ``prompt_budget``.
-    not_used_reason: Literal["egress_policy", "prompt_budget"] | None = None
+    # organization allows for this provider), ``relevance_floor`` (matched only as a
+    # semantic neighbour) or ``prompt_budget``. None when used, or when no model was
+    # called for another reason (the status says why).
+    not_used_reason: Literal["egress_policy", "relevance_floor", "prompt_budget"] | None = None
 
 
 class Freshness(_Strict):

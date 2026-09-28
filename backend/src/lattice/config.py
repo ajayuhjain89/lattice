@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     session_idle_timeout_minutes: int = Field(default=720, ge=5, le=7 * 24 * 60)
     session_absolute_timeout_minutes: int = Field(default=7 * 24 * 60, ge=5, le=30 * 24 * 60)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # The query-embedding provider Ask uses for semantic retrieval (the same choices as
+    # `lattice sync --embedding`; its credential, if any, from ProviderSettings). "none":
+    # exact + lexical retrieval only. Whether a question may be sent to it is still the
+    # egress policy's decision per organization. Generation is not configured here: each
+    # organization's generation provider comes from its own recorded configuration.
+    query_embedding: Literal["none", "fake", "local", "gemini", "openai"] = "none"
 
     _check_url = field_validator("database_url")(_require_asyncpg_url)
 
