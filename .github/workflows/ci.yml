@@ -49,8 +49,8 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install dependencies (locked)
-        run: uv sync --locked
+      - name: Install dependencies (locked, with the local-inference runtime; no model weights)
+        run: uv sync --locked --extra local
 
       - name: Lint
         run: uv run ruff check . && uv run ruff format --check .
@@ -100,6 +100,10 @@ jobs:
             uv run lattice apply-admin-grants --org "$org" \
               --grants "../data/synthetic/$org/admin-grants.yaml"
           done
+
+      - name: Retrieval evaluation as every persona (security metrics must be 0)
+        # Fake embeddings: this gates security, not quality (docs/evaluation-plan.md §9).
+        run: uv run lattice eval retrieval --embedding fake --quiet
 
       - name: Tests (real PostgreSQL)
         run: uv run pytest

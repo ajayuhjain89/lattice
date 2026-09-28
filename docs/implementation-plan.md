@@ -2,9 +2,16 @@
 
 Status: Phase 0 approved. Phase 1 approved and closed (after the `lattice_auth`
 hardening below). Phase 2 approved, with decisions D-8 and D-9 (implemented at the start
-of Phase 3). Phase 3 approved and merged to `main`. **Phase 4 implemented** (awaiting
-review, branch `phase/4-ingestion`), with decisions D-10 and D-12 applied and D-11
-recorded for Phase 6.
+of Phase 3). Phase 3 approved and merged to `main`. Phase 4 approved and merged to
+`main` (5e12616), with decisions D-10 and D-12 applied and D-11 recorded for Phase 6.
+**Phase 5 implemented and closed** (awaiting review, branch `phase/5-retrieval`, not
+merged). The Phase 5 closure added a local model, Gemini and the provider invocation
+rule, and decided and implemented D-13 and D-14. The final closure (2026-09-29)
+removed the rejected cross-encoder experiment, resolved D-15 (deployment trust
+classes, migration 0007) and decided D-16's timing, and it froze retrieval.
+Engineering and security are complete, subject to the final verification. The product
+objective Recall@10 ≥ 0.90 is **not yet achieved**: best real result is Gemini 0.726,
+local 0.695 (evaluation-plan §12). No Phase 6 work has started.
 
 ---
 
@@ -393,7 +400,188 @@ removed ⇒ suite fails); retrieval metrics baseline recorded (Recall@10 target 
 
 **Non-goals.** HNSW, model reranker, LLM query rewriting.
 
+**Phase 5 as built.** Deliverables: `lattice.retrieval` -- typed query and limits,
+deterministic analysis (normalization, identifiers, temporal intent, visible-account
+mentions), the shared conditions (tenant, lifecycle, `authz.readable_documents_predicate`,
+narrowing scope; account joined only through `visible_accounts_predicate`), the exact,
+lexical and semantic channels (each one statement), query-side AI egress and
+embedding-space checks with explicit degradation outcomes, RRF (k = 60) with org-safe
+deduplication and `matched_by`, `rerank_v1`, selection, evidence hydration through the
+predicate, the E4 tripwire over every candidate and over the evidence, the trace and its
+log line; `lattice.evals.retrieval` and `lattice eval retrieval` (JSON + Markdown
+reports); `lattice search`; `make eval`; a CI step running the evaluation as every
+persona (security gate). No migration: no new index was justified
+(`retrieval-design.md` §7.6).
+
+| Planned | As built | Why |
+| ------- | -------- | --- |
+| Lexical: `websearch_to_tsquery` (all terms), `ts_rank_cd` | Any of the question's lexemes; ranked by coverage of distinct lexemes, identifier phrases and visible-account terms, `ts_rank_cd` as tie-break | Measured: all-terms matching returned no lexical candidate for 63/89 golden questions (R@10 0.418 → 0.512 fake / 0.668 lexical over four measured changes, `evaluation-plan.md` §9) |
+| Identifier path "injected at the top of the lexical list" | Its own channel and RRF list, plus the `identifier_match` rerank feature | ADR-004 and retrieval-design §6 already treated it as a list; three independent channels are testable separately |
+| Identifier regex per source configuration | One pattern (`PREFIX-123`, `PREFIX-2026-17`) against `display_ref` | No source configures one; the only references in the corpus are ticket IDs |
+| Questions always sent to the embedding provider (security-model §6 draft) | Query egress policy: declared question classification (default `internal`) ≤ effective level, provider recorded in `model_providers` | Phase 5 requirement: the question can carry confidential information. Default behaviour unchanged for ordinary questions; D-13 decides the declaration's UX and Phase 6 use |
+| Vectors compared by model name | Plus the provider's dimensions and an unambiguous (provider, model) registration | A failed `--reembed` keeps the previous model's vectors, so spaces coexist; the model name alone does not name the provider |
+| Context selection: dedupe, ≤ 3 per document, ≤ 12 chunks / 6k tokens, egress split, relevance floor, conflict coverage | Retrieval selects: dedupe by content hash, ≤ 3 per document first (the rest deferred, not dropped), ≤ 20 evidence chunks. Budget, egress split, relevance floor and conflict coverage move to Phase 6 | They decide what reaches the model, not what is permitted evidence |
+| Supersession for Phase 6 | Evidence carries supersession links between **readable** documents only | An unreadable successor must not be revealed (SEC-5); D-14 |
+| `query_traces` recorder | In-memory `RetrievalTrace` returned with the result; persisted in Phase 6 | The table and its viewer rules belong with Ask (data-model §7) |
+| Evidence endpoint / HTTP retrieval API | None; `lattice search` for developers | Ask and `GET /v1/evidence` are Phase 6; no endpoint invented for testing |
+| Real-provider Recall@10 ≥ 0.9 | Phase 5: blocked (no key). **Phase 5 closure: measured -- Gemini 0.726, local 0.695 (not met)**; OpenAI not run | Fake embeddings are a test double, not a quality proxy; see evaluation-plan §10 |
+
+Evidence: `backend/tests/retrieval/` -- query model and limits (no authorization claims
+accepted, abusive input rejected), fusion and rerank units, retrievers against
+hand-built worlds (adversarial strongest-match per channel, cross-org identifier
+collisions, lifecycle, D-8/D-10 with an account-less control twin), structural SQL
+proofs for all four statements, query egress and degradation with a recording
+provider (incl. OpenAI outage without leaking the key), E4 abort-not-filter, trace
+content, snapshot consistency under a mid-request revocation, no existence oracle, a
+200-world property test (also with RLS bypassed), and `golden/` over the real corpus:
+all 89 items with zero violations (semantic on and off), recall regression floors,
+same-question groups, adversarial withheld-evidence checks, the critical Acme
+scenario, D-8/D-10 items, injection fixtures as data, raw SQL capture and
+re-execution. The authz boundary test names the retrieval modules explicitly.
+
+**Phase 5 mutation check** (by hand, never committed; each defect applied alone to
+pristine sources, then `tests/retrieval` and the authz boundary test run; every file
+restored and verified byte-identical by SHA-256). Every defect is caught:
+
+| # | Defect introduced | Tests failed | Caught by (modules) |
+| - | ----------------- | -----------: | ------------------- |
+| M1 | Authorization predicate removed from lexical retrieval | 142 | structure, retrievers, invariants (tripwire), property, golden, SQL capture, critical Acme |
+| M2 | Authorization predicate removed from semantic retrieval | 148 | same seven modules |
+| M3 | Tenant conditions removed from the exact lookup | 2 | structure (the predicate's own organization clause and RLS still isolate: defence in depth) |
+| M4 | Hidden structured account names usable as search input (all accounts "mentionable") | 29 | retrievers, invariants, property, golden |
+| M5 | `failed` embeddings admitted to vector retrieval | 1 | structure (a failed chunk has no vector or model -- DB CHECK -- so the model condition also excludes it) |
+| M6 | Query vector compared with another embedding model | 3 | retrievers, degradation, structure |
+| M7 | Both E4 `assert_all_readable` calls skipped | 3 | invariants |
+| M8 | Deduplication keyed by chunk without the organization | 1 | fusion (cross-tenant chunk IDs cannot collide in the database; the unit test pins identity) |
+| M9 | Count of matching documents the reader cannot see added to the trace | 2 | invariants (existence oracle, trace content) |
+| M10 | Recency drops evidence older than the newest by 60+ days | 6 | fusion/rerank, golden, critical Acme |
+| M11 | Authority drops conversational evidence when a system of record exists | 2 | fusion/rerank |
+| M12 | A semantic failure aborts the request | 8 | degradation |
+| M13 | Scope account resolved among all accounts (trusting the client's value) | 2 | retrievers, property |
+| M14 | Exact lookup without tenant or authorization conditions | 10 | retrievers, property (incl. RLS bypassed), structure, golden |
+| M15 | Evidence lookup by ID without the authorization predicate | 2 | structure |
+| M16 | Structured account joined without account visibility (D-8) | 16 | retrievers, invariants, property, structure, golden |
+| M17 | Supersession names successors the reader cannot read | 1 → 2 | structure; after adding the unreadable-successor test, also retrievers |
+| M18 | Query egress ignores the question's classification | 4 | degradation, invariants |
+
 ---
+
+**Phase 5 closure (2026-09-28): local embeddings, Gemini, BYOK architecture.**
+Deliverables: `LocalEmbeddingProvider` (`mxbai-embed-large-v1`, 1024 native, ONNX
+Runtime, pinned weights fetched only by `lattice models fetch`; ADR-009),
+`GeminiEmbeddingProvider` (`gemini-embedding-2` at 1024, text-prefix task semantics,
+unpaid key synthetic-only; ADR-010), the provider invocation rule for documents and
+questions (`providers.egress.provider_decision`: recorded, deployment-true, data-use
+acceptable, approved for the sensitivity; ADR-011), migration 0006 (`local`
+deployment, `default_query_sensitivity`, `data_origin`), `lattice provider approve`,
+`lattice models list/fetch/verify`, D-13 and D-14 implemented, evaluation query
+prefetch and usage accounting. No retrieval tunable changed (`retrieval-6`). No
+Phase 6 work.
+
+| Planned (closure brief) | As built | Why |
+| ----------------------- | -------- | --- |
+| Fake provider has deployment `test`, no egress | No network, but *declared* `external_api` | So every egress test exercises the external rule; production refuses it anyway |
+| Local provider: `deployment = local` or `self_hosted` | `local` (migration 0006); `private` unchanged and still capped by the external level, until the final closure replaced it (D-15, migration 0007) | Conservative until D-15 was decided |
+| Gemini credential "existing convention" | `LATTICE_GEMINI_API_KEY` or Google's `GEMINI_API_KEY` | The user's `.env` uses Google's name |
+| Unpaid-tier key synthetic-only | Enforced by data: `org_settings.data_origin = synthetic` (seeded for Halden and Veridian) plus the recorded `training_opt_out = false`; refused in production | A declaration alone would be documentation, not a control |
+| Evaluation over the whole corpus with Gemini | Done in two runs: 985/1,289 chunks before the project's observed daily quota (about 1,000 embedded texts for that project and tier), then only the 304 failed chunks with a second valid key (stored vectors kept) | The quota came from the 429's quota detail, not from Google's docs; quotas vary by project, model and tier |
+| One local model | Two: `mxbai-embed-large-v1` (default) and `snowflake-arctic-embed-l-v2.0` (comparison, pinned; R@10 0.657 < 0.695, so not adopted) | The first miss analysis flagged embedding quality as a plausible factor (brief §21). The comparison ruled it out as the lever |
+| Harness: `must_not_contain` anywhere in evidence is a security hit | Only for canaries or unreadable records; readable injection payloads are informational | The harness's documented definition; the item targets that record (evaluation-plan §10) |
+
+**Phase 5 closure mutation check** (applied one at a time to the working tree, the
+named test modules run, every file restored and verified byte-identical by SHA-256;
+never committed). All 15 caught:
+
+| # | Defect introduced | Tests failed | Caught by |
+| - | ----------------- | -----------: | --------- |
+| C1 | Local provider opens a network connection while embedding | 1 | `test_inference_makes_no_network_call` |
+| C2 | Local provider stops checking vector dimensions | 1 | `test_malformed_inference_output_is_a_typed_failure` |
+| C3a | Gemini questions bypass the query egress check | 1 | `test_a_provider_credential_cannot_lower_it` |
+| C3b | Gemini document chunks bypass the egress eligibility | 1 | `test_an_unpaid_key_receives_only_synthetic_content` |
+| C4a | Unpaid Gemini key declared as not using content | 3 | data-use declaration, factory, unpaid-key eligibility |
+| C4b | Unpaid Gemini key allowed in production | 1 | `test_factory_gemini` |
+| C4c | Data-use policy ignored (a data-using provider treated as approved) | 2 | unpaid-key eligibility; customer question never sent |
+| C5 | The user's declaration can lower the organization default | 6 | question-sensitivity property and client-lowering tests |
+| C6 | A provider credential lowers the question sensitivity | 1 | `test_a_provider_credential_cannot_lower_it` |
+| C7 | External semantic runs although policy excluded it | 13 | question-sensitivity and semantic-degradation suites |
+| C8 | Supersession names an unreadable successor | 2 | D-14 tests |
+| C9a | Query vector compared with another model's vectors | 2 | `test_semantic_compares_only_the_providers_embedding_space`, degradation |
+| C9b | A provider's deployment claim trusted over its record | 2 | deployment-mismatch (ingestion and query) |
+| C9c | The local rule (no external cap) applied to external providers | 1 | `test_provider_selection_cannot_lower_it` |
+| C10 | Provider-specific code drops the authorization predicate for local models | 1 | `test_every_provider_returns_only_readable_same_tenant_evidence` |
+
+**Forward requirements for Phase 6** (recorded now, not implemented): generation
+resolves its provider per organization through the same configuration and invocation
+rule (ADR-011; no call site depends on one global key); the question's effective
+sensitivity (`RetrievalResult.question_sensitivity`, D-13) governs whether the
+question may be placed in an external prompt (otherwise `evidence_only`, no model
+call); evidence above the provider's effective level is excluded from the prompt as
+security-model §6 describes; the Anthropic generation adapter is BYOK like the
+embedding providers.
+
+**Final Phase 5 closure (2026-09-29): freeze retrieval, D-15, D-16.**
+
+- **Rejected experiment removed.** A local cross-encoder (`gte-reranker-modernbert-base`)
+  was measured as a bounded Phase 5.1 experiment and rejected for the default path.
+  It improved MRR and R@1, but it lowered Gemini R@10 (0.726 → 0.711), added only
+  +0.018 locally, regressed supersession, and took 5–13 s per query on the reference
+  M1. Its uncommitted integration (a `Reranker` protocol, a cross-encoder provider, a
+  `crossrank` stage, service, trace and evaluation hooks, a CLI flag, a factory, a model
+  registry entry and a setting) was removed. It never reached a commit and it added no
+  dependency. The findings are in evaluation-plan §11.
+- **Retrieval frozen.** The retained path is exact, lexical and semantic retrieval with
+  authorization in SQL, RRF, rerank_v1, selection and E4. No retrieval tunable or
+  algorithm changed in the final closure, so the Gemini benchmark (R@10 0.726) stands
+  as recorded and was not re-run (no quota spent; evaluation-plan §12).
+- **D-15 as built.** Trust classes `local`, `organization_controlled`, `external_api`,
+  plus `unknown` (fail closed) in `providers.egress` (`trust_class`, `class_ceiling`,
+  `provider_decision`). Migration 0007 relabels `private` records as
+  `organization_controlled` and restricts the column to the three known classes. It
+  adds `model_providers.approved_at` (set by `lattice provider approve`) and
+  `org_settings.organization_controlled_level` (NULL = class not allowed). An
+  `organization_controlled` provider needs both before anything is sent. `local` and
+  `external_api` decisions are unchanged. Ingestion never records an unknown declared
+  class. New reason codes: `deployment_unknown`, `deployment_not_allowed`. Tests:
+  `tests/providers/test_trust_classes.py` (the decision for every class and class
+  pair), `tests/retrieval/test_trust_classes.py` (questions, observed),
+  `tests/ingestion/test_provider_eligibility.py` (document chunks, observed) and
+  `tests/test_migrations.py` (0006 → 0007 → 0006 relabel round trip).
+- **D-16 timing.** The Phase 6 backend builds the minimum organization-scoped provider
+  configuration and secret abstraction. The Phase 7 frontend builds the administrative
+  UX (ADR-011). Nothing is built in Phase 5.
+
+**Final closure mutation check (D-15)** (each applied alone to the working tree; the
+trust-class, eligibility, migration, question-sensitivity and provider-authorization
+modules run, 98 tests; every file restored and verified byte-identical by SHA-256;
+never committed). 8 of 8 relevant mutations caught:
+
+| # | Defect introduced | Tests failed | Caught by (examples) |
+| - | ----------------- | -----------: | -------------------- |
+| D15-1 | An unknown class is treated as `external_api` | 15 | `test_an_unknown_deployment_sends_no_query[*]`, `…_no_document_text` |
+| D15-2 | `organization_controlled` needs no explicit approval | 7 | `test_organization_controlled_needs_an_explicit_approval[*]`, other-organization test, 0007 migration test |
+| D15-3 | `organization_controlled` allowed up to `restricted` by default | 4 | class-ceiling tests (query and documents), relabelling test |
+| D15-4 | The external ceiling is ignored (an approval or credential raises it) | 8 | `test_an_external_credential_does_not_raise_the_ceiling`, external minimum tests |
+| D15-5 | The declared class is trusted over the record (downgrade/upgrade between classes) | 10 | `test_a_declared_class_that_differs_from_the_record_sends_nothing[*]` (all 6 class pairs) |
+| D15-6 | An unknown declared class is recorded and used | 15 | unknown-class query and document tests |
+| D15-7 | The schema accepts the old label `private` | 1 | `test_the_schema_stores_only_known_classes[private]` |
+| D15-8b | Another organization's provider record is used (organization filter dropped **and** RLS disabled on `model_providers`) | 1 | `test_another_organizations_configuration_is_never_used` |
+
+Dropping only the organization filter in `providers.records` (D15-8) is **not** a
+defect: all 98 tests pass because `model_providers` has forced row-level security, and
+the runtime role cannot bypass it. The filter and RLS are two independent layers, and
+D15-8b shows the test fails as soon as both are gone.
+
+**Forward requirements for Phase 6, added by the final closure** (not implemented):
+
+- **Retrieved content is untrusted data, never model instructions (hard security
+  requirement).** Retrieving a readable document that contains prompt-injection text
+  is not an authorization leak (evaluation-plan §10). The Phase 6 adversarial tests
+  must prove that retrieved passages cannot override system/developer instructions,
+  request hidden documents, reveal unauthorized content, credentials or secrets,
+  change the organization context, alter authorization or provider/egress policy,
+  cause unauthorized actions, or exfiltrate information.
+- **Multi-hop evidence** remains an open product requirement (evaluation-plan §12). No
+  approach is approved.
 
 ### Phase 6 — Answering: generation, claim-level citations, freshness, potential conflicts, traces
 
@@ -490,7 +678,7 @@ author (or a fresh machine).
 | 11 | Deployment + operations | Container images, single-region deploy, backups/PITR, migrations in CI/CD, retention jobs, alerting on `security_invariant_violated` |
 | 12 | Accounts workspace | Account timeline + scoped Ask (AM workflow) |
 | 13 | Next connectors | Call transcripts, CRM notes, GitHub issues, release notes |
-| — | Only if evals demand | HNSW tuning, model reranker, query rewriting, simple-config tsvector |
+| — | Only if evals demand | HNSW tuning, model reranker (a local cross-encoder was measured and rejected in Phase 5, evaluation-plan §11), query rewriting, simple-config tsvector |
 
 ## 5. Local development
 
@@ -506,11 +694,12 @@ make check-db-role  # runtime role cannot bypass RLS
 make api            # uvicorn on 127.0.0.1:8000
 make sync-dry-run   # what ingestion would do (Phase 4)
 make sync           # ingest both organizations, fake embeddings; then admin grants
-make test           # 1,000+ tests against the lattice_test database (incl. 500-example authz proof)
+make test           # 1,300+ tests against the lattice_test database (incl. 500-example authz proof)
 make lint typecheck
 make dataset-lint   # the synthetic dataset and golden set (no database, no model)
+make eval           # retrieval metrics + security checks as each persona (Phase 5)
 ```
-Added in later phases: `make eval` (Phase 5), `make web` (Phase 7, Node 22 LTS + pnpm).
+Added in later phases: `make web` (Phase 7, Node 22 LTS + pnpm).
 
 ## 6. Phase 1 traceability check
 
@@ -550,6 +739,10 @@ Added in later phases: `make eval` (Phase 5), `make web` (Phase 7, Node 22 LTS +
 | D-10 | The chunk contextual header (embedded, and in the shared `tsv`) includes the document's account name, per document, not per reader. After D-8, a query naming an out-of-scope account would still match a granted document of that account through the header alone, hinting at the association | Phase 4 (header design) | **Decided:** structured account names are never added to shared search or embedding text; account terms are kept separate and used only when `account_visible` — at query time, over the reader's visible accounts (no stored per-account field is needed). Implemented in Phase 4 (header and `tsv`); the query side is Phase 5. Golden item `visibility-kestrel-latest-maya` pins the expected behaviour | Engineering + Product owner — decided |
 | D-11 | Answer status for requests Lattice does not perform (draft an email, change access, update a ticket, read others' questions) | Phase 6 | **Decided:** add `unsupported_request` (reason `action_request`), decided by the model under a fixed rubric and validated like any status; never used for unreadable evidence. Implemented with answering (Phase 6) | Product owner — decided |
 | D-12 | How Phase 4 applies admin grants that exist before the Phase 9 access UI (the dataset's `admin-grants.yaml`) | Phase 4 | **Decided:** a separate post-sync command (`lattice apply-admin-grants`), never a connector, resolves each record key (optionally with its source) to a document and writes `origin = admin` membership grants; any unresolvable, ambiguous or duplicate entry fails the whole application with nothing written; idempotent; `--prune` revokes | Engineering — decided |
+| D-13 | Query egress: who sets a question's sensitivity, and does generation obey it? | Phase 5 closure | **Decided and implemented:** `effective = more_restrictive(org_settings.default_query_sensitivity, per-question declaration)`. A user, client, provider key or provider selection can raise it, never lower it (unrecognised = `restricted`). External query embedding is skipped when policy forbids it; exact + lexical always run; a `local` provider approved for the sensitivity may still embed the question; no silent external fallback. Returned as `RetrievalResult.question_sensitivity`. **Phase 6 must apply the same effective sensitivity to the question in the generation prompt** (`evidence_only` without a model call when it may not be sent), under the same invocation rule (ADR-011). Phase 7 offers the per-question "more sensitive" control. Migration 0006; tests `test_question_sensitivity.py` | Product owner — decided |
+| D-14 | Notice for a document superseded by one the reader cannot read | Phase 5 closure | **Decided and implemented:** drop any notice derived solely from an unreadable successor: no "newer document exists", no "may be outdated", no successor ID, count, title, timestamp, source or relationship. Readable ↔ readable explicit supersession is exposed; never inferred from age. Tests `test_successor_visibility.py` (the reader's whole result is identical with and without a hidden successor; losing access removes the link on the next request) | Product owner — decided |
+| D-15 | Deployment trust classes: how is inference outside the Lattice deployment governed, and what does "private" mean? | Final Phase 5 closure | **Decided (2026-09-29, ADR-011):** "private" has no security meaning. The classes are `local` (inside the deployment; own approval), `organization_controlled` (outside Lattice, on organization-controlled infrastructure: not allowed until the organization sets a ceiling, and needs an explicit record approval), `external_api` (third party: external level, approval, data use) and `unknown` (fail closed). A credential satisfies only the credential requirement. Implemented in migration 0007 and `providers.egress` | Product owner — decided |
+| D-16 | Organization-owned provider credentials (BYOK): when are the secret store, encryption at rest, rotation, revocation, masked admin UI and approval audit events built? | Final Phase 5 closure | **Decided (2026-09-29, timing only, ADR-011):** the Phase 6 backend builds the minimum organization-scoped provider configuration and secret abstraction (organization → provider configuration → trust class → provider/model → secret reference → invocation; secrets never in API responses, logs, traces, prompts or errors; rotation, replacement, revocation, disablement; environment variables stay as the development fallback). The Phase 7 frontend builds the admin UX (masked state, connection test, enable/disable, egress communication). Nothing in Phase 5 | Product owner + Engineering — decided |
 
 ## 8. Self-review log (Phase 0)
 

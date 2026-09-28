@@ -9,22 +9,33 @@
     lattice dataset generate [--data DIR]
         Regenerate the deterministic bulk distractor tickets.
     lattice sync --org SLUG --sources FILE [--source KEY ...] [--mode full|acl_only]
-                 [--dry-run] [--allow-mass-deletion] [--embedding none|fake|openai]
+                 [--dry-run] [--allow-mass-deletion] [--embedding none|fake|local|gemini|openai]
         Apply each source's Lattice configuration from FILE and sync it (ingestion).
     lattice reindex --org SLUG --sources FILE [--source KEY ...] [--rechunk] [--reembed]
-                    [--embedding none|fake|openai]
+                    [--embedding none|fake|local|gemini|openai]
         Re-chunk and/or re-embed a source's documents; never deletes documents.
     lattice source disconnect --org SLUG --source KEY
         Make a source's content unretrievable at once, then purge it.
     lattice apply-admin-grants --org SLUG --grants FILE [--dry-run] [--prune]
         Apply Lattice administrator grants (D-12), after ingestion.
+    lattice search --org SLUG --as EMAIL [--account KEY] [--source-type T ...]
+                   [--embedding none|fake|local|gemini|openai] [--text] [--pool] [--json] QUESTION
+        Retrieve permitted evidence as that member (development/test only).
+    lattice eval retrieval [--embedding none|fake|local|gemini|openai] [--category C ...]
+                           [--persona P ...] [--item ID ...] [--out DIR]
+        Retrieval metrics over the golden set (development/test only).
+    lattice models list | fetch NAME | verify NAME
+        Pinned local embedding models: cache state, explicit download, re-hash.
+    lattice provider approve --org SLUG --provider P --model M --level L --reason TEXT
+        Set a recorded embedding provider's approved egress level (admin action).
 
 Ingestion commands run as lattice_owner (operator tools, through row-level security)
 and print counts and fixed codes only -- never record content, titles or filenames.
 
 Exit codes: 0 success; 1 check failed, a sync failed or was aborted, or admin grants
-were not applied; 2 configuration or input error; 3 a sync completed as ``partial``
-(records rejected, embeddings failed or the deletion guard tripped -- details printed).
+were not applied, or a retrieval evaluation found a security violation; 2
+configuration or input error; 3 a sync completed as ``partial`` (records rejected,
+embeddings failed or the deletion guard tripped -- details printed).
 """
 
 import argparse
@@ -36,6 +47,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from lattice import cli_providers, cli_retrieval
 from lattice.admin_grants import apply_admin_grants, load_admin_grants
 from lattice.config import (
     ConfigurationError,
@@ -50,7 +62,7 @@ from lattice.db.role_check import inspect_runtime_role
 from lattice.ingestion.lifecycle import SourceNotFound, disconnect_source
 from lattice.ingestion.store import organization_id
 from lattice.ingestion.sync import SyncError, SyncOptions, SyncResult, sync_source
-from lattice.providers.factory import ProviderName, build_embedding_provider
+from lattice.providers.factory import PROVIDER_NAMES, ProviderName, build_embedding_provider
 from lattice.seed import load_manifest, seed_manifest
 from lattice.sources.config import load_sources_file
 
@@ -166,6 +178,8 @@ def _print_sync(org: str, result: SyncResult) -> None:
             f"excluded by AI egress policy {result.chunks_policy_excluded}, "
             f"embedding failures {result.embedding_failures}"
         )
+    if result.egress_block:
+        print(f"  AI egress policy: the provider may receive nothing ({result.egress_block})")
     if result.deletion_guard_tripped:
         print(f"  DELETION GUARD: {result.error_code}; nothing was deleted", file=sys.stderr)
     elif result.error_code:
@@ -288,7 +302,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     generate = dataset_commands.add_parser("generate", help="Regenerate bulk distractor tickets")
     generate.add_argument("--data", type=Path, default=DATA)
 
-    embedding_choices = ["none", "fake", "openai"]
+    embedding_choices = list(PROVIDER_NAMES)
     sync = commands.add_parser("sync", help="Sync sources (ingestion)")
     reindex = commands.add_parser("reindex", help="Re-chunk / re-embed a source's documents")
     for command in (sync, reindex):
@@ -313,6 +327,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     grants.add_argument("--grants", type=Path, required=True)
     grants.add_argument("--dry-run", action="store_true")
     grants.add_argument("--prune", action="store_true")
+    cli_retrieval.add_parsers(commands)
+    cli_providers.add_parsers(commands)
     args = parser.parse_args(argv)
 
     if args.command == "dataset":
@@ -332,6 +348,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             return asyncio.run(_disconnect(args))
         if args.command == "apply-admin-grants":
             return asyncio.run(_apply_admin_grants(args))
+        if args.command == "search":
+            return asyncio.run(cli_retrieval.search(args))
+        if args.command == "eval":
+            return asyncio.run(cli_retrieval.eval_retrieval(args))
+        if args.command == "models":
+            return cli_providers.models(args)
+        if args.command == "provider":
+            return asyncio.run(cli_providers.approve(args))
         return asyncio.run(_check_db_role())
     except ConfigurationError as exc:
         return _fail(str(exc))

@@ -5,7 +5,7 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–4 are implemented** (Phase 4 awaits review). What runs today: a FastAPI backend with typed
+**Status: Phases 1–5 are implemented** (Phase 5 awaits review). What runs today: a FastAPI backend with typed
 fail-fast configuration, PostgreSQL 16 + pgvector with forced row-level security for
 organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -18,8 +18,11 @@ both against the real authorization policy — and (Phase 4) ingestion: three co
 (Markdown documents, ticket JSON Lines, Slack export), an idempotent, fail-closed sync
 pipeline with source-aware chunking, lexical indexing and embeddings under the AI egress
 policy, a guarded deletion sweep, source disconnect, and administrator grants applied
-as a separate step. There is no retrieval, answering or web UI yet — see the
-[implementation plan](docs/implementation-plan.md).
+as a separate step — and (Phase 5) permission-aware hybrid retrieval: exact
+identifier, full-text and vector search, each with the authorization predicate inside
+its SQL, fused and deterministically reranked into permitted evidence, with a
+retrieval evaluation over the golden set. There is no answering or web UI yet — see
+the [implementation plan](docs/implementation-plan.md).
 
 ## Local setup
 
@@ -61,9 +64,19 @@ curl -s -b /tmp/lattice.jar -X POST -H 'X-Lattice-Request: 1' http://127.0.0.1:8
 to a customer whose ticketing organization is deliberately not mapped to an account,
 so ingestion refuses it (`access_unmappable:account`) rather than index it without an
 account. Its run is `partial`, which `make sync` accepts; a source-level failure stops
-it. Run it again: nothing is written the second time. `make sync EMBEDDING=openai`
-uses the real provider (needs `LATTICE_OPENAI_API_KEY`, ADR-008); `EMBEDDING=none`
-indexes lexically only.
+it. Run it again: nothing is written the second time. `EMBEDDING=none` indexes
+lexically only.
+
+**Real semantic retrieval without any paid API** (ADR-009): `make models-fetch`
+downloads the pinned open-weight model `mxbai-embed-large-v1` (Apache-2.0, 1024
+dimensions, 1.34 GB, once, SHA-256 verified, into `~/.cache/lattice/models`, never
+into the repository). Then `make sync EMBEDDING=local` and `make eval EMBEDDING=local`.
+It runs on the CPU with ONNX Runtime and is fully offline after the download.
+External providers are optional, and a key never makes one eligible: the AI egress
+policy decides what each may receive. `EMBEDDING=gemini` needs `GEMINI_API_KEY`; an
+unpaid key may receive only the synthetic organizations' data (ADR-010).
+`EMBEDDING=openai` needs `LATTICE_OPENAI_API_KEY` (ADR-008). Tests and CI use the
+deterministic fake provider and a tiny committed model; they never download weights.
 
 Seeded personas are listed in [`data/synthetic/halden/org.yaml`](data/synthetic/halden/org.yaml)
 and [`data/synthetic/veridian/org.yaml`](data/synthetic/veridian/org.yaml). Every
@@ -77,6 +90,9 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 | `make lint` | `ruff check` + `ruff format --check` |
 | `make dataset-lint` | Validate the synthetic dataset and golden set against the reference policy (no database, no model) |
 | `make sync-dry-run` / `make sync` / `make admin-grants` | Ingest the synthetic organizations ([ingestion design §9](docs/ingestion-design.md) documents `lattice sync`, `reindex`, `source disconnect`, `apply-admin-grants`) |
+| `make eval` | Retrieval metrics and security checks over the golden set, as each persona (after `make sync`; `EMBEDDING=fake\|local\|gemini\|openai\|none`, matching the sync); reports in `evals/reports/` |
+| `make models-fetch` | Download and verify the pinned local embedding model (explicit; the only command that downloads weights) |
+| `lattice search --org halden --as maya.okafor@halden.example "What did we promise Acme?"` | A member's permitted evidence with per-channel ranks (`--text`, `--pool`, `--json`; development/test only). Run from `backend/` with `uv run --env-file ../.env` |
 | `make dataset-generate` | Regenerate the deterministic bulk distractor tickets after editing authored tickets |
 | `make format` | Apply formatting and safe lint fixes |
 | `make typecheck` | `mypy --strict` over source, tests and migrations |
@@ -87,7 +103,8 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 CI (`.github/workflows/ci.yml`) runs lint, strict type checking, the dataset lint, the
 bootstrap, a migration round-trip on a clean database with a model-drift check, the
 seed (twice), the runtime-role check, a sync of the dataset (twice, the second writing
-nothing), and the test suite against
+nothing), the retrieval evaluation as every persona (fails on any security
+violation), and the test suite against
 `pgvector/pgvector:0.8.1-pg16`.
 
 ## How isolation works (Phase 1)
@@ -129,6 +146,33 @@ are Lattice configuration, applied after ingestion and never touched by a sync.
 Details: [ingestion design](docs/ingestion-design.md),
 [connector design](docs/connector-design.md).
 
+## How retrieval works (Phase 5)
+
+A question becomes the best **permitted** evidence in one consistent authorization
+snapshot. Three channels -- exact identifier (`HAL-4821`), PostgreSQL full-text search
+and pgvector similarity -- each run one SQL statement that contains the tenant
+condition, the lifecycle condition and the authorization predicate, so an unreadable
+row never leaves PostgreSQL, however well it matches. Results are fused with
+reciprocal rank fusion and reordered by a small deterministic reranker (recency and
+source authority are signals, never truth). A tripwire re-checks every candidate with
+the reference policy and aborts the request on any mismatch; it never filters. The
+question is embedded only if the AI egress policy allows it. Its sensitivity is the
+organization's default, which a user can raise but never lower (D-13); otherwise, or if
+the provider fails, exact and lexical retrieval still answer. A local model can embed
+questions that must not leave the deployment. Providers change relevance only, never
+what is permitted, and a document superseded by one the reader cannot see carries no
+hint of it (D-14). Every model provider has an explicit deployment trust class --
+`local`, `organization_controlled` or `external_api`; anything else receives nothing
+(D-15) -- and a provider credential never authorizes sending data.
+
+Results on the synthetic golden set (Recall@10): exact + lexical 0.668, local
+`mxbai-embed-large-v1` 0.695, Gemini `gemini-embedding-2` 0.726; every security metric
+0. The product objective of Recall@10 ≥ 0.90 is **not yet achieved**. A local
+cross-encoder reranker was measured and rejected for the default path. Retrieval is
+frozen for Phase 5. No test or CI run needs an external API key. Details:
+[retrieval design, Part I](docs/retrieval-design.md); results:
+[evaluation plan §9–§12](docs/evaluation-plan.md).
+
 ## Repository layout
 
 ```
@@ -136,7 +180,7 @@ backend/            FastAPI app (src/lattice), Alembic migrations, tests
 infra/postgres/     superuser bootstrap: roles, databases, extensions
 data/synthetic/     synthetic organizations: manifests, raw source exports, ground truth
                     (see data/synthetic/README.md)
-evals/golden/       golden question set
+evals/golden/       golden question set (evals/reports/: evaluation output, not committed)
 docs/               product, architecture, security and design documentation
 compose.yaml        local Postgres only
 Makefile            developer commands (thin wrappers; read before running)
@@ -153,7 +197,7 @@ Makefile            developer commands (thin wrappers; read before running)
 | [Trust boundaries](docs/trust-boundaries.md) · [Threat model](docs/threat-model.md) · [Security model](docs/security-model.md) | Security design |
 | [Connector design](docs/connector-design.md) · [Ingestion design](docs/ingestion-design.md) | Getting data in, idempotently and fail-closed |
 | [Retrieval design](docs/retrieval-design.md) | Hybrid retrieval, ranking, generation, citations, freshness, conflicts, refusals |
-| [Evaluation plan](docs/evaluation-plan.md) | Synthetic dataset, golden set, metrics |
+| [Evaluation plan](docs/evaluation-plan.md) | Synthetic dataset, golden set, metrics, retrieval results |
 | [Synthetic dataset](data/synthetic/README.md) | Halden and Veridian: personas, storylines, timeline, access design, canaries, golden set |
 | [Design system](docs/design-system.md) | Reference analysis, tokens, components, states |
 | [Implementation plan](docs/implementation-plan.md) | Phases, traceability, open decisions, as-built notes per phase |

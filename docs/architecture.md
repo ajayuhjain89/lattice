@@ -1,8 +1,10 @@
 # Lattice — Architecture
 
 Status: Phase 1 implemented (config, db, errors, logging, identity/sessions, orgs, API
-skeleton, seed CLI); Phase 2 implemented `authz` (no HTTP surface yet). Later-phase
-modules below are still design; the ✔ marks in §3 say which.
+skeleton, seed CLI); Phase 2 implemented `authz` (no HTTP surface yet); Phase 3 the
+dataset tooling; Phase 4 sources, connectors, ingestion and providers; Phase 5
+`retrieval` and the retrieval half of `evals` (CLI only, no HTTP surface yet).
+Later-phase modules below are still design; the ✔ marks in §3 say which.
 Related: `data-model.md`, `authorization-model.md`, `retrieval-design.md`,
 `trust-boundaries.md`, ADRs 001–007.
 
@@ -93,16 +95,16 @@ Package: `backend/src/lattice/`.
 | `sources` ✔   | Lattice-side source configuration (`sources.yaml`) models and loader (Phase 4). Source rows, runs and failures are written by `ingestion.store` | — |
 | `connectors` ✔ | Connector contract, registry + three connectors (Markdown documents, ticket JSONL, Slack export) (Phase 4) | — (pure: stdlib, Pydantic, PyYAML; a test enforces it) |
 | `ingestion` ✔ | Canonical text and hashing, chunking, fail-closed access mapping, embedding input, persistence (`store`: the one writer of document access columns, source grants and source groups), sync pipeline, deletion sweep, source disconnect (Phase 4) | connectors, sources, providers, db |
-| `providers` ✔ | `EmbeddingProvider` Protocol, fake + recording + OpenAI (Phase 4), AI egress policy; `GenerationProvider` in Phase 6 | config |
+| `providers` ✔ | `EmbeddingProvider` Protocol; adapters: fake + recording (Phase 4), OpenAI (Phase 4), local ONNX model + pinned weights cache, Gemini (Phase 5 closure); the AI egress policy / invocation rule (`egress`, pure) and the reader of each organization's provider configuration (`records`); `GenerationProvider` in Phase 6 | config, db (records only) |
 | `admin_grants` ✔ | Applies `admin-grants.yaml` as admin-origin grants after ingestion (D-12) | db |
-| `retrieval`   | Query analysis, lexical + semantic search (with authz predicate), fusion, rerank, context selection | authz, providers, db |
+| `retrieval` ✔ | Query model and analysis; exact, lexical and semantic channels (each one statement with the authz predicate, tenant and lifecycle conditions); query-side AI egress and embedding-space checks; RRF, `rerank_v1`, selection; evidence hydration; E4 tripwire; trace (Phase 5, `retrieval-design.md` Part I) | authz, providers, ingestion (chunk model), orgs, sources, db |
 | `answering`   | Prompt construction, generation, output validation, citation verification, freshness & conflict assembly, refusal logic | retrieval, providers |
 | `tracing`     | Trace records, redaction, re-authorized trace reads                                      | authz, db                   |
 | `api`         | FastAPI app, routers (thin), request dependencies (session → identity → org → authz ctx)  | all service modules         |
-| `evals`       | Golden-set loader, retrieval/generation/security eval runners, reports                    | retrieval, answering        |
-| `cli` ✔ (partial) | `lattice seed`, `lattice check-db-role` now; later `sync`, `search`, `ask`, `eval`   | services                    |
+| `evals` ✔ (retrieval) | Retrieval + security runner over the golden set, reports (Phase 5); generation runner and judges in Phase 6 | retrieval, dataset, (answering) |
+| `cli` ✔ (partial) | `seed`, `check-db-role`, `dataset`, `sync`, `reindex`, `source disconnect`, `apply-admin-grants`, `search` and `eval retrieval` (Phase 5, development/test only: they act as a member), `models list/fetch/verify` and `provider approve` (Phase 5 closure); `ask` and `eval answer` later | services                    |
 
-✔ = implemented (Phases 1–2). Alembic migrations live in `backend/alembic/`, outside the
+✔ = implemented (Phases 1–5). Alembic migrations live in `backend/alembic/`, outside the
 package. Boundary rules (enforced by review; the `authz` rule is also enforced
 mechanically since Phase 2):
 
@@ -121,8 +123,29 @@ mechanically since Phase 2):
   content than retrieval gave it.
 - Route handlers parse input, call one service function, and map the result. No SQL,
   no policy, no prompt text in `api`.
-- `providers` know nothing about organizations, users or authorization; they receive
-  text and return text/vectors.
+- Provider *adapters* (`fake`, `local`, `gemini`, `openai`, later generation) know
+  nothing about organizations, users or authorization: they receive text and return
+  text/vectors, and each maps `purpose` to its own query/document semantics. Whether an
+  adapter may be called is decided outside it, by `providers.egress` over the
+  organization's recorded configuration (`providers.records`), never by the adapter
+  or its credential. Retrieval and ingestion contain no provider-specific code.
+
+**Model providers (Phase 5 closure; ADR-008, ADR-009, ADR-010, ADR-011)**
+
+| Provider | Deployment | External egress | Current purpose |
+| -------- | ---------- | --------------- | --------------- |
+| Fake | test | no (declared `external_api` for policy tests) | CI and tests |
+| Local (`mxbai-embed-large-v1`, ONNX Runtime) | `local` | no | real zero-cost / self-hosted / offline deployments |
+| Gemini (`gemini-embedding-2`, 1024 dims) | `external_api` | yes | optional external provider / BYOK; unpaid key = synthetic evaluation only |
+| OpenAI (`text-embedding-3-small`, 1024 dims) | `external_api` | yes | optional managed / BYOK provider; real evaluation not run |
+| Organization-controlled endpoint (future) | `organization_controlled` | to the organization's endpoint | customer-owned model infrastructure; explicit organization policy required |
+
+The trust classes are those of D-15 (`local`, `organization_controlled`,
+`external_api`; anything else is `unknown` and receives nothing). The sensitivity each
+may receive comes from the approval and egress policy (security-model §6), never from
+this table. Credentials are process-wide environment
+variables today, and organization-owned credentials (BYOK) are the target
+architecture (ADR-011). Lattice runs with none of them (local provider).
 
 ## 4. Request lifecycle: Ask
 
@@ -135,13 +158,18 @@ POST /v1/ask {question, scope?}
     authz context, retrieval and the invariant check see the same permissions)
  4. authz: resolve AuthorizationContext fresh from DB (membership active? clearance,
     account scope, assigned accounts, departments, group memberships)
- 5. retrieval: analyze query (identifiers, quoted phrases, account mentions, temporal intent)
- 6. retrieval: build RetrievalRequest; authz compiles the readable-documents predicate
- 7. retrieval: lexical search  ─┐  both SQL statements include the predicate and
-    retrieval: semantic search ─┘  status='active'; forbidden rows are never returned
- 8. retrieval: reciprocal-rank fusion → deterministic rerank → context selection
- 9. authz: invariant check — every selected chunk re-verified with the Python reference
+ 5. retrieval: analyze query (identifiers, visible-account mentions, temporal intent);
+    scope account must be visible; query egress decision (embed concurrently or not)
+ 6. retrieval: authz compiles the readable-documents predicate into every statement
+ 7. retrieval: exact identifier ─┐  each one SQL statement with the predicate, the
+    retrieval: lexical search    ├  tenant and status='active' conditions; forbidden
+    retrieval: semantic search  ─┘  rows are never returned; semantic may degrade
+ 8. authz: invariant check over every candidate's document (abort, never filter)
+    retrieval: reciprocal-rank fusion → deterministic rerank → selection → evidence
+    lookup (predicate inside)
+ 9. authz: invariant check — every evidence chunk re-verified with the Python reference
     policy. Any mismatch = hard failure (no generation), security event logged.
+    (Steps 5–9 are built in Phase 5: `lattice.retrieval.retrieve`.)
 10. answering: AI egress policy — evidence above the effective external level
     (default: internal only) is kept out of the prompt but stays in the user's
     evidence list; if nothing remains → `evidence_only`, no model call.

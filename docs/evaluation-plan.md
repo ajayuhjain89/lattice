@@ -2,7 +2,10 @@
 
 Status: §2–4 **built in Phase 3**: the dataset is in `data/synthetic/` (its README is the
 maintainer's ground truth) and the golden set in `evals/golden/`; both are validated by
-`lattice dataset lint`. Metrics, judges and runners (§5–7) arrive in Phases 5–6.
+`lattice dataset lint`. **The retrieval and security metrics of §5 and the retrieval
+runner of §7 are built in Phase 5** (`lattice.evals.retrieval`, `lattice eval
+retrieval`; results in §9). Generation metrics, judges and `lattice eval answer` arrive
+in Phase 6.
 Related: `retrieval-design.md`, `security-model.md` §9, `product-brief.md` §8.
 
 Evaluation is built alongside the system: the retrieval harness lands in the same
@@ -215,9 +218,14 @@ Phase 3 total: 89 items; 10 same-question groups; 51 items tagged `security`.
 
 ## 7. Running evals
 
-- `lattice eval retrieval [--category …] [--persona …]` — fast, no generation; runs in
-  CI with the fake embedding provider for security metrics, and locally/nightly with
-  the real embedding provider for quality metrics.
+- `lattice eval retrieval [--embedding fake|openai|none] [--category …] [--persona …]
+  [--item …]` (**built, Phase 5**; `make eval`) — no generation. Runs every selected
+  golden item as its persona: the runtime role (`lattice_app`) through RLS, the
+  persona's context resolved in the request snapshot, the item's scope; retrieval gets
+  the question and nothing else. Development/test only (it acts as members). Needs a
+  synced corpus (`make sync`). CI runs it after the dataset sync with the fake provider
+  and fails on any security metric above 0; quality needs the real provider on a
+  corpus embedded with it (`runbook.md` §4).
 - `lattice eval answer` — full pipeline with the real generation provider + judges;
   run manually/nightly; costs money, reports estimated cost before running.
 - Output: `evals/reports/<timestamp>/report.json` + `report.md` (per-category table,
@@ -226,8 +234,450 @@ Phase 3 total: 89 items; 10 same-question groups; 51 items tagged `security`.
 - Regression rule: a change that lowers any retrieval metric by > 2 points on any
   category, or any security metric above 0, must be justified in the PR.
 
+**Methodology as built (retrieval).** Ground truth never comes from the system under
+test: every chunk ID is mapped back to its dataset record and part anchors by the
+operator role, table by table; readability comes from the dataset oracle (the
+reference policy over the raw fixture metadata, Phase 3). Per item:
+
+- *Targets* = `relevant` ∪ `not_used_for_answer` over the item's egress configurations
+  (which documents retrieval should find does not depend on the egress setting; that
+  decides what may reach a model, Phase 6). A part key (`doc:x#3`, `ticket:T#c3`,
+  `chat:C:ts#msg`) is found by an evidence chunk covering that part; a record key by
+  any chunk of the record; a record key is dropped when the item also names one of its
+  parts. 68 of 89 items have targets; the others (ambiguous, insufficient evidence,
+  refusal, most inaccessible) are scored on security only.
+- *Recall@k* (k = 1, 5, 10, 20) over the first k evidence chunks (the evaluation asks
+  for 20; the first 10 are identical to a 10-chunk request), averaged over items
+  (macro); *MRR* of the first target.
+- *Security*, every stage: the exact, lexical and semantic candidate lists as the
+  database returned them, the fused pool and the evidence -- chunks the oracle says
+  the persona cannot read, other-tenant chunks, `must_not_retrieve` hits, evidence
+  showing an account the oracle says must be hidden (D-8), account mentions of
+  accounts the persona may not see, canary strings of unreadable records.
+- *Misses* in the top 10 are located: never returned by any channel, outside the
+  fused pool, or fused but ranked out (including selection).
+- Also reported: per-category and per-persona blocks, channel contribution (which
+  channels matched each target found), semantic outcomes, same-question groups.
+
 ## 8. Failure analysis as a deliverable
 
 Each eval revision records notable failures and what changed because of them in
 `docs/decisions/` or the eval report (e.g. "stemmer conflated 'Northpeak' → added
 simple-config title vector"). This is the evidence trail for every retrieval change.
+
+## 9. Phase 5 results (retrieval)
+
+Corpus: both organizations synced (Halden 1,110 chunks, Veridian 215; 36 chunks
+policy-excluded from embedding, i.e. lexical-only), admin grants applied. Items: 89
+(68 with targets). `now` = the dataset's 27 September 2026.
+
+### Real-provider evaluation: BLOCKED (superseded by the Phase 5 closure below)
+
+*As first recorded in Phase 5.* No `LATTICE_OPENAI_API_KEY` was available in the environment or the ignored `.env`, so
+the corpus was not embedded with OpenAI `text-embedding-3-small` and **the Recall@10 ≥
+0.90 target has not been evaluated**. Every number below uses the deterministic fake
+provider (a hashed bag of words, for tests) or no semantic channel at all; neither is
+a claim about production semantic quality. Estimated cost of the blocked run: only
+`internal` chunks are sent -- 1,289 of 1,325; the 36 confidential/restricted chunks
+never leave -- about 283,000 characters of embedding input (header + text), ≈ 71,000
+tokens at four characters per token; at $0.02 per 1M tokens, about $0.0015 per full
+embedding, plus about 1,000 tokens for the 89 questions. Procedure: `runbook.md` §4.
+
+### Security (both configurations): all 0
+
+| Metric | Fake provider | Exact + lexical |
+| ------ | ------------: | --------------: |
+| Unauthorized candidates (any stage) | 0 | 0 |
+| Cross-organization candidates | 0 | 0 |
+| `must_not_retrieve` hits | 0 | 0 |
+| Hidden account metadata in evidence (D-8) | 0 | 0 |
+| Account mentions of hidden accounts | 0 | 0 |
+| Canary / `must_not_contain` hits | 0 | 0 |
+| Tripwire aborts | 0 | 0 |
+
+### Changes made, one at a time (fake provider / exact + lexical R@10)
+
+| Config | Change | Cause class it addressed | R@10 fake | R@10 lexical |
+| ------ | ------ | ------------------------ | --------: | -----------: |
+| retrieval-1 | Baseline = the Phase 0 design (`websearch_to_tsquery`, all terms) | -- | 0.418 | n/m |
+| retrieval-2 | Match any of the question's lexemes (ranked by `ts_rank_cd`) | FTS query semantics: 63/89 questions had no lexical candidate | 0.495 | n/m |
+| retrieval-3 | Rank by coverage of distinct question lexemes, `ts_rank_cd` as tie-break | Lexical ranking: frequency beat coverage | 0.505 | 0.641 |
+| retrieval-4 | An identifier in the question also scores as a phrase | Identifier parsing: `hal` is in every ticket | 0.512 | 0.656 |
+| retrieval-5 | A visible account named in the question counts as a matched term (D-10 query-time matching) | Structured accounts are not in the index (D-10) | 0.512 | 0.668 |
+| retrieval-6 | The per-document cap defers instead of dropping | Selection (no measurable effect; kept as correct semantics) | 0.512 | 0.668 |
+
+No golden text was special-cased, no label changed, no item removed, K not changed, no
+authorization weakened. The rerank_v1 weights are the design's, untuned.
+
+### Final (retrieval-6)
+
+| Slice | Items (targets) | R@1 | R@5 | R@10 | R@20 | MRR |
+| ----- | --------------: | --: | --: | ---: | ---: | --: |
+| **Overall, exact + lexical** | 89 (68) | 0.316 | 0.534 | **0.668** | 0.779 | 0.641 |
+| **Overall, + fake semantic** | 89 (68) | 0.238 | 0.440 | **0.512** | 0.685 | 0.515 |
+
+By category (exact + lexical / + fake semantic, R@10): lookup 0.900 / 0.700;
+supersession 0.917 / 0.750; cross_org 0.861 / 0.833; stale 0.619 / 0.667; cross_source
+0.630 / 0.454; prompt_injection 0.625 / 0.250; cross_document 0.563 / 0.479;
+account_visibility 0.563 / 0.313; potential_conflicts 0.542 / 0.542; inaccessible
+(2 items with targets) 0.500 / 0.250; ai_egress 0.486 / 0.181. Ambiguous,
+insufficient_evidence and refusal items have no targets (security only).
+
+Channel contribution (targets found in the top 10, fake run): lexical matched 66,
+semantic 56, exact 7; found by lexical only 4. In the exact + lexical run, 80 of 87
+were found by lexical only and 7 also by exact.
+
+**The fake provider lowers recall** (0.668 → 0.512): its vectors are hashed word
+counts including stop words, and its 50 semantic candidates per query crowd lexical
+matches out of the fused pool. That is the expected behaviour of a test double and the
+reason the quality gate needs the real provider.
+
+### Miss analysis (exact + lexical, top 10: 64 targets missed)
+
+A diagnostic run with the candidate limits raised from 50/40 to 200/200 (not a
+configuration change) left R@10 exactly unchanged at 0.668 and showed that 12 of the
+21 "never returned" targets do match lexically but rank below 50. Pool size is not the
+problem; lexical ordering and vocabulary are.
+
+| Cause | Targets | What it is | Next step |
+| ----- | ------: | ---------- | --------- |
+| No lexical match at all | 9 | Vocabulary mismatch: "What commitments have we made to Acme?" against "expected in October" (HAL-4821#c3) and the decision record's beta/GA dates; "Why was Directory Sync delayed?" against a load-test thread; an exec-channel thread; the SCIM squad's go/no-go thread | The semantic channel's job: re-evaluate with the real provider |
+| Lexical match, ranked out (below 50 in lexical, or fused but below 10) | 52 | Ties between many chunks that share the question's terms: title terms are in every chunk of a document, so long documents whose title shares question words fill the list; a visible account term matches every chunk of that account | Measure with the real provider first (semantic ranks break these ties); candidate changes, one at a time: count title terms once per document; weight the account term below content terms |
+| Outside the fused pool | 3 | Candidate pool (unchanged by a 5× larger pool) | None |
+
+Confidential evidence is lexical-only under the default egress policy (no vectors), so
+when semantic candidates of internal documents are strong, a confidential target can
+fall out of the fused list (seen for Grace's exec-notes question with the fake
+provider). Recorded as a known limitation; the Phase 6 egress notice depends on these
+documents being retrieved, so it is re-measured with the real provider.
+
+Same question, different persona: 10 groups, every persona's evidence permitted (0
+violations); no record one persona retrieved that another may not read ever appears
+for the other; a request by one persona never changes another's result. The top-10
+evidence sets differ between personas in 9 of 10 groups with the fake provider and 7
+of 10 with exact + lexical. Where they coincide, each persona's top 10 holds only
+records both may read -- e.g. the Tern memo ranks below 10 for Arjun (a recall miss,
+not an access difference) -- so the privileged persona's extra evidence is simply not
+among the ten.
+
+## 10. Phase 5 closure: real semantic providers (2026-09-28)
+
+The Phase 5 evaluation could only use the fake test double. The closure adds a real
+local model (ADR-009) and Gemini (ADR-010) behind the same Protocol and re-runs **the
+same harness, goldens, K and configuration (retrieval-6, rerank_v1)**. Nothing in the
+golden set, the relevance labels, K, the security filters or the personas was changed.
+Each configuration ran in its own isolated database (Compose projects
+`lattice-eval-*`, separate ports and volumes; the developer database was not touched),
+seeded and synced exactly like `make sync`.
+
+One harness correction was made, with evidence (commit f8a531f). The local model
+surfaced HAL-4877's comment 4 for "Summarize ticket HAL-4877." That comment is the
+ticket's planted injection, and it contains the exfiltration URL listed in the item's
+`must_not_contain`. The harness had counted any `must_not_contain` literal in evidence
+as a security hit, which contradicts its own definition ("canary strings of unreadable
+records"). The ticket is the item's relevant target and Tom may read it, and the item's
+notes say the *answer* must not contain the URL (Phase 6). A literal is now a violation
+when it is a canary or comes from a record the persona may not read. The readable
+payload is reported as `injection_payloads_in_readable_evidence` (informational; 1 in
+the local runs). No golden changed.
+
+### Results (89 items, 68 with targets; macro averages)
+
+| Configuration | What it is | R@1 | R@5 | R@10 | R@20 | MRR | Security |
+| ------------- | ---------- | --: | --: | ---: | ---: | --: | -------: |
+| **A. Exact + lexical** | provider-independent baseline | 0.316 | 0.534 | **0.668** | 0.779 | 0.640 | all 0 |
+| **B. Fake** | *deterministic test double, not a semantic benchmark* | 0.238 | 0.440 | 0.512 | 0.685 | 0.515 | all 0 |
+| **C1. Local, approved `internal`** | real model, same egress shape as an external provider (36 confidential/restricted chunks without vectors) | 0.271 | 0.535 | **0.660** | 0.772 | 0.574 | all 0 |
+| **C2. Local, approved `restricted`** | real model, the natural local configuration: every chunk embedded, nothing leaves the deployment | 0.295 | 0.572 | **0.695** | 0.801 | 0.640 | all 0 |
+| **C3. Local Arctic L v2.0 (comparison)** | `snowflake-arctic-embed-l-v2.0@ac6544c8a46e`, approved `restricted` | 0.317 | 0.548 | 0.657 | 0.797 | 0.633 | all 0 |
+| **D. Gemini** | `gemini-embedding-2`, 1024 dims, external, approved `internal` (unpaid key: synthetic data only; the 36 confidential/restricted chunks are never sent) | 0.338 | 0.602 | **0.726** | 0.820 | 0.648 | all 0 |
+| **E. OpenAI** | `text-embedding-3-small` | **not run**: no credential (none required) |
+
+Local model: `mxbai-embed-large-v1@b33106f585b9`, fp32 ONNX, CPU. The query side
+prefetched the 71 distinct questions in 4 batched calls. Security in every run:
+unauthorized candidates 0, cross-organization 0, `must_not_retrieve` 0, hidden account
+metadata (D-8) 0, hidden account mentions (D-10) 0, canary 0, unknown chunks 0,
+tripwire aborts 0.
+
+By category (R@10; items with targets):
+
+| Category | n | A lexical | B fake | C1 local-internal | C2 local-restricted | D Gemini |
+| -------- | -: | --------: | -----: | ----------------: | ------------------: | -------: |
+| lookup | 10 | 0.900 | 0.700 | 1.000 | 1.000 | 1.000 |
+| supersession | 4 | 0.917 | 0.750 | 1.000 | 1.000 | 1.000 |
+| cross_org | 6 | 0.861 | 0.833 | 0.694 | 0.778 | 0.694 |
+| stale | 7 | 0.619 | 0.667 | 0.762 | 0.762 | 0.786 |
+| cross_source | 9 | 0.630 | 0.454 | 0.685 | 0.685 | 0.778 |
+| prompt_injection | 4 | 0.625 | 0.250 | 0.625 | 0.625 | 0.625 |
+| cross_document | 8 | 0.563 | 0.479 | 0.563 | 0.563 | 0.729 |
+| account_visibility | 8 | 0.563 | 0.313 | 0.500 | 0.500 | 0.615 |
+| potential_conflicts | 4 | 0.542 | 0.542 | 0.542 | 0.542 | 0.542 |
+| inaccessible | 2 | 0.500 | 0.250 | 0.500 | 0.500 | 1.000 |
+| ai_egress | 6 | 0.486 | 0.181 | 0.181 | 0.486 | 0.208 |
+
+C3 (Arctic, restricted) by category: lookup 0.900, supersession 1.000, stale 0.810,
+cross_org 0.778, cross_source 0.630, prompt_injection 0.625, cross_document 0.521,
+inaccessible 0.500, potential_conflicts 0.458, ai_egress 0.444, account_visibility
+0.438. It has zero security violations, and its evidence sets differ between personas
+in 9 of 10 same-question groups.
+
+Same question, different persona (C2): 10 groups, 0 violations in every persona's
+result, and the evidence sets differ between personas in 8 of 10 groups. The two
+exceptions (`kestrel-outage`, `promise-acme`) hold only records every persona in the
+group may read. The same holds in every configuration.
+
+Local resources (Apple M1, 8 GB): full-corpus sync 375 s for 1,289 chunks including
+ingestion (about 3.4 chunks/s; embedding alone about 4 chunks/s); peak RSS 1.39 GB
+(Halden) and 1.53 GB (Veridian) for the sync process; model 1.34 GB on disk. The
+query-side evaluation of 89 items took 27 s.
+
+### Miss analysis (C2, the best real configuration: 60 of 151 targets missed at 10)
+
+Per-target channel ranks (each channel returns at most 50 candidates):
+
+| Stage | @10 | @20 | @50 |
+| ----- | --: | --: | --: |
+| Lexical alone | 0.570 | 0.702 | 0.861 |
+| Semantic alone (local model) | 0.517 | 0.682 | 0.834 |
+| Union of channels | 0.629 | -- | 0.907 |
+| Fused (RRF) | 0.596 | 0.762 | 0.854 |
+| Evidence (after rerank and selection) | 0.603 | 0.728 | -- |
+
+| Cause | Misses | Evidence |
+| ----- | -----: | -------- |
+| **Vocabulary / multi-hop**: no channel ranks the target within 50 | 14 | "What commitments have we made to Acme?" needs the SCIM decision record (`scim-ga-decision#2`) and HAL-4821 comment 3, which never mention Acme or commitments. That is a second hop through "the commitment was SCIM", which no single-vector or lexical retriever makes. Also an exec-channel thread and a postmortem section |
+| **Ranking depth** (embedding and lexical quality): best channel rank 21–50 | 16 | Many chunks share the question's topic (SCIM, Acme, Kestrel); the target is relevant but not the closest |
+| **Near miss**: best channel rank 11–20 | 21 | As above, just outside the top 10 |
+| **Fusion / selection**: a channel had the target in its top 10 | 9 | RRF dilution when the other channel ranks it low (7). Per-document cap: `refund-policy-v2#3` (lexical 1, fused 5) and `HAL-4877#c5` (fused 6) were deferred behind three chunks of the same document and then crowded out of the 20 (2) |
+| **Confidential chunks without vectors** (C1 only) | 10 lost vs A | Under the default approval the 36 confidential/restricted chunks have no vectors. A strong semantic list pushes lexical-only chunks out of the fused pool (`ai_egress` 0.486 → 0.181). C2 (local approved `restricted`) removes this entirely. For an external provider it is inherent to the egress policy and must be re-measured with Phase 6's egress notice |
+| Relevance-label issue | 0 found | No golden was judged wrong. The multi-hop targets are correct answers the question needs |
+
+**Conclusion (local).** Recall@10 ≥ 0.90 is **not achieved** by the local model.
+Its best is 0.695 (restricted approval), +0.027 over exact + lexical. Real
+semantic retrieval helps lookup, supersession, stale and cross_source, and is neutral
+elsewhere. Fusion and selection cost about 2.6 points (union @10 0.629 → evidence
+0.603). The larger gaps are first-stage ranking depth (37 misses at ranks 11–50) and
+multi-hop questions (14). Because the embedding channel alone places only 52% of
+targets in its top 10, embedding quality was judged a material factor, and one
+additional local model was compared (C3).
+
+**C3: a second local model does not help.** `snowflake-arctic-embed-l-v2.0` (568M
+parameters, 1.7× mxbai; 2.27 GB) was pinned, fetched and run under the identical
+setup (its own isolated database, approved `restricted`). Recall@10 is **0.657**
+against mxbai's 0.695 (MRR 0.633 vs 0.640; R@20 0.797 vs 0.801). Its semantic channel
+alone is no better: @10 0.510 vs 0.517, and @50 0.848 vs 0.834. It lost more targets
+in fusion and selection (16 of 65 misses had a channel at ≤ 10, against 9 of 60).
+Resources: full sync 750 s (about 1.7 chunks/s including ingestion, 2× slower than
+mxbai), peak RSS 1.46 GB. The embedding model within this class is therefore **not**
+the lever. mxbai stays the default (ADR-009). What would move Recall@10 toward 0.90:
+
+1. **Fusion and selection** (9–16 targets that a channel already had in its top 10).
+   Candidates to test one at a time: a per-channel RRF weight, a larger evidence
+   limit before the per-document cap applies, and title terms counted once per
+   document (evaluation-plan §9's open lexical item).
+2. **Ranking depth** (37 targets at ranks 11–50 in both channels): a second-stage
+   reranker (a cross-encoder). It was tested once, as a bounded experiment, and
+   **rejected** for the default path (§11).
+3. **Multi-hop questions** (12–14 targets): needs query understanding beyond one
+   vector, which is out of scope for deterministic retrieval (no LLM rewriting,
+   §2). Phase 6's answer step can ask for or combine evidence.
+
+None of these was applied: the closure measures, and changes to retrieval tunables
+need their own review (§7 regression rule).
+
+### Gemini (D): completed on 2026-09-29
+
+- **Data use.** The key is from an unpaid-tier project (`LATTICE_GEMINI_DATA_USE=unpaid`),
+  so it was used on Halden and Veridian (`data_origin: synthetic`) only. The egress
+  policy would refuse it for any `customer` organization, and the factory refuses it in
+  production. Approved for `internal` only, so the 36 confidential/restricted chunks
+  and no confidential question were ever sent.
+- **Estimate and first run (2026-09-28).** The estimate was 1,289 internal chunks,
+  305,727 characters (~76k tokens), about 20 batched requests, plus 71 distinct
+  questions. A one-text probe confirmed 1024-dimensional unit vectors with
+  `embedContentConfig.outputDimensionality = 1024`. The sync embedded 985 chunks and
+  then hit HTTP 429. The quota detail named
+  `EmbedContentRequestsPerDayPerProjectPerModel-FreeTier`. For this project and tier
+  it limited the run to about 1,000 embedded texts per day, counted per text rather
+  than per request. That is an observation about one project, not a product rule:
+  active Gemini quotas vary by project, model and tier, and Google's rate-limit page
+  did not state this one. The adapter now stops at once on a per-day quota
+  (`embedding_failed:quota_exhausted`).
+- **Completion (2026-09-29, a second valid key).** Before any embedding call, the key
+  was checked with `models.get` on `gemini-embedding-2` (HTTP 200, no quota spent;
+  the value was never displayed). The same model and 1024 dimensions mean the same
+  embedding space whichever key produced a vector, so the 985 stored vectors were kept.
+  `lattice sync` embedded **only the 304 failed chunks** (94 Halden Slack; Veridian 19
+  drive, 179 support, 12 Slack) in 188 s, with 0 failures and 0 rate-limit events. The
+  corpus is complete: 1,289 `gemini-embedding-2` vectors, 36 `policy_excluded`.
+- **Usage, whole evaluation.** Documents: 1,289 texts (985 + 304). Queries: 71 distinct
+  questions in 2 batched calls (3 HTTP requests: one per-minute 429, retried after the
+  server's delay). Diagnostics: 71 more query texts. About 1,450 texts in total, plus
+  3 probe texts. Provider failures other than 429: none. No key appeared in any output
+  (checked).
+
+**Result.** R@1 0.338, R@5 0.602, **R@10 0.726**, R@20 0.820, MRR 0.648. Security: all 0
+(unauthorized, cross-organization, `must_not_retrieve`, D-8 account metadata, D-10
+account mentions, canaries, unknown chunks, tripwire). Same question, different
+persona: 0 violations; evidence sets differ in 6 of 10 groups, and where they coincide
+they hold only records every persona in the group may read.
+
+**Miss analysis (56 of 151 targets missed at 10).** Semantic channel alone @10 0.543,
+the strongest of the models measured (mxbai 0.517, Arctic 0.510), @50 0.795. Union of
+channels @50 0.901; fused @10 0.636; evidence @10 0.629.
+
+| Cause | Misses |
+| ----- | -----: |
+| No channel within 50 (multi-hop / vocabulary) | 15 |
+| Best channel rank 21–50 (ranking depth) | 9 |
+| Best channel rank 11–20 (near miss) | 15 |
+| A channel had it at ≤ 10, lost in fusion / selection | 17 |
+| Of all misses: chunks of confidential documents, which an `internal`-approved external provider never embeds | 10 |
+
+Gemini gains most on cross_document (0.729), cross_source (0.778),
+account_visibility (0.615) and inaccessible (1.000). It loses on ai_egress (0.208),
+where the targets are confidential documents with no external vectors, so the fused
+semantic list crowds out lexical-only chunks. Compared under the same egress shape
+(C1, local approved `internal`: 0.660), Gemini is +0.066.
+
+**Overall conclusion.** Recall@10 ≥ 0.90 is **not achieved by any real provider**:
+Gemini 0.726, local mxbai 0.695 (restricted) / 0.660 (internal), Arctic 0.657. A
+stronger embedding model helps the semantic channel. The remaining gap is fusion and
+selection (17 misses with a channel at ≤ 10), ranking depth, multi-hop questions and,
+for external providers, confidential content that must not leave. Quality and
+eligibility stay separate: Gemini scores highest here, but an unpaid key is
+synthetic-only and is not a production default.
+
+### OpenAI
+
+Not run: no credential, and none is required. The adapter stays implemented, tested
+against a mock transport and documented (ADR-008) for organizations that bring an
+OpenAI key.
+
+### Voyage comparison: not triggered
+
+ADR-008's trigger needs (1) a real-provider evaluation, (2) a material Recall@10 miss,
+(3) misses attributable to semantic/paraphrase retrieval and (4) simple retrieval and
+fusion causes ruled out. After the closure, (1) and (2) hold with the local model. (4)
+does not: 37 misses are ranking depth shared by both channels, 2 are the per-document
+cap, and 14 are multi-hop. So no external comparison was added; the closure compared
+one more *local* model instead (§10).
+
+## 11. Rejected retrieval experiment: local cross-encoder reranking (2026-09-29)
+
+One bounded experiment tested whether a second-stage reranker closes the
+ranking-depth gap (§10, cause 2). It was measured, then **rejected for the current
+default retrieval path**, and its code was removed from the product. The rejection is
+a quality/latency/category trade-off. It is not a security finding: the experiment's
+security boundary held throughout.
+
+| Property | Value |
+| -------- | ----- |
+| Model | `Alibaba-NLP/gte-reranker-modernbert-base`, pinned revision `f7481e6055501a30fb19d090657df9ec1f79ab2c` |
+| License | Apache-2.0 |
+| Architecture | ModernBERT cross-encoder, about 149M parameters, one relevance logit per (question, passage) pair |
+| Weights | fp32 ONNX, 598,803,940 bytes (`onnx/model.onnx`, SHA-256 `c6d32265…5d93`) plus `tokenizer.json` |
+| Runtime | ONNX Runtime 1.30, CPU execution provider, graph optimizations `ORT_ENABLE_ALL` (the default), in process |
+| Placement | after RRF + rerank_v1, over the top 40 of the fused pool; rerank_v1's bounded multipliers applied to the cross-encoder's probability |
+| Security boundary | Local only (a non-local reranker was refused). It saw only the question and the pool's passages, the same text the embedding provider sees for a chunk. Each passage was re-read through the retrieval SQL predicate, and every pool document passed E4 before anything was scored. No account, access, sensitivity or source metadata. It reordered only; it removed nothing. The harness checked everything the reranker received against the same oracle as every other stage: 0 violations |
+| Network | none. A socket guard allowing only loopback was active during every reranker pass: 0 connection attempts |
+
+**Runtime benchmark.** Apple M1, 8 GB, under heavy swap pressure at the time (11.4
+of 12 GB swap in use), so absolute latencies are noisy. The relative result is clear.
+All 89 golden questions produce exactly 40 authorized passages. Ten of those pools
+were scored per configuration, each configuration in a fresh process after one
+warm-up.
+
+| Intra-op threads \ batch | 4 | 8 | 16 | 20 | 40 |
+| ------------------------ | --: | --: | --: | --: | --: |
+| runtime default | **5.3 s** | 7.3 / 7.7 s | 8.7 s | 12.6 s | 24.0 s |
+| 4 (M1 performance cores) | 6.0 s | 8.5 / 7.7 s | 9.1 s | 14.3 s | 28.4 s |
+| 2 | -- | 11.8 s | 13.4 s | 17.7 s | 34.4 s |
+
+p50 per 40-passage pool (two runs where two values are shown). Every configuration
+produced identical candidate IDs and identical order (maximum logit difference 7.4e-6).
+Larger batches are slower because each batch pads to its longest pair (median pair 87
+tokens, maximum 314; about 4.2k tokens per pool). The work is compute-bound: about
+0.9 TFLOP per pool in fp32. The best configuration (runtime-default threads, batch 4)
+reached p50 5.3 s and p95 6.4 s per pool, about 7.5 pairs/s, with 677 MB peak RSS for
+the reranker alone. In the product, the whole rerank step (passage read, E4, scoring)
+took p50 6.2–6.9 s and p95 10.5–12.8 s per query. A process holding the local
+embedding model and the reranker peaked at 1.27 GB RSS.
+
+**Quality.** Full golden set; each baseline was re-run in the same process and
+reproduced exactly (the Gemini query vectors were fetched once, 71 texts, and reused
+for the reranked pass).
+
+| Configuration | R@1 | R@5 | R@10 | R@20 | MRR |
+| ------------- | --: | --: | ---: | ---: | --: |
+| Gemini (D) | 0.338 | 0.602 | **0.726** | 0.820 | 0.648 |
+| Gemini + cross-encoder | 0.353 | 0.614 | **0.711** | 0.824 | 0.689 |
+| Local mxbai (C2) | 0.295 | 0.572 | **0.695** | 0.801 | 0.640 |
+| Local + cross-encoder | 0.363 | 0.616 | **0.713** | 0.826 | 0.715 |
+
+By category (R@10), in both configurations: gains on cross_org (Gemini 0.694 → 0.917,
+local 0.778 → 0.917) and stale (0.786 → 0.833; 0.762 → 0.833). Losses on
+**supersession** (1.000 → 0.917 in both), cross_source (0.778 → 0.574;
+0.685 → 0.574) and account_visibility (0.615 → 0.490; 0.500 → 0.490). Gemini also
+loses cross_document (0.729 → 0.646). Security was 0 in all four runs.
+
+**Why it was rejected.** It improves early ordering (MRR +0.04 / +0.08, R@1 up).
+But it lowers Gemini's Recall@10, the strongest real result, and adds only +0.018 for
+the local model. It regresses supersession: a relevance model has no notion of which
+version replaced another, so it promotes older evidence. And 5–13 s per query on the
+reference machine is unsuitable for the default interactive path. Not tried, by
+decision: quantization, a smaller pool, another reranker, GPU or remote inference.
+
+**Reconsideration condition.** A future reranking approach may be reconsidered if a
+materially faster local implementation, or a materially stronger Recall@10
+improvement, becomes available *without* damaging conflict and supersession evidence.
+That needs its own review. The findings above are the baseline to beat.
+
+## 12. Phase 5 final status (frozen)
+
+Phase 5 retrieval is architecturally frozen. The retained product path is exact,
+lexical and semantic retrieval (authorization inside every SQL statement), RRF fusion,
+the deterministic rerank_v1, permitted evidence selection and E4. There is no
+cross-encoder and no generation stage.
+
+**Accepted baselines** (89 items, 68 with targets; retrieval-6, rerank_v1):
+
+| Configuration | R@1 | R@5 | R@10 | R@20 | MRR | Role |
+| ------------- | --: | --: | ---: | ---: | --: | ---- |
+| Exact + lexical | 0.316 | 0.534 | 0.668 | 0.779 | 0.640 | provider-independent floor |
+| Local `mxbai-embed-large-v1`, approved `restricted` | 0.295 | 0.572 | 0.695 | 0.801 | 0.640 | real local / self-hosted |
+| Gemini `gemini-embedding-2`, 1024 dims | 0.338 | 0.602 | **0.726** | 0.820 | 0.648 | real external; strongest measured |
+| Fake provider | -- | -- | -- | -- | -- | tests and CI only; never a quality figure |
+| OpenAI `text-embedding-3-small` | -- | -- | -- | -- | -- | **not run**: no credential (none required) |
+
+**The Gemini figure is historical evidence.** It was measured on 2026-09-29 against the
+retained retrieval code. The final closure changed no retrieval semantics for an
+`external_api` provider (D-15 changes only how trust classes are recorded and allowed,
+and an `external_api` decision is identical by construction and by test). It was
+therefore not re-run, and no further Gemini quota was spent. The isolated evaluation
+databases that held the Gemini vectors were later lost in a Docker Desktop reset. Re-measuring
+would need a fresh corpus embedding (about 1,289 texts) and is a deliberate, manual
+act, never CI.
+
+**Product objective: Recall@10 ≥ 0.90 is NOT YET ACHIEVED.** Best real result: Gemini
+0.726. The objective is unchanged and remains the product-quality target. It no longer
+blocks closing the Phase 5 engineering phase:
+
+- **Phase 5 engineering / security: complete**, subject to the final verification
+  gates (security metrics all 0, full test suite, static checks, clean clone, CI);
+- **retrieval product-quality objective: partially achieved, target not yet met.**
+
+**Final Gemini miss analysis** (56 of 151 targets outside the top 10): 17 lost in
+fusion/selection although a channel ranked them in its top 10; 24 whose best channel
+ranked them 11–50; 15 that no channel finds (multi-hop / vocabulary). Of all misses, 10
+are chunks of confidential documents, which an `internal`-approved external provider
+never embeds. That is the egress policy working as designed, not a defect, and the
+policy is not weakened to raise recall.
+
+**Forward requirement: multi-hop evidence.** Some Lattice questions need evidence that
+does not resemble the question closely enough for exact, lexical or dense retrieval
+(for example "What commitments have we made to Acme?" needs the SCIM decision record,
+which never mentions Acme). All multi-hop golden questions stay in the set, with their
+categories unchanged. Possible future approaches include deterministic evidence
+expansion, relationship-aware traversal, carefully bounded query decomposition and
+multi-stage retrieval. None is approved, and none is implemented.

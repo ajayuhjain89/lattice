@@ -23,7 +23,8 @@ from typing import Any
 import httpx
 from pydantic import SecretStr
 
-from lattice.providers.embedding import Deployment, EmbeddingError, Purpose
+from lattice.providers.egress import Deployment
+from lattice.providers.embedding import EmbeddingError, Purpose
 
 DEFAULT_MODEL = "text-embedding-3-small"
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
