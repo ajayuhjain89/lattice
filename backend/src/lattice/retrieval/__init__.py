@@ -14,9 +14,11 @@ Authorization comes only from ``lattice.authz``; this package never builds an ac
 condition of its own (``tests/test_authz_boundary.py``).
 
 Public entry points: ``retrieve`` (resolves the context from the server-side
-session's identifiers) and ``retrieve_with_context`` (inside an already-open snapshot).
+session's identifiers), ``retrieve_with_context`` (inside an already-open snapshot) and
+``lookup_evidence`` (direct lookup by chunk ID through the same predicate, E5; Phase 6).
 """
 
+from lattice.retrieval.evidence import lookup_evidence
 from lattice.retrieval.models import (
     DEFAULT_CONFIG,
     Evidence,
@@ -39,6 +41,7 @@ __all__ = [
     "RetrievalScopeUnavailable",
     "SemanticOutcome",
     "VisibleAccount",
+    "lookup_evidence",
     "retrieve",
     "retrieve_with_context",
 ]

@@ -20,7 +20,13 @@ from sqlalchemy.dialects.postgresql import ARRAY, UUID, aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lattice.authz import AuthorizationContext, readable_documents_predicate
-from lattice.retrieval.models import KIND_SOURCE_TYPE, Evidence, RankedCandidate, VisibleAccount
+from lattice.retrieval.models import (
+    KIND_SOURCE_TYPE,
+    Channel,
+    Evidence,
+    RankedCandidate,
+    VisibleAccount,
+)
 from lattice.retrieval.permitted import (
     CHANNEL_OPTION,
     CHUNKS,
@@ -126,45 +132,87 @@ async def hydrate(
     rows = {row.chunk_id: row for row in (await session.execute(evidence_statement(ctx, ids)))}
     if set(rows) != set(ids):
         raise EvidenceUnavailable()
-    evidence: list[Evidence] = []
-    for position, r in enumerate(selected, start=1):
-        row = rows[r.fused.candidate.chunk_id]
-        account = (
-            VisibleAccount(id=row.account_id, key=str(row.account_key), name=row.account_name)
-            if row.account_id is not None
-            else None
+    return [
+        _evidence(
+            rows[r.fused.candidate.chunk_id],
+            rank=position,
+            matched_by=r.fused.matched_by,
+            channel_ranks=dict(r.fused.ranks),
+            rrf_score=round(r.fused.rrf_score, 8),
+            features=dict(r.features),
+            final_score=round(r.final_score, 8),
         )
-        evidence.append(
-            Evidence(
-                rank=position,
-                chunk_id=row.chunk_id,
-                document_id=row.document_id,
-                source_type=KIND_SOURCE_TYPE[row.document_kind],
-                document_kind=row.document_kind,
-                source_name=row.source_name,
-                title=row.title,
-                display_ref=row.display_ref,
-                uri=row.uri,
-                heading_path=tuple(row.heading_path),
-                source_anchors=tuple(row.source_anchors),
-                ordinal=row.ordinal,
-                text=row.text,
-                char_start=row.char_start,
-                char_end=row.char_end,
-                author=row.chunk_author or row.document_author,
-                occurred_at=row.occurred_at,
-                document_created_at=row.source_created_at,
-                document_updated_at=row.source_updated_at,
-                version=row.version,
-                authority=row.authority,
-                account=account,
-                supersedes_document_id=row.supersedes_document_id,
-                superseded_by_document_ids=tuple(row.superseded_by),
-                matched_by=r.fused.matched_by,
-                channel_ranks=dict(r.fused.ranks),
-                rrf_score=round(r.fused.rrf_score, 8),
-                features=dict(r.features),
-                final_score=round(r.final_score, 8),
-            )
+        for position, r in enumerate(selected, start=1)
+    ]
+
+
+async def lookup_evidence(
+    session: AsyncSession, ctx: AuthorizationContext, chunk_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, Evidence]:
+    """Direct lookup by chunk ID (E5: the evidence endpoint, trace re-authorization).
+    The statement carries the tenant, lifecycle and authorization conditions, so an
+    unreadable, foreign or missing chunk is simply absent -- indistinguishable (SEC-5).
+    No ranking: ``rank`` is 0 and the scores are empty."""
+    if not chunk_ids:
+        return {}
+    rows = await session.execute(evidence_statement(ctx, chunk_ids))
+    return {
+        row.chunk_id: _evidence(
+            row,
+            rank=0,
+            matched_by=(),
+            channel_ranks={},
+            rrf_score=0.0,
+            features={},
+            final_score=0.0,
         )
-    return evidence
+        for row in rows
+    }
+
+
+def _evidence(
+    row: Any,
+    *,
+    rank: int,
+    matched_by: tuple[Channel, ...],
+    channel_ranks: dict[Channel, int],
+    rrf_score: float,
+    features: dict[str, float],
+    final_score: float,
+) -> Evidence:
+    account = (
+        VisibleAccount(id=row.account_id, key=str(row.account_key), name=row.account_name)
+        if row.account_id is not None
+        else None
+    )
+    return Evidence(
+        rank=rank,
+        chunk_id=row.chunk_id,
+        document_id=row.document_id,
+        source_type=KIND_SOURCE_TYPE[row.document_kind],
+        document_kind=row.document_kind,
+        source_name=row.source_name,
+        title=row.title,
+        display_ref=row.display_ref,
+        uri=row.uri,
+        heading_path=tuple(row.heading_path),
+        source_anchors=tuple(row.source_anchors),
+        ordinal=row.ordinal,
+        text=row.text,
+        char_start=row.char_start,
+        char_end=row.char_end,
+        author=row.chunk_author or row.document_author,
+        occurred_at=row.occurred_at,
+        document_created_at=row.source_created_at,
+        document_updated_at=row.source_updated_at,
+        version=row.version,
+        authority=row.authority,
+        account=account,
+        supersedes_document_id=row.supersedes_document_id,
+        superseded_by_document_ids=tuple(row.superseded_by),
+        matched_by=matched_by,
+        channel_ranks=channel_ranks,
+        rrf_score=rrf_score,
+        features=features,
+        final_score=final_score,
+    )
