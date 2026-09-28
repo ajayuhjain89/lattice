@@ -43,7 +43,7 @@ SemanticStatus = Literal[
     "incompatible_space",  # the provider's vectors are not comparable with stored ones
 ]
 
-MAX_QUERY_CHARS: Final = 1000
+MAX_QUERY_CHARS: Final = 2000  # trust-boundaries B2: questions up to 2,000 characters
 DEFAULT_LIMIT: Final = 10
 MAX_LIMIT: Final = 20
 

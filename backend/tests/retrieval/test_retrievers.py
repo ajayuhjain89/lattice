@@ -6,12 +6,14 @@ and assert it is absent from that channel's candidates as the database returned 
 (``trace.stages``), not merely from the final evidence.
 """
 
+from datetime import timedelta
+
 import pytest
 
 from lattice.db.engine import Database
 from lattice.retrieval import RetrievalScopeUnavailable
 
-from .world import FAKE, Org, documents_in, new_org, search, stage_documents
+from .world import FAKE, NOW, Org, documents_in, new_org, search, stage_documents
 
 
 @pytest.fixture
@@ -393,6 +395,48 @@ async def test_account_mentions_resolve_among_visible_accounts_only(
     assert [a.key for a in maya.account_mentions] == ["acme-corp"]  # not ambiguous for Maya
     priya = await search(app_db, halden, "priya", "What did we promise Acme?")
     assert [a.key for a in priya.account_mentions] == ["acme-corp", "acme-health"]
+
+
+async def test_supersession_is_explicit_and_names_readable_documents_only(
+    app_db: Database, halden: Org
+) -> None:
+    old = NOW - timedelta(days=500)
+    await halden.document("refund-v1", "Refund policy v1", ["Refund window: 30 days."], updated=old)
+    await halden.document(
+        "refund-v2",
+        "Refund policy v2",
+        ["Refund window: 14 days, then credits."],
+        supersedes="refund-v1",
+        authority="system_of_record",
+    )
+    await halden.document("refund-faq", "Refund FAQ", ["Refund window questions."], updated=old)
+    result = await search(app_db, halden, "maya", "refund window", provider=None)
+    by_doc = {halden.document_of(e.chunk_id): e for e in result.evidence}
+    assert set(by_doc) == {"refund-v1", "refund-v2", "refund-faq"}  # nothing removed
+    assert by_doc["refund-v1"].superseded_by_document_ids == (halden.documents["refund-v2"],)
+    assert by_doc["refund-v2"].supersedes_document_id == halden.documents["refund-v1"]
+    # Old is not superseded: only explicit source metadata says so.
+    assert by_doc["refund-faq"].superseded_by_document_ids == ()
+    assert by_doc["refund-faq"].supersedes_document_id is None
+
+
+async def test_an_unreadable_successor_is_never_mentioned(app_db: Database, halden: Org) -> None:
+    await halden.document("sla-2025", "SLA 2025", ["P1 response within 1 hour."])
+    await halden.document(
+        "sla-2026",
+        "SLA 2026 draft",
+        ["P1 response within 30 minutes."],
+        sensitivity="confidential",
+        departments=["leadership"],
+        supersedes="sla-2025",
+    )
+    maya = await search(app_db, halden, "maya", "P1 response", provider=None)
+    assert documents_in(halden, maya) == ["sla-2025"]
+    assert maya.evidence[0].superseded_by_document_ids == ()
+    assert str(halden.documents["sla-2026"]) not in maya.model_dump_json()
+    grace = await search(app_db, halden, "grace", "P1 response", provider=None)
+    old = next(e for e in grace.evidence if halden.document_of(e.chunk_id) == "sla-2025")
+    assert old.superseded_by_document_ids == (halden.documents["sla-2026"],)
 
 
 async def test_prompt_injection_text_is_only_data(app_db: Database, halden: Org) -> None:

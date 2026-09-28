@@ -140,7 +140,8 @@ def test_recency_applies_only_with_temporal_intent_and_never_removes_older_evide
     ]
     assert _ranked(cands) == [old_decision, new_chat]
     with_intent = _ranked(cands, temporal=True)
-    assert set(with_intent) == {old_decision, new_chat}  # reordered at most, never removed
+    assert with_intent == [new_chat, old_decision]  # the freshness signal works...
+    assert set(with_intent) == {old_decision, new_chat}  # ...by reordering, never removing
 
 
 def test_authority_never_removes_contradicting_evidence() -> None:
@@ -150,7 +151,7 @@ def test_authority_never_removes_contradicting_evidence() -> None:
         candidate(record, "lexical", 2, authority="system_of_record"),
     ]
     ranked = _ranked(cands)
-    assert set(ranked) == {record, rumour}
+    assert ranked == [record, rumour]  # the authority signal works, and keeps both
     assert AUTHORITY_WEIGHT == {"system_of_record": 1.0, "working": 0.5, "conversational": 0.0}
 
 

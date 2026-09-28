@@ -17,7 +17,10 @@ same transaction). Then:
 2. every evidence item is readable, and its structured account is exactly
    ``visible_document_account()`` (D-8): shown only when visible, never substituted;
 3. every account mention is ``account_visible()``;
-4. no row of the other organization appears anywhere.
+4. no row of the other organization appears anywhere;
+5. the exact, lexical and semantic statements, executed with row-level security
+   bypassed (superuser) over both organizations, still return only the reader's
+   organization's readable rows -- isolation is in each statement, not only in RLS.
 
 The tripwire would also abort on a violation; this check runs on the raw candidates
 first, so a failure names the channel. LATTICE_RETRIEVAL_EXAMPLES sets the number of
@@ -48,8 +51,13 @@ from lattice.authz import (
     visible_document_account,
 )
 from lattice.db.engine import create_engine
-from lattice.retrieval import RetrievalQuery, retrieve_with_context
+from lattice.retrieval import DEFAULT_CONFIG, RetrievalQuery, retrieve_with_context
+from lattice.retrieval.exact import exact_statement
+from lattice.retrieval.lexical import lexical_statement
 from lattice.retrieval.models import Candidate
+from lattice.retrieval.permitted import ResolvedScope
+from lattice.retrieval.query import extract_identifiers
+from lattice.retrieval.semantic import semantic_statement
 
 from ..conftest import SUPERUSER_URL
 from .world import FAKE, NOW, vector_text
@@ -412,7 +420,28 @@ async def _check(conn: AsyncConnection, spec: WorldSpec, stats: Counter[str]) ->
                     if d.organization_id == org and not readable(ctx, d)
                 ]
                 stats["unreadable_documents_in_reach"] += len(unreadable)
+            # 5. The statements alone, with row-level security bypassed (superuser), over
+            # both organizations: tenant isolation is in each statement, not only in RLS.
             await conn.execute(text("RESET ROLE"))
+            for question in spec.queries:
+                identifiers = extract_identifiers(question, 5)
+                statements = {
+                    "exact": exact_statement(
+                        ctx, ResolvedScope(), identifiers or ["HAL-1"], DEFAULT_CONFIG
+                    ),
+                    "lexical": lexical_statement(
+                        ctx, ResolvedScope(), question, DEFAULT_CONFIG, identifiers=identifiers
+                    ),
+                    "semantic": semantic_statement(
+                        ctx, ResolvedScope(), FAKE.vector(question), FAKE.model, DEFAULT_CONFIG
+                    ),
+                }
+                for channel, statement in statements.items():
+                    for row in (await session.execute(statement)).all():
+                        document = built.documents[row.document_id]
+                        assert row.organization_id == org, (channel, "cross-org without RLS")
+                        assert readable(ctx, document), (channel, "unreadable without RLS")
+                        stats[f"{channel}_rows_without_rls"] += 1
         await session.close()
         stats["examples"] += 1
     finally:

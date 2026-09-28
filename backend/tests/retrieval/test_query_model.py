@@ -63,7 +63,7 @@ def test_abusive_or_malformed_queries_are_rejected(query: dict[str, object]) -> 
 
 def test_limits_are_conservative() -> None:
     config = RetrievalConfig()
-    assert MAX_QUERY_CHARS == 1000
+    assert MAX_QUERY_CHARS == 2000
     assert MAX_LIMIT == 20
     assert (config.k_exact, config.k_lexical, config.k_semantic, config.fused_pool) == (
         50,
