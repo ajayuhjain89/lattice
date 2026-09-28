@@ -363,6 +363,16 @@ byte-identical afterwards). Every defect is caught:
 | M17 | Unidentified failures no longer quarantine unseen documents | 1 | deletion |
 | M18 | An unchanged chunk input is re-embedded instead of reused | 2 | sync |
 
+Final Phase 4 check (before merge): a failed re-embed after a content change leaves no
+stale vector. `tests/ingestion/test_embedding_consistency.py` covers old content + old
+vector → content change → failed embedding (new body and lexical entries stored; the
+changed passage is a new, `failed` chunk without a vector; the old row and vector gone;
+the database refuses a vector on it) → next sync embeds exactly that input, and the same
+text under a new title (same chunk IDs, vectors cleared, all re-embedded). Targeted
+mutations: N1 chunk upsert keeps the old vector on conflict — caught; N2 vector reuse
+keyed by chunk ID instead of embedding-input hash — caught; N3 failed chunks not retried
+by the next sync — caught (both tests). No implementation change was needed.
+
 M4 (a sync deleting admin grants) is observable only when a document is rewritten, so
 the admin-grants suite catches it (a source-side change on a document with an admin
 grant); the dataset-oracle test's re-sync after applying grants writes nothing.

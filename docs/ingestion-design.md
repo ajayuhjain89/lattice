@@ -145,6 +145,21 @@ written — its new content is searchable lexically at once — with those chunk
 them. The Phase 0 draft kept the old version instead, which would have kept stale
 content (and its old vectors) retrievable to wait for a provider.
 
+**A failed re-embed never leaves a stale vector attached to new content.** A chunk
+row is always built without a vector; it gets one only by reusing a vector of the same
+document whose `embedding_input_hash` (template version + exact provider input) is
+identical, or by a successful call for its own input. A changed passage is a new chunk
+(its ID derives from its content), so the old row and its vector are deleted in the
+document's transaction; a passage whose text is unchanged but whose input changed (a
+new title or heading) keeps its ID and the upsert overwrites its vector with NULL. The
+CHECK `ck_chunks_embedding_matches_status` refuses a vector on any chunk that is not
+`embedded`, so a semantic path reading vectors cannot see a failed chunk. Evidence:
+`tests/ingestion/test_embedding_consistency.py` (both transitions, the recovery sync
+sending exactly the inputs still missing, and a check that every stored vector is the
+vector of its chunk's *current* input), with three targeted mutations — upsert keeping
+the old vector, reuse keyed by chunk ID instead of input hash, failed chunks not
+retried — each caught.
+
 ## 5. Updates, deletion, supersession, quarantine
 
 - Content change → `version += 1`, chunks replaced as above, `ingested_at` updated.
