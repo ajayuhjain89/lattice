@@ -1,7 +1,7 @@
 # Insufficient evidence (nothing the persona can read answers it -- genuinely absent,
 # not hidden) and required refusals (requests Lattice does not perform).
-# `unsupported_request` is provisional pending decision D-11 (answer status for action
-# and out-of-scope requests); see data/synthetic/README.md.
+# `unsupported_request` is the answer status decided in D-11 for action and out-of-scope
+# requests (implemented with answering in Phase 6); see data/synthetic/README.md.
 
 - id: insufficient-acme-nps
   category: insufficient_evidence

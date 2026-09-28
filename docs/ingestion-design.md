@@ -1,6 +1,8 @@
 # Lattice — Ingestion Design
 
-Status: Foundation draft (Phase 0).
+Status: **Implemented (Phase 4)** — `backend/src/lattice/ingestion/`, migration
+`0005_ingestion.py`; tests in `backend/tests/ingestion/`. Deviations from the Phase 0
+draft are listed in `implementation-plan.md` (Phase 4, as built).
 Related: `connector-design.md`, `data-model.md`, `retrieval-design.md`.
 
 ---
@@ -8,159 +10,254 @@ Related: `connector-design.md`, `data-model.md`, `retrieval-design.md`.
 ## 1. Pipeline
 
 ```
-sync(source, mode)
+lattice sync --org SLUG --sources FILE [--source KEY] [--mode full|acl_only] [--dry-run]
   │
-  ├─ load + validate source config (connector config_model)
-  ├─ connector.check()                       → fail fast: SourceUnavailable
+  ├─ load + validate sources.yaml (lattice.sources.config); check its account and
+  │  department keys against the organization          → source_config:* (nothing written)
+  ├─ upsert the source row (refuses a changed connector type or a `deleting` source)
+  ├─ advisory lock: one sync per source at a time      → source_busy
   ├─ open source_sync_runs row (running)
-  ├─ ACL groups: connector.list_access_groups() → upsert access_groups + members (origin=source)
+  ├─ connector.check()                                 → SourceUnavailable: run failed, no sweep
+  ├─ egress level = min(org_settings level, provider's approved level); first use of a
+  │  provider records it in model_providers, approved for `internal`
+  ├─ ACL groups: connector.access_groups() → upsert source groups + members by email
   │
-  ├─ for each record from connector.list_records(checkpoint):
-  │     1. VALIDATE      schema, limits, timestamps, URI scheme           → RecordError
-  │     2. NORMALIZE     NFC, strip control chars, normalize whitespace,
-  │                      markdown→plain structure, parts → canonical body
-  │     3. MAP ACCESS    sensitivity, departments, account_ref→account_id,
-  │                      group grants  (fail closed, §6)                  → failure: access_unmappable
-  │     4. HASH          content_hash(canonical body + title + parts meta)
-  │                      access_hash(sensitivity, departments, account, grants)
-  │     5. DECIDE        new | content_changed | access_changed | unchanged
-  │     6. CHUNK         (new/content_changed only) kind-specific chunker
-  │     7. EMBED         only chunk content_hashes not already embedded for this doc
-  │                      (batching, retries with backoff; AI egress policy respected)
+  ├─ for each batch of records from connector.records():
+  │     1. VALIDATE      the connector's typed models (RecordError → failure row)
+  │     2. NORMALIZE     NFC, LF, no control chars, whitespace; parts → canonical body
+  │                      with exact part spans (lattice.ingestion.canonical)
+  │     3. MAP ACCESS    sensitivity, access mode, departments, account, source grants
+  │                      (fail closed, §6)                    → access_unmappable:<what>
+  │     4. HASH          content_hash (content only), access_hash (access only)
+  │     5. DECIDE        create | update | acl | unchanged (| skip in acl_only)
+  │     6. CHUNK         create/update only, kind-specific (§3)
+  │     7. EMBED         outside any transaction: reuse vectors whose input hash is
+  │                      unchanged; embed the rest if the egress policy allows (§7)
   │     8. PERSIST       one transaction per document (§4)
-  │     9. RECORD        IngestionResult → run counters; failures → sync_record_failures
+  │     9. RECORD        counts on the run; failures → sync_record_failures (§8)
   │
-  ├─ DELETION SWEEP (snapshot sources, full mode, no source-level failure):
-  │     unseen = active docs of source not seen in this run
-  │     if |unseen| / |active| > guard (default 20%) → abort sweep, run = partial, flag
-  │        (override for genuine mass deletions: `--allow-mass-deletion`, logged)
-  │     else DELETE unseen documents (cascade)
-  │
-  └─ close run: succeeded | partial (some record failures) | failed | aborted
+  ├─ DELETION SWEEP (full mode, snapshot connectors only; §5)
+  ├─ supersession links resolved; stale source groups removed (full mode, no guard trip)
+  ├─ embedding reconciliation: remove vectors the policy no longer allows; fill
+  │  pending/failed/newly eligible chunks
+  └─ close run: succeeded | partial (any record or embedding failure, or a guard trip)
+     | failed (source-level); sources.last_synced_at / last_succeeded_at / acl_synced_at
 ```
 
-Modes: `full` (snapshot + sweep), `incremental` (checkpointed; no sweep), `acl_only`
-(re-read access hints + groups; update access columns/grants; never re-chunk or embed).
+Modes:
+
+- `full` — snapshot sync: create, update, access-update, quarantine, delete (guarded).
+- `acl_only` — re-read access hints and groups; update access columns and source grants
+  of existing documents only; never re-chunk or delete, and content changes are ignored.
+  New records are skipped (counted) until the next full sync. Vectors change only where
+  a new classification changes what the egress policy allows (removed at once when
+  raised above the level; filled when lowered back).
+- `reindex` (`lattice reindex`) — `full` without the deletion sweep, optionally
+  re-chunking every document (`--rechunk`, after a chunker change) and re-embedding
+  every eligible chunk (`--reembed`, after a provider, model or template change).
+- `--dry-run` — runs everything in a read-only snapshot, makes no embedding call, and
+  reports what a real run would do (`would create/update/quarantine/delete`).
+
+`incremental` mode is not built: no connector supports checkpoints yet.
+
+Ingestion is an operator tool. It connects as `lattice_owner` and writes **through**
+row-level security, one organization bound per transaction, exactly like the seed. The
+runtime role (`lattice_app`) has SELECT only on the ingestion tables.
 
 ## 2. Idempotency and determinism
 
 - Idempotency key: `(organization_id, source_id, external_id)`.
-- Running the same sync twice produces zero writes the second time (all
-  `unchanged`); asserted by test.
-- Chunk IDs are deterministic (`uuid5(document_id, chunk_content_hash, occurrence)`),
-  so unchanged chunks keep IDs across content updates of their document. Citations in
-  recent traces still resolve if the passage they cite was not edited.
-- Chunkers are pure functions of (kind, canonical parts, chunker_version). Changing
-  the chunker bumps `chunker_version` and triggers a controlled re-chunk via
-  `lattice reindex`.
+- A second sync of unchanged input writes nothing: no document, chunk, grant, group,
+  membership or provider row changes — only the run row and the source's timestamps
+  (asserted with row versions of every table in `tests/ingestion/test_sync.py`).
+- Document IDs are `uuid5(source_id/external_id)`; chunk IDs are
+  `uuid5(document_id, chunk content hash, occurrence)`, so an unchanged passage keeps its
+  ID — and its vector — across content updates of its document.
+- Canonicalization (`CANONICAL_VERSION`), chunking (`CHUNKER_VERSION`) and the embedding
+  input template (`EMBEDDING_INPUT_VERSION`) are pure and versioned; golden outputs pin
+  them (`tests/ingestion/golden/chunks.json`). Changing one is a deliberate version bump
+  followed by `lattice reindex --rechunk` (or `--reembed` for the template).
+- The content hash covers title, body, part structure, authorship, source timestamps,
+  supersession and per-kind extras — never access metadata. The access hash covers
+  sensitivity, access mode, account, departments and source grants — never admin grants
+  (Lattice configuration, D-12).
 
 ## 3. Chunking (by kind)
 
-Target: 250–450 tokens per chunk, hard max 600; never split mid-sentence when
-avoidable. Every chunk carries a short **contextual header used for embedding and
-lexical title weighting, not stored in `text`**:
-`"{kind} · {title} · {account name} · {heading path} · {occurred_at date}"`.
-This lets "What did we promise Acme?" match a comment that never says "Acme".
-Open decision D-10 (implementation-plan §7): whether the account name belongs in the
-embedded header and in the shared `tsv`, given D-8 (a grant does not disclose the
-account) — the header is computed once per document, not per reader.
+Budget: target ~400 tokens (1,600 characters), hard maximum ~600 (2,400), estimated
+at four characters per token (no tokenizer dependency). Every chunk is an exact, trimmed
+slice `documents.body[char_start:char_end]`; no text is lost.
 
 | Kind | Strategy | `occurred_at` | `author_display` |
 | ---- | -------- | ------------- | ---------------- |
-| `doc` | Split by headings, then paragraphs; pack paragraphs up to target; no overlap (header supplies context) | Section date if present, else doc `updated_at` | Doc author |
-| `ticket` | Header part (subject/status/priority/requester) as one chunk; each comment its own chunk; long comments split by paragraph | Comment `created_at` | Comment author |
-| `chat_thread` | Root + replies packed chronologically into windows up to target; a window never spans > 48 h | Last message in window | Speakers joined ("Tom, Sofia") |
-| `chat_channel_day` | Messages packed chronologically; split on > 2 h gaps | Last message in window | Speakers |
+| `doc` | One H1/H2 section at a time; paragraphs packed up to the target; a chunk never spans sections, so editing one section changes no other chunk | Doc `updated_at` | Doc author |
+| `ticket` | Header part (subject, status, priority, type, requester, assignee, tags) as one chunk; each comment its own chunk; long comments split by paragraph. A new comment adds one chunk | Comment `created_at` | Comment author |
+| `chat_thread` | Root + replies packed chronologically up to the target; a window never spans more than 48 h | Last message in window | Speakers, joined |
+| `chat_channel_day` | The same, and a gap of more than 2 h starts a new window | Last message in window | Speakers |
 
-Per-part timestamps are preserved, so freshness is judged on the evidence actually
-cited (a ticket opened in March with a comment yesterday is fresh).
+Chat messages render as `[YYYY-MM-DD HH:MM UTC] Speaker: text`, so speaker and time stay
+with the text wherever a chunk is cut. Oversized paragraphs split at sentence ends, then
+at whitespace.
 
-Header staleness: the contextual header includes the account name. If a document's
-account changes (an access change) or an account is renamed, **authorization is
-updated immediately** via the access columns, but the header text in `tsv` and the
-embedding is refreshed by a follow-up `reindex` of the affected documents. This is a
-ranking-quality lag, never an access lag.
+**Contextual header (decision D-10, decided).** The text sent to the embedding provider
+is a short header plus the chunk text:
+
+```
+Support ticket: SSO redirect loop after switching IdP to Entra
+Comment 3 · Priya Natarajan (agent)
+
+<chunk text>
+```
+
+The header carries the kind label, the title and the heading path — content of the
+document itself — and nothing else: **no structured account name or alias**, no internal
+IDs, sensitivity, departments, groups, grants, emails or display reference. The lexical
+index weights title and heading path (and, in the `simple` configuration, the display
+reference such as `HAL-4821`) the same way. The header is shared by every reader; an
+account term in it would let a query naming an out-of-scope account match a document
+read through a grant (D-8). If the document's own text names its customer, that is
+content and stays. Account-derived terms are applied at query time, only for accounts
+the reader may see (`account_visible`; `retrieval-design.md` §4) — nothing is stored
+for them. Consequence: an account change or rename never makes the index stale.
 
 ## 4. Persistence transaction (per document)
 
 ```sql
-BEGIN;
-  SET LOCAL app.org_id = :org;
-  INSERT … ON CONFLICT (organization_id, source_id, external_id) DO UPDATE …  -- documents
-  DELETE FROM chunks WHERE document_id = :doc AND id <> ALL(:kept_chunk_ids);
-  INSERT INTO chunks … ON CONFLICT (id) DO UPDATE SET ordinal, char_start, char_end, …;
-  -- replace source-origin grants; admin-origin grants untouched
+BEGIN;  -- lattice_owner, app.org_id bound
+  INSERT INTO documents … ON CONFLICT (organization_id, source_id, external_id) DO UPDATE …;
+  DELETE FROM chunks WHERE document_id = :doc AND NOT (id = ANY(:kept_chunk_ids));
+  INSERT INTO chunks … ON CONFLICT (id) DO UPDATE SET ordinal, char_start, …;  -- vectors, tsv
+  -- replace source-origin grants only if they differ; admin-origin grants untouched
   DELETE FROM document_grants WHERE document_id = :doc AND origin = 'source';
-  INSERT INTO document_grants …;
+  INSERT INTO document_grants … origin = 'source';
 COMMIT;
 ```
 
-Retrieval therefore sees either the old document or the new one, never a mix.
-Embedding happens **before** the transaction (network calls are not held inside DB
-transactions); if embedding fails, nothing is written for that document and the old
-version stays searchable. Result: `failed(embed)`, retried next sync.
+Retrieval therefore sees the old document or the new one, never a mix (a failure after
+the chunk deletion rolls everything back; tested). An access-only change is one
+transaction updating the access columns and source grants, plus the egress consequence
+for its chunks (below). Embeddings are computed before the transaction; no network call
+is held inside one.
 
-## 5. Updates, versions and supersession
+**Embedding failures (as built).** A document whose embedding call fails is still
+written — its new content is searchable lexically at once — with those chunks marked
+`embedding_status = 'failed'` (no vector). The run is `partial`; the next sync retries
+them. The Phase 0 draft kept the old version instead, which would have kept stale
+content (and its old vectors) retrievable to wait for a provider.
+
+## 5. Updates, deletion, supersession, quarantine
 
 - Content change → `version += 1`, chunks replaced as above, `ingested_at` updated.
-- Only the current version is stored. Version history stays in the source of truth
-  (non-goal: Lattice as an archive). Rationale: storing old versions would make old
-  content retrievable after the source changed or deleted it.
-- Explicit supersession (`supersedes_external_id`, e.g. "Refund policy v2 replaces
-  v1") sets `supersedes_document_id`. The superseded document remains retrievable
-  (the old policy may be what a customer was told) but answering marks it as
-  superseded (retrieval-design §7).
+  Only the current version is stored (non-goal: Lattice as an archive).
+- **Deletion sweep** (full mode, snapshot connectors): documents whose records are
+  absent from the snapshot are deleted (CASCADE chunks with their vectors and lexical
+  entries, and all grants). **Guard** — the sweep does not run when:
+  - more than 20% of the source's documents (and more than one) would go
+    (`deletion_guard:mass_deletion`), or the snapshot is empty
+    (`deletion_guard:empty_snapshot`): override with `--allow-mass-deletion` after
+    checking the export; `--dry-run` shows `would delete` first;
+  - any record failed before it could be identified (a corrupt line or file:
+    `deletion_guard:unidentified_failures`). Not overridable: that record could be any
+    unseen document. The unseen documents are **quarantined** instead — the source may
+    have changed their access — until a sync reads them again.
+- A source that cannot be read (`SourceUnavailable`) fails the run; nothing is swept.
+- **Quarantine** (fail closed): an existing document whose record now fails access
+  mapping, normalization or validation becomes `quarantined` — kept, unreadable — rather
+  than readable on access metadata the source no longer states. The next successful
+  sync restores it.
+- Explicit supersession (`supersedes_external_id`, e.g. refund policy v2 replaces v1)
+  sets `supersedes_document_id` within the same source; links to deleted documents are
+  cleared. The superseded document remains retrievable; answering marks it
+  (retrieval-design §7).
+- **Source disconnect** (`lattice source disconnect`): one transaction makes the source
+  `deleting` and all its documents `deleted` (unreadable from the next request); a second
+  transaction deletes the source row, cascading to documents, chunks, every grant on them
+  (source and admin — re-apply `admin-grants.yaml` after a reconnect), source groups and
+  members (those members' `authz_updated_at` is bumped), sync runs and failures. If the
+  purge fails, re-running the command resumes it.
 
 ## 6. Fail-closed access mapping
 
+`lattice.ingestion.access.map_access` turns a connector's untrusted `AccessHints` into
+the stored access record through the source's Lattice configuration. It decides what is
+stored, never who may read (that is `lattice.authz` over the stored record). The rules
+mirror the dataset's expected-access oracle, and a contract test compares the two for
+every record and persona (`tests/ingestion/test_ingested_access.py`).
+
 | Situation | Outcome |
 | --------- | ------- |
-| No sensitivity in hints and no source default | Impossible: `default_sensitivity` is required on sources |
-| Unknown department key | Record fails: `access_unmappable:department` |
-| `account_scoped` source and account_ref unmapped | Record fails: `access_unmappable:account` (not indexed as unscoped) |
-| Group ref not declared by the connector | Record fails: `access_unmappable:group` |
-| Private channel with zero mappable members | Indexed as `grants_only` with an empty group → readable by nobody until members map; reported as warning |
-| `sensitivity = restricted` without `grants_only` | Forced to `grants_only` (restricted is always grant-only); DB CHECK backs this |
+| No sensitivity in hints | Channel's configured sensitivity (chat), else the source's required default |
+| `sensitivity = restricted` | Always `grants_only` (DB CHECK backs this) |
+| Unknown department key (restriction or grant) | Record fails: `access_unmappable:department` — never dropped |
+| Unknown admin-group key in a grant | Record fails: `access_unmappable:group` |
+| Group reference the connector did not declare | Record fails: `access_unmappable:group` |
+| Account key that does not exist (document, channel) | Record fails: `access_unmappable:account` — never "no account" |
+| `account_scoped` source and account reference unmapped | Record fails: `access_unmappable:account` (not indexed as unscoped); the failure carries only the external reference to map |
+| Private channel with no mappable members | Indexed `grants_only` with an empty group: readable by nobody until members map |
+| Existing document whose record now fails | Quarantined (§5) |
+
+Source configuration problems (a configured account or department key that does not
+exist) refuse the whole sync before anything is written (`source_config:*`).
 
 ## 7. Embedding
 
-- `EmbeddingProvider` Protocol: `embed(texts: list[str], purpose: Literal["document","query"]) -> list[vector]`, `model_id`, `dimensions`.
-- Batching (provider-specific max), exponential backoff on rate limits, per-sync
-  budget cap.
-- Reuse: before calling the provider, look up existing chunks of the same document
-  with identical `content_hash` and `embedding_model`; reuse their vectors. Typical
-  ticket updates (one new comment) embed one chunk, not the whole ticket.
-- AI egress policy (`security-model.md` §6): documents above the embedding
-  provider's effective level — by default anything `confidential` or `restricted` —
-  are not sent to it. They are lexical-only (embedding NULL); retrieval excludes
-  NULL embeddings from the semantic path only, so they remain findable by keywords
-  and identifiers. If the org later opts in (or configures a private embedding
-  endpoint approved for that level), `lattice reindex --reembed --sensitivity
-  confidential` fills the embeddings. Lowering the level deletes the affected
-  embeddings in the same operation.
-- Tests use `FakeEmbeddingProvider` (deterministic hashed bag-of-words vectors) — no
-  network in CI.
+- `EmbeddingProvider` Protocol (`lattice.providers.embedding`): `embed(texts, purpose)`
+  plus `provider`, `model`, `dimensions`, `deployment`, `retention_mode`,
+  `training_opt_out`, `max_batch`. Implementations: `OpenAIEmbeddingProvider`
+  (`text-embedding-3-small` at 1024 dimensions over plain HTTP; retries with exponential
+  backoff on 429/5xx/timeouts; fixed error codes, never response bodies; ADR-008),
+  `FakeEmbeddingProvider` (deterministic hashed bag-of-words; development and tests;
+  refused in production; treated as an external provider so the egress policy is
+  exercised), `RecordingEmbeddingProvider` (tests: keeps every payload).
+- `--embedding none|fake|openai` (default `none`: eligible chunks wait as `pending`).
+- **Reuse:** a chunk reuses a stored vector of the same document when its
+  `embedding_input_hash` (template version + exact input) and model match. A new ticket
+  comment embeds one chunk; an access-only change embeds nothing.
+- **AI egress policy** (`security-model.md` §6): a chunk is sent only if its document's
+  sensitivity is at or below `min(org_settings.external_egress_level,
+  model_providers.approved_for_level)`; by default `internal`. Chunks above the level
+  are `policy_excluded`: no vector, lexical-only, still findable by keywords and
+  identifiers for readers who are authorized. A classification raised above the level
+  removes the document's vectors in the same transaction as the access change;
+  lowering the organization's level or the provider's approval removes the affected
+  vectors on the next sync of each source (`exclude_ineligible`); raising them fills
+  the newly eligible chunks. Tests assert the exact payload set under each setting and
+  that no canary above the level is ever sent.
 
 ## 8. Failure reporting (operator-visible)
 
 Every sync produces a `source_sync_runs` row with counts and status, and a
-`sync_record_failures` row per failed record with stage, code and templated
-parameters (no free-text messages). The Sources page (Phase 8) shows admins: last sync
-time and status, aggregate counts, top failure codes, deletion-guard trips, and
-"permissions last synced". Failure rows show a record's filename/title/external ID
-only if the admin can read that document; otherwise an opaque reference
-(`security-model.md` §10). Members see only sources they can read, with counts
-computed inside their authorization predicate. Nothing reports `succeeded` if
-any record failed — that is `partial`.
+`sync_record_failures` row per failed record with stage, code, safe parameters and an
+opaque reference — no free-text message (`data-model.md` §3). The CLI prints counts and
+codes only, never titles, record IDs or filenames; logs carry the run's counts and
+codes. The Sources page (Phase 8) shows admins last sync time and status, aggregate
+counts, top failure codes, deletion-guard trips and "permissions last synced"; a
+failure shows a record's identifier only if the admin can read that document, otherwise
+its opaque reference (`security-model.md` §10). Nothing reports `succeeded` if any
+record failed — that is `partial`.
 
 ## 9. Operations
 
-- `lattice sync <source-key> [--mode full|incremental|acl_only] [--dry-run]`
-  (`--dry-run` reports decisions without writing: useful before first sync of a new
-  source).
-- `lattice reindex <source-key> [--rechunk] [--reembed]`.
-- `lattice source disconnect <source-key>` → immediate soft delete, async purge.
-- Performance target (synthetic dataset, ~2k records, ~15k chunks): full first sync
-  < 5 min with a remote embedding provider; no-op re-sync < 30 s.
-- Concurrency: one sync per source at a time (advisory lock on source_id). The API
-  keeps serving during syncs; per-document transactions keep locks short.
+```
+lattice sync --org SLUG --sources data/synthetic/<org>/sources.yaml [--source KEY ...]
+             [--mode full|acl_only] [--dry-run] [--allow-mass-deletion]
+             [--embedding none|fake|openai]
+lattice reindex --org SLUG --sources FILE [--source KEY ...] [--rechunk] [--reembed]
+                [--embedding none|fake|openai]
+lattice source disconnect --org SLUG --source KEY
+lattice apply-admin-grants --org SLUG --grants FILE [--dry-run] [--prune]
+```
+
+Exit codes: 0 success; 1 a sync failed (source-level) or was aborted (an unexpected
+error: the run is recorded `aborted` with `internal_error`, never left `running`), or
+admin grants were not applied; 2 configuration or input error; 3 a sync completed as
+`partial` (records rejected, embeddings failed or the deletion guard tripped). `make
+sync` accepts 3 — the dataset's HAL-4951 is unmapped on purpose. Makefile wrappers: `make sync`,
+`make sync-dry-run`, `make admin-grants` (README).
+
+- Performance (synthetic dataset, fake provider, laptop): first sync of both
+  organizations ≈ 3 s; a no-op re-sync writes nothing. Remote-provider timings are
+  recorded when a real key is used.
+- Concurrency: one sync per source (a session-level advisory lock on a dedicated
+  connection); the per-document transactions keep row locks short, so the API keeps
+  serving.

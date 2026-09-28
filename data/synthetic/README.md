@@ -8,9 +8,11 @@ Lattice-side configuration that governs them.
 It is written for the engineers who maintain the dataset and states things no product
 user would ever see (who can read what, which record is a trap, where the canaries are).
 
-Nothing here has been ingested. Phase 4 connectors will read these files; until then the
-only consumer is the dataset lint (`lattice dataset lint`), which validates the data and
-the golden set against the **real** reference authorization policy.
+The Phase 4 connectors ingest these files (`make sync`, README). The dataset lint
+(`lattice dataset lint`) validates the data and the golden set against the **real**
+reference authorization policy, and `backend/tests/ingestion/test_ingested_access.py`
+proves ingestion reaches the lint's expected-access decisions for every record and
+persona.
 
 - Evaluation design: `docs/evaluation-plan.md`. Golden questions: `evals/golden/`.
 - Source formats: `docs/connector-design.md`. Access rules: `docs/authorization-model.md`.
@@ -133,8 +135,9 @@ Groups:
 | #prod-identity (`G0PRODIDEN1`) | private Slack channel | Tom, Sofia (+ Kofi, Wei) | Squad discussion, load-test numbers |
 | #exec-escalations (`G0EXECESC01`) | private Slack channel, configured confidential | Grace, Arjun (+ Jonas) | Kestrel and Acme escalations |
 
-Private channels become source groups in Phase 4 (synced from `groups.json`, members
-mapped to memberships by email). Only admin-defined groups are seeded now.
+Private channels become source groups when Slack is synced (from `groups.json`, members
+mapped to memberships by email; key `src-slack-<channel id>`). The seed creates only the
+admin-defined groups.
 
 ## 4. Source types and record keys
 
@@ -343,7 +346,8 @@ so the easiest match is something the persona may not read (lint-checked). Tags 
 `restricted_contains_answer`, `unauthorized_more_relevant`, `cross_org_same_identifier`
 mark the kind of trap.
 
-`unsupported_request` (refusal items) is a provisional status pending decision D-11.
+`unsupported_request` (refusal items) is the answer status decided in D-11 (implemented with
+answering in Phase 6).
 
 ## 13. Maintaining the dataset
 
@@ -363,11 +367,12 @@ mark the kind of trap.
 - Volume is below the evaluation plan's first target (~120 documents, ~600 tickets,
   ~1,200 messages): quality over volume, per the Phase 3 brief. Grow it with authored
   records as retrieval evals show where more distractors are needed.
-- The expected-access oracle mirrors the Phase 4 mapping rules; Phase 4 must add a
-  contract test proving ingestion reaches the same decisions.
+- The expected-access oracle mirrors the Phase 4 mapping rules; a contract test proves
+  ingestion reaches the same decisions (`tests/ingestion/test_ingested_access.py`).
 - Direct membership grants exist only as Lattice admin grants (`admin-grants.yaml`); the
   connectors cannot express per-person grants (by design, connector-design §5).
-- Sync-failure fixtures (malformed records with sensitive filenames) belong with the
-  Phase 4 connector tests and are not part of this corpus.
+- Sync-failure fixtures (malformed records with sensitive filenames) live with the
+  Phase 4 connector and ingestion tests (`backend/tests/ingestion/`), built in temporary
+  copies of this corpus; they are not part of it.
 - Golden `required_facts` and `forbidden_claims` are judged by a model in Phase 6; the
   lint checks structure and access, not wording.

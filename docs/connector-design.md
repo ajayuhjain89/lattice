@@ -1,8 +1,10 @@
 # Lattice — Connector Design
 
-Status: Foundation draft (Phase 0). The three export formats now exist as fixtures
-(`data/synthetic/<org>/documents|tickets|slack`, Phase 3); the details below marked
-"as built" are what those fixtures use. Connectors themselves arrive in Phase 4.
+Status: **Implemented (Phase 4)** — `backend/src/lattice/connectors/` (contract,
+registry, three connectors) with the shared contract test kit
+`backend/tests/ingestion/test_connector_contract.py`. The export formats are the
+Phase 3 fixtures (`data/synthetic/<org>/documents|tickets|slack`). §2 shows the contract
+as built; notes marked "as built" record where the connectors differ from the draft.
 Related: `ingestion-design.md`, `data-model.md` §3–5.
 
 ---
@@ -19,63 +21,70 @@ connector a small, self-contained unit.
 
 ## 2. Contract
 
+As built (`lattice.connectors.contract`; the draft's async iterators, checkpoints and
+per-connector config registry are simplified to what local exports need):
+
 ```python
 class Connector(Protocol):
-    connector_type: ClassVar[ConnectorType]          # document_repository | ticketing | chat_export
-    config_model: ClassVar[type[BaseModel]]          # validated source config
+    capabilities: ConnectorCapabilities   # snapshot, incremental, acl_export
+    def check(self) -> None: ...          # raise SourceUnavailable(code) if unreadable
+    def access_groups(self) -> list[ExternalGroup]: ...   # may be empty
+    def records(self) -> Iterator[SourceRecord | RecordError]:
+        """Every live record (a full snapshot), in a deterministic order. Never raises
+        for a single bad record: yields RecordError and continues."""
 
-    def __init__(self, config: BaseModel) -> None: ...
-
-    async def check(self) -> SourceHealth:
-        """Can the source be read right now? Used by Sources page and before sync."""
-
-    def list_records(self, checkpoint: Checkpoint | None) -> AsyncIterator[SourceRecord | RecordError]:
-        """Yield every record (full snapshot) or those changed since checkpoint.
-        Must never raise for a single bad record: yield RecordError and continue."""
-
-    def list_access_groups(self) -> AsyncIterator[ExternalGroup]:
-        """Groups whose membership governs access (e.g. private channels). May be empty."""
-
-    capabilities: ClassVar[ConnectorCapabilities]
-    # snapshot: bool      -> every sync sees all live records (enables deletion sweep)
-    # incremental: bool   -> supports checkpoints
-    # acl_export: bool    -> provides per-record access hints / groups
+build_connector(connector_type, path) -> Connector      # lattice.connectors.registry
 ```
 
 ```python
-class SourceRecord(BaseModel):
-    external_id: str                      # stable, normalized (see §4)
-    kind: DocumentKind                    # doc | ticket | chat_thread | chat_channel_day
+class SourceRecord(BaseModel):          # frozen, extra="forbid"; validates itself
+    external_id: str                    # normalized (§4), unique within the source
+    kind: DocumentKind                  # doc | ticket | chat_thread | chat_channel_day
     title: str
-    display_ref: str | None               # "HAL-4821"
-    uri: HttpsUrl | None
+    display_ref: str | None             # "HAL-4821"
+    uri: str | None                     # https only
     author: str | None
-    created_at: datetime                  # tz-aware, from source
-    updated_at: datetime
-    account_ref: str | None               # external account reference, mapped by ingestion
-    access: AccessHints                   # see §5
-    parts: list[RecordPart]               # ordered content with per-part timestamps/authors
-    supersedes_external_id: str | None    # when the source explicitly marks replacement
-    extra: dict[str, str | int | bool]    # small, validated per kind (ticket status, channel name)
+    created_at: datetime | None         # zone-aware
+    updated_at: datetime                # zone-aware
+    account_ref: str | None             # account key / ticketing org ID / channel ID
+    access: AccessHints                 # untrusted (§5)
+    parts: tuple[RecordPart, ...]       # ≥ 1; anchors unique within the record
+    supersedes_external_id: str | None
+    authority: Authority | None         # None -> the source default
+    extra: dict[str, str | int | bool]  # ticket status, channel name, file path
 
 class RecordPart(BaseModel):
-    heading: str | None                   # doc section heading, "Comment 4", message author/time
+    anchor: str                         # stable position: section "3", comment "c4", message ts
+    heading: str | None
     author: str | None
     occurred_at: datetime | None
-    text: str                             # plain text or markdown (no HTML)
+    text: str                           # plain text or Markdown; control chars and HTML rejected
 
 class RecordError(BaseModel):
-    external_id: str | None
+    external_id: str | None             # when known
+    location: str | None                # "tickets.jsonl:12" -- operators only (a filename)
     stage: Literal["read", "parse", "validate"]
-    code: str                             # e.g. "malformed_json", "missing_timestamp"
-    message: str                          # safe summary, never record content
+    code: str                           # lowercase code, e.g. "malformed_json"
+    params: dict[str, str | int]        # short identifiers only (field name, line number)
+
+class ExternalGroup(BaseModel):
+    external_ref: str                   # e.g. a private channel ID
+    name: str                           # "#acct-acme"
+    member_emails: tuple[str, ...]      # lowercased; mapped to memberships by ingestion
 ```
 
-`SourceHealth`, `ExternalGroup(external_ref, name, member_emails | member_external_ids)`
-and `Checkpoint` (opaque string) complete the contract.
+Differences from the draft: `RecordError` has **no free-text `message`** — its
+parameters are validated as short identifiers, so a connector cannot put record content
+into a failure; `check()` raises instead of returning a health object; iteration is
+synchronous (local exports); `incremental`/checkpoints are not built (no connector
+supports them yet). Connector configuration holds only what is needed to read the
+export (a path); Lattice-side settings (defaults, account mapping, channel settings)
+live in `sources.yaml` and never reach a connector.
 
 That is the entire framework: one Protocol, a handful of Pydantic models, and a
-registry mapping `connector_type` → class. No plugin loader, no base-class hierarchy.
+registry mapping `connector_type` → connector. No plugin loader, no base-class
+hierarchy. Connectors import only the standard library, Pydantic, PyYAML and the
+contract (a test enforces it): no database, provider, ingestion or authorization code.
 
 ## 3. First three connectors (local exports)
 
@@ -97,8 +106,8 @@ data/synthetic/halden/documents/
 Front matter: `id`, `title`, `author`, `created`, `updated`, `account` (optional),
 `department`, `sensitivity`, `authority` (optional), `uri` (optional),
 `supersedes` (optional), `grants` (optional list of group/department keys).
-Parts: split at H1/H2 headings. Capabilities: snapshot ✔, incremental ✔ (mtime),
-acl_export ✔ (front matter).
+Parts: split at H1/H2 headings (not inside fenced code). Capabilities: snapshot ✔,
+incremental ✗ (as built: the export is read whole), acl_export ✔ (front matter).
 
 As built (Phase 3 fixtures): `departments` is a list of department keys (empty or
 absent = no restriction); `grants_only: true` expresses `AccessHints.grants_only`
@@ -108,6 +117,11 @@ timestamps are ISO 8601 with a zone. Text before the first H1/H2 heading is the 
 part. Per-person grants are not expressible here (§5); a person-level share is an
 admin grant made in Lattice (`admin-grants.yaml` in the dataset, applied after
 ingestion).
+
+As built (connector): `external_id` is the front-matter `id` (a rename is not a
+delete + create); two files with the same `id` are both rejected
+(`duplicate_external_id`); a file without front matter, with malformed YAML or invalid
+fields, or with HTML in its text yields a `RecordError` and the next file is read.
 
 ### 3.2 `ticketing` — Zendesk-style JSON Lines
 
@@ -124,10 +138,14 @@ also carry Zendesk's `type`, `via` and `group`; `requester`/`assignee`/`author` 
 `{name, email}`; `author_role` is `end-user` or `agent`.
 Parts: a header part (subject, status, priority, requester) + one part per comment.
 Internal (non-public) comments are included; they are internal-level content.
-`account_ref` = ticketing organization ID → mapped through `account_external_refs`.
-Source is `account_scoped = true`: unmapped tickets are not indexed.
-Capabilities: snapshot ✔, incremental ✔ (`updated_at`), acl_export ✗ (source defaults
-apply: internal, Support department not restricted).
+`account_ref` = ticketing organization ID → mapped by the source configuration's
+`account_refs` (as built; the draft's `account_external_refs` table is not needed until
+accounts are managed in Lattice). Source is `account_scoped = true`: unmapped tickets
+are not indexed (`access_unmappable:account`, e.g. HAL-4951 in the dataset).
+`display_ref` = the ticket ID. People appear by name only; emails are never copied into
+content. A ticket ID that appears twice is rejected in every occurrence.
+Capabilities: snapshot ✔, incremental ✗ (as built), acl_export ✗ (source defaults
+apply: internal, no department restriction).
 
 ### 3.3 `chat_export` — Slack export format
 
@@ -137,8 +155,9 @@ The real Slack export layout: `channels.json`, `groups.json` (private channels, 
 - Threads (messages with replies) → one `chat_thread` record per thread root.
 - Non-threaded messages → one `chat_channel_day` record per channel per day.
 - `external_id`: `<channel_id>:<thread_ts>` or `<channel_id>:day:<date>`.
-- Account mapping by channel via source config (e.g. `C0ACME01 → acme-corp`, or the
-  naming rule `acct-<key>`); channels not mapped have no account.
+- Account mapping by channel ID via the source configuration
+  (`channels: {C0ACCTKES01: {account: kestrel-bank}}`); channels not mapped have no
+  account. (As built: no naming rule — an explicit mapping only.)
 - Public channels: source default sensitivity (internal).
 - Private channels: `ExternalGroup` per private channel; records get a `group` grant
   and `access_mode = grants_only` so **only channel members** can read them —
@@ -152,6 +171,13 @@ The real Slack export layout: `channels.json`, `groups.json` (private channels, 
   day they were posted; bot posts use `subtype: bot_message`; a Slack Connect channel
   includes external users from another `team_id`. Channel settings (account,
   sensitivity) live in the source configuration (`sources.yaml` in the dataset).
+- As built (connector): any message a reply points to is a thread root, even without
+  `reply_count`, so a root never appears in both its thread and its day record; a reply
+  to a missing root is `orphan_reply`; `<@U123>` becomes `@Real Name` and `&amp;`,
+  `&lt;`, `&gt;` are unescaped (text that then looks like HTML is rejected); a folder
+  that names no known channel is `unknown_channel`. Missing or malformed
+  `users.json`/`channels.json`/`groups.json` makes the source unavailable: without them
+  no message can be attributed and no private channel's membership is known.
 Capabilities: snapshot ✔, incremental ✗ (exports are full snapshots), acl_export ✔.
 
 ## 4. External identifier normalization
@@ -165,22 +191,25 @@ Capabilities: snapshot ✔, incremental ✗ (exports are full snapshots), acl_ex
 ## 5. Access hints
 
 ```python
-class AccessHints(BaseModel):
-    sensitivity: Sensitivity | None          # None -> source default
-    grants_only: bool = False                # True -> only explicit grants may read
-    department_keys: list[str] | None        # None -> source default
-    group_refs: list[str] = []               # external group refs (private channels)
-    department_grant_keys: list[str] = []
+class AccessHints(BaseModel):                  # as built
+    sensitivity: Level | None = None           # None -> channel setting / source default
+    grants_only: bool = False                  # True -> only explicit grants may read
+    department_keys: tuple[str, ...] | None = None   # None -> the source default
+    group_refs: tuple[str, ...] = ()           # groups declared by access_groups() (private channels)
+    group_grant_keys: tuple[str, ...] = ()     # admin-defined Lattice groups, by stable key (D-9)
+    department_grant_keys: tuple[str, ...] = ()
 ```
 
-Hints are **untrusted**. Ingestion maps them through the source's configuration:
-unknown department keys fail the record (not silently dropped); sensitivity can only
-be one of the enum values; groups must be declared by `list_access_groups`. A
-connector cannot express "grant user X" by email in the slice; groups are the unit.
+Hints are **untrusted**. Ingestion maps them through the source's configuration and
+fails the record when it cannot (`ingestion-design.md` §6): unknown department or group
+keys fail it (never silently dropped); groups must be declared by `access_groups()`. A
+connector cannot express "grant user X": groups are the unit, and person-level shares
+are admin grants made in Lattice (D-12).
 
 ## 6. Failure reporting
 
-- Per-record problems → `RecordError` (sync continues).
+- Per-record problems → `RecordError` (sync continues). A record that fails before
+  its `external_id` is known (a corrupt line) blocks the deletion sweep for that run.
 - Source-level problems (directory missing, unreadable, auth failure for future API
   connectors) → `SourceUnavailable` exception → sync run `failed`, no deletion sweep.
 - Connectors never log record content.
@@ -193,9 +222,11 @@ connector cannot express "grant user X" by email in the slice; groups are the un
    feed or tombstones).
 4. Map the source's ACL model to sensitivity/departments/groups; document fail-closed
    behaviour.
-5. Fixture export + contract tests (shared test kit runs the same assertions against
-   every connector: stable IDs, tz-aware timestamps, no HTML in text, errors don't
-   abort iteration).
+5. Fixture export + contract tests: add the connector to `CONNECTORS` and its
+   malformed fixtures to `MALFORMED` in `tests/ingestion/test_connector_contract.py`
+   (the shared kit asserts normalized unique IDs, zone-aware timestamps, plain text,
+   deterministic order, honest capabilities, record keys equal to the dataset's, and
+   that errors carry no content and never abort iteration).
 
 Likely next connectors and their ACL mapping: call transcripts (Gong: account-scoped,
 participants), CRM notes (account-scoped, owner-based), GitHub issues

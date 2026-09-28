@@ -81,5 +81,25 @@ jobs:
           uv run lattice seed --manifest ../data/synthetic/halden/org.yaml --manifest ../data/synthetic/veridian/org.yaml
           uv run lattice check-db-role
 
+      - name: Sync the dataset twice (fake embeddings); the second sync writes nothing
+        shell: bash
+        run: |
+          # Exit 3 = partial: Halden's HAL-4951 is unmapped on purpose. Anything else fails.
+          sync() {
+            for org in halden veridian; do
+              uv run lattice sync --org "$org" --sources "../data/synthetic/$org/sources.yaml" \
+                --embedding fake || [ $? -eq 3 ] || return 1
+            done
+          }
+          sync
+          sync | tee second-sync.txt
+          if grep -E '(create|update|access|deleted) [1-9]' second-sync.txt; then
+            echo "the second sync wrote something"; exit 1
+          fi
+          for org in halden veridian; do
+            uv run lattice apply-admin-grants --org "$org" \
+              --grants "../data/synthetic/$org/admin-grants.yaml"
+          done
+
       - name: Tests (real PostgreSQL)
         run: uv run pytest

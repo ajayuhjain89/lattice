@@ -125,14 +125,14 @@ Lattice. The provider boundary is governed separately.
 
 | Call | When | Data sent | Not sent |
 | ---- | ---- | --------- | -------- |
-| Embedding (documents) | Ingestion | Chunk text + contextual header (document title, kind, heading path, account name, date) — only for documents at or below the embedding provider's effective egress level (default: `internal`) | Confidential/restricted content under the default policy; internal IDs, access metadata, authors' emails |
+| Embedding (documents) | Ingestion | Chunk text + contextual header (document kind, title, heading path — D-10: no account name) — only for documents at or below the embedding provider's effective egress level (default: `internal`) | Confidential/restricted content under the default policy; structured account names; internal IDs, display references, access metadata, authors' emails (Phase 4: asserted payload-for-payload with a recording provider) |
 | Embedding (query) | Each Ask | The question text | User identity, org name |
 | Generation | Each Ask with evidence | Fixed instructions; the question; selected evidence at or below the effective egress level (default: `internal`; ≤ ~12 chunks, ≤ ~6k tokens) with handle, kind, title, display ref, account name, date, author display name | Evidence above the egress level; UUIDs, user identity/profile, org metadata, authz structures, sensitivity labels, unrelated evidence, secrets |
 
 Note the asymmetry: **the embedding provider eventually receives the entire indexed
 *internal* corpus**, while the generation provider receives only small,
 question-specific excerpts. The embedding provider choice is therefore the larger egress decision
-(open decision D-2).
+(decision D-2; ADR-008: OpenAI `text-embedding-3-small`, approved for `internal`).
 
 ### Egress policy (distinct from authorization)
 
@@ -168,11 +168,15 @@ its external model provider.
   them below." If the excluded evidence is *newer* than all evidence used, the
   notice says so ("…including the most recent evidence"). If all relevant evidence
   is excluded, no model call is made and the answer status is `evidence_only`.
-- **Embedding:** records above the effective level of the embedding provider are
-  indexed lexically only (embedding NULL); they still participate in retrieval
-  through FTS and the identifier path. Consequence: under the default policy,
-  confidential/restricted documents have keyword-only recall (measured separately
-  in evals).
+- **Embedding (implemented, Phase 4):** records above the effective level of the
+  embedding provider are indexed lexically only (embedding NULL, `embedding_status =
+  'policy_excluded'`); they still participate in retrieval through FTS and the
+  identifier path. A classification raised above the level removes the vectors in the
+  same transaction as the access change; a lowered org level or provider approval
+  removes them on the next sync of each source. A provider used for the first time is
+  recorded in `model_providers` approved for `internal` only. Consequence: under the
+  default policy, confidential/restricted documents have keyword-only recall (measured
+  separately in evals).
 - **Questions** are user-authored and always sent to the configured providers (query
   embedding and generation). Lattice cannot classify free text; this is stated in
   the provider settings page and the privacy documentation.

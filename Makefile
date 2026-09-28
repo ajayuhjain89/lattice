@@ -5,7 +5,10 @@ UV_RUN := cd backend && uv run --env-file ../.env
 UV := cd backend && uv run
 MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/synthetic/veridian/org.yaml
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role dataset-lint dataset-generate
+EMBEDDING ?= fake
+ORGS := halden veridian
+
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role dataset-lint dataset-generate sync sync-dry-run admin-grants
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -32,6 +35,26 @@ migrate: ## Apply migrations to the development database (as lattice_owner)
 
 seed: ## Upsert the Halden and Veridian manifests: people, accounts, admin groups (idempotent)
 	$(UV_RUN) lattice seed $(MANIFESTS)
+
+sync-dry-run: ## Show what `make sync` would create, update, reject and delete (writes nothing)
+	@for org in $(ORGS); do \
+	  (cd backend && uv run --env-file ../.env lattice sync --org $$org \
+	    --sources ../data/synthetic/$$org/sources.yaml --dry-run) || exit $$?; \
+	done
+
+sync: ## Ingest both organizations' sources (EMBEDDING=fake|openai|none), then apply admin grants
+	@for org in $(ORGS); do \
+	  (cd backend && uv run --env-file ../.env lattice sync --org $$org \
+	    --sources ../data/synthetic/$$org/sources.yaml --embedding $(EMBEDDING)); \
+	  rc=$$?; [ $$rc -eq 0 ] || [ $$rc -eq 3 ] || exit $$rc; \
+	done
+	@$(MAKE) --no-print-directory admin-grants
+
+admin-grants: ## Apply each organization's admin-grants.yaml (decision D-12; after sync)
+	@for org in $(ORGS); do \
+	  (cd backend && uv run --env-file ../.env lattice apply-admin-grants --org $$org \
+	    --grants ../data/synthetic/$$org/admin-grants.yaml) || exit $$?; \
+	done
 
 dataset-lint: ## Validate the synthetic dataset and golden set (no database, no model)
 	$(UV) lattice dataset lint

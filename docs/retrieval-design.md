@@ -60,10 +60,16 @@ group_ids)`.
 - Top `k_lex = 50`.
 - Identifier path: exact `display_ref` match (index on `(organization_id,
   display_ref)`) → those documents' chunks injected at the top of the lexical list.
-- Open question (decision D-10, before Phase 4): the header terms include the account
-  name, which is document-level and reader-independent. For a document read through a
-  grant on an out-of-scope account (D-8), a query naming that account would match it
-  through the header alone, hinting at the association. See implementation-plan §7.
+- Decision D-10 (decided; implemented in Phase 4): the stored header terms are the
+  title, heading path and display reference only — **no structured account name or
+  alias**, in `tsv` or in the embedded text. A document-level account term would be
+  shared by every reader, so for a document read through a grant on an out-of-scope
+  account (D-8) a query naming that account would match it through the header alone.
+  Account-derived matching happens at query time instead, from the accounts the reader
+  may see (`visible_accounts_predicate`): an account mention in the question is
+  resolved only among visible accounts, and the account-match rerank feature compares
+  `documents.account_id` with those. Golden item `visibility-kestrel-latest-maya` pins
+  the behaviour (Phase 5).
 - Known weakness: the `english` stemmer can conflate proper nouns/product names.
   First mitigation if the eval shows it: add a second `simple`-config tsvector for
   titles/headers. Not added speculatively.
