@@ -29,6 +29,8 @@ class ModelProvider(Base):
     model: Mapped[str] = mapped_column(Text)
     deployment: Mapped[str] = mapped_column(Text)
     approved_for_level: Mapped[str] = mapped_column(Text, server_default="internal")
+    # Set by an explicit administrator approval; required for organization_controlled.
+    approved_at: Mapped[datetime | None]
     retention_mode: Mapped[str] = mapped_column(Text)
     training_opt_out: Mapped[bool]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

@@ -146,3 +146,93 @@ async def test_a_deployment_claim_that_differs_from_the_record_sends_nothing(
     result = await sync(owner_db, halden, "drive", liar, mode="reindex", reembed=True)
     assert liar.calls == []
     assert result.egress_block == "provider_deployment_mismatch"
+
+
+# --- D-15: trust classes on the document side --------------------------------------------
+
+
+class _Declares(FakeEmbeddingProvider):
+    """The fake provider, declaring whatever trust class a test gives it."""
+
+    def __init__(self, deployment: str, provider: str = "fake") -> None:
+        super().__init__()
+        self.deployment = deployment  # type: ignore[assignment]
+        self.provider = provider
+
+
+async def test_an_unknown_deployment_sends_no_document_text(
+    owner_db: Database, halden: Org
+) -> None:
+    for label in ("private", "self_hosted", ""):
+        provider = RecordingEmbeddingProvider(_Declares(label, provider=f"p-{label or 'blank'}"))
+        result = await sync(owner_db, halden, "drive", provider, mode="reindex", reembed=True)
+        assert provider.calls == []
+        assert result.egress_block == "deployment_unknown"
+        assert result.chunks_embedded == 0
+        # Never recorded either: an unknown class is not a configuration.
+        assert (
+            await scalar(
+                owner_db,
+                halden.id,
+                "SELECT count(*) FROM model_providers WHERE provider = :p",
+                p=provider.provider,
+            )
+            == 0
+        )
+    assert (
+        await scalar(owner_db, halden.id, "SELECT count(*) FROM chunks WHERE embedding IS NOT NULL")
+        == 0
+    )
+
+
+async def test_organization_controlled_sends_documents_only_when_explicitly_allowed(
+    owner_db: Database, halden: Org
+) -> None:
+    provider = RecordingEmbeddingProvider(_Declares("organization_controlled", "acme-inference"))
+    await _set(
+        owner_db,
+        halden,
+        "INSERT INTO org_settings (organization_id, external_egress_level) "
+        "VALUES (:o, 'restricted') "
+        "ON CONFLICT (organization_id) DO UPDATE SET external_egress_level = 'restricted'",
+    )
+    # First use records it with the default approval, which is not an approval here.
+    result = await sync(owner_db, halden, "drive", provider)
+    assert provider.calls == []
+    assert result.egress_block == "provider_unapproved"
+    assert (
+        await scalar(
+            owner_db,
+            halden.id,
+            "SELECT deployment || '/' || approved_for_level || '/' || (approved_at IS NULL) "
+            "FROM model_providers WHERE provider = 'acme-inference'",
+        )
+        == "organization_controlled/internal/true"
+    )
+
+    # An administrator approves it for restricted; the organization has not allowed the
+    # class (organization_controlled_level unset): still nothing.
+    await _set(
+        owner_db,
+        halden,
+        "UPDATE model_providers SET approved_for_level = 'restricted', approved_at = now() "
+        "WHERE provider = 'acme-inference'",
+    )
+    result = await sync(owner_db, halden, "drive", provider, mode="reindex", reembed=True)
+    assert provider.calls == []
+    assert result.egress_block == "deployment_not_allowed"
+
+    # The organization allows the class up to confidential: exactly internal and
+    # confidential content is sent, restricted never.
+    await _set(
+        owner_db, halden, "UPDATE org_settings SET organization_controlled_level = 'confidential'"
+    )
+    result = await sync(owner_db, halden, "drive", provider, mode="reindex", reembed=True)
+    assert result.egress_block is None
+    allowed = await _embedded_inputs(owner_db, halden, ("internal", "confidential"))
+    restricted = await _embedded_inputs(owner_db, halden, ("restricted",))
+    confidential = await _embedded_inputs(owner_db, halden, ("confidential",))
+    assert confidential  # the drive export has both
+    assert restricted
+    assert set(provider.texts) == allowed
+    assert not set(provider.texts) & restricted

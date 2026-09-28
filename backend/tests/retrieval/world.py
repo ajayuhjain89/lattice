@@ -229,23 +229,29 @@ class Org:
         *,
         deployment: str = "external_api",
         training_opt_out: bool = True,
+        explicit: bool = False,
     ) -> None:
+        """``explicit``: an administrator approved it (``approved_at``), as an
+        ``organization_controlled`` record requires (D-15)."""
         await self.execute(
             "INSERT INTO model_providers (organization_id, purpose, provider, model, deployment, "
-            "approved_for_level, retention_mode, training_opt_out) VALUES (:o, 'embedding', :p, "
-            ":m, :d, :l, 'none', :t) ON CONFLICT (organization_id, purpose, "
-            "provider, model) DO UPDATE SET approved_for_level = EXCLUDED.approved_for_level",
+            "approved_for_level, approved_at, retention_mode, training_opt_out) VALUES (:o, "
+            "'embedding', :p, :m, :d, :l, CASE WHEN :x THEN now() END, 'none', :t) "
+            "ON CONFLICT (organization_id, purpose, provider, model) DO UPDATE SET "
+            "approved_for_level = EXCLUDED.approved_for_level, "
+            "approved_at = EXCLUDED.approved_at",
             o=self.id,
             p=provider,
             m=model or FAKE.model,
             d=deployment,
             l=level,
             t=training_opt_out,
+            x=explicit,
         )
 
     async def settings(self, **columns: str) -> None:
         """Upsert ``org_settings`` columns (external_egress_level,
-        default_query_sensitivity, data_origin)."""
+        default_query_sensitivity, data_origin, organization_controlled_level)."""
         names = sorted(columns)
         await self.execute(
             f"INSERT INTO org_settings (organization_id, {', '.join(names)}) "  # noqa: S608

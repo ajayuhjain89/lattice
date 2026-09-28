@@ -10,11 +10,14 @@ it is an egress decision like embedding a document (``lattice.providers.egress``
   lower it; nothing about the provider or its credential enters the computation;
 * the provider must be **recorded** for this organization (``model_providers``,
   purpose ``embedding``) -- the record ingestion wrote when it embedded documents
-  with it -- with the deployment it actually runs as and acceptable data terms
-  (``provider_unapproved``, ``provider_deployment_mismatch``, ``provider_data_use``);
+  with it -- with a known trust class that is the one it actually runs as, a class the
+  organization allows, and acceptable data terms (``provider_unapproved``,
+  ``deployment_unknown``, ``provider_deployment_mismatch``, ``deployment_not_allowed``,
+  ``provider_data_use``; D-15);
 * the effective sensitivity must be at or below the provider's effective level:
-  ``min(external level, approval)`` for an external provider, the approval alone for a
-  ``local`` one (``query_classification``).
+  ``min(class ceiling, approval)`` -- the external level for ``external_api``, the
+  organization-controlled level for ``organization_controlled``, the approval alone
+  for ``local`` (``query_classification``).
 
 Otherwise nothing is sent (``policy_excluded``). There is no fallback to another
 provider: a question excluded from an external provider is never sent to it, while a

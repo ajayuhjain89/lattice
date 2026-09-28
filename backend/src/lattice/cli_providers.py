@@ -6,9 +6,12 @@
 * ``models verify NAME`` -- re-hash the cached files.
 * ``provider approve`` -- set a recorded provider's ``approved_for_level`` for one
   organization: the explicit administrator action of security-model §6, with a stated
-  reason, logged as an event. It cannot create a record (a provider is recorded when
-  first used) and does not touch the organization's external egress level, which still
-  caps every external provider.
+  reason, logged as an event, and recorded as ``approved_at`` (an
+  ``organization_controlled`` provider needs it, D-15). It cannot create a record (a
+  provider is recorded when first used), cannot change its trust class, and does not
+  touch the organization's ceilings: ``external_egress_level`` still caps every
+  ``external_api`` provider and ``organization_controlled_level`` (unset: not allowed)
+  every ``organization_controlled`` one.
 """
 
 import argparse
@@ -97,7 +100,8 @@ async def approve(args: argparse.Namespace) -> int:
             row = (
                 await s.execute(
                     text(
-                        "UPDATE model_providers SET approved_for_level = :level "
+                        "UPDATE model_providers SET approved_for_level = :level, "
+                        "approved_at = now(), updated_at = now() "
                         "WHERE organization_id = :o AND purpose = 'embedding' "
                         "AND provider = :p AND model = :m "
                         "RETURNING deployment, training_opt_out"
@@ -123,7 +127,14 @@ async def approve(args: argparse.Namespace) -> int:
         approved_for_level=args.level,
         reason=args.reason.strip()[:200],
     )
-    note = "" if row[0] == "local" else " (still capped by the external egress level)"
+    note = {
+        "local": "",
+        "external_api": " (still capped by the organization's external egress level)",
+        "organization_controlled": (
+            " (still capped by the organization's organization_controlled level; "
+            "nothing is sent while that is unset)"
+        ),
+    }.get(row[0], " (unknown deployment class: nothing is sent)")
     print(f"{args.org}: {args.provider}/{args.model} approved for {args.level}{note}")
     if not row[1]:
         print(

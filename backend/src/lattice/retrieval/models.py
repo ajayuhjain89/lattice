@@ -261,7 +261,7 @@ class SemanticOutcome(_Frozen):
     reason: str | None = None
     provider: str | None = None
     model: str | None = None
-    deployment: str | None = None  # external_api | private | local
+    deployment: str | None = None  # local | organization_controlled | external_api
 
     @property
     def degraded(self) -> bool:

@@ -161,5 +161,7 @@ class OrgSettings(Base):
     # customer | synthetic: only synthetic content may reach a provider that may use
     # submitted content (training_opt_out = false; ADR-010).
     data_origin: Mapped[str] = mapped_column(Text, server_default="customer")
+    # D-15: the ceiling for organization_controlled inference; NULL = not allowed.
+    organization_controlled_level: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())

@@ -52,6 +52,7 @@ from lattice.providers.egress import (
     effective_level,
     may_send,
     provider_decision,
+    trust_class,
 )
 from lattice.providers.embedding import EmbeddingError, EmbeddingProvider
 from lattice.sources.config import SourceConfig
@@ -346,7 +347,8 @@ class Syncer:
             if self.provider is None:
                 self.level = effective_level(org.external_egress_level, DEFAULT_LEVEL)
             else:
-                if not self.options.dry_run:
+                # An unknown trust class is never recorded: nothing is sent (D-15).
+                if not self.options.dry_run and trust_class(self.provider.deployment) != "unknown":
                     await store.register_provider(
                         s,
                         self.org,
