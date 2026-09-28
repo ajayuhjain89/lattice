@@ -187,6 +187,48 @@ def verify(spec: LocalModelSpec, root: Path) -> Path:
     return directory
 
 
+def _download(
+    client: httpx.Client,
+    url: str,
+    name: str,
+    partial: Path,
+    expected: ModelFile,
+    progress: Callable[[str, int, int], None] | None,
+) -> None:
+    """Append to ``partial`` from where it stopped (HTTP Range), re-hashing what is
+    already there. A server that ignores the range gets a clean restart."""
+    digest = hashlib.sha256()
+    have = partial.stat().st_size if partial.is_file() else 0
+    if have > expected.size:
+        partial.unlink()
+        have = 0
+    if have:
+        with partial.open("rb") as existing:
+            for block in iter(lambda: existing.read(1 << 20), b""):
+                digest.update(block)
+    headers = {"Range": f"bytes={have}-"} if have else {}
+    with client.stream("GET", url, headers=headers) as response:
+        if response.status_code == 200 and have:
+            digest, have = hashlib.sha256(), 0  # range ignored: start over
+        elif response.status_code not in (200, 206):
+            raise LocalModelUnavailable(
+                "local_model_missing", f"download of {name} failed (HTTP {response.status_code})"
+            )
+        with partial.open("ab" if have else "wb") as out:
+            written = have
+            for block in response.iter_bytes():
+                out.write(block)
+                digest.update(block)
+                written += len(block)
+                if progress is not None:
+                    progress(name, written, expected.size)
+    if written != expected.size or digest.hexdigest() != expected.sha256:
+        partial.unlink(missing_ok=True)
+        raise LocalModelUnavailable(
+            "local_model_corrupt", f"{name} does not match its pinned size/SHA-256"
+        )
+
+
 def fetch(
     spec: LocalModelSpec,
     root: Path,
@@ -194,11 +236,14 @@ def fetch(
     base_url: str = HF_BASE_URL,
     transport: httpx.BaseTransport | None = None,
     progress: Callable[[str, int, int], None] | None = None,
+    attempts: int = 5,
 ) -> Path:
     """Download the pinned files into the cache (explicit operator action only).
-    Files already present and verified are skipped. A file is written to a temporary
-    name, verified, then renamed: an interrupted or tampered download never becomes
-    a cache entry."""
+    Files already present and verified are skipped. A file is written to a
+    ``.partial`` name, verified against its pinned size and SHA-256, then renamed: an
+    interrupted or tampered download never becomes a cache entry. An interrupted
+    transfer resumes where it stopped (up to ``attempts`` times per file; running the
+    command again resumes too)."""
     directory = spec.path(root)
     with httpx.Client(
         base_url=base_url, transport=transport, follow_redirects=True, timeout=60.0
@@ -213,25 +258,16 @@ def fetch(
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
             partial = target.with_name(target.name + ".partial")
-            digest = hashlib.sha256()
-            written = 0
             url = f"/{spec.repository}/resolve/{spec.revision}/{name}"
-            with client.stream("GET", url) as response, partial.open("wb") as out:
-                if response.status_code != 200:
-                    raise LocalModelUnavailable(
-                        "local_model_missing",
-                        f"download of {name} failed (HTTP {response.status_code})",
-                    )
-                for block in response.iter_bytes(1 << 20):
-                    out.write(block)
-                    digest.update(block)
-                    written += len(block)
-                    if progress is not None:
-                        progress(name, written, expected.size)
-            if written != expected.size or digest.hexdigest() != expected.sha256:
-                partial.unlink(missing_ok=True)
-                raise LocalModelUnavailable(
-                    "local_model_corrupt", f"{name} does not match its pinned size/SHA-256"
-                )
+            for attempt in range(1, attempts + 1):
+                try:
+                    _download(client, url, name, partial, expected, progress)
+                    break
+                except httpx.HTTPError:
+                    if attempt == attempts:
+                        raise LocalModelUnavailable(
+                            "local_model_missing",
+                            f"download of {name} was interrupted; run the command again to resume",
+                        ) from None
             os.replace(partial, target)
     return verify(spec, root)

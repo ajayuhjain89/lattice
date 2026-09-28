@@ -9,7 +9,7 @@ enforced, not assumed: sockets and HTTP clients raise for the whole embedding ca
 import hashlib
 import math
 import socket
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -298,6 +298,52 @@ def test_a_tampered_download_never_becomes_a_cache_entry(tmp_path: Path) -> None
     leftovers = [p.name for p in TINY.path(tmp_path).iterdir()]
     assert "tokenizer.json" not in leftovers
     assert not any(name.endswith(".partial") for name in leftovers)
+
+
+def test_an_interrupted_download_resumes_where_it_stopped(tmp_path: Path) -> None:
+    files = {name: (FIXTURE / name).read_bytes() for name in TINY.files}
+    model = files["model.onnx"]
+    cut = len(model) // 3
+    requests: list[tuple[str, str | None]] = []
+    drops = {"model.onnx": 1}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        name = request.url.path.split(f"/resolve/{TINY.revision}/", 1)[1]
+        requests.append((name, request.headers.get("range")))
+        data = files[name]
+        if drops.get(name):
+            drops[name] -= 1
+
+            def broken() -> Iterator[bytes]:
+                yield data[:cut]
+                raise httpx.RemoteProtocolError("peer closed connection")
+
+            return httpx.Response(200, content=broken())
+        start = int(request.headers["range"][6:-1]) if "range" in request.headers else 0
+        return httpx.Response(206 if start else 200, content=data[start:])
+
+    fetch(TINY, tmp_path, transport=httpx.MockTransport(handler))
+    assert ("model.onnx", f"bytes={cut}-") in requests  # resumed, not restarted
+    verify(TINY, tmp_path)
+
+
+def test_a_server_ignoring_the_range_restarts_cleanly(tmp_path: Path) -> None:
+    files = {name: (FIXTURE / name).read_bytes() for name in TINY.files}
+    directory = TINY.path(tmp_path)
+    directory.mkdir(parents=True)
+    (directory / "model.onnx.partial").write_bytes(files["model.onnx"][:1000])
+    fetch(TINY, tmp_path, transport=_hub(files, []))  # always 200, full body
+    verify(TINY, tmp_path)
+
+
+def test_a_download_that_keeps_failing_is_a_typed_error(tmp_path: Path) -> None:
+    def down(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("unreachable")
+
+    with pytest.raises(LocalModelUnavailable) as err:
+        fetch(TINY, tmp_path, transport=httpx.MockTransport(down), attempts=2)
+    assert err.value.code == "local_model_missing"
+    assert "resume" in str(err.value)
 
 
 # --- the factory ------------------------------------------------------------------------
