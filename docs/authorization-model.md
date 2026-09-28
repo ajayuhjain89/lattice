@@ -5,7 +5,9 @@ account-visibility rules of §9 are **implemented in Phase 2** (`backend/src/lat
 migration 0003) and proven by the suites listed in §6; enforcement points E3 and E4
 exist as library functions that retrieval (Phase 5) and answering (Phase 6) will call.
 Phase 3 added decision D-8 (structured account metadata, §6 and §9, policy version
-`authz-2`) and D-9 (a stable key for access groups, migration 0004).
+`authz-2`) and D-9 (a stable key for access groups, migration 0004). **Phase 5** wired
+E3 into every retrieval statement, E4 around retrieval, and E5 into the evidence lookup
+(`lattice.retrieval`); the policy itself is unchanged (`authz-2`).
 Related: `data-model.md` §2–5, `security-model.md`, ADR-003, ADR-005.
 
 ---
@@ -171,6 +173,12 @@ Mapping to the scenarios in the brief:
 | E6 | Trace reads | Trace references re-authorized against the *viewer's* current context | Debug tools can't bypass access |
 | E7 | Admin routes | `is_admin` capability | Management actions |
 
+As built (Phase 5): E3 is in the exact, lexical and semantic statements and the
+evidence lookup by chunk ID (E5's first user), each with explicit tenant and lifecycle
+conditions and the structured account joined through `visible_accounts_predicate`
+(`retrieval-design.md` §3.1). E4 runs over every document any channel returned, before
+fusion, and again over the evidence, in the request's snapshot.
+
 E3 is the control; E4 is a tripwire that proves E3 in production. E4 never *filters*:
 if it removes something, E3 was wrong and the request fails loudly. Context
 resolution, retrieval and E4 run in one `REPEATABLE READ` read-only snapshot, so a
@@ -333,7 +341,9 @@ source name, author, account, date, count, or existence. Concretely:
   (`evals/golden/ai_egress.yaml` `egress-acme-commitments-grace`,
   `account_visibility.yaml` `visibility-commitments-maya`), plus Priya and Daniel.
 
-Assertions (automated, `tests/security/test_critical_acme.py`):
+Assertions (automated; the retrieval half -- 1, the retrieval part of 3, and 5 -- is
+`backend/tests/retrieval/golden/test_critical_acme.py` since Phase 5; the payload,
+response, trace and 404 halves arrive with Phase 6):
 
 1. For User 1, Doc B's chunk IDs are absent from lexical candidates, semantic
    candidates, fused list, selected context, and the recorded provider payload.

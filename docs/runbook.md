@@ -1,6 +1,6 @@
 # Lattice — Operational Runbook
 
-Status: §1 is implemented (Phases 1–2). Everything else is **planned** unless marked
+Status: §1 is implemented (Phases 1–2); §3 (embedding) Phase 4; §4 (retrieval) Phase 5. Everything else is **planned** unless marked
 otherwise; each section is
 marked with the phase that makes it real; sections are rewritten against the actual system
 when that phase lands. Do not follow planned procedures on a live system.
@@ -75,3 +75,17 @@ For each configured provider, record: provider, endpoint, model, deployment
 opt-out status, data-retention mode (standard / zero-retention), region, key owner,
 rotation date. Raising an approved level or the org's external egress level requires
 a recorded reason and produces an audit event. Admins see this on the Sources/Settings page.
+
+## 4. Retrieval and its evaluation — *implemented (Phase 5)*
+
+| Situation | Action |
+| --------- | ------ |
+| See what a member would retrieve | From `backend/`: `uv run --env-file ../.env lattice search --org halden --as <email> "<question>"` (`--account KEY`, `--source-type doc\|ticket\|chat`, `--classification`, `--embedding none\|fake\|openai`, `--text`, `--pool`, `--json`). Development/test only; it acts as that member through RLS |
+| Measure retrieval | `make sync` then `make eval` (fake embeddings; `EMBEDDING=none` for exact + lexical only). Prints overall recall and the security counts; writes `evals/reports/<timestamp>/report.{json,md}` (per category, per persona, misses and where they were lost). Exit 1 if any security count is above 0 |
+| Real-provider quality evaluation (the Recall@10 gate) | Put `LATTICE_OPENAI_API_KEY` in the environment or the git-ignored `.env` (never in chat, source config or commits). Then `make sync EMBEDDING=openai` for a fresh corpus, or for an existing one `lattice reindex --org <org> --sources ../data/synthetic/<org>/sources.yaml --reembed --embedding openai` per organization; then `make eval EMBEDDING=openai`. Only `internal` chunks are sent (1,289 chunks, about 71k tokens for both organizations, about $0.0015); the query side sends each question once. Check the report's corpus-embedding line shows `embedded/text-embedding-3-small` |
+| An evaluation reports a security violation | Treat as an incident in retrieval: the report names the item, stage and record. Reproduce with `lattice search`, then the SQL of that channel (`tests/retrieval/test_sql_structure.py` and `golden/test_sql_capture.py` show how to inspect it). Never "fix" by filtering results |
+| `semantic: policy_excluded (provider_unapproved)` | The provider has no `model_providers` record for the organization: nothing was sent. Sync with that provider first (it records it, approved for `internal`) |
+| `semantic: policy_excluded (query_classification)` | The question was declared above the effective egress level; working as designed |
+| `semantic: incompatible_space` | `dimensions`: the provider's vector size is not the column's (1024). `model_ambiguous`: two providers are recorded under one model name; remove the stale record |
+| `semantic: provider_failed (...)` | Provider outage, timeout (5 s), rejection or malformed vectors; exact and lexical results were still returned. Check the provider, then the key |
+| Changing retrieval tunables | `RetrievalConfig` in `lattice/retrieval/models.py`; bump `version`, run `make eval` before and after, and record the change and its per-category effect in `docs/evaluation-plan.md` §9 (regression rule §7) |

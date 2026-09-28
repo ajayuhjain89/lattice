@@ -1,7 +1,10 @@
 # Lattice — Retrieval, Ranking, Generation & Citations
 
-Status: Foundation draft (Phase 0).
-Related: `authorization-model.md`, `data-model.md` §6, ADR-003, ADR-004, ADR-006.
+Status: **Part I implemented in Phase 5** (`backend/src/lattice/retrieval/`, evaluated by
+`lattice eval retrieval`; tests in `backend/tests/retrieval/`). Part II is still design
+(Phase 6). Where Phase 5 differs from the Phase 0 draft, the section says so and
+`implementation-plan.md` (Phase 5, as built) lists why.
+Related: `authorization-model.md`, `data-model.md` §6, ADR-003, ADR-004, ADR-006, ADR-008.
 
 Part I covers retrieval and ranking. Part II covers answer generation, citations,
 freshness, conflicts and refusals.
@@ -12,128 +15,270 @@ freshness, conflicts and refusals.
 
 ## 1. Principles
 
-1. Authorization constrains the search itself (SEC-3). Both retrieval paths carry the
-   same compiled predicate. Nothing unreadable is ever materialized in application
-   memory.
-2. Lexical and semantic retrieval are peers. Exact names, ticket IDs, quoted phrases
-   and dates are lexical problems; paraphrase is a semantic problem. Neither alone is
-   acceptable.
-3. Every ranking step is inspectable: each candidate's per-stage rank and score is
-   recorded in the trace.
+1. Authorization constrains the search itself (SEC-3). Every retrieval path -- exact
+   identifier, lexical, semantic, and the evidence lookup by ID -- is one SQL statement
+   carrying the same compiled predicate. Nothing unreadable is ever materialized in
+   application memory; there is no retrieve-then-filter step anywhere.
+2. Lexical and semantic retrieval are peers, and exact identifiers have their own
+   channel. Exact names, ticket IDs and dates are lexical or identifier problems;
+   paraphrase is a semantic problem.
+3. Every ranking step is inspectable: each candidate's per-channel rank and score, its
+   fused score, its rerank features and its final score are in the trace.
 4. Retrieval quality is measured independently of generation (`evaluation-plan.md`).
    A retrieval failure is never "fixed" in the prompt.
-
-## 2. Query analysis (deterministic, no model call)
-
-| Signal | Detection | Use |
-| ------ | --------- | --- |
-| Identifiers | Regex per source config (`HAL-\d+`, `#\d{3,6}`) | Exact-match path against `documents.display_ref` (rank 1 if readable) |
-| Quoted phrases | `"…"` | `phraseto_tsquery` must-match clause in lexical path |
-| Account mentions | Case-insensitive match of `accounts.name`/`aliases` **restricted to accounts inside the member's account scope** (security-model §10) | Soft boost (not a hard filter) + shown to user as "Interpreted: Acme Corp" with one-click scope. Hard filter only if user sets scope. A mention of an account outside the member's scope is treated as plain text (no interpretation, no boost) so the response doesn't confirm the account exists |
-| Ambiguous account | Mention matches ≥ 2 accounts *in the member's scope* ("Acme" → Acme Corp, Acme Health) | If no scope chosen: answer status `ambiguous` with choices drawn only from in-scope accounts |
-| Temporal intent | Keywords: latest, current, now, still, recent, "last month", "since <date>", explicit dates | `recent` → recency feature on; explicit ranges → date filter on `occurred_at` |
-| Scope (from UI) | account, source types, date range | Hard filters **ANDed** with the authz predicate (never a replacement) |
-
-LLM query rewriting is **not** used in the first release: it adds latency, egress and
-a nondeterministic step in front of retrieval. Reconsider if the eval shows recall
-failures that analysis-level fixes can't address.
-
-## 3. The shared filter
+5. One request, one authorization snapshot (`Database.tenant_snapshot`, REPEATABLE READ
+   READ ONLY): the context, account visibility, the egress settings, every channel, the
+   evidence lookup and both tripwire checks see the same permissions.
 
 ```
-WHERE c.organization_id = :org                                  -- plus RLS
-  AND d.id = c.document_id AND d.status = 'active'
-  AND <authz.readable_documents_predicate(ctx)>                 -- authorization-model §4
-  AND <scope filters>                                           -- optional
+lattice.retrieval.retrieve(db, organization_id, membership_id, query, provider)
+  snapshot → AuthorizationContext (authz) → query analysis → visible accounts
+  → scope (narrowing only) → query egress decision → [embed query, concurrently]
+  → exact | lexical | semantic          (one statement each, predicate inside)
+  → E4 tripwire over every candidate    (abort, never filter)
+  → RRF → rerank_v1 → selection → evidence lookup (predicate inside)
+  → E4 tripwire over the evidence → RetrievalResult (evidence, semantic outcome, trace)
 ```
 
-The predicate is an SQLAlchemy expression composed from ctx values; grants are an
-`EXISTS` against `document_grants` with the member's `(membership_id, department_ids,
-group_ids)`.
+Module map: `models` (query, limits, candidate, evidence, trace), `query` (analysis),
+`permitted` (the shared conditions), `exact`, `lexical`, `semantic` (incl. query
+egress), `fusion`, `rerank` (rerank_v1 + selection), `evidence` (hydration), `trace`,
+`service` (orchestration). No HTTP endpoint exists yet (Ask is Phase 6); the developer
+surface is `lattice search` and `lattice eval retrieval`.
 
-## 4. Lexical path (PostgreSQL FTS)
+## 2. Query and query analysis (deterministic, no model call)
 
-- `chunks.tsv` = `setweight(to_tsvector('english', header_title_terms), 'A') ||
-  setweight(to_tsvector('english', text), 'D')` (generated column, GIN index).
-- Query: `websearch_to_tsquery('english', :q)` (supports quotes, `OR`, `-term`) plus
-  phrase clauses; rank with `ts_rank_cd(tsv, query, 32)`.
-- Top `k_lex = 50`.
-- Identifier path: exact `display_ref` match (index on `(organization_id,
-  display_ref)`) → those documents' chunks injected at the top of the lexical list.
-- Decision D-10 (decided; implemented in Phase 4): the stored header terms are the
-  title, heading path and display reference only — **no structured account name or
-  alias**, in `tsv` or in the embedded text. A document-level account term would be
-  shared by every reader, so for a document read through a grant on an out-of-scope
-  account (D-8) a query naming that account would match it through the header alone.
-  Account-derived matching happens at query time instead, from the accounts the reader
-  may see (`visible_accounts_predicate`): an account mention in the question is
-  resolved only among visible accounts, and the account-match rerank feature compares
-  `documents.account_id` with those. Golden item `visibility-kestrel-latest-maya` pins
-  the behaviour (Phase 5).
-- Known weakness: the `english` stemmer can conflate proper nouns/product names.
-  First mitigation if the eval shows it: add a second `simple`-config tsvector for
-  titles/headers. Not added speculatively.
+**The query** (`RetrievalQuery`) carries only: `text` (1-2,000 characters, the API boundary's limit, trust-boundaries B2), an optional
+`scope` (`account` key, `source_types` ⊆ {doc, ticket, chat}, `since`/`until` dates),
+`limit` (1-20, default 10) and `classification` (the question's own sensitivity for the
+AI egress policy, §5; default `internal`). Unknown fields are rejected, so no
+organization, membership, clearance, role, department, group, grant or assignment can
+be supplied; all of those come from the server-side session and the database. Scope
+filters are ANDed with the predicate, so they only narrow.
 
-## 5. Semantic path (pgvector)
+| Signal | As built | Use |
+| ------ | -------- | --- |
+| Normalization | NFC; control characters become spaces; invisible format characters (zero-width) removed; whitespace collapsed. Case, punctuation and hyphenation kept | The text searched |
+| Identifiers | `[A-Za-z][A-Za-z0-9]{1,15}(-[0-9]+)+`, not glued to other word characters; upper-cased; at most 5 (`HAL-4821`, `RFC-2026-17`, `INC-2026-031`) | Exact channel against `documents.display_ref`; also a phrase bonus in lexical ranking. Taken from the question only, never from retrieved text |
+| Account mentions | Whole-phrase, case-insensitive match of `accounts.name`/`aliases` **among the accounts `visible_accounts_predicate` returns for the reader** | A matched term in lexical ranking and the `account_match` rerank feature; returned as `account_mentions` for Phase 6 (≥ 2 = ambiguous). A hidden account named in the question is plain text: no interpretation, no boost, no choice |
+| Temporal intent | Words: latest, current(ly), now, still, recent(ly), newest, today, this/last week/month | Turns on the recency feature |
+| Scope | `account` must be a visible account (a hidden or unknown key is refused identically, `validation_failed` / `scope.account: unknown_account`); source types map to document kinds; dates to `coalesce(chunk.occurred_at, document.source_updated_at)` | Hard filters ANDed with the predicate |
 
-- Query embedding via `EmbeddingProvider.embed([q], purpose="query")`, issued
-  concurrently with the lexical query.
-- `ORDER BY c.embedding <=> :qvec LIMIT k_sem` (cosine), `k_sem = 50`, with the shared
-  filter and `c.embedding IS NOT NULL`.
-- **Index strategy:** exact scan (no ANN index) while per-org chunk count is small —
-  the filter narrows rows first, recall is perfect, and at ≤ ~100k chunks per org the
-  scan is a few tens of ms. When measurement shows p95 > 150 ms: add HNSW and enable
-  pgvector's iterative index scans (`hnsw.iterative_scan = relaxed_order`), so
-  selective authorization filters don't starve results. Either way the filter is in
-  the same statement; the ANN index can reduce *recall* under selective filters but
-  can never return rows the predicate excludes.
+Not built (not needed by the golden set; recorded, not speculative): quoted-phrase
+must-match clauses and in-text date parsing ("last month" as a filter). LLM query
+rewriting, expansion and HyDE are not used.
 
-## 6. Fusion and reranking
+## 3. The shared conditions and the exact channel
 
-**Fusion:** Reciprocal Rank Fusion, `score = Σ 1/(60 + rank_i)` over the lexical and
-semantic lists (and the identifier list). Rank-based, so no fragile score
-normalization between `ts_rank_cd` and cosine distance. Top 40 fused candidates go to
-reranking.
+### 3.1 Shared conditions (`retrieval.permitted`)
 
-**Reranker v1 (deterministic, versioned `rerank_v1`):**
+Every statement's WHERE clause contains, in this order:
 
 ```
-final = rrf_score
-      × (1 + 0.15 · account_match)          # doc account = mentioned/scoped account
-      × (1 + 0.10 · authority_weight)       # system_of_record 1, working 0.5, conversational 0
-      × (1 + 0.20 · recency · temporal_intent)   # recency = exp(-age_days / 60), only if query has temporal intent
-      × (1 + 0.50 · identifier_match)
+chunks.organization_id = :org AND documents.organization_id = :org     -- tenant
+AND documents.status = 'active'                                        -- lifecycle
+AND <authz.readable_documents_predicate(ctx, documents)>               -- authorization
+AND <scope filters>                                                    -- optional, narrowing
 ```
 
-Weights are initial guesses, tuned against the golden set and recorded in the trace
-(`features`, `final`). The reranker is behind a `Reranker` Protocol so a
-cross-encoder or model reranker can be swapped in **if** evaluation shows candidate
-recall is good but ordering is poor (the signature of a reranker problem).
+joined as `chunks ⋈ documents ON (id, organization_id)` and
+`LEFT JOIN accounts AS visible_account ON id = documents.account_id AND
+<authz.visible_accounts_predicate(ctx, visible_account)>`. The structured account of a
+candidate is therefore present only when the reader may see it (D-8); a hidden account
+never reaches Python, so it cannot be displayed, boosted on or matched (D-10).
+`deleted` and `quarantined` documents are never searchable. Row-level security is the
+second, independent layer (E2).
 
-## 7. Context selection
+The retrieval package never names an access column or table: the authz boundary test
+scans it (and fails on, e.g., `Document.sensitivity == "internal"` in a retriever).
+`tests/retrieval/test_sql_structure.py` proves each statement's WHERE clause contains
+this reader's predicate (structural comparison, and verbatim in the compiled SQL), the
+tenant and lifecycle conditions; `test_retrieval_property.py` runs every statement with
+RLS bypassed over two tenants and finds only the reader's readable rows.
 
-From reranked candidates, select evidence for generation:
+### 3.2 Exact identifier channel (`retrieval.exact`)
 
-1. Drop duplicates by chunk `content_hash` (Slack cross-posts, quoted replies).
-2. At most 3 chunks per document; prefer adjacent chunks as one block.
-3. Guarantee coverage for conflict detection: if the top candidates contain ≥ 2
-   documents about the same account and topic with different `occurred_at` months,
-   keep the newest and the highest-authority ones even if slightly lower ranked
-   (simple rule; measured by the conflict slice of the golden set).
-4. Budget: ≤ 12 chunks, ≤ ~6,000 tokens.
-5. Egress policy (a data-egress control, not authorization — security-model §6):
-   remove chunks above the effective external egress level (default `internal`)
-   from the *prompt* only. They remain in the user's evidence list marked "Not used
-   to draft this answer", and drive the egress notice. If no relevant chunk remains
-   for the prompt, skip generation → `evidence_only`.
-6. Relevance floor: if no candidate has a lexical match, an identifier match, or a
-   semantic similarity above a calibrated threshold, skip generation →
-   `insufficient_evidence` (§11). The threshold is calibrated on the golden set's
-   insufficient-evidence items; the model can still return `insufficient_evidence`
-   when weak candidates pass the floor.
-7. E4 tripwire: re-verify every selected chunk with the reference policy.
+`documents.display_ref = ANY(:identifiers)` (the source's human reference, e.g. a ticket
+ID), through the `(organization_id, display_ref)` index, plus the shared conditions.
+All chunks of a matched document are candidates (header first, then comments in
+order), at most `k_exact = 50`. Score 1.0 (rank-based fusion ignores it). A matched
+chunk gets `identifier_match = 1` in rerank_v1. Halden and Veridian deliberately share
+ticket IDs; the conditions keep each tenant's lookup inside the tenant.
 
-Each selected chunk becomes an `EvidenceChunk` with a request-local handle `E1…En`.
+As built vs draft: the draft said "injected at the top of the lexical list" in one
+place and "the identifier list" of RRF in another. It is a separate RRF list (ADR-004)
+with the identifier boost.
+
+## 4. Lexical channel (`retrieval.lexical`, PostgreSQL FTS)
+
+`chunks.tsv` (Phase 4): title + heading path (weight A, `english`), the display
+reference (weight A, `simple`), text (weight D, `english`). **No structured account
+name or alias** (D-10). GIN index `ix_chunks_tsv`.
+
+As built (Phase 5 evaluation, `evaluation-plan.md` §9):
+
+- **Match** any of the question's lexemes: the question is parsed by PostgreSQL in the
+  index's configuration (`to_tsvector`), its lexemes quoted and OR-ed into one tsquery
+  (no syntax can be injected). The draft's `websearch_to_tsquery` requires *every*
+  term; on the golden set it returned no lexical candidate for 63 of 89 natural-language
+  questions (baseline R@10 0.418 → 0.495 after this change alone).
+- **Rank** by coverage: the number of distinct question lexemes the chunk contains,
+  plus `ts_rank_cd(tsv, query, 32)` (in [0, 1), so it only breaks ties); +1 per
+  question identifier found as a phrase (`phraseto_tsquery`: "HAL-4821" is the lexemes
+  `hal` and `-4821`, and `hal` is in every ticket); +1 when the document's account is a
+  **visible** account the question names -- the query-time, per-reader account matching
+  D-10 prescribes (documents of that account also match on that term alone).
+- Top `k_lexical = 50`; ties by `(external_id, ordinal, id)` -- identical across
+  databases, unlike IDs derived from random source IDs.
+
+Known weakness (unchanged): the `english` stemmer may conflate product names; the
+`simple` title vector is still the first mitigation if the eval shows it.
+
+## 5. Semantic channel (`retrieval.semantic`, pgvector)
+
+**Query egress.** The question can itself carry confidential information, so embedding
+it is an egress decision (security-model §6, as revised in Phase 5). Before any call:
+the provider must have a `model_providers` record for the organization (purpose
+`embedding`) -- written when ingestion embedded documents with it; otherwise nothing is
+sent (`policy_excluded` / `provider_unapproved`). The effective level is
+`min(org_settings.external_egress_level, approved_for_level)` and the query's declared
+`classification` must be at or below it; otherwise nothing is sent (`policy_excluded` /
+`query_classification`). The declaration can only make egress stricter. The provider
+receives the normalized question only, through `EmbeddingProvider.embed([q],
+purpose="query")` (the adapter maps the purpose; OpenAI ignores it, Voyage would use
+`input_type`), with a 5-second timeout.
+
+**Embedding space.** Vectors are compared only within one space: the provider's
+`model` (`chunks.embedding_model = :model`), its dimensions (the column's 1024; a
+provider of another size is `incompatible_space` / `dimensions`), and its identity (if
+two recorded providers share one model name, the space cannot be told apart:
+`incompatible_space` / `model_ambiguous`). Several spaces can coexist during a
+re-embed (a failed `reindex --reembed` keeps the previous model's vectors); only the
+query's own space is searched.
+
+**Validity.** `embedding_status = 'embedded' AND embedding IS NOT NULL AND
+embedding_model = :model` plus the shared conditions: failed, pending,
+policy-excluded and cleared vectors never participate; Phase 4 guarantees a stored
+vector belongs to its chunk's current input.
+
+**Search.** `ORDER BY embedding <=> :q` (cosine), `k_semantic = 50`, exact scan (no ANN
+index; §7.6), score `1 - distance`.
+
+**Degradation.** Any failure yields a `SemanticOutcome` and zero semantic candidates;
+exact and lexical still run and return permitted evidence. Outcomes are distinct:
+`matched`, `no_matches`, `policy_excluded`, `provider_failed` (`embedding_failed:
+timeout | provider_error | rejected | unauthorized | rate_limited | malformed_response |
+wrong_dimensions`), `not_configured`, `incompatible_space`. Codes only, never provider
+text. The request never fails because semantic retrieval could not run.
+
+## 6. Fusion and rerank_v1
+
+**Fusion** (`retrieval.fusion`): Reciprocal Rank Fusion, `rrf = Σ 1/(60 + rank)` over
+the exact, lexical and semantic lists. A chunk found by several channels is one
+candidate with its per-channel ranks and scores (`matched_by`). Identity is
+`(organization_id, chunk_id)`: two tenants' rows are never merged. Order: fused score,
+best channel rank, stable key, ID (total, deterministic). Top `fused_pool = 40`.
+
+**rerank_v1** (`retrieval.rerank`, deterministic, versioned):
+
+```
+final = rrf
+      * (1 + 0.15 * account_match)      # the chunk's *visible* account is mentioned or scoped
+      * (1 + 0.10 * authority_weight)   # system_of_record 1, working 0.5, conversational 0
+      * (1 + 0.20 * recency * temporal_intent)   # recency = exp(-age_days / 60)
+      * (1 + 0.50 * identifier_match)   # found by the exact channel
+```
+
+Every factor is bounded (combined at most about 2.3 times), so the reranker reorders
+and never removes. **Recency is not truth** (it applies only to questions asking for
+the current state; older evidence stays in the list) and **authority is not truth** (a
+decision record ranks above a chat message about the same thing; both stay). Only
+explicit supersession metadata may settle a disagreement, and that is Phase 6's job
+(§10). Recency uses `now` passed by the caller (the evaluation uses the dataset's
+27 September 2026).
+
+## 7. Selection, evidence, tripwire, trace, limits
+
+### 7.1 Selection
+
+The retrieval part of the draft's context selection: walk the reranked
+list; identical chunk text (same organization and content hash -- in this corpus, the
+boilerplate comments of bulk tickets) is kept once; at most 3 chunks per document come
+first, and chunks that cap held back fill any remaining positions (deferred, not
+dropped); stop at `limit` (≤ 20). The prompt-side steps of the draft -- egress split,
+the ≤ 12-chunk / 6k-token budget, the relevance floor and conflict-coverage rule -- are
+Phase 6 (they decide what reaches the model, not what is permitted evidence).
+
+### 7.2 Evidence
+
+**Evidence** (`Evidence`, what Phase 6 consumes; only what the reader may receive):
+chunk and document IDs, source type and kind, source name, title, display reference,
+URI, heading path, source anchors, ordinal, text and its offsets, author, the chunk's
+time and the document's created/updated times, version, authority, the account
+**only when visible** (no substitute), supersession links **between readable documents
+only** (`supersedes_document_id`, `superseded_by_document_ids`; an unreadable successor
+is not mentioned), `matched_by`, per-channel ranks, RRF and final scores, features. No
+sensitivity, access mode, departments, groups, grants or other tenants' identifiers.
+The lookup by chunk ID carries the shared conditions (E5); a selected chunk that does
+not come back aborts the request.
+
+### 7.3 E4 tripwire
+
+`authz.assert_all_readable` runs over every document any channel
+returned (before fusion) and again over the evidence, in the same snapshot. One
+unreadable or foreign document aborts the request (`security_invariant_violated`,
+one `security.invariant_violated` log event with IDs and counts only). It never
+filters.
+
+### 7.4 Trace
+
+`RetrievalTrace`, returned with the result (persisted from Phase 6):
+request ID, organization and membership IDs, policy version, config version
+(`retrieval-6`) and rerank version, RRF k, limits, embedding provider/model, semantic
+status and reason, `degraded`, counts (exact, lexical, semantic, merged, reranked,
+final), stage timings, per-stage candidates (chunk ID, rank, score; ≤ 50 each) and the
+reranked pool with features. No question, text, titles, account or source names; every
+ID and count concerns permitted rows only, so the trace cannot reveal that unreadable
+matches exist (tested by comparing results with and without such a document). The log
+line `retrieval.completed` carries IDs, versions, codes, counts and the duration.
+
+### 7.5 Limits
+
+`RetrievalConfig`, recorded in the trace: question ≤ 2,000 characters;
+≤ 5 identifiers; ≤ 50 candidates per channel; fused pool 40; ≤ 3 chunks per document
+first; ≤ 20 evidence chunks; query embedding timeout 5 s. Validation errors never echo
+the submitted value.
+
+### 7.6 Query plans and indexes (reviewed in Phase 5)
+
+`EXPLAIN (ANALYZE, BUFFERS)` of each statement exactly as sent, as `lattice_app`, on the
+synced dev corpus (Halden: 1,110 chunks; both organizations 1,325), for Maya and Priya:
+
+| Statement | Plan | Time |
+| --------- | ---- | ---: |
+| Exact (`HAL-4821`) | Index scan `ix_documents_organization_id_display_ref` → chunks by `uq_chunks_document_id_ordinal` | 0.14 ms |
+| Lexical, broad question (772 of 1,325 chunks match) | Seq scan on chunks (tenant filter) → documents by `uq_documents_organization_id_id`; top-N heapsort | 4.2 ms |
+| Lexical, selective ("refund window", 38 match) | Seq scan (or tenant index when seq scans are disabled); the GIN index is usable for the same tsquery form in isolation (`Bitmap Index Scan on ix_chunks_tsv`) -- the planner costs the tenant path cheaper at this size | 1.2 ms |
+| Semantic | Exact scan: documents filtered by the predicate, hash-joined to chunks, top-N heapsort on `<=>` | 6.8 ms |
+| Evidence (10 chunks) | Index scans on `uq_chunks_organization_id_id`, documents, sources, accounts | < 1 ms |
+
+In every plan the authorization EXISTS over `document_grants` is evaluated once as a
+hashed subplan (not per row), and tenant conditions appear as index conditions.
+
+Decisions: **no new index and no migration.** The draft's `(organization_id,
+display_ref)` index serves the exact channel; the GIN index exists; no ANN index while
+per-organization chunk counts are small (§5 threshold: p95 > 150 ms).
+Watch-point at scale: the lexical tsquery is built inside the statement (an InitPlan),
+so the planner estimates its selectivity generically; if large corpora pick poor
+plans, build it in a separate round trip and bind it as a constant.
+
+### 7.7 Measured quality (Phase 5)
+
+`evaluation-plan.md` §9 has the full results. With the deterministic fake embedding
+provider: R@10 = 0.512 (0.668 with exact + lexical alone -- the fake provider is noise,
+not a semantic model). **The Recall@10 ≥ 0.90 target has not been evaluated with the
+real provider** (no `LATTICE_OPENAI_API_KEY` was available): real semantic quality is
+blocked, not claimed. Unauthorized, cross-organization and hidden-account results: 0.
 
 ---
 

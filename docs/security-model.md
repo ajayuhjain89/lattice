@@ -4,7 +4,9 @@ Status: Foundation draft (Phase 0). Implemented so far: §3–5 (Phase 1) and th
 authorization controls behind SEC-3, SEC-4, SEC-5 (explanations), SEC-14 (account
 visibility, including D-8 structured account metadata) and SEC-15 at the policy layer
 (Phase 2); see §9 for which suites exist. The Phase 3 synthetic dataset places 19
-canaries for the canary suites (`data/synthetic/canaries.yaml`).
+canaries for the canary suites (`data/synthetic/canaries.yaml`). Phase 4 implemented
+the embedding side of §6; **Phase 5** implemented E3 in every retrieval path (SEC-3),
+the query side of §6 (revised below), and the retrieval suites of §9.
 Related: `authorization-model.md`, `trust-boundaries.md`, `threat-model.md`.
 
 ---
@@ -44,9 +46,10 @@ Related: `authorization-model.md`, `trust-boundaries.md`, `threat-model.md`.
 Removing any single layer must not cause a leak in the tested scenarios; removing E3
 must make the test suite fail (mutation check in CI: a test build with the predicate
 replaced by `TRUE` must fail the security suite — proves the tests actually test).
-Phase 2 performed this and eleven other policy mutations by hand; results are in
-`implementation-plan.md` (Phase 2 as built). The automated nightly mutation job
-arrives with retrieval (Phase 5), when there is a retrieval path to mutate.
+Phase 2 performed this and eleven other policy mutations by hand; Phase 5 removed the
+predicate from each retrieval path in turn (and 15 other retrieval defects) -- every
+one is caught; results are in `implementation-plan.md`. An automated nightly mutation
+job is still planned (Phase 11).
 
 ## 3. Organization isolation
 
@@ -126,7 +129,7 @@ Lattice. The provider boundary is governed separately.
 | Call | When | Data sent | Not sent |
 | ---- | ---- | --------- | -------- |
 | Embedding (documents) | Ingestion | Chunk text + contextual header (document kind, title, heading path — D-10: no account name) — only for documents at or below the embedding provider's effective egress level (default: `internal`) | Confidential/restricted content under the default policy; structured account names; internal IDs, display references, access metadata, authors' emails (Phase 4: asserted payload-for-payload with a recording provider) |
-| Embedding (query) | Each Ask | The question text | User identity, org name |
+| Embedding (query) | Each retrieval (Phase 5) whose query the policy allows (below) | The normalized question text, `purpose = query` | User identity, org name, scope, any document content; nothing at all when the policy excludes the query |
 | Generation | Each Ask with evidence | Fixed instructions; the question; selected evidence at or below the effective egress level (default: `internal`; ≤ ~12 chunks, ≤ ~6k tokens) with handle, kind, title, display ref, account name, date, author display name | Evidence above the egress level; UUIDs, user identity/profile, org metadata, authz structures, sensitivity labels, unrelated evidence, secrets |
 
 Note the asymmetry: **the embedding provider eventually receives the entire indexed
@@ -177,9 +180,21 @@ its external model provider.
   recorded in `model_providers` approved for `internal` only. Consequence: under the
   default policy, confidential/restricted documents have keyword-only recall (measured
   separately in evals).
-- **Questions** are user-authored and always sent to the configured providers (query
-  embedding and generation). Lattice cannot classify free text; this is stated in
-  the provider settings page and the privacy documentation.
+- **Questions** (revised in Phase 5; the Phase 0 draft sent every question). The
+  question itself can carry confidential information, so query embedding is an egress
+  decision too. A retrieval request carries a `classification` for its question
+  (`internal` by default -- Lattice cannot classify free text, so the default keeps the
+  approved behaviour for ordinary questions); the caller or the asker may declare it
+  `confidential` or `restricted`. The query is sent only if (1) the provider has a
+  `model_providers` record for the organization (an unrecorded provider was never
+  approved to receive anything) and (2) the declared classification is at or below
+  `min(org external_egress_level, approved_for_level)`. Otherwise nothing is sent and
+  semantic retrieval is `policy_excluded`; exact and lexical retrieval continue. A
+  declaration can only make egress stricter: it never widens what is sent or what may
+  be read. Whether and how the Ask UI lets askers declare it, and whether generation
+  (Phase 6) honours the same declaration for the question in the prompt, are open
+  (implementation-plan §7, D-13). Tested with a recording provider
+  (`backend/tests/retrieval/test_semantic_degradation.py`).
 - Provider configuration records: provider name, endpoint, model, deployment,
   approved level, data-retention mode, training opt-out status. Visible to admins.
 
@@ -239,14 +254,15 @@ evidence (D-5: off/deferred).
 | `tests/security/test_authz_explain.py`, `test_authz_invariant.py`, `test_authz_context.py` ✔ | CI | Explanation semantics; E4 aborts and never filters; context resolution |
 | `tests/security/test_account_metadata.py`, `test_access_group_key.py` ✔ | CI | D-8: structured account metadata only when readable and visible (reference and SQL join form); D-9: group keys never affect access |
 | `tests/dataset/` ✔ | CI | The synthetic dataset and golden set validated against the reference policy; canaries unique and placed; the dataset's access oracle equals the seeded resolver |
-| `tests/security/critical_acme` | CI | The permanent scenario (`authorization-model.md` §10) |
+| `tests/retrieval/golden/test_critical_acme.py` ✔ (retrieval half) | CI | The permanent scenario (`authorization-model.md` §10): Doc B absent from every stage for Maya, retrieved for Grace, revocation on the next request. Payload, response and 404 halves arrive with Phase 6 |
+| `tests/retrieval/` ✔ (Phase 5) | CI | Each statement's WHERE clause structurally contains the reader's predicate, tenant and lifecycle conditions; adversarial strongest-match cases per channel; cross-org identifier collisions; D-8/D-10; query egress and semantic degradation with a recording provider; E4 aborts and never filters; snapshot consistency; no existence oracle (results identical with or without an unreadable match); a 200-world property test, also with RLS bypassed; raw SQL capture (the database returns only permitted rows, retrieval keeps exactly those); all 89 golden items with zero violations |
 | `tests/security/canary` | CI | Recording fake providers capture every payload; canary strings from restricted/confidential docs must never appear for unauthorized personas — in payloads, responses, traces or captured logs |
 | `tests/security/test_authz_revocation.py` ✔ | CI | Each access change type → next check differs, no document rewritten; snapshot consistency |
 | `tests/security/injection` | CI (deterministic parts) + eval harness (real model) | Schema validity, foreign-handle rejection, no instruction following |
 | `tests/security/citations` | CI | Claim-level fail-closed: invalid handle → claim absent; fabricated quote → claim absent; mixed valid/invalid → only validated claims survive (and a claim with one valid + one invalid citation is absent); all material claims invalid → answer withheld (`insufficient_evidence`, reason `claims_unverified`); every rendered citation references an evidence item present in the response and readable by the user |
 | `tests/security/egress` | CI | Default policy: recording provider never receives confidential/restricted chunk text or canaries, for any persona including Leadership; opt-in + approved provider: confidential reaches the provider, restricted still does not; excluded evidence still returned to the authorized user with the egress notice; `evidence_only` when all evidence excluded |
 | `tests/security/operational_metadata` | CI | Every channel in §10 checked for each persona/admin: no inaccessible account names, source names, titles, filenames, URLs, external IDs, counts or statuses |
-| Mutation check | CI nightly | Predicate disabled → suite must fail |
+| Mutation check | By hand per phase (Phase 5: 18 retrieval defects, `implementation-plan.md`); CI nightly job still planned | Predicate disabled → suite must fail |
 
 Release gate: any failure in these suites blocks merge. `unauthorized_context_retrieved`
 in the eval harness must be exactly 0.

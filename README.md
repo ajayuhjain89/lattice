@@ -5,7 +5,7 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–4 are implemented** (Phase 4 awaits review). What runs today: a FastAPI backend with typed
+**Status: Phases 1–5 are implemented** (Phase 5 awaits review). What runs today: a FastAPI backend with typed
 fail-fast configuration, PostgreSQL 16 + pgvector with forced row-level security for
 organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -18,8 +18,11 @@ both against the real authorization policy — and (Phase 4) ingestion: three co
 (Markdown documents, ticket JSON Lines, Slack export), an idempotent, fail-closed sync
 pipeline with source-aware chunking, lexical indexing and embeddings under the AI egress
 policy, a guarded deletion sweep, source disconnect, and administrator grants applied
-as a separate step. There is no retrieval, answering or web UI yet — see the
-[implementation plan](docs/implementation-plan.md).
+as a separate step — and (Phase 5) permission-aware hybrid retrieval: exact
+identifier, full-text and vector search, each with the authorization predicate inside
+its SQL, fused and deterministically reranked into permitted evidence, with a
+retrieval evaluation over the golden set. There is no answering or web UI yet — see
+the [implementation plan](docs/implementation-plan.md).
 
 ## Local setup
 
@@ -77,6 +80,8 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 | `make lint` | `ruff check` + `ruff format --check` |
 | `make dataset-lint` | Validate the synthetic dataset and golden set against the reference policy (no database, no model) |
 | `make sync-dry-run` / `make sync` / `make admin-grants` | Ingest the synthetic organizations ([ingestion design §9](docs/ingestion-design.md) documents `lattice sync`, `reindex`, `source disconnect`, `apply-admin-grants`) |
+| `make eval` | Retrieval metrics and security checks over the golden set, as each persona (after `make sync`; `EMBEDDING=fake\|openai\|none`); reports in `evals/reports/` |
+| `lattice search --org halden --as maya.okafor@halden.example "What did we promise Acme?"` | A member's permitted evidence with per-channel ranks (`--text`, `--pool`, `--json`; development/test only). Run from `backend/` with `uv run --env-file ../.env` |
 | `make dataset-generate` | Regenerate the deterministic bulk distractor tickets after editing authored tickets |
 | `make format` | Apply formatting and safe lint fixes |
 | `make typecheck` | `mypy --strict` over source, tests and migrations |
@@ -87,7 +92,8 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 CI (`.github/workflows/ci.yml`) runs lint, strict type checking, the dataset lint, the
 bootstrap, a migration round-trip on a clean database with a model-drift check, the
 seed (twice), the runtime-role check, a sync of the dataset (twice, the second writing
-nothing), and the test suite against
+nothing), the retrieval evaluation as every persona (fails on any security
+violation), and the test suite against
 `pgvector/pgvector:0.8.1-pg16`.
 
 ## How isolation works (Phase 1)
@@ -129,6 +135,21 @@ are Lattice configuration, applied after ingestion and never touched by a sync.
 Details: [ingestion design](docs/ingestion-design.md),
 [connector design](docs/connector-design.md).
 
+## How retrieval works (Phase 5)
+
+A question becomes the best **permitted** evidence in one consistent authorization
+snapshot. Three channels -- exact identifier (`HAL-4821`), PostgreSQL full-text search
+and pgvector similarity -- each run one SQL statement that contains the tenant
+condition, the lifecycle condition and the authorization predicate, so an unreadable
+row never leaves PostgreSQL, however well it matches. Results are fused with
+reciprocal rank fusion and reordered by a small deterministic reranker (recency and
+source authority are signals, never truth). A tripwire re-checks every candidate with
+the reference policy and aborts the request on any mismatch; it never filters. The
+question is embedded only if the AI egress policy allows it; otherwise, or if the
+provider fails, exact and lexical retrieval still answer. Details:
+[retrieval design, Part I](docs/retrieval-design.md); results:
+[evaluation plan §9](docs/evaluation-plan.md).
+
 ## Repository layout
 
 ```
@@ -136,7 +157,7 @@ backend/            FastAPI app (src/lattice), Alembic migrations, tests
 infra/postgres/     superuser bootstrap: roles, databases, extensions
 data/synthetic/     synthetic organizations: manifests, raw source exports, ground truth
                     (see data/synthetic/README.md)
-evals/golden/       golden question set
+evals/golden/       golden question set (evals/reports/: evaluation output, not committed)
 docs/               product, architecture, security and design documentation
 compose.yaml        local Postgres only
 Makefile            developer commands (thin wrappers; read before running)
@@ -153,7 +174,7 @@ Makefile            developer commands (thin wrappers; read before running)
 | [Trust boundaries](docs/trust-boundaries.md) · [Threat model](docs/threat-model.md) · [Security model](docs/security-model.md) | Security design |
 | [Connector design](docs/connector-design.md) · [Ingestion design](docs/ingestion-design.md) | Getting data in, idempotently and fail-closed |
 | [Retrieval design](docs/retrieval-design.md) | Hybrid retrieval, ranking, generation, citations, freshness, conflicts, refusals |
-| [Evaluation plan](docs/evaluation-plan.md) | Synthetic dataset, golden set, metrics |
+| [Evaluation plan](docs/evaluation-plan.md) | Synthetic dataset, golden set, metrics, retrieval results |
 | [Synthetic dataset](data/synthetic/README.md) | Halden and Veridian: personas, storylines, timeline, access design, canaries, golden set |
 | [Design system](docs/design-system.md) | Reference analysis, tokens, components, states |
 | [Implementation plan](docs/implementation-plan.md) | Phases, traceability, open decisions, as-built notes per phase |

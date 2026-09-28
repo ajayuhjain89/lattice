@@ -8,7 +8,10 @@ Lattice-side configuration that governs them.
 It is written for the engineers who maintain the dataset and states things no product
 user would ever see (who can read what, which record is a trap, where the canaries are).
 
-The Phase 4 connectors ingest these files (`make sync`, README). The dataset lint
+The Phase 4 connectors ingest these files (`make sync`, README), and Phase 5's
+`make eval` (`lattice eval retrieval`) asks every golden question as its persona
+against the ingested corpus, checking every retrieval stage against this dataset's
+access oracle (`docs/evaluation-plan.md` §7, §9). The dataset lint
 (`lattice dataset lint`) validates the data and the golden set against the **real**
 reference authorization policy, and `backend/tests/ingestion/test_ingested_access.py`
 proves ingestion reaches the lint's expected-access decisions for every record and

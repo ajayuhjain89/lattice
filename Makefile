@@ -8,7 +8,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role dataset-lint dataset-generate sync sync-dry-run admin-grants
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role dataset-lint dataset-generate sync sync-dry-run admin-grants eval
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -55,6 +55,9 @@ admin-grants: ## Apply each organization's admin-grants.yaml (decision D-12; aft
 	  (cd backend && uv run --env-file ../.env lattice apply-admin-grants --org $$org \
 	    --grants ../data/synthetic/$$org/admin-grants.yaml) || exit $$?; \
 	done
+
+eval: ## Retrieval metrics over the golden set as each persona (EMBEDDING=fake|openai|none; after `make sync`)
+	$(UV_RUN) lattice eval retrieval --embedding $(EMBEDDING)
 
 dataset-lint: ## Validate the synthetic dataset and golden set (no database, no model)
 	$(UV) lattice dataset lint

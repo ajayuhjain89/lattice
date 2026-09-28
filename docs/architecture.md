@@ -1,8 +1,10 @@
 # Lattice — Architecture
 
 Status: Phase 1 implemented (config, db, errors, logging, identity/sessions, orgs, API
-skeleton, seed CLI); Phase 2 implemented `authz` (no HTTP surface yet). Later-phase
-modules below are still design; the ✔ marks in §3 say which.
+skeleton, seed CLI); Phase 2 implemented `authz` (no HTTP surface yet); Phase 3 the
+dataset tooling; Phase 4 sources, connectors, ingestion and providers; Phase 5
+`retrieval` and the retrieval half of `evals` (CLI only, no HTTP surface yet).
+Later-phase modules below are still design; the ✔ marks in §3 say which.
 Related: `data-model.md`, `authorization-model.md`, `retrieval-design.md`,
 `trust-boundaries.md`, ADRs 001–007.
 
@@ -95,14 +97,14 @@ Package: `backend/src/lattice/`.
 | `ingestion` ✔ | Canonical text and hashing, chunking, fail-closed access mapping, embedding input, persistence (`store`: the one writer of document access columns, source grants and source groups), sync pipeline, deletion sweep, source disconnect (Phase 4) | connectors, sources, providers, db |
 | `providers` ✔ | `EmbeddingProvider` Protocol, fake + recording + OpenAI (Phase 4), AI egress policy; `GenerationProvider` in Phase 6 | config |
 | `admin_grants` ✔ | Applies `admin-grants.yaml` as admin-origin grants after ingestion (D-12) | db |
-| `retrieval`   | Query analysis, lexical + semantic search (with authz predicate), fusion, rerank, context selection | authz, providers, db |
+| `retrieval` ✔ | Query model and analysis; exact, lexical and semantic channels (each one statement with the authz predicate, tenant and lifecycle conditions); query-side AI egress and embedding-space checks; RRF, `rerank_v1`, selection; evidence hydration; E4 tripwire; trace (Phase 5, `retrieval-design.md` Part I) | authz, providers, ingestion (chunk model), orgs, sources, db |
 | `answering`   | Prompt construction, generation, output validation, citation verification, freshness & conflict assembly, refusal logic | retrieval, providers |
 | `tracing`     | Trace records, redaction, re-authorized trace reads                                      | authz, db                   |
 | `api`         | FastAPI app, routers (thin), request dependencies (session → identity → org → authz ctx)  | all service modules         |
-| `evals`       | Golden-set loader, retrieval/generation/security eval runners, reports                    | retrieval, answering        |
-| `cli` ✔ (partial) | `lattice seed`, `lattice check-db-role` now; later `sync`, `search`, `ask`, `eval`   | services                    |
+| `evals` ✔ (retrieval) | Retrieval + security runner over the golden set, reports (Phase 5); generation runner and judges in Phase 6 | retrieval, dataset, (answering) |
+| `cli` ✔ (partial) | `seed`, `check-db-role`, `dataset`, `sync`, `reindex`, `source disconnect`, `apply-admin-grants`, `search` and `eval retrieval` (Phase 5, development/test only: they act as a member); `ask` and `eval answer` later | services                    |
 
-✔ = implemented (Phases 1–2). Alembic migrations live in `backend/alembic/`, outside the
+✔ = implemented (Phases 1–5). Alembic migrations live in `backend/alembic/`, outside the
 package. Boundary rules (enforced by review; the `authz` rule is also enforced
 mechanically since Phase 2):
 
@@ -135,13 +137,18 @@ POST /v1/ask {question, scope?}
     authz context, retrieval and the invariant check see the same permissions)
  4. authz: resolve AuthorizationContext fresh from DB (membership active? clearance,
     account scope, assigned accounts, departments, group memberships)
- 5. retrieval: analyze query (identifiers, quoted phrases, account mentions, temporal intent)
- 6. retrieval: build RetrievalRequest; authz compiles the readable-documents predicate
- 7. retrieval: lexical search  ─┐  both SQL statements include the predicate and
-    retrieval: semantic search ─┘  status='active'; forbidden rows are never returned
- 8. retrieval: reciprocal-rank fusion → deterministic rerank → context selection
- 9. authz: invariant check — every selected chunk re-verified with the Python reference
+ 5. retrieval: analyze query (identifiers, visible-account mentions, temporal intent);
+    scope account must be visible; query egress decision (embed concurrently or not)
+ 6. retrieval: authz compiles the readable-documents predicate into every statement
+ 7. retrieval: exact identifier ─┐  each one SQL statement with the predicate, the
+    retrieval: lexical search    ├  tenant and status='active' conditions; forbidden
+    retrieval: semantic search  ─┘  rows are never returned; semantic may degrade
+ 8. authz: invariant check over every candidate's document (abort, never filter)
+    retrieval: reciprocal-rank fusion → deterministic rerank → selection → evidence
+    lookup (predicate inside)
+ 9. authz: invariant check — every evidence chunk re-verified with the Python reference
     policy. Any mismatch = hard failure (no generation), security event logged.
+    (Steps 5–9 are built in Phase 5: `lattice.retrieval.retrieve`.)
 10. answering: AI egress policy — evidence above the effective external level
     (default: internal only) is kept out of the prompt but stays in the user's
     evidence list; if nothing remains → `evidence_only`, no model call.

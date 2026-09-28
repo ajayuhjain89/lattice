@@ -2,7 +2,10 @@
 
 Status: §2–4 **built in Phase 3**: the dataset is in `data/synthetic/` (its README is the
 maintainer's ground truth) and the golden set in `evals/golden/`; both are validated by
-`lattice dataset lint`. Metrics, judges and runners (§5–7) arrive in Phases 5–6.
+`lattice dataset lint`. **The retrieval and security metrics of §5 and the retrieval
+runner of §7 are built in Phase 5** (`lattice.evals.retrieval`, `lattice eval
+retrieval`; results in §9). Generation metrics, judges and `lattice eval answer` arrive
+in Phase 6.
 Related: `retrieval-design.md`, `security-model.md` §9, `product-brief.md` §8.
 
 Evaluation is built alongside the system: the retrieval harness lands in the same
@@ -215,9 +218,14 @@ Phase 3 total: 89 items; 10 same-question groups; 51 items tagged `security`.
 
 ## 7. Running evals
 
-- `lattice eval retrieval [--category …] [--persona …]` — fast, no generation; runs in
-  CI with the fake embedding provider for security metrics, and locally/nightly with
-  the real embedding provider for quality metrics.
+- `lattice eval retrieval [--embedding fake|openai|none] [--category …] [--persona …]
+  [--item …]` (**built, Phase 5**; `make eval`) — no generation. Runs every selected
+  golden item as its persona: the runtime role (`lattice_app`) through RLS, the
+  persona's context resolved in the request snapshot, the item's scope; retrieval gets
+  the question and nothing else. Development/test only (it acts as members). Needs a
+  synced corpus (`make sync`). CI runs it after the dataset sync with the fake provider
+  and fails on any security metric above 0; quality needs the real provider on a
+  corpus embedded with it (`runbook.md` §4).
 - `lattice eval answer` — full pipeline with the real generation provider + judges;
   run manually/nightly; costs money, reports estimated cost before running.
 - Output: `evals/reports/<timestamp>/report.json` + `report.md` (per-category table,
@@ -226,8 +234,135 @@ Phase 3 total: 89 items; 10 same-question groups; 51 items tagged `security`.
 - Regression rule: a change that lowers any retrieval metric by > 2 points on any
   category, or any security metric above 0, must be justified in the PR.
 
+**Methodology as built (retrieval).** Ground truth never comes from the system under
+test: every chunk ID is mapped back to its dataset record and part anchors by the
+operator role, table by table; readability comes from the dataset oracle (the
+reference policy over the raw fixture metadata, Phase 3). Per item:
+
+- *Targets* = `relevant` ∪ `not_used_for_answer` over the item's egress configurations
+  (which documents retrieval should find does not depend on the egress setting; that
+  decides what may reach a model, Phase 6). A part key (`doc:x#3`, `ticket:T#c3`,
+  `chat:C:ts#msg`) is found by an evidence chunk covering that part; a record key by
+  any chunk of the record; a record key is dropped when the item also names one of its
+  parts. 68 of 89 items have targets; the others (ambiguous, insufficient evidence,
+  refusal, most inaccessible) are scored on security only.
+- *Recall@k* (k = 1, 5, 10, 20) over the first k evidence chunks (the evaluation asks
+  for 20; the first 10 are identical to a 10-chunk request), averaged over items
+  (macro); *MRR* of the first target.
+- *Security*, every stage: the exact, lexical and semantic candidate lists as the
+  database returned them, the fused pool and the evidence -- chunks the oracle says
+  the persona cannot read, other-tenant chunks, `must_not_retrieve` hits, evidence
+  showing an account the oracle says must be hidden (D-8), account mentions of
+  accounts the persona may not see, canary strings of unreadable records.
+- *Misses* in the top 10 are located: never returned by any channel, outside the
+  fused pool, or fused but ranked out (including selection).
+- Also reported: per-category and per-persona blocks, channel contribution (which
+  channels matched each target found), semantic outcomes, same-question groups.
+
 ## 8. Failure analysis as a deliverable
 
 Each eval revision records notable failures and what changed because of them in
 `docs/decisions/` or the eval report (e.g. "stemmer conflated 'Northpeak' → added
 simple-config title vector"). This is the evidence trail for every retrieval change.
+
+## 9. Phase 5 results (retrieval)
+
+Corpus: both organizations synced (Halden 1,110 chunks, Veridian 215; 36 chunks
+policy-excluded from embedding, i.e. lexical-only), admin grants applied. Items: 89
+(68 with targets). `now` = the dataset's 27 September 2026.
+
+### Real-provider evaluation: BLOCKED
+
+No `LATTICE_OPENAI_API_KEY` was available in the environment or the ignored `.env`, so
+the corpus was not embedded with OpenAI `text-embedding-3-small` and **the Recall@10 ≥
+0.90 target has not been evaluated**. Every number below uses the deterministic fake
+provider (a hashed bag of words, for tests) or no semantic channel at all; neither is
+a claim about production semantic quality. Estimated cost of the blocked run: only
+`internal` chunks are sent -- 1,289 of 1,325; the 36 confidential/restricted chunks
+never leave -- about 283,000 characters of embedding input (header + text), ≈ 71,000
+tokens at four characters per token; at $0.02 per 1M tokens, about $0.0015 per full
+embedding, plus about 1,000 tokens for the 89 questions. Procedure: `runbook.md` §4.
+
+### Security (both configurations): all 0
+
+| Metric | Fake provider | Exact + lexical |
+| ------ | ------------: | --------------: |
+| Unauthorized candidates (any stage) | 0 | 0 |
+| Cross-organization candidates | 0 | 0 |
+| `must_not_retrieve` hits | 0 | 0 |
+| Hidden account metadata in evidence (D-8) | 0 | 0 |
+| Account mentions of hidden accounts | 0 | 0 |
+| Canary / `must_not_contain` hits | 0 | 0 |
+| Tripwire aborts | 0 | 0 |
+
+### Changes made, one at a time (fake provider / exact + lexical R@10)
+
+| Config | Change | Cause class it addressed | R@10 fake | R@10 lexical |
+| ------ | ------ | ------------------------ | --------: | -----------: |
+| retrieval-1 | Baseline = the Phase 0 design (`websearch_to_tsquery`, all terms) | -- | 0.418 | n/m |
+| retrieval-2 | Match any of the question's lexemes (ranked by `ts_rank_cd`) | FTS query semantics: 63/89 questions had no lexical candidate | 0.495 | n/m |
+| retrieval-3 | Rank by coverage of distinct question lexemes, `ts_rank_cd` as tie-break | Lexical ranking: frequency beat coverage | 0.505 | 0.641 |
+| retrieval-4 | An identifier in the question also scores as a phrase | Identifier parsing: `hal` is in every ticket | 0.512 | 0.656 |
+| retrieval-5 | A visible account named in the question counts as a matched term (D-10 query-time matching) | Structured accounts are not in the index (D-10) | 0.512 | 0.668 |
+| retrieval-6 | The per-document cap defers instead of dropping | Selection (no measurable effect; kept as correct semantics) | 0.512 | 0.668 |
+
+No golden text was special-cased, no label changed, no item removed, K not changed, no
+authorization weakened. The rerank_v1 weights are the design's, untuned.
+
+### Final (retrieval-6)
+
+| Slice | Items (targets) | R@1 | R@5 | R@10 | R@20 | MRR |
+| ----- | --------------: | --: | --: | ---: | ---: | --: |
+| **Overall, exact + lexical** | 89 (68) | 0.316 | 0.534 | **0.668** | 0.779 | 0.641 |
+| **Overall, + fake semantic** | 89 (68) | 0.238 | 0.440 | **0.512** | 0.685 | 0.515 |
+
+By category (exact + lexical / + fake semantic, R@10): lookup 0.900 / 0.700;
+supersession 0.917 / 0.750; cross_org 0.861 / 0.833; stale 0.619 / 0.667; cross_source
+0.630 / 0.454; prompt_injection 0.625 / 0.250; cross_document 0.563 / 0.479;
+account_visibility 0.563 / 0.313; potential_conflicts 0.542 / 0.542; inaccessible
+(2 items with targets) 0.500 / 0.250; ai_egress 0.486 / 0.181. Ambiguous,
+insufficient_evidence and refusal items have no targets (security only).
+
+Channel contribution (targets found in the top 10, fake run): lexical matched 66,
+semantic 56, exact 7; found by lexical only 4. In the exact + lexical run, 80 of 87
+were found by lexical only and 7 also by exact.
+
+**The fake provider lowers recall** (0.668 → 0.512): its vectors are hashed word
+counts including stop words, and its 50 semantic candidates per query crowd lexical
+matches out of the fused pool. That is the expected behaviour of a test double and the
+reason the quality gate needs the real provider.
+
+### Miss analysis (exact + lexical, top 10: 64 targets missed)
+
+A diagnostic run with the candidate limits raised from 50/40 to 200/200 (not a
+configuration change) left R@10 exactly unchanged at 0.668 and showed that 12 of the
+21 "never returned" targets do match lexically but rank below 50. Pool size is not the
+problem; lexical ordering and vocabulary are.
+
+| Cause | Targets | What it is | Next step |
+| ----- | ------: | ---------- | --------- |
+| No lexical match at all | 9 | Vocabulary mismatch: "What commitments have we made to Acme?" against "expected in October" (HAL-4821#c3) and the decision record's beta/GA dates; "Why was Directory Sync delayed?" against a load-test thread; an exec-channel thread; the SCIM squad's go/no-go thread | The semantic channel's job: re-evaluate with the real provider |
+| Lexical match, ranked out (below 50 in lexical, or fused but below 10) | 52 | Ties between many chunks that share the question's terms: title terms are in every chunk of a document, so long documents whose title shares question words fill the list; a visible account term matches every chunk of that account | Measure with the real provider first (semantic ranks break these ties); candidate changes, one at a time: count title terms once per document; weight the account term below content terms |
+| Outside the fused pool | 3 | Candidate pool (unchanged by a 5× larger pool) | None |
+
+Confidential evidence is lexical-only under the default egress policy (no vectors), so
+when semantic candidates of internal documents are strong, a confidential target can
+fall out of the fused list (seen for Grace's exec-notes question with the fake
+provider). Recorded as a known limitation; the Phase 6 egress notice depends on these
+documents being retrieved, so it is re-measured with the real provider.
+
+Same question, different persona: 10 groups, every persona's evidence permitted (0
+violations); no record one persona retrieved that another may not read ever appears
+for the other; a request by one persona never changes another's result. The top-10
+evidence sets differ between personas in 9 of 10 groups with the fake provider and 7
+of 10 with exact + lexical. Where they coincide, each persona's top 10 holds only
+records both may read -- e.g. the Tern memo ranks below 10 for Arjun (a recall miss,
+not an access difference) -- so the privileged persona's extra evidence is simply not
+among the ten.
+
+### Voyage comparison: not triggered
+
+ADR-008's trigger needs (1) a real-provider evaluation, (2) a material Recall@10 miss,
+(3) misses attributable to semantic/paraphrase retrieval and (4) simple retrieval and
+fusion causes ruled out. (1) is blocked, so no comparison was run and no Voyage code
+was added.

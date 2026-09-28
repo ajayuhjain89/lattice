@@ -2,9 +2,10 @@
 
 Status: Phase 0 approved. Phase 1 approved and closed (after the `lattice_auth`
 hardening below). Phase 2 approved, with decisions D-8 and D-9 (implemented at the start
-of Phase 3). Phase 3 approved and merged to `main`. **Phase 4 implemented** (awaiting
-review, branch `phase/4-ingestion`), with decisions D-10 and D-12 applied and D-11
-recorded for Phase 6.
+of Phase 3). Phase 3 approved and merged to `main`. Phase 4 approved and merged to
+`main` (5e12616), with decisions D-10 and D-12 applied and D-11 recorded for Phase 6.
+**Phase 5 implemented** (awaiting review, branch `phase/5-retrieval`); the real-provider
+quality evaluation is blocked on credentials (below), and D-13 is open.
 
 ---
 
@@ -393,6 +394,70 @@ removed ⇒ suite fails); retrieval metrics baseline recorded (Recall@10 target 
 
 **Non-goals.** HNSW, model reranker, LLM query rewriting.
 
+**Phase 5 as built.** Deliverables: `lattice.retrieval` -- typed query and limits,
+deterministic analysis (normalization, identifiers, temporal intent, visible-account
+mentions), the shared conditions (tenant, lifecycle, `authz.readable_documents_predicate`,
+narrowing scope; account joined only through `visible_accounts_predicate`), the exact,
+lexical and semantic channels (each one statement), query-side AI egress and
+embedding-space checks with explicit degradation outcomes, RRF (k = 60) with org-safe
+deduplication and `matched_by`, `rerank_v1`, selection, evidence hydration through the
+predicate, the E4 tripwire over every candidate and over the evidence, the trace and its
+log line; `lattice.evals.retrieval` and `lattice eval retrieval` (JSON + Markdown
+reports); `lattice search`; `make eval`; a CI step running the evaluation as every
+persona (security gate). No migration: no new index was justified
+(`retrieval-design.md` §7.6).
+
+| Planned | As built | Why |
+| ------- | -------- | --- |
+| Lexical: `websearch_to_tsquery` (all terms), `ts_rank_cd` | Any of the question's lexemes; ranked by coverage of distinct lexemes, identifier phrases and visible-account terms, `ts_rank_cd` as tie-break | Measured: all-terms matching returned no lexical candidate for 63/89 golden questions (R@10 0.418 → 0.512 fake / 0.668 lexical over four measured changes, `evaluation-plan.md` §9) |
+| Identifier path "injected at the top of the lexical list" | Its own channel and RRF list, plus the `identifier_match` rerank feature | ADR-004 and retrieval-design §6 already treated it as a list; three independent channels are testable separately |
+| Identifier regex per source configuration | One pattern (`PREFIX-123`, `PREFIX-2026-17`) against `display_ref` | No source configures one; the only references in the corpus are ticket IDs |
+| Questions always sent to the embedding provider (security-model §6 draft) | Query egress policy: declared question classification (default `internal`) ≤ effective level, provider recorded in `model_providers` | Phase 5 requirement: the question can carry confidential information. Default behaviour unchanged for ordinary questions; D-13 decides the declaration's UX and Phase 6 use |
+| Vectors compared by model name | Plus the provider's dimensions and an unambiguous (provider, model) registration | A failed `--reembed` keeps the previous model's vectors, so spaces coexist; the model name alone does not name the provider |
+| Context selection: dedupe, ≤ 3 per document, ≤ 12 chunks / 6k tokens, egress split, relevance floor, conflict coverage | Retrieval selects: dedupe by content hash, ≤ 3 per document first (the rest deferred, not dropped), ≤ 20 evidence chunks. Budget, egress split, relevance floor and conflict coverage move to Phase 6 | They decide what reaches the model, not what is permitted evidence |
+| Supersession for Phase 6 | Evidence carries supersession links between **readable** documents only | An unreadable successor must not be revealed (SEC-5); D-14 |
+| `query_traces` recorder | In-memory `RetrievalTrace` returned with the result; persisted in Phase 6 | The table and its viewer rules belong with Ask (data-model §7) |
+| Evidence endpoint / HTTP retrieval API | None; `lattice search` for developers | Ask and `GET /v1/evidence` are Phase 6; no endpoint invented for testing |
+| Real-provider Recall@10 ≥ 0.9 | **Blocked**: no `LATTICE_OPENAI_API_KEY`; measured with the fake provider and exact + lexical only | Fake embeddings are a test double, not a quality proxy (they lower recall) |
+
+Evidence: `backend/tests/retrieval/` -- query model and limits (no authorization claims
+accepted, abusive input rejected), fusion and rerank units, retrievers against
+hand-built worlds (adversarial strongest-match per channel, cross-org identifier
+collisions, lifecycle, D-8/D-10 with an account-less control twin), structural SQL
+proofs for all four statements, query egress and degradation with a recording
+provider (incl. OpenAI outage without leaking the key), E4 abort-not-filter, trace
+content, snapshot consistency under a mid-request revocation, no existence oracle, a
+200-world property test (also with RLS bypassed), and `golden/` over the real corpus:
+all 89 items with zero violations (semantic on and off), recall regression floors,
+same-question groups, adversarial withheld-evidence checks, the critical Acme
+scenario, D-8/D-10 items, injection fixtures as data, raw SQL capture and
+re-execution. The authz boundary test names the retrieval modules explicitly.
+
+**Phase 5 mutation check** (by hand, never committed; each defect applied alone to
+pristine sources, then `tests/retrieval` and the authz boundary test run; every file
+restored and verified byte-identical by SHA-256). Every defect is caught:
+
+| # | Defect introduced | Tests failed | Caught by (modules) |
+| - | ----------------- | -----------: | ------------------- |
+| M1 | Authorization predicate removed from lexical retrieval | 142 | structure, retrievers, invariants (tripwire), property, golden, SQL capture, critical Acme |
+| M2 | Authorization predicate removed from semantic retrieval | 148 | same seven modules |
+| M3 | Tenant conditions removed from the exact lookup | 2 | structure (the predicate's own organization clause and RLS still isolate: defence in depth) |
+| M4 | Hidden structured account names usable as search input (all accounts "mentionable") | 29 | retrievers, invariants, property, golden |
+| M5 | `failed` embeddings admitted to vector retrieval | 1 | structure (a failed chunk has no vector or model -- DB CHECK -- so the model condition also excludes it) |
+| M6 | Query vector compared with another embedding model | 3 | retrievers, degradation, structure |
+| M7 | Both E4 `assert_all_readable` calls skipped | 3 | invariants |
+| M8 | Deduplication keyed by chunk without the organization | 1 | fusion (cross-tenant chunk IDs cannot collide in the database; the unit test pins identity) |
+| M9 | Count of matching documents the reader cannot see added to the trace | 2 | invariants (existence oracle, trace content) |
+| M10 | Recency drops evidence older than the newest by 60+ days | 6 | fusion/rerank, golden, critical Acme |
+| M11 | Authority drops conversational evidence when a system of record exists | 2 | fusion/rerank |
+| M12 | A semantic failure aborts the request | 8 | degradation |
+| M13 | Scope account resolved among all accounts (trusting the client's value) | 2 | retrievers, property |
+| M14 | Exact lookup without tenant or authorization conditions | 10 | retrievers, property (incl. RLS bypassed), structure, golden |
+| M15 | Evidence lookup by ID without the authorization predicate | 2 | structure |
+| M16 | Structured account joined without account visibility (D-8) | 16 | retrievers, invariants, property, structure, golden |
+| M17 | Supersession names successors the reader cannot read | 1 → 2 | structure; after adding the unreadable-successor test, also retrievers |
+| M18 | Query egress ignores the question's classification | 4 | degradation, invariants |
+
 ---
 
 ### Phase 6 — Answering: generation, claim-level citations, freshness, potential conflicts, traces
@@ -506,11 +571,12 @@ make check-db-role  # runtime role cannot bypass RLS
 make api            # uvicorn on 127.0.0.1:8000
 make sync-dry-run   # what ingestion would do (Phase 4)
 make sync           # ingest both organizations, fake embeddings; then admin grants
-make test           # 1,000+ tests against the lattice_test database (incl. 500-example authz proof)
+make test           # 1,300+ tests against the lattice_test database (incl. 500-example authz proof)
 make lint typecheck
 make dataset-lint   # the synthetic dataset and golden set (no database, no model)
+make eval           # retrieval metrics + security checks as each persona (Phase 5)
 ```
-Added in later phases: `make eval` (Phase 5), `make web` (Phase 7, Node 22 LTS + pnpm).
+Added in later phases: `make web` (Phase 7, Node 22 LTS + pnpm).
 
 ## 6. Phase 1 traceability check
 
@@ -550,6 +616,8 @@ Added in later phases: `make eval` (Phase 5), `make web` (Phase 7, Node 22 LTS +
 | D-10 | The chunk contextual header (embedded, and in the shared `tsv`) includes the document's account name, per document, not per reader. After D-8, a query naming an out-of-scope account would still match a granted document of that account through the header alone, hinting at the association | Phase 4 (header design) | **Decided:** structured account names are never added to shared search or embedding text; account terms are kept separate and used only when `account_visible` — at query time, over the reader's visible accounts (no stored per-account field is needed). Implemented in Phase 4 (header and `tsv`); the query side is Phase 5. Golden item `visibility-kestrel-latest-maya` pins the expected behaviour | Engineering + Product owner — decided |
 | D-11 | Answer status for requests Lattice does not perform (draft an email, change access, update a ticket, read others' questions) | Phase 6 | **Decided:** add `unsupported_request` (reason `action_request`), decided by the model under a fixed rubric and validated like any status; never used for unreadable evidence. Implemented with answering (Phase 6) | Product owner — decided |
 | D-12 | How Phase 4 applies admin grants that exist before the Phase 9 access UI (the dataset's `admin-grants.yaml`) | Phase 4 | **Decided:** a separate post-sync command (`lattice apply-admin-grants`), never a connector, resolves each record key (optionally with its source) to a document and writes `origin = admin` membership grants; any unresolvable, ambiguous or duplicate entry fails the whole application with nothing written; idempotent; `--prune` revokes | Engineering — decided |
+| D-13 | Query egress (Phase 5): the question's classification defaults to `internal` and can be declared higher by the caller, which only makes egress stricter. Who declares it (an Ask "contains confidential information" control? an org-wide default?), and does generation (Phase 6) apply the same rule to the question it sends in the prompt? | Phase 6 (generation), Phase 7 (UI) | Keep `internal` as the default (Lattice cannot classify free text); Phase 7 offers a per-question control; Phase 6 applies the same declaration to the question in the generation payload and, when it may not be sent, answers `evidence_only` without a model call | Product owner |
+| D-14 | retrieval-design §10 (draft) shows a generic "This document may be outdated" notice when a cited document is superseded by one the reader cannot read. That notice confirms a newer, unreadable document exists | Phase 6 | Treat an unreadable successor as nonexistent: no notice (SEC-5). Phase 5 evidence already exposes supersession links between readable documents only | Product owner |
 
 ## 8. Self-review log (Phase 0)
 

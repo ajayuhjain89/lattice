@@ -101,5 +101,9 @@ jobs:
               --grants "../data/synthetic/$org/admin-grants.yaml"
           done
 
+      - name: Retrieval evaluation as every persona (security metrics must be 0)
+        # Fake embeddings: this gates security, not quality (docs/evaluation-plan.md §9).
+        run: uv run lattice eval retrieval --embedding fake --quiet
+
       - name: Tests (real PostgreSQL)
         run: uv run pytest

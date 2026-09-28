@@ -7,7 +7,9 @@ Status: §2 identity and tenancy tables are **implemented** (Phase 1, migration
 `access_groups.key` was added in Phase 3 (migration `0004_access_group_key.py`,
 decision D-9). §3, the remaining `documents` columns (§4), §6, `org_settings` and
 `model_providers` (§7) are **implemented** (Phase 4, migration `0005_ingestion.py`),
-each with an "as built" note where it differs from the draft. `query_traces` is still
+each with an "as built" note where it differs from the draft. Phase 5 (retrieval) added
+no schema: its query plans use the existing indexes (`retrieval-design.md` §7.6), and its
+trace is an in-memory `RetrievalTrace` returned with each result. `query_traces` is still
 design (Phase 6).
 Related: `authorization-model.md`, `ingestion-design.md`, `retrieval-design.md`.
 
@@ -366,7 +368,7 @@ the file). They are membership grants only.
 | token_count     | int           | DBG         | Context budgeting |
 | tsv             | tsvector      |             | Computed by ingestion: setweight(english(title + heading path),'A') ‖ setweight(simple(display_ref),'A') ‖ setweight(english(text),'D'). **No structured account name** (decision D-10). GIN index |
 | embedding       | vector(1024)  |             | Fixed per deployment (ADR-008). NULL unless `embedding_status = 'embedded'` (CHECK) |
-| embedding_model | text?         | VER         | Set exactly when a vector exists; a model change is a tracked re-embed |
+| embedding_model | text?         | VER         | Set exactly when a vector exists; a model change is a tracked re-embed. Retrieval compares a query vector only with chunks of the provider's own model (Phase 5); the provider behind a model name is resolved through `model_providers` |
 | embedding_status | enum         | egress, DBG | `embedded`, `policy_excluded` (above the provider's effective egress level: lexical-only), `pending` (no provider configured yet), `failed` (provider error; retried by the next sync) |
 
 Indexes: UQ (document_id, ordinal) DEFERRABLE (replacing a document's chunks

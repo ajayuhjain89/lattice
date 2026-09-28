@@ -1,7 +1,9 @@
 # ADR-008: Embedding provider for the first vertical slice
 
 Status: Accepted (Phase 4, 2026-09-27). Implements decision D-2 within the egress
-policy D-3. Revisit after the Phase 5 retrieval evaluation.
+policy D-3. Revisit after the Phase 5 retrieval evaluation -- which could not run with
+the real provider (no API key available; `evaluation-plan.md` §9), so this ADR stands
+unchanged and the Voyage comparison was not triggered.
 
 ## Context
 
@@ -135,6 +137,10 @@ to `input_type`, and the OpenAI adapter ignores. The 1024-dimension column fits 
   stored in `sources.config` or `model_providers`, and never logged.
 - Only chunks of documents at or below the effective egress level (default
   `internal`) are ever sent (ingestion-design §7).
+- Phase 5: queries are embedded with `purpose = "query"` (ignored by this adapter),
+  only when the provider is recorded for the organization and the question's declared
+  classification is within the effective level; query vectors are compared only with
+  chunks of the same model (`retrieval-design.md` §5).
 
 ## Reconsider when
 
