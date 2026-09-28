@@ -63,6 +63,7 @@ DEFAULT_LEVEL: Final[Level] = "internal"
 DEFAULT_DATA_ORIGIN: Final[DataOrigin] = "customer"
 _ORDER: Final[tuple[Level, ...]] = ("internal", "confidential", "restricted")
 _RANK: Final = {level: rank for rank, level in enumerate(_ORDER)}
+LEVELS_ORDER: Final = _ORDER  # least to most sensitive
 DEPLOYMENTS: Final[tuple[Deployment, ...]] = ("local", "organization_controlled", "external_api")
 
 
