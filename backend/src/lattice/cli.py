@@ -24,10 +24,18 @@
     lattice eval retrieval [--embedding none|fake|local|gemini|openai] [--category C ...]
                            [--persona P ...] [--item ID ...] [--out DIR]
         Retrieval metrics over the golden set (development/test only).
+    lattice ask --org SLUG --as EMAIL [--account KEY] [--classification L] [--json] QUESTION
+        Ask as that member (development/test only): retrieval, the invocation rule, the
+        organization's own generation provider, validation; prints the answer.
+    lattice eval answer [--generation fake|ollama|gemini] [--model M] [--embedding ...]
+                        [--judge] [--category C ...] [--persona P ...] [--item ID ...]
+        Generation and security metrics over the golden set (development/test only).
     lattice models list | fetch NAME | verify NAME
         Pinned local embedding models: cache state, explicit download, re-hash.
-    lattice provider approve --org SLUG --provider P --model M --level L --reason TEXT
-        Set a recorded embedding provider's approved egress level (admin action).
+    lattice provider approve|configure|enable|disable|credential|list ...
+    lattice org egress --org SLUG [--external-level L] [--organization-controlled-level L]
+        Organization provider configuration and AI egress ceilings (administrative;
+        each change needs --reason and is recorded in audit_events).
 
 Ingestion commands run as lattice_owner (operator tools, through row-level security)
 and print counts and fixed codes only -- never record content, titles or filenames.
@@ -47,7 +55,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from lattice import cli_providers, cli_retrieval
+from lattice import cli_answer, cli_providers, cli_retrieval
 from lattice.admin_grants import apply_admin_grants, load_admin_grants
 from lattice.config import (
     ConfigurationError,
@@ -327,7 +335,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     grants.add_argument("--grants", type=Path, required=True)
     grants.add_argument("--dry-run", action="store_true")
     grants.add_argument("--prune", action="store_true")
-    cli_retrieval.add_parsers(commands)
+    cli_answer.add_parsers(commands, cli_retrieval.add_parsers(commands))
     cli_providers.add_parsers(commands)
     args = parser.parse_args(argv)
 
@@ -350,12 +358,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             return asyncio.run(_apply_admin_grants(args))
         if args.command == "search":
             return asyncio.run(cli_retrieval.search(args))
+        if args.command == "ask":
+            return asyncio.run(cli_answer.ask_command(args))
+        if args.command == "eval" and args.eval_command == "answer":
+            return asyncio.run(cli_answer.eval_answer(args))
         if args.command == "eval":
             return asyncio.run(cli_retrieval.eval_retrieval(args))
         if args.command == "models":
             return cli_providers.models(args)
-        if args.command == "provider":
-            return asyncio.run(cli_providers.approve(args))
+        if args.command in ("provider", "org"):
+            return asyncio.run(cli_providers.provider(args))
         return asyncio.run(_check_db_role())
     except ConfigurationError as exc:
         return _fail(str(exc))

@@ -23,8 +23,10 @@ input to authorization, retrieval or configuration.
 
 import asyncio
 import logging
+import re
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Final
@@ -54,6 +56,7 @@ from lattice.retrieval import (
     RetrievalConfig,
     RetrievalQuery,
     RetrievalResult,
+    VisibleAccount,
     retrieve_with_context,
 )
 from lattice.retrieval.query import normalize
@@ -157,6 +160,20 @@ def _relevant(retrieval: RetrievalResult) -> set[uuid.UUID]:
     }
 
 
+def _ambiguous(question: str, mentions: Sequence[VisibleAccount]) -> bool:
+    """Retrieval reports every visible account whose name or alias occurs in the
+    question (Phase 5 leaves what to ask to Phase 6). A question that names an account
+    in full is specific -- "Acme Corp" also contains Acme Health's alias "Acme" -- and
+    several accounts named in full are a comparison, not an ambiguity. Only two or more
+    accounts matched by bare aliases need a clarifying choice. Only accounts the asker
+    may see are ever involved."""
+    if len(mentions) < 2:
+        return False
+    return not any(
+        re.search(rf"(?<!\w){re.escape(a.name)}(?!\w)", question, re.IGNORECASE) for a in mentions
+    )
+
+
 def _response_invariant(claims: list[Claim], evidence: list[EvidenceItem]) -> bool:
     """Every citation references an evidence item of this response that was sent to the
     model (and so is readable by the asker); every quote is exactly its highlighted span."""
@@ -208,7 +225,9 @@ async def answer_question(
         )
         relevant_ids = _relevant(retrieval)
         relevant = bool(relevant_ids)
-        ambiguous = len(retrieval.account_mentions) >= 2 and request.scope.account is None
+        ambiguous = request.scope.account is None and _ambiguous(
+            request.question, retrieval.account_mentions
+        )
         policy_started = time.perf_counter()
         access = await resolve_generation(
             session,
