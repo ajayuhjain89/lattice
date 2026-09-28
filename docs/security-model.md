@@ -110,7 +110,14 @@ logout, and is checked before authentication.
 - Database URLs are `SecretStr`: never in `repr`, logs or error messages. Configuration
   errors name the variable and the problem but never echo the value.
 - Provider API keys (Phase 4+) are read by `providers` only and never logged, never
-  placed in prompts, never returned by any endpoint.
+  placed in prompts, never returned by any endpoint. Gemini (Phase 5 closure) reads
+  `LATTICE_GEMINI_API_KEY` or Google's `GEMINI_API_KEY` and sends it only in the
+  `x-goog-api-key` header (never in a URL). Today these are process-wide variables for
+  operator commands. Organization-owned credentials (BYOK: encrypted at rest or in a
+  secret manager, never returned or logged, masked in the UI, rotatable and revocable)
+  are the target (ADR-011) and are **not built yet**.
+- A credential is never an approval: whether a provider may receive anything is the
+  egress policy's decision (§6), and it does not consult credentials.
 - Startup validation (implemented) rejects: missing/invalid `LATTICE_*` settings;
   `LATTICE_ENV` unset; `LATTICE_ENV=production` with dev auth enabled or insecure
   cookies; a runtime DB role that is a superuser, has `BYPASSRLS`, is a member of such
@@ -135,7 +142,8 @@ Lattice. The provider boundary is governed separately.
 Note the asymmetry: **the embedding provider eventually receives the entire indexed
 *internal* corpus**, while the generation provider receives only small,
 question-specific excerpts. The embedding provider choice is therefore the larger egress decision
-(decision D-2; ADR-008: OpenAI `text-embedding-3-small`, approved for `internal`).
+(decision D-2; ADR-008: OpenAI `text-embedding-3-small`, approved for `internal`). A
+`local` provider (ADR-009) removes this egress entirely.
 
 ### Egress policy (distinct from authorization)
 
@@ -153,17 +161,51 @@ its external model provider.
 | `confidential` | **No** — unless the organization explicitly opts in *and* the configured provider is approved for `confidential` |
 | `restricted` | **No** by default — same explicit opt-in + approval required |
 
-**Mechanics**
+**Mechanics** (the invocation rule, ADR-011; `lattice.providers.egress`)
+
+A provider receives content -- document chunks at ingestion, the question at
+retrieval, and (Phase 6) evidence and the prompt -- only if **all** hold:
+
+1. the user is authorized for the content (decided first, in SQL; egress only narrows);
+2. the organization's policy permits the sensitivity for the provider's deployment
+   type;
+3. the provider's configuration is approved for it (`model_providers.approved_for_level`);
+4. the provider's declared deployment equals its recorded one
+   (`provider_deployment_mismatch` otherwise);
+5. its data-use terms are acceptable for the organization's data (`provider_data_use`
+   otherwise);
+6. valid credentials or configuration exist.
+
+A valid key satisfies only item 6. It never authorizes sending anything.
 
 - `org_settings.external_egress_level` ∈ {`internal`, `confidential`, `restricted`},
-  default **`internal`**.
-- Each configured provider record carries `approved_for_level` (default `internal`)
-  and a `deployment` of `external_api` or `private` (private cloud endpoint /
-  self-hosted). The effective level for a call is
-  `min(org external_egress_level, provider.approved_for_level)`.
+  default **`internal`**. `org_settings.default_query_sensitivity` (D-13), default
+  `internal`. `org_settings.data_origin` ∈ {`customer`, `synthetic`}, default
+  **`customer`** (set to `synthetic` by the seed for Halden and Veridian only).
+- Each configured provider record carries `approved_for_level` (default `internal`),
+  a `deployment` of `external_api`, `private` (an organization-controlled endpoint), or
+  `local` (inference inside the Lattice deployment, ADR-009), a `retention_mode` and
+  `training_opt_out`. The effective level:
+
+  | Deployment | Effective level |
+  | ---------- | --------------- |
+  | `external_api`, `private` | `min(external_egress_level, approved_for_level)` |
+  | `local` | `approved_for_level` (nothing leaves the deployment; the *external* level does not apply) |
+
+  `private` stays under the external level until a decision says otherwise
+  (implementation-plan §7).
+- **Data use.** A provider that may use submitted content to improve its products
+  (`training_opt_out = false`; today an unpaid-tier Gemini key, ADR-010) may receive
+  content only from a `synthetic` organization. For a `customer` organization it
+  receives nothing: no chunk and no question. Where the provider's declaration and its
+  record differ, the more restrictive reading wins. Such a key is also refused
+  outright when `LATTICE_ENV=production`.
 - Raising either value is an explicit admin action with a stated reason, recorded as
   an audit event and shown on the provider settings page. There is no implicit path
-  (no "leadership users may send confidential content" shortcut).
+  (no "leadership users may send confidential content" shortcut). Implemented today as
+  the operator command `lattice provider approve --org … --provider … --model …
+  --level … --reason …`, which logs `provider.approval_changed`. The settings page and
+  audit table come with BYOK (ADR-011).
 - **Generation:** authorized evidence above the effective level is removed from the
   prompt only. It stays in the user's evidence list, labelled **"Not used to draft
   this answer"**, with a notice naming the reason: "2 Confidential sources you can
@@ -171,37 +213,55 @@ its external model provider.
   them below." If the excluded evidence is *newer* than all evidence used, the
   notice says so ("…including the most recent evidence"). If all relevant evidence
   is excluded, no model call is made and the answer status is `evidence_only`.
-- **Embedding (implemented, Phase 4):** records above the effective level of the
-  embedding provider are indexed lexically only (embedding NULL, `embedding_status =
-  'policy_excluded'`); they still participate in retrieval through FTS and the
-  identifier path. A classification raised above the level removes the vectors in the
-  same transaction as the access change; a lowered org level or provider approval
-  removes them on the next sync of each source. A provider used for the first time is
-  recorded in `model_providers` approved for `internal` only. Consequence: under the
-  default policy, confidential/restricted documents have keyword-only recall (measured
-  separately in evals).
-- **Questions** (revised in Phase 5; the Phase 0 draft sent every question). The
-  question itself can carry confidential information, so query embedding is an egress
-  decision too. A retrieval request carries a `classification` for its question
-  (`internal` by default -- Lattice cannot classify free text, so the default keeps the
-  approved behaviour for ordinary questions); the caller or the asker may declare it
-  `confidential` or `restricted`. The query is sent only if (1) the provider has a
-  `model_providers` record for the organization (an unrecorded provider was never
-  approved to receive anything) and (2) the declared classification is at or below
-  `min(org external_egress_level, approved_for_level)`. Otherwise nothing is sent and
-  semantic retrieval is `policy_excluded`; exact and lexical retrieval continue. A
-  declaration can only make egress stricter: it never widens what is sent or what may
-  be read. Whether and how the Ask UI lets askers declare it, and whether generation
-  (Phase 6) honours the same declaration for the question in the prompt, are open
-  (implementation-plan §7, D-13). Tested with a recording provider
-  (`backend/tests/retrieval/test_semantic_degradation.py`).
+- **Embedding (implemented, Phase 4; deployment rule Phase 5 closure):** records above
+  the effective level of the embedding provider are indexed lexically only (embedding
+  NULL, `embedding_status = 'policy_excluded'`). They still participate in retrieval
+  through FTS and the identifier path. A classification raised above the level removes
+  the vectors in the same transaction as the access change. A lowered org level or
+  provider approval removes them on the next sync of each source. A provider used for
+  the first time is recorded in `model_providers` approved for `internal` only.
+  Consequence: under the default policy, confidential/restricted documents have
+  keyword-only recall with an external provider (measured separately in evals). A
+  `local` provider approved for `restricted` embeds them without any egress.
+- **Questions (D-13, resolved in the Phase 5 closure).** The question itself can carry
+  confidential information, so query embedding is an egress decision too. Its
+  effective sensitivity is
+  `more_restrictive(org_settings.default_query_sensitivity, the asker's declaration)`.
+  A user, client, provider key or provider choice can raise it, never lower it, and
+  unrecognised values count as `restricted`. The question is sent only if items 1–6
+  above hold for it at that sensitivity. Otherwise nothing is sent and semantic
+  retrieval is `policy_excluded` (`query_classification`, `provider_unapproved`,
+  `provider_deployment_mismatch`, `provider_data_use`). Exact and lexical retrieval
+  continue. A `local` provider approved for the sensitivity may still embed it; the
+  question is never silently sent to another external provider. The effective
+  sensitivity is returned with every retrieval (`question_sensitivity`, also in the
+  trace). **Phase 6 generation must apply it**: a question that may not be sent is not
+  put in an external prompt (then `evidence_only`, no model call). Tested with
+  recording providers and mock transports:
+  `backend/tests/retrieval/test_question_sensitivity.py`,
+  `test_semantic_degradation.py`.
 - Provider configuration records: provider name, endpoint, model, deployment,
   approved level, data-retention mode, training opt-out status. Visible to admins.
+
+**Providers (Phase 5 closure)**
+
+| Provider | Deployment | External egress | Current purpose |
+| -------- | ---------- | --------------- | --------------- |
+| Fake | test double (declared `external_api`, so tests exercise the external rule; no network) | no | tests and CI only; refused in production |
+| Local (`mxbai-embed-large-v1`, ADR-009) | `local` | no | real zero-cost semantic retrieval; private/offline deployments |
+| Gemini (ADR-010) | `external_api` | yes | optional BYOK; an unpaid key is synthetic-only |
+| OpenAI (ADR-008) | `external_api` | yes | optional BYOK / managed deployments |
+
+This table says where inference runs. Whether a provider may receive a given piece of
+content is only ever the policy's answer above, never a conclusion from its name.
 
 ### Provider requirements
 
 - Commercial API terms under which inputs are not used for training (the default for
-  major providers' commercial APIs — verify at contract time).
+  major providers' commercial APIs — verify at contract time). A provider or tier that
+  does not meet this (for example the Gemini API's unpaid tier, whose content Google
+  uses to improve its products) is recorded with `training_opt_out = false` and is
+  confined to synthetic organizations by the policy above.
 - Zero-data-retention where the provider offers it and the chosen model supports it
   (some frontier models require standard retention; verify per model before
   enabling). Document the effective retention per provider in the runbook.

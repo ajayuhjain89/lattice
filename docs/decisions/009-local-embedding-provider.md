@@ -112,8 +112,9 @@ slower on a CPU, and it needs about 2.4 GB of fp32 weights in RAM.
   bytes, `tokenizer.json` 711,396 bytes; 1.34 GB) from
   `huggingface.co/<repo>/resolve/<revision>/…` over HTTPS. Each file is written to a
   `.partial` name, checked against its pinned size and SHA-256, then renamed; a
-  tampered or interrupted download never becomes a cache entry. Re-running skips
-  verified files. `lattice models verify` re-hashes the cache.
+  tampered or interrupted download never becomes a cache entry. An interrupted
+  transfer resumes from the `.partial` file with an HTTP Range request (the existing
+  bytes are re-hashed first), and re-running skips verified files. `lattice models verify` re-hashes the cache.
 - Cache: `LATTICE_MODEL_DIR` (default `~/.cache/lattice/models`), laid out as
   `<repository>/<revision>/<file>`. It can be shared between checkouts. Lattice never
   writes into it except through `fetch`.
@@ -129,13 +130,15 @@ slower on a CPU, and it needs about 2.4 GB of fp32 weights in RAM.
 
 ## Resources (measured on the development machine)
 
-Measured by the Phase 5 closure evaluation (evaluation-plan §9) on an Apple M1, 8 GB,
+Measured by the Phase 5 closure evaluation (evaluation-plan §10) on an Apple M1, 8 GB,
 CPU execution provider, fp32:
 
-- Model file: 1.34 GB on disk. Process memory while embedding: see evaluation-plan
-  §9 (resident set measured during the full-corpus sync).
-- Throughput: see evaluation-plan §9 (chunks per second for the full-corpus sync;
-  query latency).
+- Model file: 1.34 GB on disk. Peak resident set of a sync process that loads it:
+  1.39–1.53 GB.
+- Throughput: about 4 chunks per second embedding, and 1,289 chunks in 375 s for a
+  full two-organization sync including ingestion. A query embedding is a single short
+  text; the 89-item evaluation (71 distinct questions prefetched in 4 batches) ran in
+  27 s end to end.
 
 Servers: the same wheels run on x86-64 and arm64 Linux. Budget about 2 GB of RAM for
 the model and activations per process that loads it (for example the sync worker, and
@@ -160,11 +163,18 @@ a question may be embedded. See security-model §6 and ADR-011.
   and semantic retrieval compares a query only with vectors of the same recorded model.
 - The backend gains an optional ~35 MB native-runtime dependency group.
 
+## Measured (Phase 5 closure)
+
+On the golden set (evaluation-plan §10), with the model approved for `restricted`:
+Recall@10 0.695, MRR 0.640 (exact + lexical alone: 0.668 / 0.640). Arctic L v2.0
+under the same setup: 0.657 / 0.633, 2× slower. The chosen model stands. Neither
+reaches the 0.90 target, and the miss analysis points at fusion and selection,
+ranking depth and multi-hop questions rather than at the embedding model.
+
 ## Reconsider when
 
-- The real-model evaluation misses Recall@10 ≥ 0.90 and the miss analysis attributes
-  the misses to embedding quality (not lexical ranking, fusion or chunking). Then
-  evaluate `snowflake-arctic-embed-l-v2.0` (1024 native, same runtime), then
+- A future miss analysis attributes misses to embedding quality (in the closure it
+  did not: Arctic L v2.0, pinned in the registry, scored lower). Then consider
   Qwen3-Embedding-0.6B if an official ONNX export appears.
 - Multilingual corpora appear: Arctic L v2.0.
 - Throughput on a server CPU is insufficient: the official int8 ONNX (337 MB) after

@@ -64,9 +64,19 @@ curl -s -b /tmp/lattice.jar -X POST -H 'X-Lattice-Request: 1' http://127.0.0.1:8
 to a customer whose ticketing organization is deliberately not mapped to an account,
 so ingestion refuses it (`access_unmappable:account`) rather than index it without an
 account. Its run is `partial`, which `make sync` accepts; a source-level failure stops
-it. Run it again: nothing is written the second time. `make sync EMBEDDING=openai`
-uses the real provider (needs `LATTICE_OPENAI_API_KEY`, ADR-008); `EMBEDDING=none`
-indexes lexically only.
+it. Run it again: nothing is written the second time. `EMBEDDING=none` indexes
+lexically only.
+
+**Real semantic retrieval without any paid API** (ADR-009): `make models-fetch`
+downloads the pinned open-weight model `mxbai-embed-large-v1` (Apache-2.0, 1024
+dimensions, 1.34 GB, once, SHA-256 verified, into `~/.cache/lattice/models`, never
+into the repository). Then `make sync EMBEDDING=local` and `make eval EMBEDDING=local`.
+It runs on the CPU with ONNX Runtime and is fully offline after the download.
+External providers are optional, and a key never makes one eligible: the AI egress
+policy decides what each may receive. `EMBEDDING=gemini` needs `GEMINI_API_KEY`; an
+unpaid key may receive only the synthetic organizations' data (ADR-010).
+`EMBEDDING=openai` needs `LATTICE_OPENAI_API_KEY` (ADR-008). Tests and CI use the
+deterministic fake provider and a tiny committed model; they never download weights.
 
 Seeded personas are listed in [`data/synthetic/halden/org.yaml`](data/synthetic/halden/org.yaml)
 and [`data/synthetic/veridian/org.yaml`](data/synthetic/veridian/org.yaml). Every
@@ -80,7 +90,8 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 | `make lint` | `ruff check` + `ruff format --check` |
 | `make dataset-lint` | Validate the synthetic dataset and golden set against the reference policy (no database, no model) |
 | `make sync-dry-run` / `make sync` / `make admin-grants` | Ingest the synthetic organizations ([ingestion design §9](docs/ingestion-design.md) documents `lattice sync`, `reindex`, `source disconnect`, `apply-admin-grants`) |
-| `make eval` | Retrieval metrics and security checks over the golden set, as each persona (after `make sync`; `EMBEDDING=fake\|openai\|none`); reports in `evals/reports/` |
+| `make eval` | Retrieval metrics and security checks over the golden set, as each persona (after `make sync`; `EMBEDDING=fake\|local\|gemini\|openai\|none`, matching the sync); reports in `evals/reports/` |
+| `make models-fetch` | Download and verify the pinned local embedding model (explicit; the only command that downloads weights) |
 | `lattice search --org halden --as maya.okafor@halden.example "What did we promise Acme?"` | A member's permitted evidence with per-channel ranks (`--text`, `--pool`, `--json`; development/test only). Run from `backend/` with `uv run --env-file ../.env` |
 | `make dataset-generate` | Regenerate the deterministic bulk distractor tickets after editing authored tickets |
 | `make format` | Apply formatting and safe lint fixes |
@@ -145,8 +156,12 @@ row never leaves PostgreSQL, however well it matches. Results are fused with
 reciprocal rank fusion and reordered by a small deterministic reranker (recency and
 source authority are signals, never truth). A tripwire re-checks every candidate with
 the reference policy and aborts the request on any mismatch; it never filters. The
-question is embedded only if the AI egress policy allows it; otherwise, or if the
-provider fails, exact and lexical retrieval still answer. Details:
+question is embedded only if the AI egress policy allows it. Its sensitivity is the
+organization's default, which a user can raise but never lower (D-13); otherwise, or if
+the provider fails, exact and lexical retrieval still answer. A local model can embed
+questions that must not leave the deployment. Providers change relevance only, never
+what is permitted, and a document superseded by one the reader cannot see carries no
+hint of it (D-14). Details:
 [retrieval design, Part I](docs/retrieval-design.md); results:
 [evaluation plan §9](docs/evaluation-plan.md).
 

@@ -136,17 +136,26 @@ Known weakness (unchanged): the `english` stemmer may conflate product names; th
 
 ## 5. Semantic channel (`retrieval.semantic`, pgvector)
 
-**Query egress.** The question can itself carry confidential information, so embedding
-it is an egress decision (security-model §6, as revised in Phase 5). Before any call:
-the provider must have a `model_providers` record for the organization (purpose
-`embedding`) -- written when ingestion embedded documents with it; otherwise nothing is
-sent (`policy_excluded` / `provider_unapproved`). The effective level is
-`min(org_settings.external_egress_level, approved_for_level)` and the query's declared
-`classification` must be at or below it; otherwise nothing is sent (`policy_excluded` /
-`query_classification`). The declaration can only make egress stricter. The provider
-receives the normalized question only, through `EmbeddingProvider.embed([q],
-purpose="query")` (the adapter maps the purpose; OpenAI ignores it, Voyage would use
-`input_type`), with a 5-second timeout.
+**Query egress (D-13).** The question can itself carry confidential information, so
+embedding it is an egress decision (security-model §6; ADR-011). Its effective
+sensitivity is `more_restrictive(org_settings.default_query_sensitivity, the declared
+classification)`: a declaration can raise it and nothing can lower it. Before any
+call, the provider must have a `model_providers` record for the organization (purpose
+`embedding`, written when ingestion embedded documents with it; otherwise
+`provider_unapproved`). Its declared deployment must match the record
+(`provider_deployment_mismatch`), its data terms must suit the organization's data
+(`provider_data_use`), and the effective sensitivity must be at or below its effective
+level: `min(external_egress_level, approved_for_level)` for `external_api` / `private`,
+and `approved_for_level` alone for `local` (`query_classification`). Otherwise nothing
+is sent (`policy_excluded`). There is no fallback to another provider. A local provider
+approved for the sensitivity may still embed a question that external providers may not
+receive. The provider receives the normalized question only, through
+`EmbeddingProvider.embed([q], purpose="query")`, with a 5-second timeout. Each adapter
+maps the purpose internally: the local model adds its query instruction, Gemini its
+`task: search result | query:` prefix (or `RETRIEVAL_QUERY` for gemini-embedding-001),
+and OpenAI ignores it. No provider-specific code exists in retrieval. The effective
+sensitivity is returned (`RetrievalResult.question_sensitivity`, trace
+`question_sensitivity`) for Phase 6 to obey.
 
 **Embedding space.** Vectors are compared only within one space: the provider's
 `model` (`chunks.embedding_model = :model`), its dimensions (the column's 1024; a
@@ -168,7 +177,8 @@ index; §7.6), score `1 - distance`.
 exact and lexical still run and return permitted evidence. Outcomes are distinct:
 `matched`, `no_matches`, `policy_excluded`, `provider_failed` (`embedding_failed:
 timeout | provider_error | rejected | unauthorized | rate_limited | malformed_response |
-wrong_dimensions`), `not_configured`, `incompatible_space`. Codes only, never provider
+wrong_dimensions | network | local_inference`), `not_configured`, `incompatible_space`.
+The outcome and trace also carry the provider's deployment (`local`, `external_api`). Codes only, never provider
 text. The request never fails because semantic retrieval could not run.
 
 ## 6. Fusion and rerank_v1
@@ -217,7 +227,7 @@ URI, heading path, source anchors, ordinal, text and its offsets, author, the ch
 time and the document's created/updated times, version, authority, the account
 **only when visible** (no substitute), supersession links **between readable documents
 only** (`supersedes_document_id`, `superseded_by_document_ids`; an unreadable successor
-is not mentioned), `matched_by`, per-channel ranks, RRF and final scores, features. No
+or predecessor is not mentioned, D-14), `matched_by`, per-channel ranks, RRF and final scores, features. No
 sensitivity, access mode, departments, groups, grants or other tenants' identifiers.
 The lookup by chunk ID carries the shared conditions (E5); a selected chunk that does
 not come back aborts the request.
@@ -272,13 +282,24 @@ Watch-point at scale: the lexical tsquery is built inside the statement (an Init
 so the planner estimates its selectivity generically; if large corpora pick poor
 plans, build it in a separate round trip and bind it as a constant.
 
-### 7.7 Measured quality (Phase 5)
+### 7.7 Measured quality (Phase 5 and its closure)
 
-`evaluation-plan.md` §9 has the full results. With the deterministic fake embedding
-provider: R@10 = 0.512 (0.668 with exact + lexical alone -- the fake provider is noise,
-not a semantic model). **The Recall@10 ≥ 0.90 target has not been evaluated with the
-real provider** (no `LATTICE_OPENAI_API_KEY` was available): real semantic quality is
-blocked, not claimed. Unauthorized, cross-organization and hidden-account results: 0.
+`evaluation-plan.md` §9–10 have the full results. These numbers are never mixed:
+
+| Configuration | R@10 | MRR |
+| ------------- | ---: | --: |
+| Exact + lexical (provider-independent) | 0.668 | 0.640 |
+| Fake provider (*test double, not semantic quality*) | 0.512 | 0.515 |
+| Local `mxbai-embed-large-v1`, approved `internal` | 0.660 | 0.574 |
+| Local `mxbai-embed-large-v1`, approved `restricted` (every chunk embedded, no egress) | 0.695 | 0.640 |
+| Local `snowflake-arctic-embed-l-v2.0`, approved `restricted` (comparison) | 0.657 | 0.633 |
+| Gemini `gemini-embedding-2` | not completed (free-tier daily quota) | |
+| OpenAI `text-embedding-3-small` | not run (no credential) | |
+
+**The Recall@10 ≥ 0.90 target is not met by a real provider.** The misses are
+mostly first-stage ranking depth and multi-hop questions, not fusion
+(evaluation-plan §10). Unauthorized, cross-organization and hidden-account results: 0
+for every provider.
 
 ---
 
@@ -424,8 +445,20 @@ declared correct.
   supersedes it are in the selected evidence — whether or not the model noticed.
 - If a cited document is superseded by a document the user can read but that wasn't
   selected, notice: "Cites a superseded document (Refund policy v1, replaced by v2 on
-  3 Mar 2026)". If the successor is not readable by the user: generic "This document
-  may be outdated" (no leak of the successor's existence).
+  3 Mar 2026)". Both documents must be readable, and the link must be explicit source
+  metadata. Supersession is never inferred from age.
+- **D-14 (resolved in the Phase 5 closure): an unreadable successor produces nothing.**
+  If the reader can read A but not the document B that supersedes it, Lattice shows
+  no notice at all: no "a newer document exists", no "this may be outdated" derived
+  from B, and no B timestamp, count, title, source or relationship. The earlier draft's
+  generic "may be outdated" notice is dropped, because it confirmed that an unreadable
+  document exists. Unreadable resources are never existence oracles. Implemented in
+  retrieval: successor and predecessor links are joined through the authorization
+  predicate, so the evidence carries only readable links, and rerank has no
+  supersession feature. Tested in `backend/tests/retrieval/test_successor_visibility.py`:
+  the reader's entire result is identical with and without a hidden successor, a
+  readable successor is exposed, and removing access removes the link on the next
+  request.
 
 **Potential conflicts (`Conflict.kind = potential_conflict`):**
 

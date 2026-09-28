@@ -271,9 +271,9 @@ Corpus: both organizations synced (Halden 1,110 chunks, Veridian 215; 36 chunks
 policy-excluded from embedding, i.e. lexical-only), admin grants applied. Items: 89
 (68 with targets). `now` = the dataset's 27 September 2026.
 
-### Real-provider evaluation: BLOCKED
+### Real-provider evaluation: BLOCKED (superseded by the Phase 5 closure below)
 
-No `LATTICE_OPENAI_API_KEY` was available in the environment or the ignored `.env`, so
+*As first recorded in Phase 5.* No `LATTICE_OPENAI_API_KEY` was available in the environment or the ignored `.env`, so
 the corpus was not embedded with OpenAI `text-embedding-3-small` and **the Recall@10 ≥
 0.90 target has not been evaluated**. Every number below uses the deterministic fake
 provider (a hashed bag of words, for tests) or no semantic channel at all; neither is
@@ -360,9 +360,169 @@ records both may read -- e.g. the Tern memo ranks below 10 for Arjun (a recall m
 not an access difference) -- so the privileged persona's extra evidence is simply not
 among the ten.
 
+## 10. Phase 5 closure: real semantic providers (2026-09-28)
+
+The Phase 5 evaluation could only use the fake test double. The closure adds a real
+local model (ADR-009) and Gemini (ADR-010) behind the same Protocol and re-runs **the
+same harness, goldens, K and configuration (retrieval-6, rerank_v1)**. Nothing in the
+golden set, the relevance labels, K, the security filters or the personas was changed.
+Each configuration ran in its own isolated database (Compose projects
+`lattice-eval-*`, separate ports and volumes; the developer database was not touched),
+seeded and synced exactly like `make sync`.
+
+One harness correction was made, with evidence (commit f8a531f). The local model
+surfaced HAL-4877's comment 4 for "Summarize ticket HAL-4877." That comment is the
+ticket's planted injection, and it contains the exfiltration URL listed in the item's
+`must_not_contain`. The harness had counted any `must_not_contain` literal in evidence
+as a security hit, which contradicts its own definition ("canary strings of unreadable
+records"). The ticket is the item's relevant target and Tom may read it, and the item's
+notes say the *answer* must not contain the URL (Phase 6). A literal is now a violation
+when it is a canary or comes from a record the persona may not read. The readable
+payload is reported as `injection_payloads_in_readable_evidence` (informational; 1 in
+the local runs). No golden changed.
+
+### Results (89 items, 68 with targets; macro averages)
+
+| Configuration | What it is | R@1 | R@5 | R@10 | R@20 | MRR | Security |
+| ------------- | ---------- | --: | --: | ---: | ---: | --: | -------: |
+| **A. Exact + lexical** | provider-independent baseline | 0.316 | 0.534 | **0.668** | 0.779 | 0.640 | all 0 |
+| **B. Fake** | *deterministic test double, not a semantic benchmark* | 0.238 | 0.440 | 0.512 | 0.685 | 0.515 | all 0 |
+| **C1. Local, approved `internal`** | real model, same egress shape as an external provider (36 confidential/restricted chunks without vectors) | 0.271 | 0.535 | **0.660** | 0.772 | 0.574 | all 0 |
+| **C2. Local, approved `restricted`** | real model, the natural local configuration: every chunk embedded, nothing leaves the deployment | 0.295 | 0.572 | **0.695** | 0.801 | 0.640 | all 0 |
+| **C3. Local Arctic L v2.0 (comparison)** | `snowflake-arctic-embed-l-v2.0@ac6544c8a46e`, approved `restricted` | 0.317 | 0.548 | 0.657 | 0.797 | 0.633 | all 0 |
+| **D. Gemini** | `gemini-embedding-2`, 1024 dims, synthetic data only | **not completed**: free-tier daily quota (below) |
+| **E. OpenAI** | `text-embedding-3-small` | **not run**: no credential (none required) |
+
+Local model: `mxbai-embed-large-v1@b33106f585b9`, fp32 ONNX, CPU. The query side
+prefetched the 71 distinct questions in 4 batched calls. Security in every run:
+unauthorized candidates 0, cross-organization 0, `must_not_retrieve` 0, hidden account
+metadata (D-8) 0, hidden account mentions (D-10) 0, canary 0, unknown chunks 0,
+tripwire aborts 0.
+
+By category (R@10; items with targets):
+
+| Category | n | A lexical | B fake | C1 local-internal | C2 local-restricted |
+| -------- | -: | --------: | -----: | ----------------: | ------------------: |
+| lookup | 10 | 0.900 | 0.700 | 1.000 | 1.000 |
+| supersession | 4 | 0.917 | 0.750 | 1.000 | 1.000 |
+| cross_org | 6 | 0.861 | 0.833 | 0.694 | 0.778 |
+| stale | 7 | 0.619 | 0.667 | 0.762 | 0.762 |
+| cross_source | 9 | 0.630 | 0.454 | 0.685 | 0.685 |
+| prompt_injection | 4 | 0.625 | 0.250 | 0.625 | 0.625 |
+| cross_document | 8 | 0.563 | 0.479 | 0.563 | 0.563 |
+| account_visibility | 8 | 0.563 | 0.313 | 0.500 | 0.500 |
+| potential_conflicts | 4 | 0.542 | 0.542 | 0.542 | 0.542 |
+| inaccessible | 2 | 0.500 | 0.250 | 0.500 | 0.500 |
+| ai_egress | 6 | 0.486 | 0.181 | 0.181 | 0.486 |
+
+C3 (Arctic, restricted) by category: lookup 0.900, supersession 1.000, stale 0.810,
+cross_org 0.778, cross_source 0.630, prompt_injection 0.625, cross_document 0.521,
+inaccessible 0.500, potential_conflicts 0.458, ai_egress 0.444, account_visibility
+0.438. It has zero security violations, and its evidence sets differ between personas
+in 9 of 10 same-question groups.
+
+Same question, different persona (C2): 10 groups, 0 violations in every persona's
+result, and the evidence sets differ between personas in 8 of 10 groups. The two
+exceptions (`kestrel-outage`, `promise-acme`) hold only records every persona in the
+group may read. The same holds in every configuration.
+
+Local resources (Apple M1, 8 GB): full-corpus sync 375 s for 1,289 chunks including
+ingestion (about 3.4 chunks/s; embedding alone about 4 chunks/s); peak RSS 1.39 GB
+(Halden) and 1.53 GB (Veridian) for the sync process; model 1.34 GB on disk. The
+query-side evaluation of 89 items took 27 s.
+
+### Miss analysis (C2, the best real configuration: 60 of 151 targets missed at 10)
+
+Per-target channel ranks (each channel returns at most 50 candidates):
+
+| Stage | @10 | @20 | @50 |
+| ----- | --: | --: | --: |
+| Lexical alone | 0.570 | 0.702 | 0.861 |
+| Semantic alone (local model) | 0.517 | 0.682 | 0.834 |
+| Union of channels | 0.629 | -- | 0.907 |
+| Fused (RRF) | 0.596 | 0.762 | 0.854 |
+| Evidence (after rerank and selection) | 0.603 | 0.728 | -- |
+
+| Cause | Misses | Evidence |
+| ----- | -----: | -------- |
+| **Vocabulary / multi-hop**: no channel ranks the target within 50 | 14 | "What commitments have we made to Acme?" needs the SCIM decision record (`scim-ga-decision#2`) and HAL-4821 comment 3, which never mention Acme or commitments. That is a second hop through "the commitment was SCIM", which no single-vector or lexical retriever makes. Also an exec-channel thread and a postmortem section |
+| **Ranking depth** (embedding and lexical quality): best channel rank 21–50 | 16 | Many chunks share the question's topic (SCIM, Acme, Kestrel); the target is relevant but not the closest |
+| **Near miss**: best channel rank 11–20 | 21 | As above, just outside the top 10 |
+| **Fusion / selection**: a channel had the target in its top 10 | 9 | RRF dilution when the other channel ranks it low (7). Per-document cap: `refund-policy-v2#3` (lexical 1, fused 5) and `HAL-4877#c5` (fused 6) were deferred behind three chunks of the same document and then crowded out of the 20 (2) |
+| **Confidential chunks without vectors** (C1 only) | 10 lost vs A | Under the default approval the 36 confidential/restricted chunks have no vectors. A strong semantic list pushes lexical-only chunks out of the fused pool (`ai_egress` 0.486 → 0.181). C2 (local approved `restricted`) removes this entirely. For an external provider it is inherent to the egress policy and must be re-measured with Phase 6's egress notice |
+| Relevance-label issue | 0 found | No golden was judged wrong. The multi-hop targets are correct answers the question needs |
+
+**Conclusion.** Recall@10 ≥ 0.90 is **not achieved** by any real provider evaluated.
+The best is 0.695 (local, restricted approval), +0.027 over exact + lexical. Real
+semantic retrieval helps lookup, supersession, stale and cross_source, and is neutral
+elsewhere. Fusion and selection cost about 2.6 points (union @10 0.629 → evidence
+0.603). The larger gaps are first-stage ranking depth (37 misses at ranks 11–50) and
+multi-hop questions (14). Because the embedding channel alone places only 52% of
+targets in its top 10, embedding quality was judged a material factor, and one
+additional local model was compared (C3).
+
+**C3: a second local model does not help.** `snowflake-arctic-embed-l-v2.0` (568M
+parameters, 1.7× mxbai; 2.27 GB) was pinned, fetched and run under the identical
+setup (its own isolated database, approved `restricted`). Recall@10 is **0.657**
+against mxbai's 0.695 (MRR 0.633 vs 0.640; R@20 0.797 vs 0.801). Its semantic channel
+alone is no better: @10 0.510 vs 0.517, and @50 0.848 vs 0.834. It lost more targets
+in fusion and selection (16 of 65 misses had a channel at ≤ 10, against 9 of 60).
+Resources: full sync 750 s (about 1.7 chunks/s including ingestion, 2× slower than
+mxbai), peak RSS 1.46 GB. The embedding model within this class is therefore **not**
+the lever. mxbai stays the default (ADR-009). What would move Recall@10 toward 0.90:
+
+1. **Fusion and selection** (9–16 targets that a channel already had in its top 10).
+   Candidates to test one at a time: a per-channel RRF weight, a larger evidence
+   limit before the per-document cap applies, and title terms counted once per
+   document (evaluation-plan §9's open lexical item).
+2. **Ranking depth** (37 targets at ranks 11–50 in both channels): a second-stage
+   reranker (a cross-encoder). That is a Phase 5 non-goal in the plan, so it needs a
+   decision.
+3. **Multi-hop questions** (12–14 targets): needs query understanding beyond one
+   vector, which is out of scope for deterministic retrieval (no LLM rewriting,
+   §2). Phase 6's answer step can ask for or combine evidence.
+
+None of these was applied: the closure measures, and changes to retrieval tunables
+need their own review (§7 regression rule).
+
+### Gemini: partially embedded, evaluation not completed
+
+- The key is from an unpaid-tier project (`LATTICE_GEMINI_DATA_USE=unpaid`), so it was
+  used on Halden and Veridian (`data_origin: synthetic`) only. The egress policy would
+  refuse it for any `customer` organization, and the factory refuses it in production.
+- The estimate before use: 1,289 internal chunks, 305,727 characters (~76k tokens),
+  about 20 batched requests; 71 distinct questions, one batch.
+- One probe request confirmed the live API: 1024-dimensional unit vectors with
+  `embedContentConfig.outputDimensionality = 1024`.
+- The sync embedded **985 of 1,289** chunks (Halden: all of drive and support, 51 of
+  145 Slack chunks; Veridian: none) and then hit HTTP 429. The diagnostic quota detail
+  names `EmbedContentRequestsPerDayPerProjectPerModel-FreeTier`, **1,000 per day,
+  counted per embedded text** (not per HTTP request). Google's rate-limit page does not
+  publish this number; it points to AI Studio. The full run needs about 1,375 texts,
+  so it cannot finish within one day's free quota. The adapter now stops immediately
+  on a per-day quota (`embedding_failed:quota_exhausted`) instead of waiting out
+  `retryDelay`.
+- Quota spent: about 1,000 texts (the daily cap), in about 16 successful HTTP
+  requests (about 13 sync batches and 3 single-purpose probes), plus 429 answers.
+  No provider errors other than 429. No key appeared in any output.
+- Stored vectors persist in the isolated evaluation database. After the daily reset
+  (midnight Pacific), `lattice sync` resumes **only the 304 failed chunks**, and the
+  evaluation then needs 1–2 batched query requests (71 texts): about 375 texts in
+  total, within one day's quota. Then `lattice eval retrieval --embedding gemini`.
+  **No Gemini recall is reported until that completes**, because a partially
+  embedded corpus is not a valid benchmark.
+
+### OpenAI
+
+Not run: no credential, and none is required. The adapter stays implemented, tested
+against a mock transport and documented (ADR-008) for organizations that bring an
+OpenAI key.
+
 ### Voyage comparison: not triggered
 
 ADR-008's trigger needs (1) a real-provider evaluation, (2) a material Recall@10 miss,
 (3) misses attributable to semantic/paraphrase retrieval and (4) simple retrieval and
-fusion causes ruled out. (1) is blocked, so no comparison was run and no Voyage code
-was added.
+fusion causes ruled out. After the closure, (1) and (2) hold with the local model. (4)
+does not: 37 misses are ranking depth shared by both channels, 2 are the per-document
+cap, and 14 are multi-hop. So no external comparison was added; the closure compared
+one more *local* model instead (§10).

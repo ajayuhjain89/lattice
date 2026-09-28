@@ -95,14 +95,14 @@ Package: `backend/src/lattice/`.
 | `sources` ✔   | Lattice-side source configuration (`sources.yaml`) models and loader (Phase 4). Source rows, runs and failures are written by `ingestion.store` | — |
 | `connectors` ✔ | Connector contract, registry + three connectors (Markdown documents, ticket JSONL, Slack export) (Phase 4) | — (pure: stdlib, Pydantic, PyYAML; a test enforces it) |
 | `ingestion` ✔ | Canonical text and hashing, chunking, fail-closed access mapping, embedding input, persistence (`store`: the one writer of document access columns, source grants and source groups), sync pipeline, deletion sweep, source disconnect (Phase 4) | connectors, sources, providers, db |
-| `providers` ✔ | `EmbeddingProvider` Protocol, fake + recording + OpenAI (Phase 4), AI egress policy; `GenerationProvider` in Phase 6 | config |
+| `providers` ✔ | `EmbeddingProvider` Protocol; adapters: fake + recording (Phase 4), OpenAI (Phase 4), local ONNX model + pinned weights cache, Gemini (Phase 5 closure); the AI egress policy / invocation rule (`egress`, pure) and the reader of each organization's provider configuration (`records`); `GenerationProvider` in Phase 6 | config, db (records only) |
 | `admin_grants` ✔ | Applies `admin-grants.yaml` as admin-origin grants after ingestion (D-12) | db |
 | `retrieval` ✔ | Query model and analysis; exact, lexical and semantic channels (each one statement with the authz predicate, tenant and lifecycle conditions); query-side AI egress and embedding-space checks; RRF, `rerank_v1`, selection; evidence hydration; E4 tripwire; trace (Phase 5, `retrieval-design.md` Part I) | authz, providers, ingestion (chunk model), orgs, sources, db |
 | `answering`   | Prompt construction, generation, output validation, citation verification, freshness & conflict assembly, refusal logic | retrieval, providers |
 | `tracing`     | Trace records, redaction, re-authorized trace reads                                      | authz, db                   |
 | `api`         | FastAPI app, routers (thin), request dependencies (session → identity → org → authz ctx)  | all service modules         |
 | `evals` ✔ (retrieval) | Retrieval + security runner over the golden set, reports (Phase 5); generation runner and judges in Phase 6 | retrieval, dataset, (answering) |
-| `cli` ✔ (partial) | `seed`, `check-db-role`, `dataset`, `sync`, `reindex`, `source disconnect`, `apply-admin-grants`, `search` and `eval retrieval` (Phase 5, development/test only: they act as a member); `ask` and `eval answer` later | services                    |
+| `cli` ✔ (partial) | `seed`, `check-db-role`, `dataset`, `sync`, `reindex`, `source disconnect`, `apply-admin-grants`, `search` and `eval retrieval` (Phase 5, development/test only: they act as a member), `models list/fetch/verify` and `provider approve` (Phase 5 closure); `ask` and `eval answer` later | services                    |
 
 ✔ = implemented (Phases 1–5). Alembic migrations live in `backend/alembic/`, outside the
 package. Boundary rules (enforced by review; the `authz` rule is also enforced
@@ -123,8 +123,26 @@ mechanically since Phase 2):
   content than retrieval gave it.
 - Route handlers parse input, call one service function, and map the result. No SQL,
   no policy, no prompt text in `api`.
-- `providers` know nothing about organizations, users or authorization; they receive
-  text and return text/vectors.
+- Provider *adapters* (`fake`, `local`, `gemini`, `openai`, later generation) know
+  nothing about organizations, users or authorization: they receive text and return
+  text/vectors, and each maps `purpose` to its own query/document semantics. Whether an
+  adapter may be called is decided outside it, by `providers.egress` over the
+  organization's recorded configuration (`providers.records`), never by the adapter
+  or its credential. Retrieval and ingestion contain no provider-specific code.
+
+**Model providers (Phase 5 closure; ADR-008, ADR-009, ADR-010, ADR-011)**
+
+| Provider | Deployment | External egress | Current purpose |
+| -------- | ---------- | --------------- | --------------- |
+| Fake | test | no (declared `external_api` for policy tests) | CI and tests |
+| Local (`mxbai-embed-large-v1`, ONNX Runtime) | `local` | no | real zero-cost / private / offline deployments |
+| Gemini (`gemini-embedding-2`, 1024 dims) | `external_api` | yes | optional BYOK; unpaid key = synthetic evaluation only |
+| OpenAI (`text-embedding-3-small`, 1024 dims) | `external_api` | yes | optional BYOK / managed provider |
+
+The sensitivity each may receive comes from the approval and egress policy
+(security-model §6), never from this table. Credentials are process-wide environment
+variables today, and organization-owned credentials (BYOK) are the target
+architecture (ADR-011). Lattice runs with none of them (local provider).
 
 ## 4. Request lifecycle: Ask
 
