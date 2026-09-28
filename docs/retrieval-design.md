@@ -293,7 +293,7 @@ plans, build it in a separate round trip and bind it as a constant.
 | Local `mxbai-embed-large-v1`, approved `internal` | 0.660 | 0.574 |
 | Local `mxbai-embed-large-v1`, approved `restricted` (every chunk embedded, no egress) | 0.695 | 0.640 |
 | Local `snowflake-arctic-embed-l-v2.0`, approved `restricted` (comparison) | 0.657 | 0.633 |
-| Gemini `gemini-embedding-2` | not completed (free-tier daily quota) | |
+| Gemini `gemini-embedding-2`, approved `internal` (synthetic data only) | 0.726 | 0.648 |
 | OpenAI `text-embedding-3-small` | not run (no credential) | |
 
 **The Recall@10 ≥ 0.90 target is not met by a real provider.** The misses are

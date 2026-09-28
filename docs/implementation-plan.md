@@ -7,8 +7,8 @@ of Phase 3). Phase 3 approved and merged to `main`. Phase 4 approved and merged 
 **Phase 5 implemented and closed** (awaiting review, branch `phase/5-retrieval`, not
 merged): the Phase 5 closure added a local model, Gemini and the provider invocation
 rule; D-13 and D-14 are decided and implemented; real semantic retrieval was measured
-with the local model (Recall@10 0.695, target 0.90 not met). The Gemini run is
-incomplete because of its free-tier daily quota (evaluation-plan §10).
+with the local model (Recall@10 0.695) and Gemini (0.726, synthetic data only); the
+0.90 target is not met by any real provider (evaluation-plan §10).
 
 ---
 
@@ -421,7 +421,7 @@ persona (security gate). No migration: no new index was justified
 | Supersession for Phase 6 | Evidence carries supersession links between **readable** documents only | An unreadable successor must not be revealed (SEC-5); D-14 |
 | `query_traces` recorder | In-memory `RetrievalTrace` returned with the result; persisted in Phase 6 | The table and its viewer rules belong with Ask (data-model §7) |
 | Evidence endpoint / HTTP retrieval API | None; `lattice search` for developers | Ask and `GET /v1/evidence` are Phase 6; no endpoint invented for testing |
-| Real-provider Recall@10 ≥ 0.9 | Phase 5: blocked (no key). **Phase 5 closure: measured with a real local model -- 0.695 (not met)**; Gemini incomplete (daily quota); OpenAI not run | Fake embeddings are a test double, not a quality proxy; see evaluation-plan §10 |
+| Real-provider Recall@10 ≥ 0.9 | Phase 5: blocked (no key). **Phase 5 closure: measured -- Gemini 0.726, local 0.695 (not met)**; OpenAI not run | Fake embeddings are a test double, not a quality proxy; see evaluation-plan §10 |
 
 Evidence: `backend/tests/retrieval/` -- query model and limits (no authorization claims
 accepted, abusive input rejected), fusion and rerank units, retrievers against
@@ -481,7 +481,7 @@ Phase 6 work.
 | Local provider: `deployment = local` or `self_hosted` | `local` (migration 0006); `private` unchanged and still capped by the external level | Conservative; D-15 decides `private` |
 | Gemini credential "existing convention" | `LATTICE_GEMINI_API_KEY` or Google's `GEMINI_API_KEY` | The user's `.env` uses Google's name |
 | Unpaid-tier key synthetic-only | Enforced by data: `org_settings.data_origin = synthetic` (seeded for Halden and Veridian) plus the recorded `training_opt_out = false`; refused in production | A declaration alone would be documentation, not a control |
-| Evaluation over the whole corpus with Gemini | 985/1,289 chunks embedded before the free tier's 1,000-texts-per-day cap; evaluation deferred to after the reset | Not in Google's docs; discovered from the 429's quota detail |
+| Evaluation over the whole corpus with Gemini | Done in two runs: 985/1,289 chunks before the free tier's 1,000-texts-per-day cap, then only the 304 failed chunks with a second valid key (stored vectors kept) | The cap is not in Google's docs; discovered from the 429's quota detail |
 | One local model | Two: `mxbai-embed-large-v1` (default) and `snowflake-arctic-embed-l-v2.0` (comparison, pinned; R@10 0.657 < 0.695, so not adopted) | The first miss analysis flagged embedding quality as a plausible factor (brief §21). The comparison ruled it out as the lever |
 | Harness: `must_not_contain` anywhere in evidence is a security hit | Only for canaries or unreadable records; readable injection payloads are informational | The harness's documented definition; the item targets that record (evaluation-plan §10) |
 

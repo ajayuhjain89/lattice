@@ -390,7 +390,7 @@ the local runs). No golden changed.
 | **C1. Local, approved `internal`** | real model, same egress shape as an external provider (36 confidential/restricted chunks without vectors) | 0.271 | 0.535 | **0.660** | 0.772 | 0.574 | all 0 |
 | **C2. Local, approved `restricted`** | real model, the natural local configuration: every chunk embedded, nothing leaves the deployment | 0.295 | 0.572 | **0.695** | 0.801 | 0.640 | all 0 |
 | **C3. Local Arctic L v2.0 (comparison)** | `snowflake-arctic-embed-l-v2.0@ac6544c8a46e`, approved `restricted` | 0.317 | 0.548 | 0.657 | 0.797 | 0.633 | all 0 |
-| **D. Gemini** | `gemini-embedding-2`, 1024 dims, synthetic data only | **not completed**: free-tier daily quota (below) |
+| **D. Gemini** | `gemini-embedding-2`, 1024 dims, external, approved `internal` (unpaid key: synthetic data only; the 36 confidential/restricted chunks are never sent) | 0.338 | 0.602 | **0.726** | 0.820 | 0.648 | all 0 |
 | **E. OpenAI** | `text-embedding-3-small` | **not run**: no credential (none required) |
 
 Local model: `mxbai-embed-large-v1@b33106f585b9`, fp32 ONNX, CPU. The query side
@@ -401,19 +401,19 @@ tripwire aborts 0.
 
 By category (R@10; items with targets):
 
-| Category | n | A lexical | B fake | C1 local-internal | C2 local-restricted |
-| -------- | -: | --------: | -----: | ----------------: | ------------------: |
-| lookup | 10 | 0.900 | 0.700 | 1.000 | 1.000 |
-| supersession | 4 | 0.917 | 0.750 | 1.000 | 1.000 |
-| cross_org | 6 | 0.861 | 0.833 | 0.694 | 0.778 |
-| stale | 7 | 0.619 | 0.667 | 0.762 | 0.762 |
-| cross_source | 9 | 0.630 | 0.454 | 0.685 | 0.685 |
-| prompt_injection | 4 | 0.625 | 0.250 | 0.625 | 0.625 |
-| cross_document | 8 | 0.563 | 0.479 | 0.563 | 0.563 |
-| account_visibility | 8 | 0.563 | 0.313 | 0.500 | 0.500 |
-| potential_conflicts | 4 | 0.542 | 0.542 | 0.542 | 0.542 |
-| inaccessible | 2 | 0.500 | 0.250 | 0.500 | 0.500 |
-| ai_egress | 6 | 0.486 | 0.181 | 0.181 | 0.486 |
+| Category | n | A lexical | B fake | C1 local-internal | C2 local-restricted | D Gemini |
+| -------- | -: | --------: | -----: | ----------------: | ------------------: | -------: |
+| lookup | 10 | 0.900 | 0.700 | 1.000 | 1.000 | 1.000 |
+| supersession | 4 | 0.917 | 0.750 | 1.000 | 1.000 | 1.000 |
+| cross_org | 6 | 0.861 | 0.833 | 0.694 | 0.778 | 0.694 |
+| stale | 7 | 0.619 | 0.667 | 0.762 | 0.762 | 0.786 |
+| cross_source | 9 | 0.630 | 0.454 | 0.685 | 0.685 | 0.778 |
+| prompt_injection | 4 | 0.625 | 0.250 | 0.625 | 0.625 | 0.625 |
+| cross_document | 8 | 0.563 | 0.479 | 0.563 | 0.563 | 0.729 |
+| account_visibility | 8 | 0.563 | 0.313 | 0.500 | 0.500 | 0.615 |
+| potential_conflicts | 4 | 0.542 | 0.542 | 0.542 | 0.542 | 0.542 |
+| inaccessible | 2 | 0.500 | 0.250 | 0.500 | 0.500 | 1.000 |
+| ai_egress | 6 | 0.486 | 0.181 | 0.181 | 0.486 | 0.208 |
 
 C3 (Arctic, restricted) by category: lookup 0.900, supersession 1.000, stale 0.810,
 cross_org 0.778, cross_source 0.630, prompt_injection 0.625, cross_document 0.521,
@@ -452,8 +452,8 @@ Per-target channel ranks (each channel returns at most 50 candidates):
 | **Confidential chunks without vectors** (C1 only) | 10 lost vs A | Under the default approval the 36 confidential/restricted chunks have no vectors. A strong semantic list pushes lexical-only chunks out of the fused pool (`ai_egress` 0.486 → 0.181). C2 (local approved `restricted`) removes this entirely. For an external provider it is inherent to the egress policy and must be re-measured with Phase 6's egress notice |
 | Relevance-label issue | 0 found | No golden was judged wrong. The multi-hop targets are correct answers the question needs |
 
-**Conclusion.** Recall@10 ≥ 0.90 is **not achieved** by any real provider evaluated.
-The best is 0.695 (local, restricted approval), +0.027 over exact + lexical. Real
+**Conclusion (local).** Recall@10 ≥ 0.90 is **not achieved** by the local model.
+Its best is 0.695 (restricted approval), +0.027 over exact + lexical. Real
 semantic retrieval helps lookup, supersession, stale and cross_source, and is neutral
 elsewhere. Fusion and selection cost about 2.6 points (union @10 0.629 → evidence
 0.603). The larger gaps are first-stage ranking depth (37 misses at ranks 11–50) and
@@ -485,32 +485,65 @@ the lever. mxbai stays the default (ADR-009). What would move Recall@10 toward 0
 None of these was applied: the closure measures, and changes to retrieval tunables
 need their own review (§7 regression rule).
 
-### Gemini: partially embedded, evaluation not completed
+### Gemini (D): completed on 2026-09-29
 
-- The key is from an unpaid-tier project (`LATTICE_GEMINI_DATA_USE=unpaid`), so it was
-  used on Halden and Veridian (`data_origin: synthetic`) only. The egress policy would
-  refuse it for any `customer` organization, and the factory refuses it in production.
-- The estimate before use: 1,289 internal chunks, 305,727 characters (~76k tokens),
-  about 20 batched requests; 71 distinct questions, one batch.
-- One probe request confirmed the live API: 1024-dimensional unit vectors with
-  `embedContentConfig.outputDimensionality = 1024`.
-- The sync embedded **985 of 1,289** chunks (Halden: all of drive and support, 51 of
-  145 Slack chunks; Veridian: none) and then hit HTTP 429. The diagnostic quota detail
-  names `EmbedContentRequestsPerDayPerProjectPerModel-FreeTier`, **1,000 per day,
-  counted per embedded text** (not per HTTP request). Google's rate-limit page does not
-  publish this number; it points to AI Studio. The full run needs about 1,375 texts,
-  so it cannot finish within one day's free quota. The adapter now stops immediately
-  on a per-day quota (`embedding_failed:quota_exhausted`) instead of waiting out
-  `retryDelay`.
-- Quota spent: about 1,000 texts (the daily cap), in about 16 successful HTTP
-  requests (about 13 sync batches and 3 single-purpose probes), plus 429 answers.
-  No provider errors other than 429. No key appeared in any output.
-- Stored vectors persist in the isolated evaluation database. After the daily reset
-  (midnight Pacific), `lattice sync` resumes **only the 304 failed chunks**, and the
-  evaluation then needs 1–2 batched query requests (71 texts): about 375 texts in
-  total, within one day's quota. Then `lattice eval retrieval --embedding gemini`.
-  **No Gemini recall is reported until that completes**, because a partially
-  embedded corpus is not a valid benchmark.
+- **Data use.** The key is from an unpaid-tier project (`LATTICE_GEMINI_DATA_USE=unpaid`),
+  so it was used on Halden and Veridian (`data_origin: synthetic`) only. The egress
+  policy would refuse it for any `customer` organization, and the factory refuses it in
+  production. Approved for `internal` only, so the 36 confidential/restricted chunks
+  and no confidential question were ever sent.
+- **Estimate and first run (2026-09-28).** The estimate was 1,289 internal chunks,
+  305,727 characters (~76k tokens), about 20 batched requests, plus 71 distinct
+  questions. A one-text probe confirmed 1024-dimensional unit vectors with
+  `embedContentConfig.outputDimensionality = 1024`. The sync embedded 985 chunks and
+  then hit HTTP 429. The quota detail named
+  `EmbedContentRequestsPerDayPerProjectPerModel-FreeTier`: **1,000 per day, counted per
+  embedded text**, a number Google's rate-limit page does not publish. The adapter now
+  stops at once on a per-day quota (`embedding_failed:quota_exhausted`).
+- **Completion (2026-09-29, a second valid key).** Before any embedding call, the key
+  was checked with `models.get` on `gemini-embedding-2` (HTTP 200, no quota spent;
+  the value was never displayed). The same model and 1024 dimensions mean the same
+  embedding space whichever key produced a vector, so the 985 stored vectors were kept.
+  `lattice sync` embedded **only the 304 failed chunks** (94 Halden Slack; Veridian 19
+  drive, 179 support, 12 Slack) in 188 s, with 0 failures and 0 rate-limit events. The
+  corpus is complete: 1,289 `gemini-embedding-2` vectors, 36 `policy_excluded`.
+- **Usage, whole evaluation.** Documents: 1,289 texts (985 + 304). Queries: 71 distinct
+  questions in 2 batched calls (3 HTTP requests: one per-minute 429, retried after the
+  server's delay). Diagnostics: 71 more query texts. About 1,450 texts in total, plus
+  3 probe texts. Provider failures other than 429: none. No key appeared in any output
+  (checked).
+
+**Result.** R@1 0.338, R@5 0.602, **R@10 0.726**, R@20 0.820, MRR 0.648. Security: all 0
+(unauthorized, cross-organization, `must_not_retrieve`, D-8 account metadata, D-10
+account mentions, canaries, unknown chunks, tripwire). Same question, different
+persona: 0 violations; evidence sets differ in 6 of 10 groups, and where they coincide
+they hold only records every persona in the group may read.
+
+**Miss analysis (56 of 151 targets missed at 10).** Semantic channel alone @10 0.543,
+the strongest of the models measured (mxbai 0.517, Arctic 0.510), @50 0.795. Union of
+channels @50 0.901; fused @10 0.636; evidence @10 0.629.
+
+| Cause | Misses |
+| ----- | -----: |
+| No channel within 50 (multi-hop / vocabulary) | 15 |
+| Best channel rank 21–50 (ranking depth) | 9 |
+| Best channel rank 11–20 (near miss) | 15 |
+| A channel had it at ≤ 10, lost in fusion / selection | 17 |
+| Of all misses: chunks of confidential documents, which an `internal`-approved external provider never embeds | 10 |
+
+Gemini gains most on cross_document (0.729), cross_source (0.778),
+account_visibility (0.615) and inaccessible (1.000). It loses on ai_egress (0.208),
+where the targets are confidential documents with no external vectors, so the fused
+semantic list crowds out lexical-only chunks. Compared under the same egress shape
+(C1, local approved `internal`: 0.660), Gemini is +0.066.
+
+**Overall conclusion.** Recall@10 ≥ 0.90 is **not achieved by any real provider**:
+Gemini 0.726, local mxbai 0.695 (restricted) / 0.660 (internal), Arctic 0.657. A
+stronger embedding model helps the semantic channel. The remaining gap is fusion and
+selection (17 misses with a channel at ≤ 10), ranking depth, multi-hop questions and,
+for external providers, confidential content that must not leave. Quality and
+eligibility stay separate: Gemini scores highest here, but an unpaid key is
+synthetic-only and is not a production default.
 
 ### OpenAI
 

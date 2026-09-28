@@ -100,7 +100,13 @@ but 1024 is inside the supported range (below).
 
 - Gemini can run a real external semantic benchmark on the synthetic corpus at no
   cost, without real data ever being eligible.
-- Quota use for the full synthetic evaluation, measured: see evaluation-plan §9.
+- Measured on the synthetic golden set (evaluation-plan §10): Recall@10 0.726, MRR
+  0.648, all security metrics 0. That is the best of the real providers tested, and
+  still below the 0.90 target. Quality is not eligibility: an unpaid key remains
+  synthetic-only.
+- The free tier allows 1,000 embedded texts per day per project and model, counted
+  per text; the synthetic corpus needed two days (or a second project's key). Quota use
+  for the full synthetic evaluation, measured: see evaluation-plan §10.
   Documents are about 20 batched requests (1,289 internal chunks, ~306k characters,
   ~76k tokens). Queries take 1–2 batched requests, because the evaluation prefetches
   the questions its own egress check allows. A sync that exhausts the quota
