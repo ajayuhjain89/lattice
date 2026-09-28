@@ -157,7 +157,7 @@ a question may be embedded. See security-model §6 and ADR-011.
 
 ## Consequences
 
-- Lattice has a real, zero-cost semantic provider for development, private and offline
+- Lattice has a real, zero-cost semantic provider for development, self-hosted and offline
   deployments, and for evaluation without any vendor account.
 - Vectors from different models never mix. The model identity includes the revision,
   and semantic retrieval compares a query only with vectors of the same recorded model.

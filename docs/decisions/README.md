@@ -15,4 +15,4 @@ not recorded here. Status values: Proposed · Accepted · Superseded.
 | [008](008-embedding-provider.md) | External embedding provider: OpenAI `text-embedding-3-small` at 1024 dimensions (optional, BYOK); Voyage AI kept compatible | Accepted |
 | [009](009-local-embedding-provider.md) | Local/self-hosted embedding provider: `mxbai-embed-large-v1` (1024 native) on ONNX Runtime, pinned weights fetched explicitly | Accepted |
 | [010](010-gemini-embedding-provider.md) | Gemini as an optional external embedding provider: `gemini-embedding-2` at 1024; unpaid key = synthetic data only | Accepted |
-| [011](011-provider-configuration-byok.md) | Provider configuration, deployment modes and organization BYOK; a credential is never an approval | Accepted (policy built; BYOK storage/UI not yet) |
+| [011](011-provider-configuration-byok.md) | Provider configuration, deployment trust classes (D-15) and organization BYOK (D-16 timing); a credential is never an approval | Accepted (policy and trust classes built; BYOK storage Phase 6, admin UX Phase 7) |

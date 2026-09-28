@@ -423,11 +423,20 @@ it uses the first time (approved for `internal` only); raising the approval is a
 explicit administrator action outside ingestion. `endpoint` and `updated_by` are not
 built.
 
+Migration 0007 (D-15): `deployment` ∈ {`local`, `organization_controlled`,
+`external_api`} (the old `private` became `organization_controlled`), and
+`approved_at timestamptz NULL`, set only by an explicit administrator approval.
+`org_settings.organization_controlled_level` (NULL = the class is not allowed) is the
+organization's ceiling for `organization_controlled` inference.
+
 Design: `id, organization_id, purpose (embedding|generation), provider, endpoint, model,
-deployment (external_api|private), approved_for_level (internal|confidential|
-restricted, default internal), retention_mode, training_opt_out bool, updated_by,
-updated_at`. Effective egress level for a call =
-`min(org_settings.external_egress_level, approved_for_level)`. Secrets are not stored
+deployment (local|organization_controlled|external_api), approved_for_level
+(internal|confidential|restricted, default internal), approved_at, retention_mode,
+training_opt_out bool, updated_by, updated_at`. Effective egress level for a call, by
+trust class: `external_api` `min(external_egress_level, approved_for_level)`;
+`organization_controlled` `min(organization_controlled_level, approved_for_level)` if
+both are set and `approved_at` is set, otherwise nothing; `local`
+`approved_for_level`. Secrets are not stored
 here (environment / secret store only).
 
 ## 8. Row-Level Security (implemented in Phase 1)

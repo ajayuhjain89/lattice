@@ -102,9 +102,9 @@ For Voyage:
   retrieval benchmark. Unverified for our corpus.
 - The shared embedding space lets query and document models differ later without
   re-indexing.
-- A private deployment path (in the customer's VPC, and open-weights `voyage-4-nano`)
-  is the natural future candidate for a `deployment: private` provider approved for
-  `confidential` (security-model §6).
+- A customer-hosted deployment path (in the customer's VPC, and open-weights
+  `voyage-4-nano`) is the natural future candidate for an `organization_controlled`
+  provider (D-15) approved for `confidential` (security-model §6).
 - Training is on by default. An account whose admin never flipped the opt-out would
   send the whole internal corpus into model training. Lattice cannot verify that toggle
   through the API, so meeting security-model §6 depends on a manual step outside
@@ -158,9 +158,10 @@ to `input_type`, and the OpenAI adapter ignores. The 1024-dimension column fits 
 - **Phase 5 retrieval evaluation** (Recall@10 target ≥ 0.9) misses on paraphrase
   items and the misses are semantic. Then run the same golden set with `voyage-4-lite`
   and `voyage-4` using `input_type`, and switch if recall improves materially.
-- An organization wants confidential content embedded. That requires a
-  `deployment: private` provider (e.g. Voyage in the customer's VPC or a self-hosted
-  model), approved for `confidential` (security-model §6).
+- An organization wants confidential content embedded. That requires an
+  `organization_controlled` provider (D-15; e.g. Voyage in the customer's VPC) with an
+  organization ceiling and an explicit approval for `confidential`, or a `local` model
+  approved for it (security-model §6).
 - Multilingual corpora appear.
 - OpenAI's data terms change (training default, retention) or a pilot needs a
   residency region only one vendor offers.

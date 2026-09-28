@@ -82,11 +82,16 @@ Credentials today: `LATTICE_OPENAI_API_KEY`, `LATTICE_GEMINI_API_KEY` (or
 `GEMINI_API_KEY`), read by the provider only, from the environment or the git-ignored
 `.env`. They are never stored in `sources.config` or `model_providers`, and never
 logged. A key never makes a provider eligible: data origin, deployment and approval
-do (security-model §6). Organization-owned credentials (BYOK) are not built yet
-(implementation-plan D-16).
+do (security-model §6): credential availability ≠ provider approval ≠ data-egress
+authorization. Organization-owned credentials (BYOK) are scheduled for the Phase 6
+backend, and their admin UX for Phase 7 (D-16, ADR-011). Environment variables remain
+the development fallback. No evaluation or CI run needs any external key.
 
-For each configured provider, record: provider, endpoint, model, deployment
-(`external_api` / `private` / `local`), approved egress level (default `internal`),
+For each configured provider, record: provider, endpoint, model, deployment trust
+class (`local` / `organization_controlled` / `external_api`; D-15, anything else is
+refused), approved egress level (default `internal`; an `organization_controlled`
+provider also needs an explicit `lattice provider approve` and an organization
+ceiling, `org_settings.organization_controlled_level`, before anything is sent),
 training opt-out status, data-retention mode, region, key owner, rotation date.
 Raising an approved level or the org's external egress level requires a recorded
 reason and produces an audit event. Admins will see this on the Sources/Settings page.

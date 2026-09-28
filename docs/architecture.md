@@ -135,12 +135,15 @@ mechanically since Phase 2):
 | Provider | Deployment | External egress | Current purpose |
 | -------- | ---------- | --------------- | --------------- |
 | Fake | test | no (declared `external_api` for policy tests) | CI and tests |
-| Local (`mxbai-embed-large-v1`, ONNX Runtime) | `local` | no | real zero-cost / private / offline deployments |
-| Gemini (`gemini-embedding-2`, 1024 dims) | `external_api` | yes | optional BYOK; unpaid key = synthetic evaluation only |
-| OpenAI (`text-embedding-3-small`, 1024 dims) | `external_api` | yes | optional BYOK / managed provider |
+| Local (`mxbai-embed-large-v1`, ONNX Runtime) | `local` | no | real zero-cost / self-hosted / offline deployments |
+| Gemini (`gemini-embedding-2`, 1024 dims) | `external_api` | yes | optional external provider / BYOK; unpaid key = synthetic evaluation only |
+| OpenAI (`text-embedding-3-small`, 1024 dims) | `external_api` | yes | optional managed / BYOK provider; real evaluation not run |
+| Organization-controlled endpoint (future) | `organization_controlled` | to the organization's endpoint | customer-owned model infrastructure; explicit organization policy required |
 
-The sensitivity each may receive comes from the approval and egress policy
-(security-model §6), never from this table. Credentials are process-wide environment
+The trust classes are those of D-15 (`local`, `organization_controlled`,
+`external_api`; anything else is `unknown` and receives nothing). The sensitivity each
+may receive comes from the approval and egress policy (security-model §6), never from
+this table. Credentials are process-wide environment
 variables today, and organization-owned credentials (BYOK) are the target
 architecture (ADR-011). Lattice runs with none of them (local provider).
 

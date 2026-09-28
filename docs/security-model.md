@@ -161,51 +161,76 @@ its external model provider.
 | `confidential` | **No** — unless the organization explicitly opts in *and* the configured provider is approved for `confidential` |
 | `restricted` | **No** by default — same explicit opt-in + approval required |
 
+**Deployment trust classes (D-15, final Phase 5 closure).** Every provider record
+names where inference runs, as one of four classes. The word "private" carries no
+security meaning in Lattice and is not a class.
+
+| Class | Meaning | What it never implies |
+| ----- | ------- | --------------------- |
+| `local` | Inference runs inside the Lattice deployment boundary; no inference content leaves it (e.g. `LocalEmbeddingProvider`) | Unrestricted access: the reader's authorization, the organization's policy (including D-13) and an explicit approval for anything above `internal` still apply |
+| `organization_controlled` | Inference runs outside the Lattice process/deployment, on infrastructure or an endpoint the organization controls or approved (its own model server, a private cloud endpoint). It may involve network transmission | Trust by default: nothing is sent until the organization allows the class with an explicit ceiling *and* an administrator approves the record explicitly. No implicit `confidential` or `restricted`; calling something "private" is never sufficient |
+| `external_api` | A third-party provider outside the organization's controlled boundary (Gemini, OpenAI, Anthropic, Voyage) | That a credential authorizes anything: external egress level, provider approval, data-use and retention terms all apply |
+| `unknown` | A missing, invalid or unrecognised classification (including the pre-D-15 label `private`) | Anything: **fail closed**, no question, chunk or evidence text is sent |
+
+The class comes from the organization's record and the implementation's own
+declaration, never from a provider's brand name. Where they differ, nothing is sent.
+
 **Mechanics** (the invocation rule, ADR-011; `lattice.providers.egress`)
 
 A provider receives content -- document chunks at ingestion, the question at
 retrieval, and (Phase 6) evidence and the prompt -- only if **all** hold:
 
 1. the user is authorized for the content (decided first, in SQL; egress only narrows);
-2. the organization's policy permits the sensitivity for the provider's deployment
-   type;
-3. the provider's configuration is approved for it (`model_providers.approved_for_level`);
-4. the provider's declared deployment equals its recorded one
-   (`provider_deployment_mismatch` otherwise);
-5. its data-use terms are acceptable for the organization's data (`provider_data_use`
-   otherwise);
-6. valid credentials or configuration exist.
+2. the provider is recorded for *this* organization (`model_providers`, under
+   row-level security; another organization's record never applies), with a known
+   trust class that equals the class its implementation declares
+   (`provider_unapproved`, `deployment_unknown`, `provider_deployment_mismatch`);
+3. the organization allows the class, and the content is within the class ceiling
+   (`deployment_not_allowed` otherwise);
+4. the provider configuration is approved for the content's sensitivity
+   (`model_providers.approved_for_level`). An `organization_controlled` record also
+   needs an explicit administrator approval (`approved_at`);
+5. its data-use and retention terms are acceptable for the organization's data
+   (`provider_data_use` otherwise);
+6. valid configuration exists, and valid credentials where the provider needs them.
 
-A valid key satisfies only item 6. It never authorizes sending anything.
+A valid key satisfies only item 6. It never authorizes sending anything, never raises
+a ceiling or an approval, and never turns `external_api` into
+`organization_controlled` or `organization_controlled` into `local`. **Credential
+availability ≠ provider approval ≠ data-egress authorization.**
 
 - `org_settings.external_egress_level` ∈ {`internal`, `confidential`, `restricted`},
-  default **`internal`**. `org_settings.default_query_sensitivity` (D-13), default
-  `internal`. `org_settings.data_origin` ∈ {`customer`, `synthetic`}, default
-  **`customer`** (set to `synthetic` by the seed for Halden and Veridian only).
+  default **`internal`**. `org_settings.organization_controlled_level` (D-15): the
+  same levels or NULL, default **NULL (class not allowed)**.
+  `org_settings.default_query_sensitivity` (D-13), default `internal`.
+  `org_settings.data_origin` ∈ {`customer`, `synthetic`}, default **`customer`** (set
+  to `synthetic` by the seed for Halden and Veridian only).
 - Each configured provider record carries `approved_for_level` (default `internal`),
-  a `deployment` of `external_api`, `private` (an organization-controlled endpoint), or
-  `local` (inference inside the Lattice deployment, ADR-009), a `retention_mode` and
-  `training_opt_out`. The effective level:
+  `approved_at` (set only by an explicit approval), a `deployment` trust class, a
+  `retention_mode` and `training_opt_out`. The database accepts only `local`,
+  `organization_controlled` and `external_api` (migration 0007). The effective level:
 
-  | Deployment | Effective level |
-  | ---------- | --------------- |
-  | `external_api`, `private` | `min(external_egress_level, approved_for_level)` |
+  | Class | Effective level |
+  | ----- | --------------- |
+  | `external_api` | `min(external_egress_level, approved_for_level)` |
+  | `organization_controlled` | `min(organization_controlled_level, approved_for_level)`, only when `organization_controlled_level` is set **and** `approved_at` is set; otherwise nothing |
   | `local` | `approved_for_level` (nothing leaves the deployment; the *external* level does not apply) |
+  | `unknown` | nothing |
 
-  `private` stays under the external level until a decision says otherwise
-  (implementation-plan §7).
 - **Data use.** A provider that may use submitted content to improve its products
   (`training_opt_out = false`; today an unpaid-tier Gemini key, ADR-010) may receive
   content only from a `synthetic` organization. For a `customer` organization it
   receives nothing: no chunk and no question. Where the provider's declaration and its
   record differ, the more restrictive reading wins. Such a key is also refused
   outright when `LATTICE_ENV=production`.
-- Raising either value is an explicit admin action with a stated reason, recorded as
+- Raising any of these values is an explicit admin action with a stated reason, recorded as
   an audit event and shown on the provider settings page. There is no implicit path
   (no "leadership users may send confidential content" shortcut). Implemented today as
   the operator command `lattice provider approve --org … --provider … --model …
-  --level … --reason …`, which logs `provider.approval_changed`. The settings page and
-  audit table come with BYOK (ADR-011).
+  --level … --reason …`, which sets `approved_at` and logs `provider.approval_changed`.
+  The organization-level ceilings have no operator command yet (set by the owner role;
+  no `organization_controlled` provider exists in Phase 5). The settings API, page and
+  audit table come with Phase 6/7 (ADR-011, D-16).
 - **Generation:** authorized evidence above the effective level is removed from the
   prompt only. It stays in the user's evidence list, labelled **"Not used to draft
   this answer"**, with a notice naming the reason: "2 Confidential sources you can
@@ -231,7 +256,8 @@ A valid key satisfies only item 6. It never authorizes sending anything.
   unrecognised values count as `restricted`. The question is sent only if items 1–6
   above hold for it at that sensitivity. Otherwise nothing is sent and semantic
   retrieval is `policy_excluded` (`query_classification`, `provider_unapproved`,
-  `provider_deployment_mismatch`, `provider_data_use`). Exact and lexical retrieval
+  `deployment_unknown`, `provider_deployment_mismatch`, `deployment_not_allowed`,
+  `provider_data_use`). Exact and lexical retrieval
   continue. A `local` provider approved for the sensitivity may still embed it; the
   question is never silently sent to another external provider. The effective
   sensitivity is returned with every retrieval (`question_sensitivity`, also in the
@@ -239,7 +265,10 @@ A valid key satisfies only item 6. It never authorizes sending anything.
   put in an external prompt (then `evidence_only`, no model call). Tested with
   recording providers and mock transports:
   `backend/tests/retrieval/test_question_sensitivity.py`,
-  `test_semantic_degradation.py`.
+  `test_semantic_degradation.py`; the trust classes (D-15) in
+  `backend/tests/providers/test_trust_classes.py`,
+  `backend/tests/retrieval/test_trust_classes.py` and
+  `backend/tests/ingestion/test_provider_eligibility.py`.
 - Provider configuration records: provider name, endpoint, model, deployment,
   approved level, data-retention mode, training opt-out status. Visible to admins.
 
@@ -248,9 +277,10 @@ A valid key satisfies only item 6. It never authorizes sending anything.
 | Provider | Deployment | External egress | Current purpose |
 | -------- | ---------- | --------------- | --------------- |
 | Fake | test double (declared `external_api`, so tests exercise the external rule; no network) | no | tests and CI only; refused in production |
-| Local (`mxbai-embed-large-v1`, ADR-009) | `local` | no | real zero-cost semantic retrieval; private/offline deployments |
-| Gemini (ADR-010) | `external_api` | yes | optional BYOK; an unpaid key is synthetic-only |
-| OpenAI (ADR-008) | `external_api` | yes | optional BYOK / managed deployments |
+| Local (`mxbai-embed-large-v1`, ADR-009) | `local` | no | real zero-cost / self-hosted semantic retrieval; offline deployments |
+| Gemini (`gemini-embedding-2`, ADR-010) | `external_api` | yes | optional external provider / BYOK; the current unpaid key is synthetic-only |
+| OpenAI (ADR-008) | `external_api` | yes | optional managed / BYOK provider; real evaluation not run |
+| Organization-controlled endpoint (future) | `organization_controlled` | to the organization's own endpoint | customer-owned model infrastructure; explicit organization policy required |
 
 This table says where inference runs. Whether a provider may receive a given piece of
 content is only ever the policy's answer above, never a conclusion from its name.
@@ -266,7 +296,7 @@ content is only ever the policy's answer above, never a conclusion from its name
   (some frontier models require standard retention; verify per model before
   enabling). Document the effective retention per provider in the runbook.
 - The `GenerationProvider`/`EmbeddingProvider` Protocols accept any endpoint, so an
-  org can use an approved external provider, a private cloud endpoint, or a
+  org can use an approved external provider, an `organization_controlled` endpoint, or a
   self-hosted model without changes to retrieval or answering.
 
 ## 7. Prompt-injection resistance
@@ -274,6 +304,9 @@ content is only ever the policy's answer above, never a conclusion from its name
 See `trust-boundaries.md` §4. Architecture, not prompt wording, carries the weight:
 no tools, only permitted evidence, schema-constrained output, handle-only citations,
 verbatim quote verification, plain-text rendering.
+
+**Retrieved content is untrusted data, never model instructions** -- a hard Phase 6
+requirement with adversarial tests, listed in `trust-boundaries.md` §4.
 
 ## 8. Traces, audit and debugging
 

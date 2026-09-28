@@ -5,10 +5,13 @@ hardening below). Phase 2 approved, with decisions D-8 and D-9 (implemented at t
 of Phase 3). Phase 3 approved and merged to `main`. Phase 4 approved and merged to
 `main` (5e12616), with decisions D-10 and D-12 applied and D-11 recorded for Phase 6.
 **Phase 5 implemented and closed** (awaiting review, branch `phase/5-retrieval`, not
-merged): the Phase 5 closure added a local model, Gemini and the provider invocation
-rule; D-13 and D-14 are decided and implemented; real semantic retrieval was measured
-with the local model (Recall@10 0.695) and Gemini (0.726, synthetic data only); the
-0.90 target is not met by any real provider (evaluation-plan §10).
+merged). The Phase 5 closure added a local model, Gemini and the provider invocation
+rule, and decided and implemented D-13 and D-14. The final closure (2026-09-29)
+removed the rejected cross-encoder experiment, resolved D-15 (deployment trust
+classes, migration 0007) and decided D-16's timing, and it froze retrieval.
+Engineering and security are complete, subject to the final verification. The product
+objective Recall@10 ≥ 0.90 is **not yet achieved**: best real result is Gemini 0.726,
+local 0.695 (evaluation-plan §12). No Phase 6 work has started.
 
 ---
 
@@ -478,10 +481,10 @@ Phase 6 work.
 | Planned (closure brief) | As built | Why |
 | ----------------------- | -------- | --- |
 | Fake provider has deployment `test`, no egress | No network, but *declared* `external_api` | So every egress test exercises the external rule; production refuses it anyway |
-| Local provider: `deployment = local` or `self_hosted` | `local` (migration 0006); `private` unchanged and still capped by the external level | Conservative; D-15 decides `private` |
+| Local provider: `deployment = local` or `self_hosted` | `local` (migration 0006); `private` unchanged and still capped by the external level, until the final closure replaced it (D-15, migration 0007) | Conservative until D-15 was decided |
 | Gemini credential "existing convention" | `LATTICE_GEMINI_API_KEY` or Google's `GEMINI_API_KEY` | The user's `.env` uses Google's name |
 | Unpaid-tier key synthetic-only | Enforced by data: `org_settings.data_origin = synthetic` (seeded for Halden and Veridian) plus the recorded `training_opt_out = false`; refused in production | A declaration alone would be documentation, not a control |
-| Evaluation over the whole corpus with Gemini | Done in two runs: 985/1,289 chunks before the free tier's 1,000-texts-per-day cap, then only the 304 failed chunks with a second valid key (stored vectors kept) | The cap is not in Google's docs; discovered from the 429's quota detail |
+| Evaluation over the whole corpus with Gemini | Done in two runs: 985/1,289 chunks before the project's observed daily quota (about 1,000 embedded texts for that project and tier), then only the 304 failed chunks with a second valid key (stored vectors kept) | The quota came from the 429's quota detail, not from Google's docs; quotas vary by project, model and tier |
 | One local model | Two: `mxbai-embed-large-v1` (default) and `snowflake-arctic-embed-l-v2.0` (comparison, pinned; R@10 0.657 < 0.695, so not adopted) | The first miss analysis flagged embedding quality as a plausible factor (brief §21). The comparison ruled it out as the lever |
 | Harness: `must_not_contain` anywhere in evidence is a security hit | Only for canaries or unreadable records; readable injection payloads are informational | The harness's documented definition; the item targets that record (evaluation-plan §10) |
 
@@ -515,6 +518,70 @@ question may be placed in an external prompt (otherwise `evidence_only`, no mode
 call); evidence above the provider's effective level is excluded from the prompt as
 security-model §6 describes; the Anthropic generation adapter is BYOK like the
 embedding providers.
+
+**Final Phase 5 closure (2026-09-29): freeze retrieval, D-15, D-16.**
+
+- **Rejected experiment removed.** A local cross-encoder (`gte-reranker-modernbert-base`)
+  was measured as a bounded Phase 5.1 experiment and rejected for the default path.
+  It improved MRR and R@1, but it lowered Gemini R@10 (0.726 → 0.711), added only
+  +0.018 locally, regressed supersession, and took 5–13 s per query on the reference
+  M1. Its uncommitted integration (a `Reranker` protocol, a cross-encoder provider, a
+  `crossrank` stage, service, trace and evaluation hooks, a CLI flag, a factory, a model
+  registry entry and a setting) was removed. It never reached a commit and it added no
+  dependency. The findings are in evaluation-plan §11.
+- **Retrieval frozen.** The retained path is exact, lexical and semantic retrieval with
+  authorization in SQL, RRF, rerank_v1, selection and E4. No retrieval tunable or
+  algorithm changed in the final closure, so the Gemini benchmark (R@10 0.726) stands
+  as recorded and was not re-run (no quota spent; evaluation-plan §12).
+- **D-15 as built.** Trust classes `local`, `organization_controlled`, `external_api`,
+  plus `unknown` (fail closed) in `providers.egress` (`trust_class`, `class_ceiling`,
+  `provider_decision`). Migration 0007 relabels `private` records as
+  `organization_controlled` and restricts the column to the three known classes. It
+  adds `model_providers.approved_at` (set by `lattice provider approve`) and
+  `org_settings.organization_controlled_level` (NULL = class not allowed). An
+  `organization_controlled` provider needs both before anything is sent. `local` and
+  `external_api` decisions are unchanged. Ingestion never records an unknown declared
+  class. New reason codes: `deployment_unknown`, `deployment_not_allowed`. Tests:
+  `tests/providers/test_trust_classes.py` (the decision for every class and class
+  pair), `tests/retrieval/test_trust_classes.py` (questions, observed),
+  `tests/ingestion/test_provider_eligibility.py` (document chunks, observed) and
+  `tests/test_migrations.py` (0006 → 0007 → 0006 relabel round trip).
+- **D-16 timing.** The Phase 6 backend builds the minimum organization-scoped provider
+  configuration and secret abstraction. The Phase 7 frontend builds the administrative
+  UX (ADR-011). Nothing is built in Phase 5.
+
+**Final closure mutation check (D-15)** (each applied alone to the working tree; the
+trust-class, eligibility, migration, question-sensitivity and provider-authorization
+modules run, 98 tests; every file restored and verified byte-identical by SHA-256;
+never committed). 8 of 8 relevant mutations caught:
+
+| # | Defect introduced | Tests failed | Caught by (examples) |
+| - | ----------------- | -----------: | -------------------- |
+| D15-1 | An unknown class is treated as `external_api` | 15 | `test_an_unknown_deployment_sends_no_query[*]`, `…_no_document_text` |
+| D15-2 | `organization_controlled` needs no explicit approval | 7 | `test_organization_controlled_needs_an_explicit_approval[*]`, other-organization test, 0007 migration test |
+| D15-3 | `organization_controlled` allowed up to `restricted` by default | 4 | class-ceiling tests (query and documents), relabelling test |
+| D15-4 | The external ceiling is ignored (an approval or credential raises it) | 8 | `test_an_external_credential_does_not_raise_the_ceiling`, external minimum tests |
+| D15-5 | The declared class is trusted over the record (downgrade/upgrade between classes) | 10 | `test_a_declared_class_that_differs_from_the_record_sends_nothing[*]` (all 6 class pairs) |
+| D15-6 | An unknown declared class is recorded and used | 15 | unknown-class query and document tests |
+| D15-7 | The schema accepts the old label `private` | 1 | `test_the_schema_stores_only_known_classes[private]` |
+| D15-8b | Another organization's provider record is used (organization filter dropped **and** RLS disabled on `model_providers`) | 1 | `test_another_organizations_configuration_is_never_used` |
+
+Dropping only the organization filter in `providers.records` (D15-8) is **not** a
+defect: all 98 tests pass because `model_providers` has forced row-level security, and
+the runtime role cannot bypass it. The filter and RLS are two independent layers, and
+D15-8b shows the test fails as soon as both are gone.
+
+**Forward requirements for Phase 6, added by the final closure** (not implemented):
+
+- **Retrieved content is untrusted data, never model instructions (hard security
+  requirement).** Retrieving a readable document that contains prompt-injection text
+  is not an authorization leak (evaluation-plan §10). The Phase 6 adversarial tests
+  must prove that retrieved passages cannot override system/developer instructions,
+  request hidden documents, reveal unauthorized content, credentials or secrets,
+  change the organization context, alter authorization or provider/egress policy,
+  cause unauthorized actions, or exfiltrate information.
+- **Multi-hop evidence** remains an open product requirement (evaluation-plan §12). No
+  approach is approved.
 
 ### Phase 6 — Answering: generation, claim-level citations, freshness, potential conflicts, traces
 
@@ -611,7 +678,7 @@ author (or a fresh machine).
 | 11 | Deployment + operations | Container images, single-region deploy, backups/PITR, migrations in CI/CD, retention jobs, alerting on `security_invariant_violated` |
 | 12 | Accounts workspace | Account timeline + scoped Ask (AM workflow) |
 | 13 | Next connectors | Call transcripts, CRM notes, GitHub issues, release notes |
-| — | Only if evals demand | HNSW tuning, model reranker, query rewriting, simple-config tsvector |
+| — | Only if evals demand | HNSW tuning, model reranker (a local cross-encoder was measured and rejected in Phase 5, evaluation-plan §11), query rewriting, simple-config tsvector |
 
 ## 5. Local development
 
@@ -674,8 +741,8 @@ Added in later phases: `make web` (Phase 7, Node 22 LTS + pnpm).
 | D-12 | How Phase 4 applies admin grants that exist before the Phase 9 access UI (the dataset's `admin-grants.yaml`) | Phase 4 | **Decided:** a separate post-sync command (`lattice apply-admin-grants`), never a connector, resolves each record key (optionally with its source) to a document and writes `origin = admin` membership grants; any unresolvable, ambiguous or duplicate entry fails the whole application with nothing written; idempotent; `--prune` revokes | Engineering — decided |
 | D-13 | Query egress: who sets a question's sensitivity, and does generation obey it? | Phase 5 closure | **Decided and implemented:** `effective = more_restrictive(org_settings.default_query_sensitivity, per-question declaration)`. A user, client, provider key or provider selection can raise it, never lower it (unrecognised = `restricted`). External query embedding is skipped when policy forbids it; exact + lexical always run; a `local` provider approved for the sensitivity may still embed the question; no silent external fallback. Returned as `RetrievalResult.question_sensitivity`. **Phase 6 must apply the same effective sensitivity to the question in the generation prompt** (`evidence_only` without a model call when it may not be sent), under the same invocation rule (ADR-011). Phase 7 offers the per-question "more sensitive" control. Migration 0006; tests `test_question_sensitivity.py` | Product owner — decided |
 | D-14 | Notice for a document superseded by one the reader cannot read | Phase 5 closure | **Decided and implemented:** drop any notice derived solely from an unreadable successor: no "newer document exists", no "may be outdated", no successor ID, count, title, timestamp, source or relationship. Readable ↔ readable explicit supersession is exposed; never inferred from age. Tests `test_successor_visibility.py` (the reader's whole result is identical with and without a hidden successor; losing access removes the link on the next request) | Product owner — decided |
-| D-15 | `private` deployments (an organization-controlled model endpoint outside the Lattice deployment): governed like `external_api` (capped by the external egress level) or like `local` (own approval only)? | Before the first private-endpoint provider | Keep them under the external level (the conservative reading, as built) until an organization needs otherwise; decide per deployment with the customer's security team | Product owner |
-| D-16 | Organization-owned provider credentials (BYOK): secret store, encryption at rest, rotation, revocation, masked admin UI, audit events for approval changes | Before any multi-tenant deployment; generation provider resolution in Phase 6 | Implement per ADR-011: credentials referenced from per-organization provider configuration, never plaintext config, never returned or logged; Phase 6 resolves the generation provider per organization so no call site depends on one global key | Product owner + Engineering |
+| D-15 | Deployment trust classes: how is inference outside the Lattice deployment governed, and what does "private" mean? | Final Phase 5 closure | **Decided (2026-09-29, ADR-011):** "private" has no security meaning. The classes are `local` (inside the deployment; own approval), `organization_controlled` (outside Lattice, on organization-controlled infrastructure: not allowed until the organization sets a ceiling, and needs an explicit record approval), `external_api` (third party: external level, approval, data use) and `unknown` (fail closed). A credential satisfies only the credential requirement. Implemented in migration 0007 and `providers.egress` | Product owner — decided |
+| D-16 | Organization-owned provider credentials (BYOK): when are the secret store, encryption at rest, rotation, revocation, masked admin UI and approval audit events built? | Final Phase 5 closure | **Decided (2026-09-29, timing only, ADR-011):** the Phase 6 backend builds the minimum organization-scoped provider configuration and secret abstraction (organization → provider configuration → trust class → provider/model → secret reference → invocation; secrets never in API responses, logs, traces, prompts or errors; rotation, replacement, revocation, disablement; environment variables stay as the development fallback). The Phase 7 frontend builds the admin UX (masked state, connection test, enable/disable, egress communication). Nothing in Phase 5 | Product owner + Engineering — decided |
 
 ## 8. Self-review log (Phase 0)
 

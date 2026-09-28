@@ -142,11 +142,14 @@ sensitivity is `more_restrictive(org_settings.default_query_sensitivity, the dec
 classification)`: a declaration can raise it and nothing can lower it. Before any
 call, the provider must have a `model_providers` record for the organization (purpose
 `embedding`, written when ingestion embedded documents with it; otherwise
-`provider_unapproved`). Its declared deployment must match the record
-(`provider_deployment_mismatch`), its data terms must suit the organization's data
-(`provider_data_use`), and the effective sensitivity must be at or below its effective
-level: `min(external_egress_level, approved_for_level)` for `external_api` / `private`,
-and `approved_for_level` alone for `local` (`query_classification`). Otherwise nothing
+`provider_unapproved`). Its trust class (D-15) must be known (`deployment_unknown`),
+equal to the class it declares (`provider_deployment_mismatch`) and allowed by the
+organization (`deployment_not_allowed`). Its data terms must suit the organization's
+data (`provider_data_use`). The effective sensitivity must be at or below its
+effective level: `min(external_egress_level, approved_for_level)` for `external_api`,
+`min(organization_controlled_level, approved_for_level)` for an explicitly approved
+`organization_controlled` provider, and `approved_for_level` alone for `local`
+(`query_classification`). Otherwise nothing
 is sent (`policy_excluded`). There is no fallback to another provider. A local provider
 approved for the sensitivity may still embed a question that external providers may not
 receive. The provider receives the normalized question only, through
