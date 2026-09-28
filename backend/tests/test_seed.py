@@ -10,6 +10,8 @@ from lattice.cli import main
 from lattice.db.engine import Database
 from lattice.seed import Manifest, load_manifest, seed_manifest
 
+from .factories import create_source
+
 DATA = Path(__file__).resolve().parents[2] / "data" / "synthetic"
 HALDEN = DATA / "halden" / "org.yaml"
 VERIDIAN = DATA / "veridian" / "org.yaml"
@@ -239,13 +241,15 @@ async def test_group_membership_changes_bump_authz_updated_at(owner_db: Database
 async def test_seed_never_takes_over_a_source_synced_group(owner_db: Database) -> None:
     await seed_manifest(owner_db, load_manifest(HALDEN))
     org = await _org_id(owner_db, "halden")
+    source = await create_source(owner_db, org, "halden-slack", "chat_export")  # type: ignore[arg-type]
     async with owner_db.tenant_transaction(org) as s:  # type: ignore[arg-type]
         await s.execute(
             text(
-                "INSERT INTO access_groups (organization_id, key, origin, external_ref, name) "
-                "VALUES (:o, 'acct-acme', 'source', 'G0ACCTACME1', '#acct-acme')"
+                "INSERT INTO access_groups (organization_id, key, origin, source_id, "
+                "external_ref, name) "
+                "VALUES (:o, 'acct-acme', 'source', :src, 'G0ACCTACME1', '#acct-acme')"
             ),
-            {"o": org},
+            {"o": org, "src": source},
         )
     base = load_manifest(HALDEN).model_dump()
     base["groups"].append({"key": "acct-acme", "name": "Acme team", "members": []})

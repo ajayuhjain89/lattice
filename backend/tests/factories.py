@@ -79,6 +79,50 @@ async def login(
     return await client.post("/v1/auth/dev-login", json=body, headers=CSRF)
 
 
+# --- Sources and documents (Phase 4) ---------------------------------------------------
+
+FIXTURE_SOURCE_KEY = "fixture"
+
+# Columns every document row needs since Phase 4 (source identity, provenance, content),
+# with fixture values, for tests that write documents directly to exercise the access
+# columns. ``fixture_document_values(org)`` takes the SQL expression of the document's
+# organization; that organization needs a fixture source (``create_source``).
+FIXTURE_DOCUMENT_COLUMNS = (
+    "source_id, external_id, document_kind, title, authority, source_updated_at, "
+    "content_hash, access_hash, body"
+)
+
+
+def fixture_document_values(org: str) -> str:
+    return (
+        f"(SELECT id FROM sources WHERE organization_id = {org} AND key = '{FIXTURE_SOURCE_KEY}'), "  # noqa: S608
+        "gen_random_uuid()::text, 'doc', 'Fixture document', 'working', now(), "
+        "sha256(convert_to(gen_random_uuid()::text, 'UTF8')), "
+        "sha256(convert_to(gen_random_uuid()::text, 'UTF8')), 'Fixture body.'"
+    )
+
+
+async def create_source(
+    db: Database,
+    organization_id: uuid.UUID,
+    key: str = FIXTURE_SOURCE_KEY,
+    connector_type: str = "document_repository",
+) -> uuid.UUID:
+    async with db.tenant_transaction(organization_id) as s:
+        value: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO sources (organization_id, key, connector_type, name, "
+                    "default_sensitivity, authority) VALUES (:o, :k, :t, :n, 'internal', "
+                    "'working') ON CONFLICT (organization_id, key) DO UPDATE SET key = "
+                    "EXCLUDED.key RETURNING id"
+                ),
+                {"o": organization_id, "k": key, "t": connector_type, "n": key},
+            )
+        ).scalar_one()
+    return value
+
+
 # --- Authorization (Phase 2) ----------------------------------------------------------
 
 
@@ -121,18 +165,24 @@ async def create_group(
 ) -> uuid.UUID:
     if key is None:  # unique by default, so fixtures never collide with seeded groups
         key = f"{re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')}-{uuid.uuid4().hex[:8]}"
+    source_id = (
+        await create_source(db, organization_id, "fixture-chat", "chat_export")
+        if origin == "source"
+        else None
+    )
     async with db.tenant_transaction(organization_id) as s:
         group_id: uuid.UUID = (
             await s.execute(
                 text(
-                    "INSERT INTO access_groups (organization_id, key, origin, external_ref, "
-                    "name) VALUES (:o, :key, :origin, :ref, :n) RETURNING id"
+                    "INSERT INTO access_groups (organization_id, key, origin, source_id, "
+                    "external_ref, name) VALUES (:o, :key, :origin, :src, :ref, :n) RETURNING id"
                 ),
                 {
                     "o": organization_id,
                     "key": key,
                     "origin": origin,
-                    "ref": f"ext-{name}" if origin == "source" else None,
+                    "src": source_id,
+                    "ref": f"ext-{name}-{uuid.uuid4().hex[:8]}" if origin == "source" else None,
                     "n": name,
                 },
             )
@@ -159,13 +209,15 @@ async def create_document(
     status: str = "active",
     grants: tuple[tuple[str, uuid.UUID], ...] = (),
 ) -> uuid.UUID:
+    await create_source(db, organization_id)
     async with db.tenant_transaction(organization_id) as s:
         document_id: uuid.UUID = (
             await s.execute(
                 text(
-                    "INSERT INTO documents (organization_id, account_id, sensitivity, "
-                    "access_mode, department_ids, status) "
-                    "VALUES (:o, :a, :s, :m, CAST(:d AS uuid[]), :st) RETURNING id"
+                    "INSERT INTO documents (organization_id, account_id, sensitivity, "  # noqa: S608
+                    f"access_mode, department_ids, status, {FIXTURE_DOCUMENT_COLUMNS}) "
+                    "VALUES (:o, :a, :s, :m, CAST(:d AS uuid[]), :st, "
+                    f"{fixture_document_values(':o')}) RETURNING id"
                 ),
                 {
                     "o": organization_id,

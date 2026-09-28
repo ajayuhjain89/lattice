@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from lattice.db.engine import Database
 
 from .factories import (
+    FIXTURE_DOCUMENT_COLUMNS,
     Member,
     create_account,
     create_department,
@@ -23,6 +24,7 @@ from .factories import (
     create_group,
     create_member,
     create_org,
+    fixture_document_values,
 )
 
 
@@ -90,18 +92,23 @@ CROSS_ORG_CASES = {
         "fk_document_grants",
     ),
     "document on another org's account": (
-        "INSERT INTO documents (organization_id, account_id, sensitivity, access_mode) "
-        "VALUES (:org, :b_account, 'internal', 'policy')",
+        "INSERT INTO documents (organization_id, account_id, sensitivity, access_mode, "  # noqa: S608
+        f"{FIXTURE_DOCUMENT_COLUMNS}) VALUES (:org, :b_account, 'internal', 'policy', "
+        f"{fixture_document_values(':org')})",
         "fk_documents_organization_id_account_id_accounts",
     ),
     "document restricted to another org's department": (
-        "INSERT INTO documents (organization_id, sensitivity, access_mode, department_ids) "
-        "VALUES (:org, 'internal', 'policy', ARRAY[CAST(:b_department AS uuid)])",
+        "INSERT INTO documents (organization_id, sensitivity, access_mode, department_ids, "  # noqa: S608
+        f"{FIXTURE_DOCUMENT_COLUMNS}) VALUES (:org, 'internal', 'policy', "
+        "ARRAY[CAST(:b_department AS uuid)], "
+        f"{fixture_document_values(':org')})",
         "department_ids must reference departments",
     ),
     "document restricted to a nonexistent department": (
-        "INSERT INTO documents (organization_id, sensitivity, access_mode, department_ids) "
-        "VALUES (:org, 'internal', 'policy', ARRAY[gen_random_uuid()])",
+        "INSERT INTO documents (organization_id, sensitivity, access_mode, department_ids, "  # noqa: S608
+        f"{FIXTURE_DOCUMENT_COLUMNS}) VALUES (:org, 'internal', 'policy', "
+        "ARRAY[gen_random_uuid()], "
+        f"{fixture_document_values(':org')})",
         "department_ids must reference departments",
     ),
 }
@@ -174,32 +181,39 @@ async def test_same_org_references_are_accepted(
 
 INVALID_ROWS = {
     "restricted but policy": (
-        "INSERT INTO documents (organization_id, sensitivity, access_mode) "
-        "VALUES (:org, 'restricted', 'policy')",
+        "INSERT INTO documents (organization_id, sensitivity, access_mode, "  # noqa: S608
+        f"{FIXTURE_DOCUMENT_COLUMNS}) VALUES (:org, 'restricted', 'policy', "
+        f"{fixture_document_values(':org')})",
         "ck_documents_restricted_is_grants_only",
     ),
     "unknown sensitivity": (
-        "INSERT INTO documents (organization_id, sensitivity, access_mode) "
-        "VALUES (:org, 'secret', 'policy')",
+        "INSERT INTO documents (organization_id, sensitivity, access_mode, "  # noqa: S608
+        f"{FIXTURE_DOCUMENT_COLUMNS}) VALUES (:org, 'secret', 'policy', "
+        f"{fixture_document_values(':org')})",
         "ck_documents_sensitivity",
     ),
     "unknown access mode": (
-        "INSERT INTO documents (organization_id, sensitivity, access_mode) "
-        "VALUES (:org, 'internal', 'public')",
+        "INSERT INTO documents (organization_id, sensitivity, access_mode, "  # noqa: S608
+        f"{FIXTURE_DOCUMENT_COLUMNS}) VALUES (:org, 'internal', 'public', "
+        f"{fixture_document_values(':org')})",
         "ck_documents_access_mode",
     ),
     "missing sensitivity": (
-        "INSERT INTO documents (organization_id, access_mode) VALUES (:org, 'policy')",
+        "INSERT INTO documents (organization_id, access_mode, "  # noqa: S608
+        f"{FIXTURE_DOCUMENT_COLUMNS}) VALUES (:org, 'policy', "
+        f"{fixture_document_values(':org')})",
         "sensitivity",
     ),
     "null department element": (
-        "INSERT INTO documents (organization_id, sensitivity, access_mode, department_ids) "
-        "VALUES (:org, 'internal', 'policy', ARRAY[NULL]::uuid[])",
+        "INSERT INTO documents (organization_id, sensitivity, access_mode, department_ids, "  # noqa: S608
+        f"{FIXTURE_DOCUMENT_COLUMNS}) VALUES (:org, 'internal', 'policy', ARRAY[NULL]::uuid[], "
+        f"{fixture_document_values(':org')})",
         "ck_documents_department_ids_no_nulls",
     ),
     "unknown document status": (
-        "INSERT INTO documents (organization_id, sensitivity, access_mode, status) "
-        "VALUES (:org, 'internal', 'policy', 'archived')",
+        "INSERT INTO documents (organization_id, sensitivity, access_mode, status, "  # noqa: S608
+        f"{FIXTURE_DOCUMENT_COLUMNS}) VALUES (:org, 'internal', 'policy', 'archived', "
+        f"{fixture_document_values(':org')})",
         "ck_documents_status",
     ),
     "grant naming no principal": (
@@ -232,6 +246,11 @@ INVALID_ROWS = {
         "INSERT INTO access_groups (organization_id, key, origin, name) "
         "VALUES (:org, 'x', 'source', 'x')",
         "ck_access_groups_external_ref_iff_source",
+    ),
+    "source group without a source": (
+        "INSERT INTO access_groups (organization_id, key, origin, external_ref, name) "
+        "VALUES (:org, 'x', 'source', 'C123', 'x')",
+        "ck_access_groups_source_id_iff_source",
     ),
     "admin group with external ref": (
         "INSERT INTO access_groups (organization_id, key, origin, external_ref, name) "
