@@ -161,9 +161,17 @@ organization's default, which a user can raise but never lower (D-13); otherwise
 the provider fails, exact and lexical retrieval still answer. A local model can embed
 questions that must not leave the deployment. Providers change relevance only, never
 what is permitted, and a document superseded by one the reader cannot see carries no
-hint of it (D-14). Details:
+hint of it (D-14). Every model provider has an explicit deployment trust class --
+`local`, `organization_controlled` or `external_api`; anything else receives nothing
+(D-15) -- and a provider credential never authorizes sending data.
+
+Results on the synthetic golden set (Recall@10): exact + lexical 0.668, local
+`mxbai-embed-large-v1` 0.695, Gemini `gemini-embedding-2` 0.726; every security metric
+0. The product objective of Recall@10 ≥ 0.90 is **not yet achieved**. A local
+cross-encoder reranker was measured and rejected for the default path. Retrieval is
+frozen for Phase 5. No test or CI run needs an external API key. Details:
 [retrieval design, Part I](docs/retrieval-design.md); results:
-[evaluation plan §9](docs/evaluation-plan.md).
+[evaluation plan §9–§12](docs/evaluation-plan.md).
 
 ## Repository layout
 

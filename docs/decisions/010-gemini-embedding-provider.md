@@ -104,8 +104,12 @@ but 1024 is inside the supported range (below).
   0.648, all security metrics 0. That is the best of the real providers tested, and
   still below the 0.90 target. Quality is not eligibility: an unpaid key remains
   synthetic-only.
-- The free tier allows 1,000 embedded texts per day per project and model, counted
-  per text; the synthetic corpus needed two days (or a second project's key). Quota use
+- During the Phase 5 evaluation this project's free-tier quota
+  (`EmbedContentRequestsPerDayPerProjectPerModel-FreeTier`) stopped the run at about
+  1,000 embedded texts per day, counted per text. Active Gemini quotas vary by project,
+  model and tier; this is an observation, not a product rule. The synthetic corpus
+  needed two days (or a second project's key). The recorded benchmark is historical
+  evidence: it is not re-run in CI or verification, which need no Gemini key. Quota use
   for the full synthetic evaluation, measured: see evaluation-plan §10.
   Documents are about 20 batched requests (1,289 internal chunks, ~306k characters,
   ~76k tokens). Queries take 1–2 batched requests, because the evaluation prefetches

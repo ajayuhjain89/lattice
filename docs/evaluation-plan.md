@@ -476,8 +476,8 @@ the lever. mxbai stays the default (ADR-009). What would move Recall@10 toward 0
    limit before the per-document cap applies, and title terms counted once per
    document (evaluation-plan §9's open lexical item).
 2. **Ranking depth** (37 targets at ranks 11–50 in both channels): a second-stage
-   reranker (a cross-encoder). That is a Phase 5 non-goal in the plan, so it needs a
-   decision.
+   reranker (a cross-encoder). It was tested once, as a bounded experiment, and
+   **rejected** for the default path (§11).
 3. **Multi-hop questions** (12–14 targets): needs query understanding beyond one
    vector, which is out of scope for deterministic retrieval (no LLM rewriting,
    §2). Phase 6's answer step can ask for or combine evidence.
@@ -497,9 +497,12 @@ need their own review (§7 regression rule).
   questions. A one-text probe confirmed 1024-dimensional unit vectors with
   `embedContentConfig.outputDimensionality = 1024`. The sync embedded 985 chunks and
   then hit HTTP 429. The quota detail named
-  `EmbedContentRequestsPerDayPerProjectPerModel-FreeTier`: **1,000 per day, counted per
-  embedded text**, a number Google's rate-limit page does not publish. The adapter now
-  stops at once on a per-day quota (`embedding_failed:quota_exhausted`).
+  `EmbedContentRequestsPerDayPerProjectPerModel-FreeTier`. For this project and tier
+  it limited the run to about 1,000 embedded texts per day, counted per text rather
+  than per request. That is an observation about one project, not a product rule:
+  active Gemini quotas vary by project, model and tier, and Google's rate-limit page
+  did not state this one. The adapter now stops at once on a per-day quota
+  (`embedding_failed:quota_exhausted`).
 - **Completion (2026-09-29, a second valid key).** Before any embedding call, the key
   was checked with `models.get` on `gemini-embedding-2` (HTTP 200, no quota spent;
   the value was never displayed). The same model and 1024 dimensions mean the same
@@ -559,3 +562,122 @@ fusion causes ruled out. After the closure, (1) and (2) hold with the local mode
 does not: 37 misses are ranking depth shared by both channels, 2 are the per-document
 cap, and 14 are multi-hop. So no external comparison was added; the closure compared
 one more *local* model instead (§10).
+
+## 11. Rejected retrieval experiment: local cross-encoder reranking (2026-09-29)
+
+One bounded experiment tested whether a second-stage reranker closes the
+ranking-depth gap (§10, cause 2). It was measured, then **rejected for the current
+default retrieval path**, and its code was removed from the product. The rejection is
+a quality/latency/category trade-off. It is not a security finding: the experiment's
+security boundary held throughout.
+
+| Property | Value |
+| -------- | ----- |
+| Model | `Alibaba-NLP/gte-reranker-modernbert-base`, pinned revision `f7481e6055501a30fb19d090657df9ec1f79ab2c` |
+| License | Apache-2.0 |
+| Architecture | ModernBERT cross-encoder, about 149M parameters, one relevance logit per (question, passage) pair |
+| Weights | fp32 ONNX, 598,803,940 bytes (`onnx/model.onnx`, SHA-256 `c6d32265…5d93`) plus `tokenizer.json` |
+| Runtime | ONNX Runtime 1.30, CPU execution provider, graph optimizations `ORT_ENABLE_ALL` (the default), in process |
+| Placement | after RRF + rerank_v1, over the top 40 of the fused pool; rerank_v1's bounded multipliers applied to the cross-encoder's probability |
+| Security boundary | Local only (a non-local reranker was refused). It saw only the question and the pool's passages, the same text the embedding provider sees for a chunk. Each passage was re-read through the retrieval SQL predicate, and every pool document passed E4 before anything was scored. No account, access, sensitivity or source metadata. It reordered only; it removed nothing. The harness checked everything the reranker received against the same oracle as every other stage: 0 violations |
+| Network | none. A socket guard allowing only loopback was active during every reranker pass: 0 connection attempts |
+
+**Runtime benchmark.** Apple M1, 8 GB, under heavy swap pressure at the time (11.4
+of 12 GB swap in use), so absolute latencies are noisy. The relative result is clear.
+All 89 golden questions produce exactly 40 authorized passages. Ten of those pools
+were scored per configuration, each configuration in a fresh process after one
+warm-up.
+
+| Intra-op threads \ batch | 4 | 8 | 16 | 20 | 40 |
+| ------------------------ | --: | --: | --: | --: | --: |
+| runtime default | **5.3 s** | 7.3 / 7.7 s | 8.7 s | 12.6 s | 24.0 s |
+| 4 (M1 performance cores) | 6.0 s | 8.5 / 7.7 s | 9.1 s | 14.3 s | 28.4 s |
+| 2 | -- | 11.8 s | 13.4 s | 17.7 s | 34.4 s |
+
+p50 per 40-passage pool (two runs where two values are shown). Every configuration
+produced identical candidate IDs and identical order (maximum logit difference 7.4e-6).
+Larger batches are slower because each batch pads to its longest pair (median pair 87
+tokens, maximum 314; about 4.2k tokens per pool). The work is compute-bound: about
+0.9 TFLOP per pool in fp32. The best configuration (runtime-default threads, batch 4)
+reached p50 5.3 s and p95 6.4 s per pool, about 7.5 pairs/s, with 677 MB peak RSS for
+the reranker alone. In the product, the whole rerank step (passage read, E4, scoring)
+took p50 6.2–6.9 s and p95 10.5–12.8 s per query. A process holding the local
+embedding model and the reranker peaked at 1.27 GB RSS.
+
+**Quality.** Full golden set; each baseline was re-run in the same process and
+reproduced exactly (the Gemini query vectors were fetched once, 71 texts, and reused
+for the reranked pass).
+
+| Configuration | R@1 | R@5 | R@10 | R@20 | MRR |
+| ------------- | --: | --: | ---: | ---: | --: |
+| Gemini (D) | 0.338 | 0.602 | **0.726** | 0.820 | 0.648 |
+| Gemini + cross-encoder | 0.353 | 0.614 | **0.711** | 0.824 | 0.689 |
+| Local mxbai (C2) | 0.295 | 0.572 | **0.695** | 0.801 | 0.640 |
+| Local + cross-encoder | 0.363 | 0.616 | **0.713** | 0.826 | 0.715 |
+
+By category (R@10), in both configurations: gains on cross_org (Gemini 0.694 → 0.917,
+local 0.778 → 0.917) and stale (0.786 → 0.833; 0.762 → 0.833). Losses on
+**supersession** (1.000 → 0.917 in both), cross_source (0.778 → 0.574;
+0.685 → 0.574) and account_visibility (0.615 → 0.490; 0.500 → 0.490). Gemini also
+loses cross_document (0.729 → 0.646). Security was 0 in all four runs.
+
+**Why it was rejected.** It improves early ordering (MRR +0.04 / +0.08, R@1 up).
+But it lowers Gemini's Recall@10, the strongest real result, and adds only +0.018 for
+the local model. It regresses supersession: a relevance model has no notion of which
+version replaced another, so it promotes older evidence. And 5–13 s per query on the
+reference machine is unsuitable for the default interactive path. Not tried, by
+decision: quantization, a smaller pool, another reranker, GPU or remote inference.
+
+**Reconsideration condition.** A future reranking approach may be reconsidered if a
+materially faster local implementation, or a materially stronger Recall@10
+improvement, becomes available *without* damaging conflict and supersession evidence.
+That needs its own review. The findings above are the baseline to beat.
+
+## 12. Phase 5 final status (frozen)
+
+Phase 5 retrieval is architecturally frozen. The retained product path is exact,
+lexical and semantic retrieval (authorization inside every SQL statement), RRF fusion,
+the deterministic rerank_v1, permitted evidence selection and E4. There is no
+cross-encoder and no generation stage.
+
+**Accepted baselines** (89 items, 68 with targets; retrieval-6, rerank_v1):
+
+| Configuration | R@1 | R@5 | R@10 | R@20 | MRR | Role |
+| ------------- | --: | --: | ---: | ---: | --: | ---- |
+| Exact + lexical | 0.316 | 0.534 | 0.668 | 0.779 | 0.640 | provider-independent floor |
+| Local `mxbai-embed-large-v1`, approved `restricted` | 0.295 | 0.572 | 0.695 | 0.801 | 0.640 | real local / self-hosted |
+| Gemini `gemini-embedding-2`, 1024 dims | 0.338 | 0.602 | **0.726** | 0.820 | 0.648 | real external; strongest measured |
+| Fake provider | -- | -- | -- | -- | -- | tests and CI only; never a quality figure |
+| OpenAI `text-embedding-3-small` | -- | -- | -- | -- | -- | **not run**: no credential (none required) |
+
+**The Gemini figure is historical evidence.** It was measured on 2026-09-29 against the
+retained retrieval code. The final closure changed no retrieval semantics for an
+`external_api` provider (D-15 changes only how trust classes are recorded and allowed,
+and an `external_api` decision is identical by construction and by test). It was
+therefore not re-run, and no further Gemini quota was spent. The isolated evaluation
+databases that held the Gemini vectors were later lost in a Docker Desktop reset. Re-measuring
+would need a fresh corpus embedding (about 1,289 texts) and is a deliberate, manual
+act, never CI.
+
+**Product objective: Recall@10 ≥ 0.90 is NOT YET ACHIEVED.** Best real result: Gemini
+0.726. The objective is unchanged and remains the product-quality target. It no longer
+blocks closing the Phase 5 engineering phase:
+
+- **Phase 5 engineering / security: complete**, subject to the final verification
+  gates (security metrics all 0, full test suite, static checks, clean clone, CI);
+- **retrieval product-quality objective: partially achieved, target not yet met.**
+
+**Final Gemini miss analysis** (56 of 151 targets outside the top 10): 17 lost in
+fusion/selection although a channel ranked them in its top 10; 24 whose best channel
+ranked them 11–50; 15 that no channel finds (multi-hop / vocabulary). Of all misses, 10
+are chunks of confidential documents, which an `internal`-approved external provider
+never embeds. That is the egress policy working as designed, not a defect, and the
+policy is not weakened to raise recall.
+
+**Forward requirement: multi-hop evidence.** Some Lattice questions need evidence that
+does not resemble the question closely enough for exact, lexical or dense retrieval
+(for example "What commitments have we made to Acme?" needs the SCIM decision record,
+which never mentions Acme). All multi-hop golden questions stay in the set, with their
+categories unchanged. Possible future approaches include deterministic evidence
+expansion, relationship-aware traversal, carefully bounded query decomposition and
+multi-stage retrieval. None is approved, and none is implemented.
