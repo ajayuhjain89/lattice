@@ -4,7 +4,8 @@ Status: §2–4 **built in Phase 3**: the dataset is in `data/synthetic/` (its R
 maintainer's ground truth) and the golden set in `evals/golden/`; both are validated by
 `lattice dataset lint`. **The retrieval and security metrics of §5 and the retrieval
 runner of §7 are built in Phase 5** (`lattice.evals.retrieval`, `lattice eval
-retrieval`; results in §9). Generation metrics, judges and `lattice eval answer` arrive
+retrieval`; results in §9, real providers in §10, the rejected reranking experiment in
+§11, the frozen final status in §12). Generation metrics, judges and `lattice eval answer` arrive
 in Phase 6.
 Related: `retrieval-design.md`, `security-model.md` §9, `product-brief.md` §8.
 
@@ -218,7 +219,7 @@ Phase 3 total: 89 items; 10 same-question groups; 51 items tagged `security`.
 
 ## 7. Running evals
 
-- `lattice eval retrieval [--embedding fake|openai|none] [--category …] [--persona …]
+- `lattice eval retrieval [--embedding fake|local|gemini|openai|none] [--category …] [--persona …]
   [--item …]` (**built, Phase 5**; `make eval`) — no generation. Runs every selected
   golden item as its persona: the runtime role (`lattice_app`) through RLS, the
   persona's context resolved in the request snapshot, the item's scope; retrieval gets
@@ -654,10 +655,9 @@ cross-encoder and no generation stage.
 retained retrieval code. The final closure changed no retrieval semantics for an
 `external_api` provider (D-15 changes only how trust classes are recorded and allowed,
 and an `external_api` decision is identical by construction and by test). It was
-therefore not re-run, and no further Gemini quota was spent. The isolated evaluation
-databases that held the Gemini vectors were later lost in a Docker Desktop reset. Re-measuring
-would need a fresh corpus embedding (about 1,289 texts) and is a deliberate, manual
-act, never CI.
+therefore not re-run, and no further Gemini quota was spent. The evaluation databases
+that held the Gemini vectors are not retained. Re-measuring would need a fresh corpus
+embedding (about 1,289 texts) and is a deliberate, manual act, never CI.
 
 **Product objective: Recall@10 ≥ 0.90 is NOT YET ACHIEVED.** Best real result: Gemini
 0.726. The objective is unchanged and remains the product-quality target. It no longer

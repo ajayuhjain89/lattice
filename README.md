@@ -5,7 +5,7 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–5 are implemented** (Phase 5 awaits review). What runs today: a FastAPI backend with typed
+**Status: Phases 1–5 are implemented and merged** (Phase 6, answering, has not started). What runs today: a FastAPI backend with typed
 fail-fast configuration, PostgreSQL 16 + pgvector with forced row-level security for
 organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -124,7 +124,7 @@ Details: [data model §8](docs/data-model.md), [security model §3–5](docs/sec
 Inside an organization, what a member may read is decided by one small deterministic
 policy ([authorization model §4](docs/authorization-model.md)) — never by a model —
 implemented twice: `lattice.authz.readable()` in plain Python, and
-`readable_documents_predicate()` as SQL that retrieval will put inside its queries,
+`readable_documents_predicate()` as SQL that retrieval puts inside its queries (Phase 5),
 so unauthorized rows never leave PostgreSQL. A property-based test proves the two
 agree on thousands of generated cases each run. Administrator capability grants no
 content access; `restricted` content is reachable only by explicit grant; anything

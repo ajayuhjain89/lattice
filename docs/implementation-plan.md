@@ -4,14 +4,15 @@ Status: Phase 0 approved. Phase 1 approved and closed (after the `lattice_auth`
 hardening below). Phase 2 approved, with decisions D-8 and D-9 (implemented at the start
 of Phase 3). Phase 3 approved and merged to `main`. Phase 4 approved and merged to
 `main` (5e12616), with decisions D-10 and D-12 applied and D-11 recorded for Phase 6.
-**Phase 5 implemented and closed** (awaiting review, branch `phase/5-retrieval`, not
-merged). The Phase 5 closure added a local model, Gemini and the provider invocation
+**Phase 5 approved and merged to `main`** (78e5640, 2026-09-29; branch
+`phase/5-retrieval` kept for reference). The Phase 5 closure added a local model, Gemini and the provider invocation
 rule, and decided and implemented D-13 and D-14. The final closure (2026-09-29)
 removed the rejected cross-encoder experiment, resolved D-15 (deployment trust
 classes, migration 0007) and decided D-16's timing, and it froze retrieval.
-Engineering and security are complete, subject to the final verification. The product
-objective Recall@10 ≥ 0.90 is **not yet achieved**: best real result is Gemini 0.726,
-local 0.695 (evaluation-plan §12). No Phase 6 work has started.
+Phase 5 engineering and security are **complete** (every security metric 0, final
+verification passed). The product objective Recall@10 ≥ 0.90 is **not yet achieved**:
+best real result is Gemini 0.726, local 0.695 (evaluation-plan §12). **Phase 6 has not
+started.**
 
 ---
 
@@ -600,6 +601,24 @@ recorder (asker view; admin operational view without content); `POST /v1/ask`,
 `GET /v1/evidence/{chunk_id}`, `GET /v1/traces/{id}`; OpenAPI → TS generation script;
 `lattice eval answer` with judges.
 
+**Deliverables carried from the Phase 5 closure (required):**
+
+- **Organization-scoped provider configuration and secret abstraction (D-16,
+  ADR-011).** The minimum needed for generation and BYOK: organization → provider
+  configuration → deployment trust class → provider/model → secret reference →
+  invocation. Credentials belong to the organization; secret values are encrypted or
+  held through a secret-manager abstraction; they never appear in API responses, logs,
+  traces, prompts or errors; rotation, replacement, revocation and provider
+  disablement are supported; environment variables stay as the development fallback.
+  No settings UI (Phase 7).
+- **Generation goes through the same invocation rule** (`providers.egress`): user
+  authorization, the organization's allowance and ceiling for the deployment trust
+  class (D-15; `unknown` fails closed), provider approval, data-use terms, then
+  configuration and credentials. A credential never authorizes egress. The question's
+  effective sensitivity (D-13) decides whether it may enter an external prompt.
+- **Retrieved content is untrusted data, never model instructions** (hard security
+  requirement, trust-boundaries §4).
+
 **Tests.**
 - Citations (claim-level fail-closed):
   1. Invalid evidence handle → that claim is absent from the response.
@@ -626,7 +645,15 @@ recorder (asker view; admin operational view without content); `POST /v1/ask`,
   identical for restricted vs nonexistent (response equality test); trace contains no
   document text and no rejected claim text; admin trace view contains no question,
   answer, evidence references, counts or scope.
-- Injection fixtures (deterministic parts).
+- Injection fixtures (deterministic parts) and **adversarial prompt-injection tests**:
+  retrieved passages cannot override system/developer instructions, request hidden
+  documents, reveal unauthorized content, credentials or secrets, change the
+  organization context, alter authorization or provider/egress policy, cause
+  unauthorized actions, or exfiltrate information.
+- Provider configuration: secrets never in responses, logs, traces, prompts or errors;
+  rotation and revocation take effect on the next call; a disabled provider receives
+  nothing; another organization's configuration is never used; generation obeys each
+  trust class exactly as retrieval does.
 
 **Non-goals.** Streaming of answer text; multi-turn; any admin capability to read
 other members' content.
@@ -640,7 +667,11 @@ Radix-based overlays; dev login screen (persona picker, dev only); shell + sideb
 Ask page with composer, scope chips, progress stages (SSE — decision D-6), answer
 block, potential-conflict/supersession/stale/egress/removed-claims notice components,
 evidence list (incl. "Not used to draft this answer" group), inspector; all §B13
-states with fixtures; generated API client.
+states with fixtures; generated API client. **Administrative provider settings (D-16,
+ADR-011):** provider and model selection where appropriate, masked credential state,
+connection test, enable/disable, the organization's egress levels and per-provider
+approvals (each change with a stated reason, audited), and clear security/egress
+communication, over the Phase 6 provider-configuration API.
 
 **Tests.** Component tests for states; a citation chip cannot render for evidence
 absent from the response (and its claim is not rendered); Playwright flows for Maya vs
@@ -673,7 +704,7 @@ author (or a fresh machine).
 
 | Phase | Theme | Notes |
 | ----- | ----- | ----- |
-| 9 | Access management UX + audit events | Explanations, change previews (counts only over admin-readable documents), admin grants, full `audit_events`, AI egress settings UI (opt-in with reason, per-provider approval) |
+| 9 | Access management UX + audit events | Explanations, change previews (counts only over admin-readable documents), admin grants, full `audit_events` (the provider and AI egress settings UI is Phase 7, D-16) |
 | 10 | OIDC SSO + hardening | OIDC (D-1), rate limits, security headers review, dependency audit, threat-model review, pen-test style review of isolation |
 | 11 | Deployment + operations | Container images, single-region deploy, backups/PITR, migrations in CI/CD, retention jobs, alerting on `security_invariant_violated` |
 | 12 | Accounts workspace | Account timeline + scoped Ask (AM workflow) |

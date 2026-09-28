@@ -1,6 +1,7 @@
 # ADR-005: Server-side sessions; development identity for the slice; OIDC before deployment
 
-Status: Proposed (Phase 0)
+Status: Accepted (proposed in Phase 0; server-side sessions and the development identity
+provider implemented in Phase 1; OIDC before any deployment, Phase 10)
 
 ## Context
 Permission and membership changes must take effect immediately (SEC-4, SEC-11).

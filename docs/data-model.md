@@ -7,9 +7,14 @@ Status: §2 identity and tenancy tables are **implemented** (Phase 1, migration
 `access_groups.key` was added in Phase 3 (migration `0004_access_group_key.py`,
 decision D-9). §3, the remaining `documents` columns (§4), §6, `org_settings` and
 `model_providers` (§7) are **implemented** (Phase 4, migration `0005_ingestion.py`),
-each with an "as built" note where it differs from the draft. Phase 5 (retrieval) added
-no schema: its query plans use the existing indexes (`retrieval-design.md` §7.6), and its
-trace is an in-memory `RetrievalTrace` returned with each result. `query_traces` is still
+each with an "as built" note where it differs from the draft. Phase 5 retrieval itself
+added no tables: its query plans use the existing indexes (`retrieval-design.md` §7.6),
+and its trace is an in-memory `RetrievalTrace` returned with each result. The Phase 5
+closure added provider-policy columns (§7): migration `0006_provider_policy.py` (the
+`local` deployment, `org_settings.default_query_sensitivity` for D-13,
+`org_settings.data_origin`) and migration `0007_deployment_trust_classes.py` (D-15
+trust classes, `model_providers.approved_at`,
+`org_settings.organization_controlled_level`). `query_traces` is still
 design (Phase 6).
 Related: `authorization-model.md`, `ingestion-design.md`, `retrieval-design.md`.
 
@@ -404,9 +409,19 @@ Security-sensitive. Stores **references and measurements**, not document content
 ### org_settings
 
 **As built (Phase 4):** `organization_id PK, external_egress_level` (default
-`internal`), timestamps. No row means `internal`. The remaining fields below arrive
-with the phases that use them; raising the level has no command yet (Phase 6 adds the
-audited CLI, Phase 9 the UI).
+`internal`), timestamps. No row means the defaults.
+
+**Added in the Phase 5 closure:** migration 0006 `default_query_sensitivity`
+(`internal|confidential|restricted`, default `internal`; D-13: the trusted minimum
+sensitivity of every question, which a declaration can raise and never lower) and
+`data_origin` (`customer|synthetic`, default `customer`; only synthetic content may
+reach a provider that may use submitted content, ADR-010). Migration 0007
+`organization_controlled_level` (same levels or NULL, default NULL = the
+`organization_controlled` trust class is not allowed; D-15).
+
+The remaining fields below arrive with the phases that use them. Raising a level has
+no command yet: the Phase 6 backend adds the audited organization-scoped provider
+configuration (D-16), and the Phase 7 frontend the provider and egress settings UI.
 
 Design: `organization_id PK, external_egress_level (internal|confidential|restricted,
 default **internal**), freshness_thresholds jsonb (per document_kind, days),
@@ -418,8 +433,9 @@ There is deliberately no setting that lets admins read other members' content (D
 
 **As built (Phase 4):** `id, organization_id, purpose, provider, model, deployment,
 approved_for_level (default internal), retention_mode, training_opt_out`, timestamps;
-UQ (organization_id, purpose, provider, model). A sync records the embedding provider
-it uses the first time (approved for `internal` only); raising the approval is an
+UQ (organization_id, purpose, provider, model). Migration 0006 added `local` to the
+allowed `deployment` values (inference inside the Lattice deployment, ADR-009). A sync
+records the embedding provider it uses the first time (approved for `internal` only); raising the approval is an
 explicit administrator action outside ingestion. `endpoint` and `updated_by` are not
 built.
 
