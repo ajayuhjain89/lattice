@@ -12,3 +12,4 @@ not recorded here. Status values: Proposed · Accepted · Superseded.
 | [005](005-server-side-sessions.md) | Server-side sessions; dev identity for the slice; OIDC before deployment | Proposed |
 | [006](006-structured-answers-verified-citations.md) | Structured answers with quote-verified citations; no streaming of unvalidated text | Proposed |
 | [007](007-single-turn-ask.md) | Single-turn Ask; no conversational memory in the first release | Proposed |
+| [008](008-embedding-provider.md) | Embedding provider for the first slice: OpenAI `text-embedding-3-small` at 1024 dimensions; Voyage AI kept compatible and re-evaluated in Phase 5 | Accepted |

@@ -60,6 +60,7 @@ from lattice.authz.sql import ACCOUNTS, DOCUMENTS
 from lattice.db.engine import create_engine
 
 from ..conftest import SUPERUSER_URL
+from ..factories import FIXTURE_DOCUMENT_COLUMNS, FIXTURE_SOURCE_KEY, fixture_document_values
 
 EXAMPLES = int(os.environ.get("LATTICE_AUTHZ_EXAMPLES", "500"))
 MINIMUM_EXAMPLES = 500
@@ -207,15 +208,23 @@ async def _build(conn: AsyncConnection, spec: WorldSpec) -> World:
             )
             for a in range(N_ACCOUNTS)
         ]
+        source_id = await _insert_one(
+            conn,
+            "INSERT INTO sources (organization_id, key, connector_type, name, "
+            "default_sensitivity, authority) VALUES (:o, :k, 'chat_export', 'Fixture', "
+            "'internal', 'working') RETURNING id",
+            {"o": org_id, "k": FIXTURE_SOURCE_KEY},
+        )
         groups = [
             await _insert_one(
                 conn,
-                "INSERT INTO access_groups (organization_id, key, origin, external_ref, name) "
-                "VALUES (:o, :k, :origin, :ref, :n) RETURNING id",
+                "INSERT INTO access_groups (organization_id, key, origin, source_id, "
+                "external_ref, name) VALUES (:o, :k, :origin, :src, :ref, :n) RETURNING id",
                 {
                     "o": org_id,
                     "k": f"g{g}",
                     "origin": "source" if g % 2 else "admin",
+                    "src": source_id if g % 2 else None,
                     "ref": f"C{g}" if g % 2 else None,
                     "n": f"g{g}",
                 },
@@ -279,8 +288,9 @@ async def _build(conn: AsyncConnection, spec: WorldSpec) -> World:
         org = orgs[doc.org]
         document_id = await _insert_one(
             conn,
-            "INSERT INTO documents (organization_id, account_id, sensitivity, access_mode, "
-            "department_ids, status) VALUES (:o, :a, :s, :m, CAST(:d AS uuid[]), :st) "
+            "INSERT INTO documents (organization_id, account_id, sensitivity, access_mode, "  # noqa: S608
+            f"department_ids, status, {FIXTURE_DOCUMENT_COLUMNS}) VALUES (:o, :a, :s, :m, "
+            f"CAST(:d AS uuid[]), :st, {fixture_document_values('CAST(:o AS uuid)')}) "
             "RETURNING id",
             {
                 "o": org.id,

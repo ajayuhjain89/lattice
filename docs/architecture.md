@@ -90,10 +90,11 @@ Package: `backend/src/lattice/`.
 | `seed` ✔      | Manifest model + idempotent upsert of orgs, users, memberships and admin-defined access groups (by stable key, D-9) | db, orgs, identity, authz (group models only) |
 | `dataset` ✔   | Synthetic dataset tooling (Phase 3): loaders for the three raw export formats, the expected-access oracle (reference policy over fixture metadata), `lattice dataset lint`, the deterministic distractor generator. Never touches the database | authz (public API), seed (manifest model) |
 | `authz` ✔     | `AuthorizationContext` + resolver, reference policy, SQL predicate, account visibility, explanations, E4 tripwire, `POLICY_VERSION`; owns the access tables (`access_groups`, `access_group_members`, `documents` access record, `document_grants`) | orgs, db, errors, log |
-| `sources`     | Source records, source config validation, sync runs, sync failures                        | db, authz (admin capability)|
-| `connectors`  | Connector contract + three connectors (document, ticket, chat export)                     | — (pure; no DB access)      |
-| `ingestion`   | Normalization, chunking, hashing, embedding orchestration, persistence, deletion sweep     | connectors, sources, providers, db |
-| `providers`   | `EmbeddingProvider`, `GenerationProvider` Protocols + implementations + fakes              | config                      |
+| `sources` ✔   | Lattice-side source configuration (`sources.yaml`) models and loader (Phase 4). Source rows, runs and failures are written by `ingestion.store` | — |
+| `connectors` ✔ | Connector contract, registry + three connectors (Markdown documents, ticket JSONL, Slack export) (Phase 4) | — (pure: stdlib, Pydantic, PyYAML; a test enforces it) |
+| `ingestion` ✔ | Canonical text and hashing, chunking, fail-closed access mapping, embedding input, persistence (`store`: the one writer of document access columns, source grants and source groups), sync pipeline, deletion sweep, source disconnect (Phase 4) | connectors, sources, providers, db |
+| `providers` ✔ | `EmbeddingProvider` Protocol, fake + recording + OpenAI (Phase 4), AI egress policy; `GenerationProvider` in Phase 6 | config |
+| `admin_grants` ✔ | Applies `admin-grants.yaml` as admin-origin grants after ingestion (D-12) | db |
 | `retrieval`   | Query analysis, lexical + semantic search (with authz predicate), fusion, rerank, context selection | authz, providers, db |
 | `answering`   | Prompt construction, generation, output validation, citation verification, freshness & conflict assembly, refusal logic | retrieval, providers |
 | `tracing`     | Trace records, redaction, re-authorized trace reads                                      | authz, db                   |
@@ -165,12 +166,16 @@ to the user (ADR-006).
 
 ## 5. Ingestion lifecycle (summary; full design in `ingestion-design.md`)
 
-`lattice sync <source>` → load source config → connector yields `SourceRecord`s →
-validate → normalize to `CanonicalDocument` → map access metadata → compare content
-and access hashes → (unchanged: skip) / (access-only change: update access columns) /
-(content change: chunk, embed new chunk hashes only, replace chunks atomically) →
-deletion sweep for records not seen in a full snapshot (with mass-deletion guard) →
-`SourceSyncResult` recorded in `source_sync_runs`.
+`lattice sync --org … --sources sources.yaml` (implemented, Phase 4) → validate the
+source configuration → connector yields `SourceRecord`s → normalize to a
+`CanonicalDocument` → map access metadata (fail closed; quarantine on failure) →
+compare content and access hashes → (unchanged: nothing written) / (access-only change:
+access columns and source grants; vectors removed if the new classification is above
+the egress level) / (content change: chunk, embed only changed inputs under the egress
+policy, replace chunks in one transaction) → guarded deletion sweep for records not
+seen in a full snapshot → counts and failures in `source_sync_runs` /
+`sync_record_failures`. Admin grants are applied separately (`lattice
+apply-admin-grants`).
 
 ## 6. Organization isolation (summary; details in `security-model.md` §3)
 
@@ -281,19 +286,22 @@ lattice/
   compose.yaml                  ✔ Postgres 16 + pgvector 0.8.1 only (bound to 127.0.0.1)
   Makefile                      ✔ setup, db-up/down/bootstrap/destroy, migrate, seed, api,
                                   test, lint, format, typecheck, check-db-role,
-                                  dataset-lint, dataset-generate
+                                  dataset-lint, dataset-generate, sync, sync-dry-run,
+                                  admin-grants
   .env.example                  ✔ documented local-only placeholders
   .github/workflows/ci.yml      ✔ lint, mypy, dataset lint, bootstrap, migration round-trip,
-                                  seed, tests
+                                  seed, dataset sync (twice), tests
   infra/postgres/               ✔ superuser bootstrap: roles, databases, extensions
   backend/
     pyproject.toml  uv.lock     ✔ (Python 3.12 pinned in .python-version)
-    alembic.ini  alembic/       ✔ 0001–0004
+    alembic.ini  alembic/       ✔ 0001–0005
     src/lattice/                ✔ config, errors, log, db/, identity/, orgs/, authz/, dataset/,
-                                  api/, seed, cli
+                                  sources/, connectors/, ingestion/, providers/,
+                                  admin_grants, api/, seed, cli
     tests/                      ✔ one module per concern, all against real PostgreSQL;
                                   tests/security/ holds the authorization suites (Phase 2);
-                                  tests/dataset/ validates the synthetic dataset (Phase 3)
+                                  tests/dataset/ validates the synthetic dataset (Phase 3);
+                                  tests/ingestion/ covers connectors and ingestion (Phase 4)
   data/synthetic/               ✔ README (ground truth for maintainers), canaries.yaml
     halden/                     ✔ org.yaml, sources.yaml, admin-grants.yaml, ground-truth.yaml,
                                   documents/ (Markdown), tickets/ (JSONL), slack/ (export)

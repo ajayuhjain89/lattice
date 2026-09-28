@@ -143,3 +143,18 @@ class AccountAssignment(Base):
     membership_id: Mapped[uuid.UUID]
     account_id: Mapped[uuid.UUID]
     assigned_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class OrgSettings(Base):
+    """Per-organization settings (docs/data-model.md §7). Phase 4 needs only the
+    external AI egress level; an organization without a row uses the defaults."""
+
+    __tablename__ = "org_settings"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
+    )
+    # internal | confidential | restricted; raising it is an explicit admin action.
+    external_egress_level: Mapped[str] = mapped_column(Text, server_default="internal")
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now())

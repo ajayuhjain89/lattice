@@ -18,7 +18,14 @@ from lattice.db.engine import Database, bind_organization, create_engine
 from lattice.identity.sessions import SessionPolicy, SessionService
 
 from .conftest import APP_URL
-from .factories import Member, create_member, create_org
+from .factories import (
+    FIXTURE_DOCUMENT_COLUMNS,
+    Member,
+    create_member,
+    create_org,
+    create_source,
+    fixture_document_values,
+)
 
 TENANT_TABLES = (
     "memberships",
@@ -31,6 +38,13 @@ TENANT_TABLES = (
     "access_group_members",
     "documents",
     "document_grants",
+    # Phase 4
+    "sources",
+    "source_sync_runs",
+    "sync_record_failures",
+    "chunks",
+    "org_settings",
+    "model_providers",
 )
 GLOBAL_TABLES = ("organizations", "users", "external_identities")
 ALL_TABLES = (*GLOBAL_TABLES, *TENANT_TABLES)
@@ -43,6 +57,7 @@ class TwoOrgs:
 
 
 async def _populate(db: Database, member: Member) -> None:
+    source = await create_source(db, member.organization_id)
     async with db.tenant_transaction(member.organization_id) as s:
         dept: uuid.UUID = (
             await s.execute(
@@ -96,10 +111,10 @@ async def _populate(db: Database, member: Member) -> None:
         document: uuid.UUID = (
             await s.execute(
                 text(
-                    "INSERT INTO documents (organization_id, account_id, sensitivity, "
-                    "access_mode, department_ids) "
-                    "VALUES (:o, :a, 'restricted', 'grants_only', ARRAY[CAST(:d AS uuid)]) "
-                    "RETURNING id"
+                    "INSERT INTO documents (organization_id, account_id, sensitivity, "  # noqa: S608
+                    f"access_mode, department_ids, {FIXTURE_DOCUMENT_COLUMNS}) "
+                    "VALUES (:o, :a, 'restricted', 'grants_only', ARRAY[CAST(:d AS uuid)], "
+                    f"{fixture_document_values(':o')}) RETURNING id"
                 ),
                 {"o": member.organization_id, "a": account, "d": dept},
             )
@@ -110,6 +125,46 @@ async def _populate(db: Database, member: Member) -> None:
                 "group_id, origin) VALUES (:o, :d, 'group', :g, 'admin')"
             ),
             {"o": member.organization_id, "d": document, "g": group},
+        )
+        # Phase 4: one row per organization in each ingestion table.
+        await s.execute(
+            text(
+                "INSERT INTO chunks (id, organization_id, document_id, ordinal, text, "
+                "char_start, char_end, content_hash, embedding_input_hash, token_count, tsv, "
+                "embedding_status) VALUES (gen_random_uuid(), :o, :d, 0, 'Fixture', 0, 7, "
+                "sha256('a'::bytea), sha256('b'::bytea), 2, to_tsvector('Fixture'), "
+                "'policy_excluded')"
+            ),
+            {"o": member.organization_id, "d": document},
+        )
+        run: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO source_sync_runs (organization_id, source_id, mode) "
+                    "VALUES (:o, :s, 'full') RETURNING id"
+                ),
+                {"o": member.organization_id, "s": source},
+            )
+        ).scalar_one()
+        await s.execute(
+            text(
+                "INSERT INTO sync_record_failures (organization_id, sync_run_id, opaque_ref, "
+                "stage, error_code) VALUES (:o, :r, 'rec_0123456789abcdef', 'parse', "
+                "'malformed_json')"
+            ),
+            {"o": member.organization_id, "r": run},
+        )
+        await s.execute(
+            text("INSERT INTO org_settings (organization_id) VALUES (:o)"),
+            {"o": member.organization_id},
+        )
+        await s.execute(
+            text(
+                "INSERT INTO model_providers (organization_id, purpose, provider, model, "
+                "deployment, retention_mode, training_opt_out) "
+                "VALUES (:o, 'embedding', 'fake', 'fake-model', 'external_api', 'none', true)"
+            ),
+            {"o": member.organization_id},
         )
 
 
@@ -208,6 +263,12 @@ async def test_org_b_rows_cannot_be_selected_by_id_from_org_a(
             ("SELECT 1 FROM document_grants WHERE organization_id = :x", b.organization_id),
             ("SELECT 1 FROM access_groups WHERE organization_id = :x", b.organization_id),
             ("SELECT 1 FROM access_group_members WHERE membership_id = :x", b.membership_id),
+            ("SELECT 1 FROM sources WHERE organization_id = :x", b.organization_id),
+            ("SELECT 1 FROM chunks WHERE organization_id = :x", b.organization_id),
+            ("SELECT 1 FROM source_sync_runs WHERE organization_id = :x", b.organization_id),
+            ("SELECT 1 FROM sync_record_failures WHERE organization_id = :x", b.organization_id),
+            ("SELECT 1 FROM org_settings WHERE organization_id = :x", b.organization_id),
+            ("SELECT 1 FROM model_providers WHERE organization_id = :x", b.organization_id),
         ):
             assert (await s.execute(text(sql), {"x": param})).first() is None, sql
 
@@ -274,14 +335,30 @@ async def test_cannot_update_another_organizations_sessions(
         "INSERT INTO access_groups (organization_id, key, origin, name) "
         "VALUES (lattice_current_org_id(), 'x', 'admin', 'x')",
         "DELETE FROM access_group_members",
-        "INSERT INTO documents (organization_id, sensitivity, access_mode) "
-        "VALUES (lattice_current_org_id(), 'internal', 'policy')",
+        "INSERT INTO documents (organization_id, sensitivity, access_mode, "  # noqa: S608
+        f"{FIXTURE_DOCUMENT_COLUMNS}) VALUES (lattice_current_org_id(), 'internal', 'policy', "
+        f"{fixture_document_values('lattice_current_org_id()')})",
         "UPDATE documents SET access_mode = 'policy'",
         "UPDATE documents SET sensitivity = 'internal'",
         "DELETE FROM documents",
         "DELETE FROM document_grants",
         "UPDATE document_grants SET membership_id = NULL",
         "ALTER TABLE documents NO FORCE ROW LEVEL SECURITY",
+        # Phase 4: ingestion is an operator tool (lattice_owner); the runtime role only
+        # reads the corpus and its operational history.
+        "INSERT INTO sources (organization_id, key, connector_type, name, "
+        "default_sensitivity, authority) VALUES (lattice_current_org_id(), 'x', "
+        "'ticketing', 'x', 'internal', 'working')",
+        "UPDATE sources SET status = 'active'",
+        "UPDATE documents SET body = ''",
+        "DELETE FROM chunks",
+        "UPDATE chunks SET embedding = NULL",
+        "UPDATE chunks SET text = ''",
+        "DELETE FROM source_sync_runs",
+        "DELETE FROM sync_record_failures",
+        "UPDATE org_settings SET external_egress_level = 'restricted'",
+        "INSERT INTO org_settings (organization_id) VALUES (lattice_current_org_id())",
+        "UPDATE model_providers SET approved_for_level = 'restricted'",
     ],
 )
 async def test_runtime_role_lacks_unneeded_privileges(

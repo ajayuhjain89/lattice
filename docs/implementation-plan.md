@@ -2,8 +2,9 @@
 
 Status: Phase 0 approved. Phase 1 approved and closed (after the `lattice_auth`
 hardening below). Phase 2 approved, with decisions D-8 and D-9 (implemented at the start
-of Phase 3). **Phase 3 implemented** (awaiting review, branch
-`phase/3-synthetic-dataset`). Phase 4 not started.
+of Phase 3). Phase 3 approved and merged to `main`. **Phase 4 implemented** (awaiting
+review, branch `phase/4-ingestion`), with decisions D-10 and D-12 applied and D-11
+recorded for Phase 6.
 
 ---
 
@@ -276,6 +277,106 @@ opaque references for records the viewer can't read.
 
 **Non-goals.** Scheduled syncs, API-backed connectors, PDF/DOCX parsing.
 
+**Phase 4 as built.** Decisions applied first:
+
+- **D-2 / ADR-008** (embedding provider): OpenAI `text-embedding-3-small` at 1024
+  dimensions over plain HTTP (`httpx`, now a runtime dependency), approved for
+  `internal` only. Voyage AI stays compatible (1024-dimension column, query/document
+  purpose in the Protocol) and is re-evaluated with the Phase 5 retrieval evals.
+- **D-10** (account names in shared index text): no structured account name or alias
+  in the embedded header or the shared `tsv`; account matching happens at query time
+  over visible accounts only (Phase 5). Payloads are asserted exactly in tests.
+- **D-12** (admin grants): `lattice apply-admin-grants` after ingestion, all-or-nothing
+  and idempotent, `--prune` to revoke; grant uniqueness now includes `origin`, so a
+  sync never collides with or touches an admin grant.
+- **D-11** (`unsupported_request`): recorded as decided; implemented with answering
+  (Phase 6).
+
+Deliverables: migration `0005_ingestion.py` (`sources`, `source_sync_runs`,
+`sync_record_failures`, `chunks`, `org_settings`, `model_providers`; `documents`
+source/provenance/content/version columns and the `quarantined` status;
+`access_groups.source_id`); `lattice.connectors` (contract, registry, Markdown, ticket
+JSONL and Slack connectors); `lattice.ingestion` (canonical text and hashing, chunking,
+fail-closed access mapping, embedding input, persistence, the sync pipeline, source
+disconnect); `lattice.providers` (Protocol, fake, recording, OpenAI adapter, egress
+policy); `lattice.sources.config`; `lattice.admin_grants`; CLI `lattice sync`,
+`reindex`, `source disconnect`, `apply-admin-grants`; Makefile `sync`, `sync-dry-run`,
+`admin-grants`; a CI step syncing the dataset twice (the second writing nothing).
+
+| Planned | As built | Why |
+| ------- | -------- | --- |
+| Pipeline order validate → … → embed → persist | Same; embeddings computed per batch outside transactions, then one transaction per document | No network call inside a transaction; a document's rows change together |
+| Embedding failure: nothing written, old version stays searchable | New content written; chunks whose embedding failed are `failed` (lexical-only) and retried by the next sync; run `partial` | Keeping the old version would keep stale content — and its vectors — retrievable while waiting for a provider |
+| Access-mapping failure: record fails | Also: an *existing* document whose record now fails mapping, normalization or validation is **quarantined** (new status, unreadable, kept) until the source states mappable access again | Leaving it active would keep it readable on access the source no longer states |
+| Deletion guard: > 20% unseen | Also an empty snapshot; and any record that failed before it could be identified blocks the sweep (not overridable) and quarantines the unseen documents | A corrupt line could be any document, including one whose access changed |
+| Sync modes full, incremental, acl_only | full, acl_only, reindex (`--rechunk`, `--reembed`); no incremental | No connector supports checkpoints; reindex is the planned re-chunk/re-embed operation |
+| Connector contract: async iterators, `message` on errors, config models per connector | Synchronous iterators; `RecordError` has code + validated identifier params + an operator-only location, **no message**; connector config is just the export path | Local exports; a free-text field is where content would leak |
+| `account_external_refs` table for ticketing organization IDs | `account_refs` in `sources.yaml` | Lattice-side configuration of one source; a table is needed once accounts are managed in Lattice |
+| `sources.default_department_ids uuid[]` | Default departments by key in `config`, validated each sync | Arrays cannot carry foreign keys |
+| Contextual header with account name and date | Kind, title, heading path (D-10); per-part time is rendered in chat chunk text | D-10; dates are per chunk (`occurred_at`) |
+| Grants: one per (document, principal) | One per (document, origin, principal) | D-12: separate permission origins |
+| `model_providers` configured by admins | Registered by the first sync that uses a provider, approved for `internal`; raising it has no command until Phase 6 | Records exactly which provider receives content; the default is the safe one |
+| Egress: lowering the level deletes vectors in the same operation | Classification raised on a document: same transaction; org level or provider approval lowered: the next sync of each source | The settings change has no command yet (Phase 6/9); the sync reconciles |
+| `IngestionResult` per record | Failure rows per failed record; `SyncResult` per run | Outcomes other than failures are counts |
+| Performance target: full sync < 5 min (remote provider), no-op re-sync < 30 s | Both organizations with the fake provider in seconds; no-op re-sync writes nothing | Remote timings recorded when a real key is used |
+
+Findings fixed while building it: the Slack connector would have put a thread root
+without `reply_count` in both its thread and its day record (any message a reply points
+to is now a root); the authorization boundary check stopped at the first access name in
+a string, so an allowed name could hide a disallowed one later in the same SQL (it now
+checks every name, with a regression test).
+
+Evidence: `backend/tests/ingestion/` — the connector contract kit (both organizations'
+real exports and malformed fixtures for every connector), access mapping, chunker golden
+outputs and invariants over every record, sync (idempotency by row versions, dry run,
+updates with chunk and vector reuse, atomic replacement, ACL-only, reclassification,
+provider failures, quarantine, groups, supersession, reindex, locking, configuration
+errors), deletion and disconnect, admin grants, **ingested access equals the dataset
+oracle for every record and persona** (through the SQL predicate as `lattice_app`,
+plus D-8 account display), egress payloads and canaries, failure rows and logs, the
+OpenAI adapter over a mock transport, and the CLI. The Phase 1–2 suites cover the new
+tables (RLS, runtime-role privileges, composite keys) and the boundary test has
+reviewed allowances for the modules that write access state.
+
+**Phase 4 mutation check** (by hand, never committed; each defect applied alone to
+pristine sources, then `tests/ingestion` and the boundary test run; sources verified
+byte-identical afterwards). Every defect is caught:
+
+| # | Defect introduced | Tests failed | Caught by (modules) |
+| - | ----------------- | -----------: | ------------------- |
+| M1 | Unknown department keys dropped instead of failing the record | 3 | access_mapping, sync |
+| M2 | Unmapped account on an account-scoped source indexed without an account | 14 | access_mapping, cli_ingestion, deletion, egress, ingested_access, sync |
+| M3 | Restricted no longer forces grants_only | 26 | access_mapping, admin_grants, cli_ingestion, deletion, egress, ingested_access, sync |
+| M4 | A sync replaces admin-origin grants too | 1 | admin_grants |
+| M5 | Egress policy ignored when embedding new chunks | 2 | egress, sync |
+| M6 | Deletion guard removed | 3 | deletion |
+| M7 | Account reference added to the embedding header (D-10) | 1 | egress |
+| M8 | Record failures never quarantine the existing document | 2 | sync |
+| M9 | An access-only change re-writes content and chunks | 3 | admin_grants, sync |
+| M10 | Change detection broken (every record rewritten) | 15 | admin_grants, cli_ingestion, deletion, egress, sync |
+| M11 | Lowering the egress level keeps existing vectors | 1 | egress |
+| M12 | Admin grants applied partially when an entry is invalid | 9 | admin_grants |
+| M13 | Members removed from a private channel keep their group membership | 1 | sync |
+| M14 | Markdown connector drops front-matter departments | 4 | ingested_access, sync |
+| M15 | Private Slack channels not reported as grants_only | 3 | connector_contract, ingested_access |
+| M16 | Failure parameters carry record content | 2 | access_mapping, egress |
+| M17 | Unidentified failures no longer quarantine unseen documents | 1 | deletion |
+| M18 | An unchanged chunk input is re-embedded instead of reused | 2 | sync |
+
+Final Phase 4 check (before merge): a failed re-embed after a content change leaves no
+stale vector. `tests/ingestion/test_embedding_consistency.py` covers old content + old
+vector → content change → failed embedding (new body and lexical entries stored; the
+changed passage is a new, `failed` chunk without a vector; the old row and vector gone;
+the database refuses a vector on it) → next sync embeds exactly that input, and the same
+text under a new title (same chunk IDs, vectors cleared, all re-embedded). Targeted
+mutations: N1 chunk upsert keeps the old vector on conflict — caught; N2 vector reuse
+keyed by chunk ID instead of embedding-input hash — caught; N3 failed chunks not retried
+by the next sync — caught (both tests). No implementation change was needed.
+
+M4 (a sync deleting admin grants) is observable only when a document is rewritten, so
+the admin-grants suite catches it (a source-side change on a document with an admin
+grant); the dataset-oracle test's re-sync after applying grants writes nothing.
+
 ---
 
 ### Phase 5 — Permission-aware hybrid retrieval + retrieval evals
@@ -403,12 +504,13 @@ make migrate        # alembic upgrade head (lattice_owner)
 make seed           # Halden + Veridian manifests (idempotent)
 make check-db-role  # runtime role cannot bypass RLS
 make api            # uvicorn on 127.0.0.1:8000
-make test           # 475 tests against the lattice_test database (incl. 500-example authz proof)
+make sync-dry-run   # what ingestion would do (Phase 4)
+make sync           # ingest both organizations, fake embeddings; then admin grants
+make test           # 1,000+ tests against the lattice_test database (incl. 500-example authz proof)
 make lint typecheck
 make dataset-lint   # the synthetic dataset and golden set (no database, no model)
 ```
-Added in later phases: `make sync` (Phase 4), `make eval` (Phase 5), `make web`
-(Phase 7, Node 22 LTS + pnpm).
+Added in later phases: `make eval` (Phase 5), `make web` (Phase 7, Node 22 LTS + pnpm).
 
 ## 6. Phase 1 traceability check
 
@@ -437,7 +539,7 @@ Added in later phases: `make sync` (Phase 4), `make eval` (Phase 5), `make web`
 | ID | Decision | Needed by | Recommendation | Owner |
 | -- | -------- | --------- | -------------- | ----- |
 | D-1 | Identity provider for first real deployment (generic OIDC; which IdP to test against) | Phase 10 | Generic OIDC + PKCE; test with the IdP your first pilot uses | Product owner |
-| D-2 | Embedding provider: external API vs private/self-hosted | Phase 4 | External API with no-training terms, approved for `internal` only (per D-3). Confidential/restricted content is lexical-only unless a private/self-hosted endpoint is approved later. The external provider receives all *internal* chunk text | Product owner |
+| D-2 | Embedding provider: external API vs private/self-hosted | Phase 4 | **Decided (ADR-008):** OpenAI `text-embedding-3-small` (1024 dimensions), external API with no-training terms, approved for `internal` only (per D-3). Confidential/restricted content is lexical-only unless a private/self-hosted endpoint is approved later. The external provider receives all *internal* chunk text | Product owner — decided |
 | D-3 | AI egress default for external providers (generation and embedding) | Phase 4 (embedding), Phase 6 (generation) | **Decided:** `internal` may be sent to an approved external provider; `confidential` and `restricted` are not sent unless the org explicitly opts in (audited) for a provider approved for that level. Egress is a data policy separate from authorization | Product owner — decided |
 | D-4 | Default generation provider/model | Phase 6 | Anthropic Messages API with a current Claude model, chosen by eval quality/latency/cost; approved for `internal` only by default (D-3) | Product owner (engineering proposes) |
 | D-5 | Admin access to other members' question/answer/evidence content | — | **Decided: OFF / deferred.** Admins get operational structure only. A future support/audit content capability would be designed separately (least privilege, explicit authorization, audit trail, clear UI, content re-authorization) | Product owner — decided |
@@ -445,9 +547,9 @@ Added in later phases: `make sync` (Phase 4), `make eval` (Phase 5), `make web`
 | D-7 | Design-customer domain (B2B SaaS "Halden") | Phase 3 | Keep unless you prefer a domain you know better (legal, healthcare, developer tools) | Product owner |
 | D-8 | A document readable **only through a grant** belongs to an account outside the reader's scope: may its evidence card / inspector show that account's name? | Phase 5 (evidence), Phase 7 (UI) | **Decided: no.** The document and its content stay readable; its structured account field is omitted (no substitute), and the account never enters lists, filters, mention detection or autocomplete. Implemented as `authz.visible_document_account` (authz-2) | Product owner — decided |
 | D-9 | Stable key for access groups | Phase 3 | **Decided:** `access_groups.key` (citext, unique per organization, slug format); stable across renames; a key change is an identity change; never an authorization input. Migration 0004 | Engineering — decided |
-| D-10 | The chunk contextual header (embedded, and in the shared `tsv`) includes the document's account name, per document, not per reader. After D-8, a query naming an out-of-scope account would still match a granted document of that account through the header alone, hinting at the association | Phase 4 (header design) | Keep account names out of the embedded header; index account-derived terms in a separate lexical field applied only when `account_visible` (and keep the account-match rerank feature scope-bound, as designed). Golden item `visibility-kestrel-latest-maya` pins the expected behaviour | Engineering + Product owner |
-| D-11 | Answer status for requests Lattice does not perform (draft an email, change access, update a ticket, read others' questions) | Phase 6 | Add `unsupported_request` (reason `action_request`), decided by the model under a fixed rubric and validated like any status; never used for unreadable evidence. The golden set uses it provisionally | Product owner |
-| D-12 | How Phase 4 applies admin grants that exist before the Phase 9 access UI (the dataset's `admin-grants.yaml`) | Phase 4 | A seed step after ingestion resolves `(source, external_id)` to documents and writes `origin = admin` grants; unresolvable entries fail loudly | Engineering |
+| D-10 | The chunk contextual header (embedded, and in the shared `tsv`) includes the document's account name, per document, not per reader. After D-8, a query naming an out-of-scope account would still match a granted document of that account through the header alone, hinting at the association | Phase 4 (header design) | **Decided:** structured account names are never added to shared search or embedding text; account terms are kept separate and used only when `account_visible` — at query time, over the reader's visible accounts (no stored per-account field is needed). Implemented in Phase 4 (header and `tsv`); the query side is Phase 5. Golden item `visibility-kestrel-latest-maya` pins the expected behaviour | Engineering + Product owner — decided |
+| D-11 | Answer status for requests Lattice does not perform (draft an email, change access, update a ticket, read others' questions) | Phase 6 | **Decided:** add `unsupported_request` (reason `action_request`), decided by the model under a fixed rubric and validated like any status; never used for unreadable evidence. Implemented with answering (Phase 6) | Product owner — decided |
+| D-12 | How Phase 4 applies admin grants that exist before the Phase 9 access UI (the dataset's `admin-grants.yaml`) | Phase 4 | **Decided:** a separate post-sync command (`lattice apply-admin-grants`), never a connector, resolves each record key (optionally with its source) to a document and writes `origin = admin` membership grants; any unresolvable, ambiguous or duplicate entry fails the whole application with nothing written; idempotent; `--prune` revokes | Engineering — decided |
 
 ## 8. Self-review log (Phase 0)
 

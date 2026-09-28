@@ -21,7 +21,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, BYTEA, CITEXT, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from lattice.db.base import Base
@@ -37,6 +37,12 @@ class AccessGroup(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "id"),
         UniqueConstraint("organization_id", "key"),
+        UniqueConstraint("organization_id", "source_id", "external_ref"),
+        ForeignKeyConstraint(
+            ["organization_id", "source_id"],
+            ["sources.organization_id", "sources.id"],
+            ondelete="CASCADE",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_DEFAULT)
@@ -48,6 +54,8 @@ class AccessGroup(Base):
     # ``name`` only. Never an authorization input: grants name the group by ``id``.
     key: Mapped[str] = mapped_column(CITEXT)
     origin: Mapped[str] = mapped_column(Text)
+    # The source a synced group mirrors (Phase 4); NULL for admin-defined groups.
+    source_id: Mapped[uuid.UUID | None]
     # External identifier for source-synced groups (e.g. a Slack channel ID).
     external_ref: Mapped[str | None] = mapped_column(Text)
     # May itself be sensitive (a private channel's name): admin-only display rules apply.
@@ -84,19 +92,46 @@ class AccessGroupMember(Base):
 
 
 class Document(Base):
-    """The Phase 2 document record: identity, organization, lifecycle and access columns
-    only. Content, source and provenance columns arrive with ingestion (Phase 4)."""
+    """One source record (a document file, a ticket, a Slack thread or channel-day).
+
+    The access columns (Phase 2) are read by the policy; the source identity,
+    provenance, content and version columns (Phase 4) are written by ingestion
+    (docs/data-model.md §4). ``(organization_id, source_id, external_id)`` is the
+    idempotency key.
+    """
 
     __tablename__ = "documents"
     __table_args__ = (
         UniqueConstraint("organization_id", "id"),
+        UniqueConstraint("organization_id", "source_id", "external_id"),
         # No ON DELETE action: deleting an account must never widen its documents'
         # visibility by clearing account_id.
         ForeignKeyConstraint(
             ["organization_id", "account_id"], ["accounts.organization_id", "accounts.id"]
         ),
+        ForeignKeyConstraint(
+            ["organization_id", "source_id"],
+            ["sources.organization_id", "sources.id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "supersedes_document_id"],
+            ["documents.organization_id", "documents.id"],
+        ),
         Index("ix_documents_organization_id_account_id", "organization_id", "account_id"),
         Index("ix_documents_department_ids", "department_ids", postgresql_using="gin"),
+        Index(
+            "ix_documents_organization_id_status_sensitivity",
+            "organization_id",
+            "status",
+            "sensitivity",
+        ),
+        Index(
+            "ix_documents_organization_id_source_updated_at",
+            "organization_id",
+            "source_updated_at",
+        ),
+        Index("ix_documents_organization_id_display_ref", "organization_id", "display_ref"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_DEFAULT)
@@ -112,6 +147,31 @@ class Document(Base):
     status: Mapped[str] = mapped_column(Text, server_default="active")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    # Source identity and provenance (Phase 4).
+    source_id: Mapped[uuid.UUID]
+    external_id: Mapped[str] = mapped_column(Text)
+    document_kind: Mapped[str] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(Text)
+    display_ref: Mapped[str | None] = mapped_column(Text)
+    uri: Mapped[str | None] = mapped_column(Text)
+    author_display: Mapped[str | None] = mapped_column(Text)
+    authority: Mapped[str] = mapped_column(Text)
+    source_created_at: Mapped[datetime | None]
+    source_updated_at: Mapped[datetime]
+    # Last time content was (re)written / access columns or source grants changed.
+    ingested_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    acl_updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    content_hash: Mapped[bytes] = mapped_column(BYTEA)
+    access_hash: Mapped[bytes] = mapped_column(BYTEA)
+    version: Mapped[int] = mapped_column(server_default=text("1"))
+    body: Mapped[str] = mapped_column(Text)
+    supersedes_external_id: Mapped[str | None] = mapped_column(Text)
+    supersedes_document_id: Mapped[uuid.UUID | None]
+    # Validated per-kind extras (ticket status, channel name). Never read by authz.
+    metadata_: Mapped[dict[str, object]] = mapped_column(
+        "metadata", JSONB, server_default=text("'{}'::jsonb")
+    )
 
 
 class DocumentGrant(Base):
@@ -144,9 +204,10 @@ class DocumentGrant(Base):
             ["access_groups.organization_id", "access_groups.id"],
             ondelete="CASCADE",
         ),
-        UniqueConstraint("document_id", "membership_id"),
-        UniqueConstraint("document_id", "department_id"),
-        UniqueConstraint("document_id", "group_id"),
+        # Source-origin and admin-origin grants are separate permission origins (D-12).
+        UniqueConstraint("document_id", "origin", "membership_id"),
+        UniqueConstraint("document_id", "origin", "department_id"),
+        UniqueConstraint("document_id", "origin", "group_id"),
         Index(
             "ix_document_grants_organization_id_membership_id", "organization_id", "membership_id"
         ),

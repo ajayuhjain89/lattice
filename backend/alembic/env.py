@@ -16,7 +16,10 @@ from lattice.authz import models as authz_models  # noqa: F401 - register tables
 from lattice.config import load_migration_settings
 from lattice.db.base import Base
 from lattice.identity import models as identity_models  # noqa: F401 - register tables
+from lattice.ingestion import models as ingestion_models  # noqa: F401 - register tables
 from lattice.orgs import models as org_models  # noqa: F401 - register tables
+from lattice.providers import models as provider_models  # noqa: F401 - register tables
+from lattice.sources import models as source_models  # noqa: F401 - register tables
 
 config = context.config
 target_metadata = Base.metadata

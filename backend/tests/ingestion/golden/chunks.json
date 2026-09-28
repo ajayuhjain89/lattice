@@ -1,0 +1,442 @@
+{
+  "versions": [
+    "canonical-1",
+    "chunker-1",
+    "embed-input-1"
+  ],
+  "records": {
+    "halden/drive/refund-policy-v2": {
+      "body_sha256": "150a12613e3555b0b42a8098d0bb2c130a66734076baf4b8dfafb20d0e300cfd",
+      "content_hash": "3aaafbd9543a8b29955cd107d17dfbf78fd8b1a92a0a3c62345f3ead6fc770c0",
+      "chunks": [
+        {
+          "span": [
+            0,
+            166
+          ],
+          "heading_path": [],
+          "anchors": [
+            "1"
+          ],
+          "occurred_at": "2026-03-03T09:00:00+00:00",
+          "author": "Luis Moreno",
+          "starts_with": "Owner: Finance Operations. Effective 3 M"
+        },
+        {
+          "span": [
+            168,
+            305
+          ],
+          "heading_path": [
+            "Refund window"
+          ],
+          "anchors": [
+            "2"
+          ],
+          "occurred_at": "2026-03-03T09:00:00+00:00",
+          "author": "Luis Moreno",
+          "starts_with": "Refund window\nAn Enterprise customer may"
+        },
+        {
+          "span": [
+            307,
+            582
+          ],
+          "heading_path": [
+            "After the refund window"
+          ],
+          "anchors": [
+            "3"
+          ],
+          "occurred_at": "2026-03-03T09:00:00+00:00",
+          "author": "Luis Moreno",
+          "starts_with": "After the refund window\nFrom day 15 to d"
+        },
+        {
+          "span": [
+            584,
+            752
+          ],
+          "heading_path": [
+            "Approvals"
+          ],
+          "anchors": [
+            "4"
+          ],
+          "occurred_at": "2026-03-03T09:00:00+00:00",
+          "author": "Luis Moreno",
+          "starts_with": "Approvals\n- Refunds and credits up to $2"
+        },
+        {
+          "span": [
+            754,
+            818
+          ],
+          "heading_path": [
+            "Seat reductions"
+          ],
+          "anchors": [
+            "5"
+          ],
+          "occurred_at": "2026-03-03T09:00:00+00:00",
+          "author": "Luis Moreno",
+          "starts_with": "Seat reductions\nUnchanged: seats may be "
+        },
+        {
+          "span": [
+            820,
+            1031
+          ],
+          "heading_path": [
+            "Why this changed"
+          ],
+          "anchors": [
+            "6"
+          ],
+          "occurred_at": "2026-03-03T09:00:00+00:00",
+          "author": "Luis Moreno",
+          "starts_with": "Why this changed\nMost v1 refunds were re"
+        }
+      ]
+    },
+    "halden/drive/acme-account-brief": {
+      "body_sha256": "521c4c59f00c2236f72e365b964c99bbb8ac9f0511cbbbd8e65cbb88205b1254",
+      "content_hash": "cd00c4dc19cacf9db328aab877b2a001db7d4e8147cf6e399985bd0118673d40",
+      "chunks": [
+        {
+          "span": [
+            0,
+            96
+          ],
+          "heading_path": [],
+          "anchors": [
+            "1"
+          ],
+          "occurred_at": "2026-09-10T15:45:00+00:00",
+          "author": "Maya Okafor",
+          "starts_with": "Living brief for anyone working with Acm"
+        },
+        {
+          "span": [
+            98,
+            439
+          ],
+          "heading_path": [
+            "Snapshot"
+          ],
+          "anchors": [
+            "2"
+          ],
+          "occurred_at": "2026-09-10T15:45:00+00:00",
+          "author": "Maya Okafor",
+          "starts_with": "Snapshot\n- Industrial manufacturer (hydr"
+        },
+        {
+          "span": [
+            441,
+            864
+          ],
+          "heading_path": [
+            "People"
+          ],
+          "anchors": [
+            "3"
+          ],
+          "occurred_at": "2026-09-10T15:45:00+00:00",
+          "author": "Maya Okafor",
+          "starts_with": "People\n| Name | Role | Notes |\n| ---- | "
+        },
+        {
+          "span": [
+            866,
+            1059
+          ],
+          "heading_path": [
+            "How they use Halden Flow"
+          ],
+          "anchors": [
+            "4"
+          ],
+          "occurred_at": "2026-09-10T15:45:00+00:00",
+          "author": "Maya Okafor",
+          "starts_with": "How they use Halden Flow\nERP-to-warehous"
+        },
+        {
+          "span": [
+            1061,
+            1534
+          ],
+          "heading_path": [
+            "Open topics"
+          ],
+          "anchors": [
+            "5"
+          ],
+          "occurred_at": "2026-09-10T15:45:00+00:00",
+          "author": "Maya Okafor",
+          "starts_with": "Open topics\n- **Directory Sync (SCIM).**"
+        },
+        {
+          "span": [
+            1536,
+            1756
+          ],
+          "heading_path": [
+            "History"
+          ],
+          "anchors": [
+            "6"
+          ],
+          "occurred_at": "2026-09-10T15:45:00+00:00",
+          "author": "Maya Okafor",
+          "starts_with": "History\n- Dec 2024 — go-live on Azure AD"
+        }
+      ]
+    },
+    "halden/support/HAL-4821": {
+      "body_sha256": "8684cc6b086ffec3113e1827909b1fda0f4b89286062687db19f70a9dfe61e39",
+      "content_hash": "899fc9502fc3b2af893be795010d4d27be513a2dfdac5cc8df9ab46f9d0493d3",
+      "chunks": [
+        {
+          "span": [
+            0,
+            213
+          ],
+          "heading_path": [],
+          "anchors": [
+            "header"
+          ],
+          "occurred_at": "2026-08-14T09:12:00+00:00",
+          "author": null,
+          "starts_with": "Subject: Users not deprovisioned after O"
+        },
+        {
+          "span": [
+            215,
+            692
+          ],
+          "heading_path": [
+            "Comment 1 · Derek Holt (customer)"
+          ],
+          "anchors": [
+            "c1"
+          ],
+          "occurred_at": "2026-08-14T09:12:00+00:00",
+          "author": "Derek Holt",
+          "starts_with": "Comment 1 · Derek Holt (customer)\nHi,\nSi"
+        },
+        {
+          "span": [
+            694,
+            994
+          ],
+          "heading_path": [
+            "Comment 2 · Priya Natarajan (agent, internal note)"
+          ],
+          "anchors": [
+            "c2"
+          ],
+          "occurred_at": "2026-08-14T10:03:00+00:00",
+          "author": "Priya Natarajan",
+          "starts_with": "Comment 2 · Priya Natarajan (agent, inte"
+        },
+        {
+          "span": [
+            996,
+            1362
+          ],
+          "heading_path": [
+            "Comment 3 · Priya Natarajan (agent)"
+          ],
+          "anchors": [
+            "c3"
+          ],
+          "occurred_at": "2026-08-14T10:41:00+00:00",
+          "author": "Priya Natarajan",
+          "starts_with": "Comment 3 · Priya Natarajan (agent)\nHi D"
+        },
+        {
+          "span": [
+            1364,
+            1562
+          ],
+          "heading_path": [
+            "Comment 4 · Derek Holt (customer)"
+          ],
+          "anchors": [
+            "c4"
+          ],
+          "occurred_at": "2026-08-17T08:20:00+00:00",
+          "author": "Derek Holt",
+          "starts_with": "Comment 4 · Derek Holt (customer)\nThanks"
+        },
+        {
+          "span": [
+            1564,
+            1824
+          ],
+          "heading_path": [
+            "Comment 5 · Priya Natarajan (agent, internal note)"
+          ],
+          "anchors": [
+            "c5"
+          ],
+          "occurred_at": "2026-09-21T11:02:00+00:00",
+          "author": "Priya Natarajan",
+          "starts_with": "Comment 5 · Priya Natarajan (agent, inte"
+        },
+        {
+          "span": [
+            1826,
+            1988
+          ],
+          "heading_path": [
+            "Comment 6 · Derek Holt (customer)"
+          ],
+          "anchors": [
+            "c6"
+          ],
+          "occurred_at": "2026-09-23T14:47:00+00:00",
+          "author": "Derek Holt",
+          "starts_with": "Comment 6 · Derek Holt (customer)\nHi — a"
+        },
+        {
+          "span": [
+            1990,
+            2152
+          ],
+          "heading_path": [
+            "Comment 7 · Priya Natarajan (agent)"
+          ],
+          "anchors": [
+            "c7"
+          ],
+          "occurred_at": "2026-09-23T15:15:00+00:00",
+          "author": "Priya Natarajan",
+          "starts_with": "Comment 7 · Priya Natarajan (agent)\nHi D"
+        }
+      ]
+    },
+    "halden/slack/C0INCIDENT1:1784621160.000100": {
+      "body_sha256": "b2531fb01b2a7e37bb0cafd2c09c1cdebbc229b99a2a6ac99594a46ff4fbc5fe",
+      "content_hash": "bcde2f70c77e76c3bb0d59a6a585faa3d13daa1cb206bec2cb5c7b2600b27a91",
+      "chunks": [
+        {
+          "span": [
+            0,
+            885
+          ],
+          "heading_path": [],
+          "anchors": [
+            "1784621160.000100",
+            "1784621520.000100",
+            "1784623200.000100",
+            "1784623620.000100",
+            "1784627700.000100",
+            "1784628900.000100",
+            "1784629200.000100"
+          ],
+          "occurred_at": "2026-07-21T10:20:00.000100+00:00",
+          "author": "Sam Patel, Hannah Cho, Sofia Marchetti, Wei Chen",
+          "starts_with": "[2026-07-21 08:06 UTC] Sam Patel: :rotat"
+        }
+      ]
+    },
+    "halden/slack/C0ENGINEER1:day:2026-08-18": {
+      "body_sha256": "6aca5edf377e6f16039c5700351751e9b20ce195faa35ddca2c5e2597e7d46c3",
+      "content_hash": "755d5612330be150f642d528391f24b5699f20a6740fddd6f784a16cdd75e565",
+      "chunks": [
+        {
+          "span": [
+            0,
+            137
+          ],
+          "heading_path": [],
+          "anchors": [
+            "1787035500.000100"
+          ],
+          "occurred_at": "2026-08-18T06:45:00.000100+00:00",
+          "author": "Sam Patel",
+          "starts_with": "[2026-08-18 06:45 UTC] Sam Patel: 2026.0"
+        },
+        {
+          "span": [
+            139,
+            231
+          ],
+          "heading_path": [],
+          "anchors": [
+            "1787054400.000100"
+          ],
+          "occurred_at": "2026-08-18T12:00:00.000100+00:00",
+          "author": "Sam Patel",
+          "starts_with": "[2026-08-18 12:00 UTC] Sam Patel: SSO er"
+        }
+      ]
+    },
+    "veridian/drive/acme-account-plan": {
+      "body_sha256": "96df8132cc9c7e25d5e019e49a07f45954430965c68d8f1b07247b5e08cd5293",
+      "content_hash": "0b5da4c897bb8a467b6f145b3b03b42fdbce9404c3063e6b0a9cebe6c3b89423",
+      "chunks": [
+        {
+          "span": [
+            0,
+            52
+          ],
+          "heading_path": [],
+          "anchors": [
+            "1"
+          ],
+          "occurred_at": "2026-08-25T15:30:00+00:00",
+          "author": "Noor Haddad",
+          "starts_with": "Veridian Analytics account plan. Owner: "
+        },
+        {
+          "span": [
+            54,
+            321
+          ],
+          "heading_path": [
+            "Snapshot"
+          ],
+          "anchors": [
+            "2"
+          ],
+          "occurred_at": "2026-08-25T15:30:00+00:00",
+          "author": "Noor Haddad",
+          "starts_with": "Snapshot\n- Acme Corp (industrial manufac"
+        },
+        {
+          "span": [
+            323,
+            570
+          ],
+          "heading_path": [
+            "Commitments"
+          ],
+          "anchors": [
+            "3"
+          ],
+          "occurred_at": "2026-08-25T15:30:00+00:00",
+          "author": "Noor Haddad",
+          "starts_with": "Commitments\n- **SCIM provisioning beta i"
+        },
+        {
+          "span": [
+            572,
+            733
+          ],
+          "heading_path": [
+            "Risks"
+          ],
+          "anchors": [
+            "4"
+          ],
+          "occurred_at": "2026-08-25T15:30:00+00:00",
+          "author": "Noor Haddad",
+          "starts_with": "Risks\n- The September dashboard outage ("
+        }
+      ]
+    }
+  }
+}

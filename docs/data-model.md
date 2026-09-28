@@ -5,7 +5,10 @@ Status: §2 identity and tenancy tables are **implemented** (Phase 1, migration
 `access_group_members`, a Phase 2 subset of `documents` (§4) and `document_grants`
 (§5) are **implemented** (Phase 2, migration `0003_authorization_core.py`);
 `access_groups.key` was added in Phase 3 (migration `0004_access_group_key.py`,
-decision D-9). §3, the remaining `documents` columns, §6 and §7 are still design.
+decision D-9). §3, the remaining `documents` columns (§4), §6, `org_settings` and
+`model_providers` (§7) are **implemented** (Phase 4, migration `0005_ingestion.py`),
+each with an "as built" note where it differs from the draft. `query_traces` is still
+design (Phase 6).
 Related: `authorization-model.md`, `ingestion-design.md`, `retrieval-design.md`.
 
 Conventions:
@@ -169,7 +172,7 @@ Slack channel) or are defined by admins (e.g. "Exec staff").
 | organization_id | uuid    | UQ (organization_id, id) — target of composite FKs           |
 | key             | citext  | **Stable identity** (D-9): UQ (organization_id, key); CHECK `key::text ~ '^[a-z0-9][a-z0-9-]{0,62}$'` (on the text value — citext regex matching ignores case). Manifests and source sync find the group by it. Renaming changes `name` only; a different key is a different group (an identity/configuration change). **Not an authorization input**: grants and memberships use `id`. Existing rows were backfilled with `group-<id>` |
 | origin          | enum    | `source` (synced from a connector) \| `admin` (managed in Lattice) |
-| source_id       | uuid?   | Set when origin = `source`. **Added in Phase 4** with its composite FK to `sources` (the table does not exist yet; an unconstrained UUID would be a dangling cross-tenant reference) |
+| source_id       | uuid?   | **Phase 4:** composite FK `(organization_id, source_id)` → `sources` (CASCADE: disconnecting a source removes its groups and their members). CHECK: set if and only if origin = `source`. UQ (organization_id, source_id, external_ref) — the group's identity within its source. Source-synced groups get the key `src-<source key>-<external ref>`; a sync never takes over a key that already exists |
 | external_ref    | text?   | e.g. Slack channel ID. CHECK: set if and only if origin = `source` |
 | name            | text    | Shown to admins; may itself be sensitive → only admins see it |
 
@@ -187,37 +190,53 @@ re-embedding (they don't — access is joined at query time).
 
 ### sources
 
+**As built (Phase 4).** One row per configured source, upserted by `lattice sync` from
+the organization's `sources.yaml` (Lattice-side configuration, `lattice.sources.config`).
+
 | Field               | Type    | Req     | Notes                                                        |
 | ------------------- | ------- | ------- | ------------------------------------------------------------ |
-| id                  | uuid PK | CITE    |                                                              |
+| id                  | uuid PK | CITE    | UQ (organization_id, id) — composite FK target                |
 | organization_id     | uuid    | ISO     |                                                              |
-| connector_type      | enum    |         | `document_repository`, `ticketing`, `chat_export`            |
-| name                | text    | CITE    | "Halden Drive — Customer Projects"                           |
-| config              | jsonb   |         | Validated by the connector's Pydantic config model on write and on load |
-| default_sensitivity | enum    | AUTHZ   | **Required.** Applied when a record carries no sensitivity   |
-| default_department_ids | uuid[] | AUTHZ | Optional default department restriction                       |
+| key                 | citext  | VER     | Stable operator key (`drive`, `support`, `slack`), UQ per organization, slug format |
+| connector_type      | enum    |         | `document_repository`, `ticketing`, `chat_export`. A sync refuses a changed type (`source_config:connector_type_changed`) |
+| name                | text    | CITE    | "Halden Drive"                                               |
+| config              | jsonb   |         | The validated configuration: export path, default departments (by key), ticketing organization → account key, channel settings. Never secrets |
+| default_sensitivity | enum    | AUTHZ   | **Required** (`internal` or `confidential`). Applied when a record carries no sensitivity |
 | account_scoped      | bool    | ACCT    | If true, every record must map to an account or it is not indexed |
 | authority           | enum    | AUTH-R  | Default authority for records: `system_of_record`, `working`, `conversational` |
-| status              | enum    | DEL     | `active`, `paused`, `deleting`                               |
-| last_sync_run_id    | uuid?   | DBG     |                                                              |
+| status              | enum    | DEL     | `active`, `paused`, `deleting` (a `deleting` source refuses syncs) |
+| opaque_ref_key      | bytea   | DBG     | 32 random bytes keying the opaque references of its failures (security-model §10). Never displayed |
+| last_synced_at, last_succeeded_at, acl_synced_at | timestamptz? | DBG, FRESH | Last run; last fully successful run; last run that applied the source's access state |
+
+Default departments are kept in `config` by key and validated against the organization
+on every sync (`source_config:unknown_department`), rather than as a `uuid[]` column
+that could not carry foreign keys.
 
 ### source_sync_runs
 
-`id, organization_id, source_id, mode (full|incremental|acl_only), started_at,
-finished_at, status (running|succeeded|partial|failed|aborted), records_seen,
-created, updated, access_updated, unchanged, deleted, failed, deletion_guard_tripped
-bool, error_code, error_summary (redacted)`. Req: **DBG**, **DEL**.
+**As built.** `id, organization_id, source_id` (composite FK, CASCADE), `mode`
+(`full | acl_only | reindex`), `status` (`running | succeeded | partial | failed |
+aborted`), `started_at, finished_at`, counts (`records_seen, created, updated,
+access_updated, unchanged, deleted, failed, chunks_embedded, embeddings_reused,
+chunks_policy_excluded, embedding_failures`), `deletion_guard_tripped`, `error_code`
+(CHECK: a code such as `deletion_guard:mass_deletion`, never free text). There is no
+`error_summary` column. `incremental` mode is not built (no connector supports
+checkpoints yet). A run is `partial` when any record failed, any embedding failed or
+the deletion guard tripped; `succeeded` only when nothing did. Req: **DBG**, **DEL**.
 
 ### sync_record_failures
 
-`id, organization_id, sync_run_id, external_id, opaque_ref, stage (validate|
-normalize|map_access|chunk|embed|persist), error_code, message_params jsonb,
-created_at`. Messages are rendered from templates keyed by `error_code`; there is no
-free-text message field, so record content cannot leak through failures.
-`opaque_ref` is a keyed hash of the external ID. Admins see *what failed, when, why*;
-the raw `external_id` (a filename or title in some sources) is displayed only if the
-admin can read the corresponding active document, otherwise `opaque_ref`
-(`security-model.md` §10).
+**As built.** `id, organization_id, sync_run_id` (composite FK, CASCADE),
+`external_id?`, `location?` (e.g. `tickets.jsonl:12` — can be a filename), `opaque_ref`
+(CHECK `^rec_[0-9a-f]{16}$`: HMAC-SHA-256 of the external ID, or of the location when
+the record could not be identified, under the source's `opaque_ref_key`), `stage`
+(`read | parse | validate | normalize | map_access | chunk | embed | persist`),
+`error_code` (CHECK: lowercase code), `message_params jsonb` (short identifiers only —
+a field name, a line number, an unmapped external account reference), `created_at`.
+There is no free-text message column, so record content cannot leak through failures
+(a test pins the column set). Admins will see *what failed, when, why* (Phase 8); the
+raw `external_id` and `location` are displayed only if the admin can read the
+corresponding active document, otherwise `opaque_ref` (`security-model.md` §10).
 
 ---
 
@@ -236,9 +255,13 @@ everyone. Arrays cannot carry foreign keys, so trigger
 `trg_documents_department_ids` rejects (as a `foreign_key_violation`) any
 `department_ids` element that is not a department of the document's organization,
 on insert and whenever `organization_id` or `department_ids` changes. A department
-deleted later leaves a dangling ID, which only makes the document less visible. The
-source, content, provenance and versioning columns below arrive with ingestion
-(Phase 4).
+deleted later leaves a dangling ID, which only makes the document less visible.
+
+**As built (Phase 4, migration 0005):** every column below exists. Additions to the
+draft: `acl_updated_at` (last access change, including admin grants),
+`supersedes_external_id` (what the source says; resolved within the same source into
+`supersedes_document_id`), and the status `quarantined`. Migration 0005 refuses to run
+if any document exists, because no earlier document could have a source.
 
 | Field               | Type        | Req             | Notes |
 | ------------------- | ----------- | --------------- | ----- |
@@ -263,13 +286,17 @@ source, content, provenance and versioning columns below arrive with ingestion
 | access_hash         | bytea       | VER             | SHA-256 of normalized access metadata (sensitivity, access_mode, account, departments, source grants); lets ACL-only changes skip re-chunking |
 | version             | int         | VER             | Incremented on content change |
 | body                | text        | CITE            | Canonical normalized text (for inspector context). Max size enforced |
-| status              | enum        | DEL             | `active`, `deleted`. Only `active` is retrievable |
-| supersedes_document_id | uuid?    | FRESH           | Explicit supersession when source provides it (e.g. "Policy v2 replaces v1") |
+| acl_updated_at      | timestamptz | AUTHZ, DBG      | Last change of access columns, source grants or admin grants |
+| status              | enum        | DEL, AUTHZ      | `active`, `deleted`, `quarantined`. Only `active` is readable. `quarantined`: the source's record exists but its access can no longer be mapped (or the record no longer parses), so the document is kept but unreadable rather than left on stale access; the next sync that maps it restores it |
+| supersedes_external_id | text?    | FRESH           | The source's own statement ("v2 replaces v1") |
+| supersedes_document_id | uuid?    | FRESH           | Resolved link within the same source (composite FK). Cleared before either document is deleted |
 | metadata            | jsonb       | DBG             | Validated per-kind extras (ticket status/priority, channel name). **Never** read by authz |
 
 Indexes: UQ (organization_id, source_id, external_id); (organization_id, account_id);
 GIN (department_ids); (organization_id, status, sensitivity);
-(organization_id, source_updated_at).
+(organization_id, source_updated_at); (organization_id, display_ref) for exact
+identifier lookup. Document IDs are deterministic (`uuid5(source_id/external_id)`);
+identity is still decided by the idempotency key.
 
 Why access fields live on `documents`, not on `chunks`: a permission change is a
 single-row update that takes effect for the next query, with no fan-out and no chance
@@ -303,8 +330,11 @@ it was deleted. Each principal kind has its own column instead:
 | created_at      | timestamptz | |
 
 CHECK `ck_document_grants_one_principal`: `principal_type` names exactly one populated
-principal column and the others are NULL. UQ (document_id, membership_id),
-(document_id, department_id), (document_id, group_id). Indexes (organization_id,
+principal column and the others are NULL. UQ (document_id, origin, membership_id),
+(document_id, origin, department_id), (document_id, origin, group_id) — **Phase 4**
+added `origin` (decision D-12): a source grant and an admin grant on the same principal
+are separate permission origins, so a sync replacing its own grants never collides
+with, or touches, an administrator's grant. Duplicates are harmless to the policy. Indexes (organization_id,
 membership_id | department_id | group_id). Deleting a principal deletes its grants.
 
 `granted_by` (the granting admin) is **deferred to Phase 9**: it is audit data, not a
@@ -312,7 +342,10 @@ policy input, and what happens to it when that admin's membership is deleted bel
 with the `audit_events` design.
 
 Source-origin grants are replaced wholesale on each ACL sync; admin-origin grants are
-never touched by sync (so an admin grant is not silently wiped by a connector).
+never touched by sync (so an admin grant is not silently wiped by a connector). Until
+the Phase 9 access UI, admin grants come from `admin-grants.yaml` through `lattice
+apply-admin-grants` (all-or-nothing, idempotent; `--prune` revokes grants no longer in
+the file). They are membership grants only.
 
 ## 6. Chunks
 
@@ -324,16 +357,20 @@ never touched by sync (so an admin grant is not silently wiped by a connector).
 | ordinal         | int           | CITE        | Position in document (for neighbours in inspector) |
 | text            | text          | CITE        | Display text, exactly as in `documents.body[char_start:char_end]` |
 | char_start, char_end | int      | CITE        | Offsets into `documents.body` for highlighting and context |
-| heading_path    | text[]        | CITE        | Doc headings / "Ticket HAL-4821 › Comment 4" |
+| heading_path    | text[]        | CITE        | Doc section heading / "Comment 4 · Priya Natarajan (agent)" |
+| source_anchors  | text[]        | CITE        | Record parts the chunk covers (section number, comment `c4`, message `ts`) |
 | occurred_at     | timestamptz   | FRESH       | Time of *this* content (message/comment time), falls back to document time |
 | author_display  | text?         | CITE        | Author of this part (comment/message author) |
-| content_hash    | bytea         | VER, DEDUP  | SHA-256 of chunk text; embedding reuse key |
+| content_hash    | bytea         | VER, DEDUP  | SHA-256 of chunk text (with the occurrence, the chunk ID) |
+| embedding_input_hash | bytea    | VER         | SHA-256 of `EMBEDDING_INPUT_VERSION` + the exact provider input (header + text); a vector is reused only when this matches |
 | token_count     | int           | DBG         | Context budgeting |
-| tsv             | tsvector      |             | Computed by ingestion (not a generated column, because it includes document-level header terms: title, account name, heading path): setweight(header,'A') ‖ setweight(text,'D'), `english` config. GIN index |
-| embedding       | vector(D)     |             | D fixed per deployment by the chosen embedding model |
-| embedding_model | text          | VER         | Model identifier; a model change is a tracked re-embed |
+| tsv             | tsvector      |             | Computed by ingestion: setweight(english(title + heading path),'A') ‖ setweight(simple(display_ref),'A') ‖ setweight(english(text),'D'). **No structured account name** (decision D-10). GIN index |
+| embedding       | vector(1024)  |             | Fixed per deployment (ADR-008). NULL unless `embedding_status = 'embedded'` (CHECK) |
+| embedding_model | text?         | VER         | Set exactly when a vector exists; a model change is a tracked re-embed |
+| embedding_status | enum         | egress, DBG | `embedded`, `policy_excluded` (above the provider's effective egress level: lexical-only), `pending` (no provider configured yet), `failed` (provider error; retried by the next sync) |
 
-Indexes: (document_id, ordinal); GIN (tsv); vector index **deferred** (exact scan is
+Indexes: UQ (document_id, ordinal) DEFERRABLE (replacing a document's chunks
+renumbers kept chunks in place); GIN (tsv); vector index **deferred** (exact scan is
 used while per-org chunk counts are small; see `retrieval-design.md` §5).
 
 Why `occurred_at` on chunks: a ticket opened in March may have a comment from last
@@ -364,7 +401,12 @@ Security-sensitive. Stores **references and measurements**, not document content
 
 ### org_settings
 
-`organization_id PK, external_egress_level (internal|confidential|restricted,
+**As built (Phase 4):** `organization_id PK, external_egress_level` (default
+`internal`), timestamps. No row means `internal`. The remaining fields below arrive
+with the phases that use them; raising the level has no command yet (Phase 6 adds the
+audited CLI, Phase 9 the UI).
+
+Design: `organization_id PK, external_egress_level (internal|confidential|restricted,
 default **internal**), freshness_thresholds jsonb (per document_kind, days),
 trace_retention_days (default 90), ask_enabled bool (default true; incident kill
 switch)`. Raising `external_egress_level` is an explicit, audited admin action.
@@ -372,7 +414,14 @@ There is deliberately no setting that lets admins read other members' content (D
 
 ### model_providers
 
-`id, organization_id, purpose (embedding|generation), provider, endpoint, model,
+**As built (Phase 4):** `id, organization_id, purpose, provider, model, deployment,
+approved_for_level (default internal), retention_mode, training_opt_out`, timestamps;
+UQ (organization_id, purpose, provider, model). A sync records the embedding provider
+it uses the first time (approved for `internal` only); raising the approval is an
+explicit administrator action outside ingestion. `endpoint` and `updated_by` are not
+built.
+
+Design: `id, organization_id, purpose (embedding|generation), provider, endpoint, model,
 deployment (external_api|private), approved_for_level (internal|confidential|
 restricted, default internal), retention_mode, training_opt_out bool, updated_by,
 updated_at`. Effective egress level for a call =
@@ -518,18 +567,23 @@ Defined once in the backend and exposed via OpenAPI where they cross HTTP.
 | `FreshnessState`       | newest_evidence_at, oldest_cited_at, is_stale, threshold_days, note |
 | `Answer`               | status, status_reason, claims[], conflicts[], evidence[] (every item a citation may reference; items excluded from the prompt by egress policy are flagged `used_for_answer=false`), freshness, notices[] (confidential sources used, evidence not sent to the AI model under egress policy, claims removed in validation), clarifying_question?, trace_id |
 | `SourceRecord`         | Connector output (see `connector-design.md`) |
-| `IngestionResult`      | Per-record outcome: created/updated/access_updated/unchanged/failed + reason |
-| `SourceSyncResult`     | Aggregate of a sync run |
+| `SyncResult`           | **Implemented (Phase 4)**, a dataclass (`lattice.ingestion.sync`): per-run counts (seen, created, updated, access_updated, unchanged, skipped, failed, quarantined, deleted, would_delete, embeddings), deletion-guard flag, error and failure codes. Per-record outcomes are the failure rows; there is no per-record result type |
 | `Trace`                | API view of a trace, re-authorized for the viewer |
 
 ## 10. Lifecycle propagation
 
 ```
-source deleted ─► sources.status=deleting ─► documents.status=deleted (one UPDATE, immediate)
-                 └─► purge job: DELETE documents (CASCADE chunks, grants) ─► DELETE source
-document deleted in source ─► sync sweep ─► DELETE document (CASCADE chunks → vectors + tsv gone)
-document updated ─► same transaction: UPDATE document, DELETE removed chunks, INSERT new chunks
-access changed in source ─► UPDATE documents access columns / replace source grants (no re-embed)
+source disconnected (`lattice source disconnect`) ─► one transaction: sources.status=deleting,
+                 documents.status=deleted (unreadable from the next request)
+                 └─► purge (next transaction, resumable): DELETE source ─► CASCADE documents,
+                     chunks (vectors + tsv), all grants on them (source and admin), source groups
+                     and members, sync runs and failures; members who lost a group get authz_updated_at
+document deleted in source ─► sync sweep (guarded) ─► DELETE document (CASCADE chunks → vectors + tsv gone)
+document updated ─► same transaction: UPDATE document, DELETE removed chunks, UPSERT kept/new chunks,
+                 replace source grants
+access changed in source ─► UPDATE documents access columns / replace source grants (no re-chunk,
+                 no re-embed); a classification above the egress level removes vectors at once
+access no longer mappable ─► documents.status=quarantined (unreadable, kept) until mapped again
 user removed from account ─► DELETE account_assignment ─► next query excludes (no cache)
 membership suspended ─► status=suspended; sessions for that membership rejected on next request
 organization deleted ─► status=deleting; sessions revoked; purge by organization_id across all tables; verification query must return 0 rows per table

@@ -61,7 +61,14 @@ fails even for the owner). In a new migration, as `lattice_owner`:
 | Change embedding model | `lattice reindex --reembed` per source; monitor cost estimate first | 4 |
 | Organization deletion | Set status `deleting`; purge job; run verification query (0 rows per table for org) | 11 |
 
-## 3. Model-provider record — *Phase 4/6*
+## 3. Model-provider record — *Phase 4 (embedding), Phase 6 (generation)*
+
+As built (Phase 4): the first sync with `--embedding openai|fake` records the provider
+in `model_providers` (purpose `embedding`, provider, model, deployment, retention mode,
+training opt-out) approved for `internal` only. There is no command to raise
+`approved_for_level` or `org_settings.external_egress_level` yet (Phase 6 adds an
+audited CLI, Phase 9 the UI); until then they stay at the default. The OpenAI key is
+read from `LATTICE_OPENAI_API_KEY` by the provider only (ADR-008).
 
 For each configured provider, record: provider, endpoint, model, deployment
 (external API / private), approved egress level (default `internal`), training
