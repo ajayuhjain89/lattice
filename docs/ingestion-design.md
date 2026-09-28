@@ -224,13 +224,17 @@ exist) refuse the whole sync before anything is written (`source_config:*`).
   `FakeEmbeddingProvider` (deterministic hashed bag-of-words; development and tests;
   refused in production; treated as an external provider so the egress policy is
   exercised), `RecordingEmbeddingProvider` (tests: keeps every payload).
-- `--embedding none|fake|openai` (default `none`: eligible chunks wait as `pending`).
+- `--embedding none|fake|local|gemini|openai` (default `none`: eligible chunks wait as
+  `pending`). `local` and `gemini` were added in the Phase 5 closure (ADR-009, ADR-010).
 - **Reuse:** a chunk reuses a stored vector of the same document when its
   `embedding_input_hash` (template version + exact input) and model match. A new ticket
   comment embeds one chunk; an access-only change embeds nothing.
 - **AI egress policy** (`security-model.md` §6): a chunk is sent only if its document's
-  sensitivity is at or below `min(org_settings.external_egress_level,
-  model_providers.approved_for_level)`; by default `internal`. Chunks above the level
+  sensitivity is at or below the provider's effective level; by default `internal`. As
+  built in Phase 4 that was `min(org_settings.external_egress_level,
+  model_providers.approved_for_level)`; since the Phase 5 closure the level depends on
+  the provider's deployment trust class (D-15: `local`, `organization_controlled`,
+  `external_api`; `unknown` receives nothing), per the table in security-model §6. Chunks above the level
   are `policy_excluded`: no vector, lexical-only, still findable by keywords and
   identifiers for readers who are authorized. A classification raised above the level
   removes the document's vectors in the same transaction as the access change;
@@ -256,9 +260,9 @@ record failed — that is `partial`.
 ```
 lattice sync --org SLUG --sources data/synthetic/<org>/sources.yaml [--source KEY ...]
              [--mode full|acl_only] [--dry-run] [--allow-mass-deletion]
-             [--embedding none|fake|openai]
+             [--embedding none|fake|local|gemini|openai]
 lattice reindex --org SLUG --sources FILE [--source KEY ...] [--rechunk] [--reembed]
-                [--embedding none|fake|openai]
+                [--embedding none|fake|local|gemini|openai]
 lattice source disconnect --org SLUG --source KEY
 lattice apply-admin-grants --org SLUG --grants FILE [--dry-run] [--prune]
 ```

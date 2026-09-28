@@ -1,7 +1,8 @@
 # ADR-004: Hybrid retrieval with reciprocal-rank fusion and a deterministic first reranker
 
-Status: Proposed (Phase 0); implemented in Phase 5 as decided, with the lexical query
-change recorded below.
+Status: Accepted (proposed in Phase 0); implemented in Phase 5 as decided, with the
+lexical query change recorded below. A local cross-encoder was later measured as a
+second-stage reranker and rejected for the default path (evaluation-plan §11).
 
 ## Context
 Questions mix exact tokens (customer names, ticket IDs, quoted phrases, dates) and

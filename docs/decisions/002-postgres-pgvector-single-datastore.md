@@ -1,6 +1,7 @@
 # ADR-002: PostgreSQL + pgvector + full-text search as the single datastore
 
-Status: Proposed (Phase 0)
+Status: Accepted (proposed in Phase 0; implemented in Phases 1–5: PostgreSQL 16 with
+forced RLS, pgvector and full-text search are the only datastore)
 
 ## Context
 Retrieval must apply authorization inside the query, support exact identifiers and

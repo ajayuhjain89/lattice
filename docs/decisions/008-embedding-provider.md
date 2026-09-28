@@ -14,7 +14,7 @@ other deployment needs:
 [ADR-009](009-local-embedding-provider.md) (local, zero-cost, no egress) and
 [ADR-010](010-gemini-embedding-provider.md) (Gemini, optional BYOK; unpaid key =
 synthetic only). The real semantic benchmark was run with those
-(`evaluation-plan.md` §9). The Voyage comparison below was not triggered.
+(`evaluation-plan.md` §10; final status §12). The Voyage comparison below was not triggered.
 
 ## Context
 
@@ -149,8 +149,9 @@ to `input_type`, and the OpenAI adapter ignores. The 1024-dimension column fits 
 - Only chunks of documents at or below the effective egress level (default
   `internal`) are ever sent (ingestion-design §7).
 - Phase 5: queries are embedded with `purpose = "query"` (ignored by this adapter),
-  only when the provider is recorded for the organization and the question's declared
-  classification is within the effective level; query vectors are compared only with
+  only when the provider is recorded for the organization and the question's effective
+  sensitivity (D-13: the organization default, raised but never lowered by a
+  declaration) is within the effective level; query vectors are compared only with
   chunks of the same model (`retrieval-design.md` §5).
 
 ## Reconsider when

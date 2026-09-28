@@ -1,6 +1,9 @@
 # Lattice — Product Brief
 
-Status: Foundation draft (Phase 0). Nothing described here is implemented yet.
+Status: Foundation draft (Phase 0), kept as the product intent. Phases 1–5 implemented
+the foundation, authorization, dataset, ingestion and permission-aware retrieval;
+answering (Phase 6) and the web app (Phase 7) are not built yet. The metric targets in
+§8 are unchanged: retrieval Recall@10 is 0.726 at best so far (evaluation-plan §12).
 Owner: Product engineering. Last reviewed: 2026-09-27.
 
 ---
@@ -161,7 +164,7 @@ evaluation set first, then to pilot usage.
 | Analytics dashboards / usage KPIs UI                  | No user outcome until core workflow works                           |
 | Explicit deny rules / ethical walls                   | Increases policy complexity; revisit with real customer need        |
 | Real-time source webhooks                             | Scheduled / manual sync is enough for first release                 |
-| Model-based reranker, query rewriting via LLM         | Add only if evaluation shows need (retrieval-design.md §2, §6)          |
+| Model-based reranker, query rewriting via LLM         | Add only if evaluation shows need (retrieval-design.md §2, §6); a local cross-encoder was measured and rejected (evaluation-plan §11) |
 | Dark theme                                            | Tokens are structured to allow it; not built in first release       |
 | Password-based login                                  | Enterprises use SSO; dev login + OIDC (ADR-005)                     |
 | Consumer chat UX (avatars, personas, chat bubbles)    | Wrong mental model for evidence work                                |

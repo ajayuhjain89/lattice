@@ -61,7 +61,7 @@ corruptions the lint must catch, the oracle compared with the seeded database).
   `ts`, group key); ticket numbers grow with creation time.
 - Every referenced user, department, account, group, channel, record and part exists.
 - **Access is computed, not asserted:** `lattice.dataset.access` maps each record's raw
-  metadata the way Phase 4 ingestion will, builds each persona's `AuthorizationContext`
+  metadata the way Phase 4 ingestion does, builds each persona's `AuthorizationContext`
   from `org.yaml` (and private-channel membership), and asks the real
   `lattice.authz.readable`, `account_visible` and `visible_document_account`. A test
   compares those contexts with the ones the resolver produces after seeding Postgres.

@@ -1,6 +1,8 @@
 # ADR-003: Authorization compiled into retrieval SQL; RLS for tenant isolation; pre-generation invariant
 
-Status: Proposed (Phase 0)
+Status: Accepted (proposed in Phase 0; RLS implemented in Phase 1, the SQL predicate and
+tripwire in Phase 2, authorization inside every retrieval statement in Phase 5; the
+pre-generation check is applied by answering in Phase 6)
 
 ## Context
 The model must never receive information the user cannot see (SEC-1). Filtering after

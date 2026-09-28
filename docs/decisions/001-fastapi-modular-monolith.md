@@ -1,6 +1,7 @@
 # ADR-001: FastAPI modular monolith with a rendering-only Next.js frontend
 
-Status: Proposed (Phase 0)
+Status: Accepted (proposed in Phase 0; the FastAPI modular monolith is implemented since
+Phase 1; the Next.js frontend arrives in Phase 7)
 
 ## Context
 Lattice's core logic — authorization, retrieval, ingestion, generation, citation

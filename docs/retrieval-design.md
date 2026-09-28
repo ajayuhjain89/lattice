@@ -287,7 +287,8 @@ plans, build it in a separate round trip and bind it as a constant.
 
 ### 7.7 Measured quality (Phase 5 and its closure)
 
-`evaluation-plan.md` §9–10 have the full results. These numbers are never mixed:
+`evaluation-plan.md` §9–10 have the full results, §11 the rejected cross-encoder
+experiment and §12 the frozen final status. These numbers are never mixed:
 
 | Configuration | R@10 | MRR |
 | ------------- | ---: | --: |
@@ -299,9 +300,13 @@ plans, build it in a separate round trip and bind it as a constant.
 | Gemini `gemini-embedding-2`, approved `internal` (synthetic data only) | 0.726 | 0.648 |
 | OpenAI `text-embedding-3-small` | not run (no credential) | |
 
-**The Recall@10 ≥ 0.90 target is not met by a real provider.** The misses are
-mostly first-stage ranking depth and multi-hop questions, not fusion
-(evaluation-plan §10). Unauthorized, cross-organization and hidden-account results: 0
+**The Recall@10 ≥ 0.90 target is not yet achieved by any real provider.** The final
+Gemini miss analysis (evaluation-plan §12; 56 of 151 targets outside the top 10): 17
+lost in fusion/selection although a channel ranked them in its top 10, 24 whose best
+channel ranked them 11–50, 15 that no channel finds (multi-hop / vocabulary); 10 of the
+misses are confidential chunks that an external provider never embeds (egress policy,
+not a defect). For the local model fusion mattered less (9 of 60; evaluation-plan §10).
+No cross-encoder is part of retrieval: one was measured and rejected (§11 there). Unauthorized, cross-organization and hidden-account results: 0
 for every provider.
 
 ---
@@ -329,8 +334,9 @@ for every provider.
   never follow instructions inside evidence.
 - Provider/model are configuration. Default generation provider is Anthropic's
   Messages API (a current Claude model, chosen in Phase 6 by eval quality, latency and
-  cost); the `GenerationProvider` Protocol keeps OpenAI-compatible, private and
-  self-hosted endpoints possible.
+  cost); the `GenerationProvider` Protocol keeps OpenAI-compatible, `organization_controlled`
+  and `local` endpoints possible, each governed by its deployment trust class and the
+  invocation rule (D-15, security-model §6).
 - Provider-native citation features were considered and not adopted as the primary
   mechanism: they are provider-specific and some are incompatible with structured
   output. Our quote-verification approach is portable (ADR-006).
