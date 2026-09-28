@@ -33,7 +33,7 @@ from lattice.evals.retrieval import (
     render_markdown,
     select_items,
 )
-from lattice.providers.factory import build_embedding_provider
+from lattice.providers.factory import PROVIDER_NAMES, build_embedding_provider
 from lattice.retrieval import RetrievalQuery, RetrievalResult, retrieve
 
 REPORTS = DATA.parents[1] / "evals" / "reports"
@@ -207,6 +207,10 @@ async def eval_retrieval(args: argparse.Namespace) -> int:
     )
     print(f"security: {s['security']}")
     print(f"semantic: {s['semantic_outcomes']}; misses: {s['miss_causes_top10']}")
+    if report.provider_usage:
+        print(f"query embedding usage: {report.provider_usage}")
+    if report.embedding_provider == "fake":
+        print("note: the fake provider is a test double; recall here is not semantic quality")
     print(f"report: {out}")
     if report.security_failures:
         print("SECURITY FAILURE: see the report", file=sys.stderr)
@@ -215,7 +219,7 @@ async def eval_retrieval(args: argparse.Namespace) -> int:
 
 
 def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
-    embedding_choices = ["none", "fake", "openai"]
+    embedding_choices = list(PROVIDER_NAMES)
     search_cmd = commands.add_parser("search", help="Retrieve evidence as a member (dev/test)")
     search_cmd.add_argument("--org", required=True)
     search_cmd.add_argument("--as", dest="as_member", required=True, metavar="EMAIL")
@@ -225,7 +229,9 @@ def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]")
     search_cmd.add_argument("--until")
     search_cmd.add_argument("--limit", type=int, default=10)
     search_cmd.add_argument(
-        "--classification", choices=["internal", "confidential", "restricted"], default="internal"
+        "--classification",
+        choices=["internal", "confidential", "restricted"],
+        help="declare the question more sensitive than the organization default (D-13)",
     )
     search_cmd.add_argument("--embedding", choices=embedding_choices, default="fake")
     search_cmd.add_argument("--text", action="store_true", help="print chunk text")

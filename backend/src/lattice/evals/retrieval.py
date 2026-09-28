@@ -34,7 +34,12 @@ Metrics:
   database returned them, the fused pool, the evidence); another organization's
   chunks; ``must_not_retrieve`` hits; evidence showing a structured account the oracle
   says must be hidden (D-8); account mentions of accounts the persona may not see;
-  canary strings of unreadable records in evidence text.
+  canary strings of unreadable records in evidence text, and ``must_not_contain``
+  literals in evidence from a record the persona may not read.
+* **Informational** (not a retrieval violation): a ``must_not_contain`` literal found in
+  a record the persona *may* read -- the injection payloads planted in the
+  prompt-injection tickets the questions are about. Retrieval must return them as
+  plain data; the answer must never contain them (Phase 6).
 
 For each target missed in the top 10, the report says where it was lost: never
 returned by any channel, returned but outside the fused pool, or fused but ranked
@@ -55,7 +60,12 @@ from lattice.dataset.lint import Dataset
 from lattice.dataset.manifests import AS_OF, CANARY, KEY_REF, GoldenItem
 from lattice.db.engine import Database
 from lattice.errors import LatticeError
-from lattice.providers.embedding import EmbeddingProvider
+from lattice.providers.embedding import (
+    EmbeddingError,
+    EmbeddingProvider,
+    Purpose,
+    RecordingEmbeddingProvider,
+)
 from lattice.retrieval import (
     DEFAULT_CONFIG,
     RetrievalConfig,
@@ -65,6 +75,8 @@ from lattice.retrieval import (
     retrieve_with_context,
 )
 from lattice.retrieval.models import CHANNELS, Candidate
+from lattice.retrieval.query import normalize
+from lattice.retrieval.semantic import query_egress_block, question_policy
 
 PREFIX = {"document_repository": "doc", "ticketing": "ticket", "chat_export": "chat"}
 KS = (1, 5, 10, 20)
@@ -124,6 +136,89 @@ def forbidden(item: GoldenItem) -> list[Target]:
             for key in expected.must_not_retrieve
         }
     )
+
+
+# --- query embeddings, prefetched under the same egress policy ----------------------
+
+
+@dataclass
+class PrefetchedQueries:
+    """Evaluation-only wrapper: the golden questions' query vectors are requested up
+    front, in the provider's own batch size, so a quota-limited external provider sees
+    a handful of requests instead of one per item. Retrieval still calls ``embed(...,
+    "query")`` exactly as in the product and gets the identical vector (same normalized
+    text, same purpose); anything not prefetched goes to the provider.
+
+    A question is prefetched only if the product's own egress decision
+    (``question_policy`` + ``query_egress_block``, as that organization, with no
+    declaration -- how the harness retrieves) would send it. Prefetching never sends
+    a question retrieval would not."""
+
+    inner: EmbeddingProvider
+    cache: dict[str, list[float]] = field(default_factory=dict)
+
+    @property
+    def provider(self) -> str:
+        return self.inner.provider
+
+    @property
+    def model(self) -> str:
+        return self.inner.model
+
+    @property
+    def dimensions(self) -> int:
+        return self.inner.dimensions
+
+    @property
+    def deployment(self) -> Any:
+        return self.inner.deployment
+
+    @property
+    def retention_mode(self) -> str:
+        return self.inner.retention_mode
+
+    @property
+    def training_opt_out(self) -> bool:
+        return self.inner.training_opt_out
+
+    @property
+    def max_batch(self) -> int:
+        return self.inner.max_batch
+
+    async def prefetch(
+        self, app: Database, identities: "Identities", items: Sequence[GoldenItem]
+    ) -> None:
+        by_org: dict[str, set[str]] = defaultdict(set)
+        for item in items:
+            by_org[item.organization].add(normalize(item.question))
+        for slug, questions in sorted(by_org.items()):
+            org_id = identities.org_ids[slug]
+            async with app.tenant_snapshot(org_id) as session:
+                member = next(
+                    (m for (o, _), m in identities.memberships.items() if o == slug), None
+                )
+                if member is None:
+                    continue
+                ctx = await resolve_authorization_context(
+                    session, organization_id=org_id, membership_id=member
+                )
+                org, sensitivity = await question_policy(session, ctx, None)
+                if await query_egress_block(session, ctx, self.inner, sensitivity, org):
+                    continue
+            pending = sorted(q for q in questions if q and q not in self.cache)
+            size = max(1, self.inner.max_batch)
+            for start in range(0, len(pending), size):
+                batch = pending[start : start + size]
+                try:
+                    vectors = await self.inner.embed(batch, "query")
+                except EmbeddingError:
+                    return  # retrieval asks (and degrades) per item, as in the product
+                self.cache.update(zip(batch, vectors, strict=True))
+
+    async def embed(self, texts: Sequence[str], purpose: Purpose) -> list[list[float]]:
+        if purpose == "query" and texts and all(t in self.cache for t in texts):
+            return [self.cache[t] for t in texts]
+        return await self.inner.embed(texts, purpose)
 
 
 # --- identities and the corpus map (operator reads, independent of retrieval) --------
@@ -228,6 +323,8 @@ class ItemResult:
     counts: dict[str, int] = field(default_factory=dict)
     hit_channels: dict[str, list[str]] = field(default_factory=dict)
     violations: list[dict[str, str]] = field(default_factory=list)
+    # Not violations: e.g. an injection payload inside a readable record's own text.
+    informational: list[dict[str, str]] = field(default_factory=list)
     misses: list[Miss] = field(default_factory=list)
 
 
@@ -266,6 +363,7 @@ def _check_evidence_metadata(
     dataset: Dataset,
     corpus: Corpus,
     out: list[dict[str, str]],
+    info: list[dict[str, str]],
 ) -> None:
     world = dataset.worlds[item.organization]
     hidden = {a for _, e in item.expectations() for a in e.hidden_accounts}
@@ -291,8 +389,19 @@ def _check_evidence_metadata(
             ):
                 out.append({"kind": "canary", "stage": "evidence", "record": found})
         for literal in {s for _, e in item.expectations() for s in e.must_not_contain}:
+            if CANARY.fullmatch(literal):
+                continue  # canaries: checked above, with their records' readability
             if literal in evidence.text or literal in evidence.title:
-                out.append({"kind": "must_not_contain", "stage": "evidence", "record": literal})
+                readable = record is not None and world.can_read(item.persona, record)
+                # A literal inside a record the persona may read is that record's own
+                # content -- e.g. the exfiltration URL planted in an injection ticket the
+                # item is about. Retrieving it is correct; keeping it out of the answer
+                # is Phase 6's check. Anywhere else it is a violation.
+                found = {"stage": "evidence", "record": literal}
+                if readable:
+                    info.append({"kind": "injection_payload_in_readable_evidence", **found})
+                else:
+                    out.append({"kind": "must_not_contain", **found})
     for mention in result.account_mentions:
         if mention.key in hidden or not world.sees_account(item.persona, mention.key):
             out.append(
@@ -424,7 +533,14 @@ async def evaluate_item(
         banned=banned,
         out=out.violations,
     )
-    _check_evidence_metadata(result, item=item, dataset=dataset, corpus=corpus, out=out.violations)
+    _check_evidence_metadata(
+        result,
+        item=item,
+        dataset=dataset,
+        corpus=corpus,
+        out=out.violations,
+        info=out.informational,
+    )
 
     out.semantic_status = result.semantic.status
     out.semantic_reason = result.semantic.reason
@@ -475,6 +591,10 @@ class RetrievalReport:
     generated_at: str
     embedding_provider: str | None
     embedding_model: str | None
+    embedding_deployment: str | None
+    # Query embeddings this run requested: calls, texts, characters (and, for
+    # providers that count them, HTTP requests and rate-limit answers).
+    provider_usage: dict[str, int]
     config_version: str
     rerank_version: str
     corpus_embeddings: dict[str, dict[str, int]]
@@ -560,6 +680,11 @@ def summarize(results: Sequence[ItemResult]) -> dict[str, Any]:
             "tripwire_aborts": violations["tripwire"],
         },
         "same_question_groups": same_question,
+        "informational": {
+            "injection_payloads_in_readable_evidence": sum(
+                1 for r in results for i in r.informational
+            ),
+        },
     }
 
 
@@ -589,28 +714,47 @@ async def evaluate_retrieval(
     config: RetrievalConfig = DEFAULT_CONFIG,
     now: datetime = AS_OF,
     progress: Callable[[ItemResult], None] | None = None,
+    prefetch: bool = True,
 ) -> RetrievalReport:
     identities = await load_identities(owner, dataset)
     corpus = await load_corpus(owner, identities.org_ids)
+    selected = list(items if items is not None else select_items(dataset))
+    recording = RecordingEmbeddingProvider(provider) if provider is not None else None
+    queries = PrefetchedQueries(recording) if recording is not None else None
+    if queries is not None and prefetch:
+        await queries.prefetch(app, identities, selected)
     results: list[ItemResult] = []
-    for item in items if items is not None else select_items(dataset):
+    for item in selected:
         result = await evaluate_item(
             app,
             item,
             dataset=dataset,
             identities=identities,
             corpus=corpus,
-            provider=provider,
+            provider=queries,
             config=config,
             now=now,
         )
         results.append(result)
         if progress is not None:
             progress(result)
+    usage: dict[str, int] = {}
+    if recording is not None:
+        usage = {
+            "calls": len(recording.calls),
+            "texts": len(recording.texts),
+            "characters": sum(len(t) for t in recording.texts),
+        }
+        for counter in ("requests", "rate_limited"):
+            value = getattr(provider, counter, None)
+            if isinstance(value, int):
+                usage[counter] = value
     return RetrievalReport(
         generated_at=datetime.now().astimezone().isoformat(timespec="seconds"),
         embedding_provider=None if provider is None else provider.provider,
         embedding_model=None if provider is None else provider.model,
+        embedding_deployment=None if provider is None else provider.deployment,
+        provider_usage=usage,
         config_version=config.version,
         rerank_version=config.rerank_version,
         corpus_embeddings=corpus.embeddings,
@@ -634,6 +778,19 @@ def render_markdown(report: RetrievalReport) -> str:
         f"Generated {report.generated_at}; config `{report.config_version}`, "
         f"`{report.rerank_version}`; query embedding "
         f"`{report.embedding_provider or 'none'}` / `{report.embedding_model or '-'}`.",
+        "",
+        *(
+            [
+                "**FakeEmbeddingProvider is a deterministic test double (hashed bag of words). "
+                "These numbers gate security and engineering behaviour; they are not a "
+                "semantic-quality benchmark.**",
+                "",
+            ]
+            if report.embedding_provider == "fake"
+            else []
+        ),
+        f"Query embedding usage: {report.provider_usage or 'none'}; deployment "
+        f"`{report.embedding_deployment or '-'}`.",
         "",
         "Corpus embeddings: "
         + "; ".join(
