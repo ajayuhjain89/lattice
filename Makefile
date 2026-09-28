@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role dataset-lint dataset-generate sync sync-dry-run admin-grants eval models-fetch
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -60,6 +60,11 @@ admin-grants: ## Apply each organization's admin-grants.yaml (decision D-12; aft
 
 eval: ## Retrieval metrics over the golden set as each persona (EMBEDDING=fake|local|gemini|openai|none; after `make sync`)
 	$(UV_RUN) lattice eval retrieval --embedding $(EMBEDDING)
+
+GENERATION ?= fake
+
+eval-answer: ## Answer + security metrics over the golden set (GENERATION=fake|ollama; after `make sync`)
+	$(UV_RUN) lattice eval answer --generation $(GENERATION) --embedding $(EMBEDDING)
 
 models-fetch: ## Download and verify the pinned local embedding model (1.34 GB, once; ADR-009)
 	cd backend && LATTICE_ENV=development uv run --extra local lattice models fetch mxbai-embed-large-v1

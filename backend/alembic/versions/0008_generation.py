@@ -142,7 +142,8 @@ def upgrade() -> None:
         CREATE TABLE audit_events (
           id uuid NOT NULL DEFAULT gen_random_uuid(),
           organization_id uuid NOT NULL,
-          created_at timestamptz NOT NULL DEFAULT now(),
+          -- clock_timestamp(): events of one transaction keep their order.
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
           actor text NOT NULL,
           action text NOT NULL,
           target jsonb NOT NULL,

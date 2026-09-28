@@ -105,5 +105,10 @@ jobs:
         # Fake embeddings: this gates security, not quality (docs/evaluation-plan.md §9).
         run: uv run lattice eval retrieval --embedding fake --quiet
 
+      - name: Answer evaluation as every persona (fake generation; security metrics must be 0)
+        # Fake providers: this gates security and plumbing, not answer quality
+        # (docs/evaluation-plan.md §13). No external credential is ever used in CI.
+        run: uv run lattice eval answer --generation fake --embedding fake --quiet
+
       - name: Tests (real PostgreSQL)
         run: uv run pytest

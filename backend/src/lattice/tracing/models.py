@@ -72,7 +72,7 @@ class AuditEvent(Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE")
     )
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(server_default=func.clock_timestamp())
     actor: Mapped[str] = mapped_column(Text)
     action: Mapped[str] = mapped_column(Text)
     target: Mapped[dict[str, Any]] = mapped_column(JSONB)
