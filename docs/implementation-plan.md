@@ -11,8 +11,10 @@ removed the rejected cross-encoder experiment, resolved D-15 (deployment trust
 classes, migration 0007) and decided D-16's timing, and it froze retrieval.
 Phase 5 engineering and security are **complete** (every security metric 0, final
 verification passed). The product objective Recall@10 ≥ 0.90 is **not yet achieved**:
-best real result is Gemini 0.726, local 0.695 (evaluation-plan §12). **Phase 6 has not
-started.**
+best real result is Gemini 0.726, local 0.695 (evaluation-plan §12). **Phase 6 is
+implemented on `phase/6-generation` and awaits review** (not merged): engineering and
+security verification complete; the real-model answer-quality evaluation was **not run**
+(reference hardware constraint, M1 8 GB; ADR-012).
 
 ---
 
@@ -657,6 +659,44 @@ recorder (asker view; admin operational view without content); `POST /v1/ask`,
 
 **Non-goals.** Streaming of answer text; multi-turn; any admin capability to read
 other members' content.
+
+**Phase 6 as built.** Deliverables: `lattice.answering` (prompt `answer-prompt-1`,
+claim-level validation, the generation invocation rule, deterministic assembly, the Ask
+service, evidence lookup), `lattice.tracing` (query traces, re-authorized views, audit
+event model), generation providers (`fake`, scripted, recording, `ollama`, `gemini`;
+ADR-012), the provider factory, secret references (`lattice.providers.secrets`), audited
+provider configuration (`lattice.providers.configuration`), migration 0008
+(`model_providers.endpoint/enabled`, `provider_credentials`, `query_traces`,
+`audit_events`), `authz.readable_document_classifications` and
+`authz.summarize_context`, `retrieval.lookup_evidence`, the routes `POST /v1/ask`,
+`GET /v1/evidence/{id}`, `GET /v1/traces/{id}`, `GET /v1/admin/providers`, the CLI
+`lattice ask`, `lattice eval answer`, `lattice provider configure|approve|enable|disable|
+credential set|credential revoke|list`, `lattice org egress`, `make eval-answer`, and a CI
+step running the answer evaluation with fake providers (security gate). No retrieval
+tunable or algorithm changed (`retrieval-6`).
+
+| Planned | As built | Why |
+| ------- | -------- | --- |
+| Real generation provider; D-4 recommends Anthropic | Ollama (`qwen3.5:4b`, local) and Gemini (`gemini-3.5-flash-lite`, BYOK) adapters, mock-tested; no Anthropic/OpenAI adapter; D-4 open | No Anthropic/OpenAI credential exists or may be requested; the user's constraint is no paid API. The factory's `declare`/`build` pair is where they go |
+| Real-provider `lattice eval answer` with judges | Harness and optional local judge built; **real-model run NOT RUN -- reference hardware constraint (M1 8 GB)** (ADR-012); Gemini quota exhausted | A 940-token smoke prompt ran at ~10 tokens/s and the machine stopped responding; the product owner chose not to run it or substitute a smaller model |
+| Secret values "encrypted at rest or held through a secret-manager abstraction" | References only (`env:LATTICE_PROVIDER_SECRET_<NAME>`, legacy provider names); a `SecretStore` Protocol with environment and in-memory stores; references to other process variables refused in code and schema | The database never holds a value; a production secret manager is one more scheme behind the Protocol (decision before Phase 7: which one, for the UI's "paste a key" flow) |
+| Provider-configuration API for Phase 7 | Read-only masked `GET /v1/admin/providers`; writes by audited CLI | Writes need the Phase 7 UX decisions (who, reasons, confirmation); the audited functions are what the UI will call |
+| `audit_events` for egress-level changes | Also provider configuration, approval, enablement and credential set/rotate/revoke; append-only by trigger; runtime role has no privilege | Every D-16 administrative action needs a record |
+| Relevance floor | Per item: exact/lexical match, or semantic similarity above a per-model calibrated threshold (none calibrated) | Semantic nearest neighbours always exist (retrieval-design §13) |
+| `ambiguous` when ≥ 2 in-scope accounts match | Only when no matched account is named in full | "Acme Corp" contains Acme Health's alias |
+| Validation: handles + verbatim quotes | Plus quote length floor, unsupported numbers, shared content terms, unsafe content (links, addresses, markup) | One valid quote must not legitimize an unrelated statement; no rendered exfiltration |
+| Prompt delimiters | Per-request nonce-suffixed delimiters | Retrieved text cannot close its own block |
+| `evidence_only (egress_policy)` | Plus `evidence_only (generation_unavailable)` for missing/disabled/unsupported configuration or credentials | Configuration states are not policy outcomes |
+| `org_settings.ask_enabled`, `freshness_thresholds`, `trace_retention_days`, `filter_fingerprint`, cost estimates | Not built; `lattice provider disable --purpose generation` is the per-organization stop | No consumer yet; retention jobs are Phase 11 |
+| OpenAPI → TS generation script | Not built (Phase 7) | No web app exists yet to consume it |
+| Streaming progress | Not built (D-6, Phase 7) | — |
+
+Evidence: `backend/tests/answering/` (validation and prompt units, the Ask pipeline over
+hand-built worlds, the generation invocation rule, the HTTP API, the golden corpus with
+the harness's security gate, the critical Acme scenario's payload/response/lookup
+halves, an obedient model against the injection fixtures),
+`tests/providers/test_generation_adapters.py`, `tests/test_provider_configuration.py`,
+and the Phase 1 isolation suites extended to the three new tables.
 
 ---
 

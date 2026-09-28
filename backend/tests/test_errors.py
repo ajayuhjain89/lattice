@@ -126,4 +126,14 @@ async def test_openapi_documents_the_error_envelope(client: httpx.AsyncClient) -
     schema = (await client.get("/openapi.json")).json()
     assert "ErrorResponse" in schema["components"]["schemas"]
     paths = set(schema["paths"])
-    assert paths == {"/v1/health", "/v1/auth/dev-login", "/v1/auth/logout", "/v1/me"}
+    assert paths == {
+        "/v1/health",
+        "/v1/auth/dev-login",
+        "/v1/auth/logout",
+        "/v1/me",
+        # Phase 6
+        "/v1/ask",
+        "/v1/evidence/{evidence_id}",
+        "/v1/traces/{trace_id}",
+        "/v1/admin/providers",
+    }

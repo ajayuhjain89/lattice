@@ -389,6 +389,23 @@ week; freshness must be judged on the evidence actually cited, not the container
 
 Security-sensitive. Stores **references and measurements**, not document content.
 
+**As built (Phase 6, migration 0008):** `id` (the trace ID), `organization_id`,
+`membership_id` (composite FK to `memberships`), `created_at`, `question_text`,
+`question_sensitivity` (D-13), `scope`, `authz_snapshot` (counts only:
+`authz.summarize_context`), `retrieval` (the Phase 5 `RetrievalTrace`),
+`evidence_chunk_ids`, `prompt_chunk_ids` (what the model received), `cited_chunk_ids`,
+`egress` (`{provider, model, deployment, effective_level, decision_reason,
+question_sensitivity, excluded_by_egress_policy, excluded_by_prompt_budget,
+below_relevance_floor, prompt_version}`), `validation` (`{generation_calls, regenerated,
+schema_failures, claims_proposed, claims_valid, claims_rejected, rejection_codes,
+conflicts_proposed, conflicts_discarded, model_status}`), `answer` (the validated answer
+without evidence text), `status` (the table below plus `unsupported_request`),
+`status_reason`, `error_code`, `timings_ms`, `usage` (`{input_tokens, output_tokens}`;
+no cost estimate). Forced RLS; the runtime role may SELECT and INSERT only. No
+`filter_fingerprint` (no consumer yet). Retention jobs: Phase 11.
+
+Design (Phase 0):
+
 | Field               | Notes |
 | ------------------- | ----- |
 | id, organization_id, membership_id, created_at | |
@@ -429,6 +446,26 @@ trace_retention_days (default 90), ask_enabled bool (default true; incident kill
 switch)`. Raising `external_egress_level` is an explicit, audited admin action.
 There is deliberately no setting that lets admins read other members' content (D-5).
 
+### provider_credentials (Phase 6, migration 0008)
+
+Organization-owned provider credentials **by reference only** (D-16, ADR-011):
+`id, organization_id, provider, secret_ref, data_use (unpaid|paid|NULL), status
+(active|revoked), created_at, revoked_at`. `secret_ref` must match
+`^(env|memory):[A-Za-z0-9_.-]{1,96}$` (CHECK); the code accepts only
+`env:LATTICE_PROVIDER_SECRET_<NAME>` and the documented legacy provider variables
+(`lattice.providers.secrets`). At most one active credential per organization and
+provider (partial unique index); rotation revokes and inserts, history is kept. Forced
+RLS; the runtime role may SELECT only (to resolve the reference at invocation).
+
+### audit_events (Phase 6, migration 0008; minimal)
+
+Append-only record of administrative changes: `id, organization_id, created_at
+(clock_timestamp), actor, action (provider.configured, provider.approval_changed,
+provider.enabled/disabled, credential.set/rotated/revoked, egress.levels_changed), target,
+before, after, reason (1-500 characters)`. A trigger rejects UPDATE; the runtime role
+has no privilege at all. Never a secret or a secret reference. The full access-change
+audit (grants, clearance, assignments) is Phase 9.
+
 ### model_providers
 
 **As built (Phase 4):** `id, organization_id, purpose, provider, model, deployment,
@@ -444,6 +481,12 @@ Migration 0007 (D-15): `deployment` ∈ {`local`, `organization_controlled`,
 `approved_at timestamptz NULL`, set only by an explicit administrator approval.
 `org_settings.organization_controlled_level` (NULL = the class is not allowed) is the
 organization's ceiling for `organization_controlled` inference.
+
+Migration 0008 (Phase 6): `endpoint` (a local or organization-controlled server; CHECK
+`^https?://...` without credentials) and `enabled` (default true; disable without
+deleting history); at most one enabled `generation` record per organization (partial
+unique index). Configured and changed by the audited functions of
+`lattice.providers.configuration`. `updated_by` is replaced by `audit_events`.
 
 Design: `id, organization_id, purpose (embedding|generation), provider, endpoint, model,
 deployment (local|organization_controlled|external_api), approved_for_level
@@ -587,12 +630,14 @@ Defined once in the backend and exposed via OpenAPI where they cross HTTP.
 | `AuthorizationContext` | **Implemented (Phase 2)**, frozen, strictly validated: organization_id, membership_id, membership_status, clearance, account_scope, assigned_account_ids, department_ids, group_ids (frozensets), authz_updated_at, policy_version. No admin flag or role label, by design |
 | `RetrievalRequest`     | question, analyzed query (identifiers, phrases, account mentions, temporal intent), scope filters, k values |
 | `RetrievalCandidate`   | chunk_id, document_id, lexical_rank?, semantic_rank?, fused_score, rerank features |
-| `EvidenceChunk`        | Selected context item: chunk text, handle (E1…), document kind, title, display_ref, account name (**only** when `authz.visible_document_account` returns it — decision D-8; otherwise absent), occurred_at, authority, sensitivity, uri |
+| `EvidenceChunk`        | *As built:* `retrieval.Evidence` (Phase 5) into answering; `answering.models.EvidenceItem` out (adds `classification`, `used_for_answer`, `not_used_reason`) |
+| *(design)*             | Selected context item: chunk text, handle (E1…), document kind, title, display_ref, account name (**only** when `authz.visible_document_account` returns it — decision D-8; otherwise absent), occurred_at, authority, sensitivity, uri |
 | `Citation`             | handle, chunk_id, quote, quote_start/end (verified offsets), document summary fields |
 | `Claim`                | text, role (`direct_answer` \| `supporting`), citations[] (all validated — SEC-13) |
 | `Conflict`             | kind (`superseded` — deterministic supersession link \| `potential_conflict` — model-proposed, code-verified, unresolved), topic, positions[{claim, citations, document_id, occurred_at, authority, version}], supersession? {superseded_document_id, superseding_document_id, since} |
 | `FreshnessState`       | newest_evidence_at, oldest_cited_at, is_stale, threshold_days, note |
-| `Answer`               | status, status_reason, claims[], conflicts[], evidence[] (every item a citation may reference; items excluded from the prompt by egress policy are flagged `used_for_answer=false`), freshness, notices[] (confidential sources used, evidence not sent to the AI model under egress policy, claims removed in validation), clarifying_question?, trace_id |
+| `Answer`               | **Implemented (Phase 6, `lattice.answering.models`)**: as below plus `message` (fixed sentence per status), `clarification {question, choices}`, `question_sensitivity`; citations carry `evidence_id` (chunk ID), `document_id`, `quote`, `quote_start/end` |
+| *(design)*             | status, status_reason, claims[], conflicts[], evidence[] (every item a citation may reference; items excluded from the prompt by egress policy are flagged `used_for_answer=false`), freshness, notices[] (confidential sources used, evidence not sent to the AI model under egress policy, claims removed in validation), clarifying_question?, trace_id |
 | `SourceRecord`         | Connector output (see `connector-design.md`) |
 | `SyncResult`           | **Implemented (Phase 4)**, a dataclass (`lattice.ingestion.sync`): per-run counts (seen, created, updated, access_updated, unchanged, skipped, failed, quarantined, deleted, would_delete, embeddings), deletion-guard flag, error and failure codes. Per-record outcomes are the failure rows; there is no per-record result type |
 | `Trace`                | API view of a trace, re-authorized for the viewer |

@@ -3,7 +3,9 @@
 Status: Phase 1 implemented (config, db, errors, logging, identity/sessions, orgs, API
 skeleton, seed CLI); Phase 2 implemented `authz` (no HTTP surface yet); Phase 3 the
 dataset tooling; Phase 4 sources, connectors, ingestion and providers; Phase 5
-`retrieval` and the retrieval half of `evals` (CLI only, no HTTP surface yet).
+`retrieval` and the retrieval half of `evals` (CLI only); Phase 6 `answering`, `tracing`,
+generation providers, provider configuration and credentials by reference, the Ask,
+evidence, trace and admin-provider endpoints, and `lattice eval answer`.
 Later-phase modules below are still design; the ✔ marks in §3 say which.
 Related: `data-model.md`, `authorization-model.md`, `retrieval-design.md`,
 `trust-boundaries.md`, ADRs 001–007.
@@ -95,13 +97,13 @@ Package: `backend/src/lattice/`.
 | `sources` ✔   | Lattice-side source configuration (`sources.yaml`) models and loader (Phase 4). Source rows, runs and failures are written by `ingestion.store` | — |
 | `connectors` ✔ | Connector contract, registry + three connectors (Markdown documents, ticket JSONL, Slack export) (Phase 4) | — (pure: stdlib, Pydantic, PyYAML; a test enforces it) |
 | `ingestion` ✔ | Canonical text and hashing, chunking, fail-closed access mapping, embedding input, persistence (`store`: the one writer of document access columns, source grants and source groups), sync pipeline, deletion sweep, source disconnect (Phase 4) | connectors, sources, providers, db |
-| `providers` ✔ | `EmbeddingProvider` Protocol; adapters: fake + recording (Phase 4), OpenAI (Phase 4), local ONNX model + pinned weights cache, Gemini (Phase 5 closure); the AI egress policy / invocation rule (`egress`, pure) and the reader of each organization's provider configuration (`records`); `GenerationProvider` in Phase 6 | config, db (records only) |
+| `providers` ✔ | `EmbeddingProvider` Protocol; adapters: fake + recording (Phase 4), OpenAI (Phase 4), local ONNX model + pinned weights cache, Gemini (Phase 5 closure); the AI egress policy / invocation rule (`egress`, pure) and the reader of each organization's provider configuration (`records`); Phase 6: `GenerationProvider` (fake, scripted, recording, Ollama, Gemini), the factory (`declare` without secrets, `build` after the rule), secret references (`secrets`), audited configuration (`configuration`) | config, db (records, configuration) |
 | `admin_grants` ✔ | Applies `admin-grants.yaml` as admin-origin grants after ingestion (D-12) | db |
 | `retrieval` ✔ | Query model and analysis; exact, lexical and semantic channels (each one statement with the authz predicate, tenant and lifecycle conditions); query-side AI egress and embedding-space checks; RRF, `rerank_v1`, selection; evidence hydration; E4 tripwire; trace (Phase 5, `retrieval-design.md` Part I) | authz, providers, ingestion (chunk model), orgs, sources, db |
-| `answering`   | Prompt construction, generation, output validation, citation verification, freshness & conflict assembly, refusal logic | retrieval, providers |
-| `tracing`     | Trace records, redaction, re-authorized trace reads                                      | authz, db                   |
-| `api`         | FastAPI app, routers (thin), request dependencies (session → identity → org → authz ctx)  | all service modules         |
-| `evals` ✔ (retrieval) | Retrieval + security runner over the golden set, reports (Phase 5); generation runner and judges in Phase 6 | retrieval, dataset, (answering) |
+| `answering` ✔ | Prompt construction (`prompt`), the invocation rule for generation (`policy`), claim-level validation (`validate`), deterministic assembly of statuses, freshness, supersession, potential conflicts and notices (`assemble`), the Ask service (`service`), evidence lookup (`evidence`) (Phase 6) | retrieval, providers, authz (public API), tracing |
+| `tracing` ✔   | `query_traces` and `audit_events` models; one INSERT per Ask; re-authorized trace reads (asker / administrator operational / 404) (Phase 6) | authz, retrieval, db        |
+| `api` ✔       | FastAPI app, routers (thin), request dependencies (session → identity → org → authz ctx); Phase 6: `POST /v1/ask`, `GET /v1/evidence/{id}`, `GET /v1/traces/{id}`, `GET /v1/admin/providers` | all service modules         |
+| `evals` ✔     | Retrieval + security runner (Phase 5); answer + security runner with an optional uncalibrated local judge (Phase 6) | retrieval, answering, dataset |
 | `cli` ✔ (partial) | `seed`, `check-db-role`, `dataset`, `sync`, `reindex`, `source disconnect`, `apply-admin-grants`, `search` and `eval retrieval` (Phase 5, development/test only: they act as a member), `models list/fetch/verify` and `provider approve` (Phase 5 closure); `ask` and `eval answer` later | services                    |
 
 ✔ = implemented (Phases 1–5). Alembic migrations live in `backend/alembic/`, outside the
@@ -139,13 +141,17 @@ mechanically since Phase 2):
 | Gemini (`gemini-embedding-2`, 1024 dims) | `external_api` | yes | optional external provider / BYOK; unpaid key = synthetic evaluation only |
 | OpenAI (`text-embedding-3-small`, 1024 dims) | `external_api` | yes | optional managed / BYOK provider; real evaluation not run |
 | Organization-controlled endpoint (future) | `organization_controlled` | to the organization's endpoint | customer-owned model infrastructure; explicit organization policy required |
+| Fake generation (Phase 6) | declared `external_api` | no | CI and tests; never an answer-quality figure |
+| Ollama generation (`qwen3.5:4b`, Phase 6, ADR-012) | `local` on loopback, otherwise `organization_controlled` | no (loopback) | zero-cost / self-hosted generation; real-model evaluation not run (M1 8 GB) |
+| Gemini generation (`gemini-3.5-flash-lite`, Phase 6, ADR-012) | `external_api` | yes | organization BYOK; unpaid key = synthetic data only |
 
 The trust classes are those of D-15 (`local`, `organization_controlled`,
 `external_api`; anything else is `unknown` and receives nothing). The sensitivity each
 may receive comes from the approval and egress policy (security-model §6), never from
 this table. Credentials are process-wide environment
-variables today, and organization-owned credentials (BYOK) are the target
-architecture (ADR-011). Lattice runs with none of them (local provider).
+variables for the operator CLI's embedding providers; generation resolves each
+organization's configuration and its credential *reference* per request (Phase 6,
+ADR-011). Lattice runs with none of them.
 
 ## 4. Request lifecycle: Ask
 
@@ -186,6 +192,12 @@ POST /v1/ask {question, scope?}
     visible citation references evidence included in the response
 14. tracing: persist trace (IDs, scores, timings, statuses — not document text)
 15. api: return Answer
+
+As built (Phase 6): steps 3–9 plus the classification of the evidence and the
+generation access decision (configuration → `provider_decision` → question sensitivity
+→ credential reference) run in one snapshot, which is closed before the model call.
+A relevance floor (retrieval-design §13) and the ambiguity rule precede the call. The
+provider is built only when a call will happen.
 ```
 
 The web client receives progress events (Phase 7 decision: SSE) for stages 7–13 so

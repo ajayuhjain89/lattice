@@ -1,6 +1,6 @@
 # ADR-007: Single-turn Ask; no conversational memory in the first release
 
-Status: Proposed (Phase 0)
+Status: Accepted; implemented in Phase 6 (`POST /v1/ask` holds no conversation state)
 
 ## Context
 Multi-turn chat creates paths for authorization carry-over: evidence retrieved in an

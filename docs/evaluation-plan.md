@@ -5,8 +5,9 @@ maintainer's ground truth) and the golden set in `evals/golden/`; both are valid
 `lattice dataset lint`. **The retrieval and security metrics of §5 and the retrieval
 runner of §7 are built in Phase 5** (`lattice.evals.retrieval`, `lattice eval
 retrieval`; results in §9, real providers in §10, the rejected reranking experiment in
-§11, the frozen final status in §12). Generation metrics, judges and `lattice eval answer` arrive
-in Phase 6.
+§11, the frozen final status in §12). **Generation metrics, the optional judge and
+`lattice eval answer` are built in Phase 6** (`lattice.evals.answer`; results in §13). No
+real generation provider has been evaluated (§13).
 Related: `retrieval-design.md`, `security-model.md` §9, `product-brief.md` §8.
 
 Evaluation is built alongside the system: the retrieval harness lands in the same
@@ -227,8 +228,16 @@ Phase 3 total: 89 items; 10 same-question groups; 51 items tagged `security`.
   synced corpus (`make sync`). CI runs it after the dataset sync with the fake provider
   and fails on any security metric above 0; quality needs the real provider on a
   corpus embedded with it (`runbook.md` §4).
-- `lattice eval answer` — full pipeline with the real generation provider + judges;
-  run manually/nightly; costs money, reports estimated cost before running.
+- `lattice eval answer [--generation fake|ollama|gemini] [--embedding ...] [--judge]
+  [--category …] [--persona …] [--item …]` (**built, Phase 6**; `make eval-answer`) —
+  the full Ask pipeline as each persona under each of the item's egress
+  configurations, with the provider's payloads and the log lines recorded. CI runs it
+  with fake providers after the retrieval evaluation and fails on any security metric
+  above 0. `--generation gemini` needs `--allow-external` (synthetic organizations only;
+  spends quota). `--judge` is limited to local providers (authored facts may describe
+  content above an external provider's egress level) and is uncalibrated (§6: no
+  30-item human calibration exists), so its scores gate nothing. No cost estimate is
+  printed (no paid provider is configured).
 - Output: `evals/reports/<timestamp>/report.json` + `report.md` (per-category table,
   failures with question, persona, expected vs got, trace IDs). Reports are not
   committed except for release baselines.

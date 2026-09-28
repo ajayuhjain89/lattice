@@ -1,6 +1,7 @@
 # Lattice — Trust Boundaries
 
-Status: Foundation draft (Phase 0).
+Status: Foundation draft (Phase 0); B5 (both directions) and §4–5 implemented in Phase 6
+(`lattice.answering`, `lattice.providers.generation*`).
 Related: `threat-model.md`, `security-model.md`.
 
 ---
@@ -59,7 +60,8 @@ validated Slack message can still contain a prompt-injection payload.
 1. **Structural separation in prompts.** System instructions are a fixed, versioned
    template. The question and each evidence block are inserted inside explicit,
    labelled delimiters, and the system instructions state that delimited content is
-   data to be analyzed, never instructions. (Necessary but not sufficient — models can
+   data to be analyzed, never instructions. As built, every delimiter ends in a
+   per-request random nonce, so retrieved text cannot close its own block. (Necessary but not sufficient — models can
    still be influenced.)
 2. **Capability starvation.** The generation call has **no tools**, no retrieval
    ability, no URLs to fetch, and sees only evidence the user may already read. An
@@ -95,9 +97,11 @@ suite. This is the same risk as a misleading document existing at all.
 Model output is untrusted input to Lattice:
 
 - Parsed with the strict answer schema; on failure, one retry with the validation
-  error summarized; then `generation_invalid`.
-- `stop_reason`/refusal handled explicitly; a provider refusal becomes a
-  `generation_failed` state, never an empty "answer".
+  error summarized; then status `failed` / `generation_invalid` (HTTP 200, evidence
+  still returned).
+- `stop_reason`/refusal handled explicitly: a truncated, refused or blocked response is
+  a fixed `generation_failed:*` code and status `failed` / `provider_unavailable`,
+  never an empty "answer".
 - Validation is claim-level and fail-closed: a claim is rejected if **any** of its
   citations has an invalid handle or an unverifiable quote. Rejected claims get one
   regeneration attempt, then are removed; their text is never shown, logged or
