@@ -176,6 +176,20 @@ def _modules_outside_authz() -> list[tuple[str, Path]]:
 def test_scan_covers_the_package() -> None:
     modules = {name for name, _ in _modules_outside_authz()}
     assert {"api.app", "identity.sessions", "seed", "db.engine"} <= modules
+    # Phase 5: every retrieval path is scanned, and none has an allowance.
+    retrieval = {
+        "retrieval.exact",
+        "retrieval.lexical",
+        "retrieval.semantic",
+        "retrieval.evidence",
+        "retrieval.permitted",
+        "retrieval.service",
+        "retrieval.fusion",
+        "retrieval.rerank",
+        "evals.retrieval",
+    }
+    assert retrieval <= modules
+    assert not retrieval & set(ALLOWED)
 
 
 def test_only_authz_builds_document_access_conditions() -> None:
@@ -204,10 +218,17 @@ def test_only_authz_builds_document_access_conditions() -> None:
         "from ..authz.sql import DOCUMENTS",
         "from ..authz import policy",
         "from lattice import authz\nq = authz.sql.readable_documents_predicate",
+        # Retrieval-shaped mistakes: a hand-written permission filter in a retriever.
+        "q = select(CHUNKS.c.id).where(DOCUMENTS.c.sensitivity.in_(('internal',)))",
+        "cond = documents.c.access_mode == 'policy'",
+        "q = text('SELECT c.id FROM chunks c JOIN documents d ON d.id = c.document_id "
+        "WHERE d.sensitivity = :s')",
+        "q = select(Chunk.id).where(Document.department_ids.overlap(ids))",
     ],
 )
 def test_the_boundary_check_catches_violations(source: str) -> None:
-    assert check_source("retrieval.search", source), source
+    for module in ("retrieval.search", "retrieval.lexical", "retrieval.semantic"):
+        assert check_source(module, source), (module, source)
 
 
 def test_an_allowed_name_does_not_hide_a_disallowed_one_in_the_same_string() -> None:
