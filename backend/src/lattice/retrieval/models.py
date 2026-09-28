@@ -31,7 +31,8 @@ KIND_SOURCE_TYPE: Final[dict[str, SourceType]] = {
 }
 
 # How sensitive the *question text* is, for the AI egress policy on query embedding
-# (security-model §6). Declared by the caller; it can only make egress stricter.
+# (security-model §6, D-13). The caller's declaration is combined with the
+# organization's trusted default and can only make it stricter.
 QueryClassification = Literal["internal", "confidential", "restricted"]
 
 SemanticStatus = Literal[
@@ -138,7 +139,9 @@ class RetrievalQuery(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_QUERY_CHARS)
     scope: RetrievalScope = Field(default_factory=RetrievalScope)
     limit: int = Field(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT)
-    classification: QueryClassification = "internal"
+    # The asker's declaration (D-13): None or a level. It can only raise the
+    # organization's default question sensitivity, never lower it.
+    classification: QueryClassification | None = None
 
 
 # --- Inside the pipeline --------------------------------------------------------------
@@ -258,6 +261,7 @@ class SemanticOutcome(_Frozen):
     reason: str | None = None
     provider: str | None = None
     model: str | None = None
+    deployment: str | None = None  # external_api | private | local
 
     @property
     def degraded(self) -> bool:
@@ -306,6 +310,9 @@ class RetrievalTrace(_Frozen):
     limits: dict[str, int]
     embedding_provider: str | None
     embedding_model: str | None
+    embedding_deployment: str | None
+    # D-13: the effective sensitivity of the question; Phase 6 generation obeys it too.
+    question_sensitivity: QueryClassification
     semantic_status: SemanticStatus
     semantic_reason: str | None
     degraded: bool
@@ -318,6 +325,10 @@ class RetrievalTrace(_Frozen):
 class RetrievalResult(_Frozen):
     evidence: tuple[Evidence, ...]
     semantic: SemanticOutcome
+    # D-13: the effective sensitivity of the question (organization default raised by
+    # the declaration). Every later use of the question -- generation included -- is
+    # bound by it.
+    question_sensitivity: QueryClassification
     identifiers: tuple[str, ...]
     # Accounts named in the question, among the accounts the reader may see only.
     account_mentions: tuple[VisibleAccount, ...]

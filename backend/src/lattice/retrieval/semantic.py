@@ -2,20 +2,24 @@
 policy (security-model §6).
 
 **Query egress.** The question itself can carry confidential information, so embedding
-it is an egress decision like embedding a document. Before any provider call:
+it is an egress decision like embedding a document (``lattice.providers.egress``):
 
-* the provider must be recorded for this organization in ``model_providers``
-  (purpose ``embedding``) -- the record ingestion wrote when it embedded documents with
-  it. An unrecorded provider was never approved to receive anything: nothing is sent
-  (``policy_excluded`` / ``provider_unapproved``);
-* the effective level is ``min(org_settings.external_egress_level, the provider's
-  approved_for_level)`` (``lattice.providers.egress``), and the query's declared
-  classification (``RetrievalQuery.classification``, default ``internal``) must be at
-  or below it. Otherwise nothing is sent (``policy_excluded`` /
-  ``query_classification``).
+* its **effective sensitivity** (D-13) is the more restrictive of the organization's
+  trusted default (``org_settings.default_query_sensitivity``) and the caller's
+  declaration (``RetrievalQuery.classification``). A declaration can raise it, never
+  lower it; nothing about the provider or its credential enters the computation;
+* the provider must be **recorded** for this organization (``model_providers``,
+  purpose ``embedding``) -- the record ingestion wrote when it embedded documents
+  with it -- with the deployment it actually runs as and acceptable data terms
+  (``provider_unapproved``, ``provider_deployment_mismatch``, ``provider_data_use``);
+* the effective sensitivity must be at or below the provider's effective level:
+  ``min(external level, approval)`` for an external provider, the approval alone for a
+  ``local`` one (``query_classification``).
 
-The declaration comes from the caller and can only make egress stricter: it never
-widens what is sent or what may be read.
+Otherwise nothing is sent (``policy_excluded``). There is no fallback to another
+provider: a question excluded from an external provider is never sent to it, while a
+``local`` provider approved for its sensitivity may still embed it -- the question
+never leaves the deployment. Exact and lexical retrieval run in every case.
 
 **Embedding space.** A query vector is compared only with vectors of the same space:
 same provider, same model (``chunks.embedding_model``), same dimensions. Vectors are
@@ -50,10 +54,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lattice.authz import AuthorizationContext
 from lattice.db.types import Vector
 from lattice.ingestion.models import EMBEDDING_DIMENSIONS
-from lattice.orgs.models import OrgSettings
-from lattice.providers.egress import DEFAULT_LEVEL, effective_level, may_send
+from lattice.providers import records
+from lattice.providers.egress import OrgEgress, may_send, provider_decision, question_sensitivity
 from lattice.providers.embedding import EmbeddingError, EmbeddingProvider
-from lattice.providers.models import ModelProvider
 from lattice.retrieval.models import (
     Candidate,
     QueryClassification,
@@ -81,44 +84,48 @@ def _outcome(
             "reason": reason,
             "provider": None if provider is None else provider.provider,
             "model": None if provider is None else provider.model,
+            "deployment": None if provider is None else provider.deployment,
         }
     )
+
+
+async def question_policy(
+    session: AsyncSession, ctx: AuthorizationContext, declared: QueryClassification | None
+) -> tuple[OrgEgress, QueryClassification]:
+    """The organization's egress settings and the question's effective sensitivity
+    (D-13), read in the request's snapshot."""
+    org = await records.org_egress(session, ctx.organization_id)
+    return org, question_sensitivity(org.default_query_sensitivity, declared)
 
 
 async def query_egress_block(
     session: AsyncSession,
     ctx: AuthorizationContext,
     provider: EmbeddingProvider | None,
-    classification: QueryClassification,
+    sensitivity: str,
+    org: OrgEgress,
 ) -> SemanticOutcome | None:
-    """Why the query may not be sent to ``provider`` -- or None if it may. Read in the
-    request's snapshot, so the decision and the search see the same settings."""
+    """Why the question may not be sent to ``provider`` -- or None if it may.
+    ``sensitivity`` is the effective one (``question_policy``)."""
     if provider is None:
         return _outcome(None, "not_configured")
     if provider.dimensions != EMBEDDING_DIMENSIONS:
         return _outcome(provider, "incompatible_space", "dimensions")
-    registered = (
-        await session.execute(
-            select(ModelProvider.provider, ModelProvider.approved_for_level).where(
-                ModelProvider.organization_id == ctx.organization_id,
-                ModelProvider.purpose == "embedding",
-                ModelProvider.model == provider.model,
-            )
-        )
-    ).all()
-    approved = [level for name, level in registered if name == provider.provider]
-    if not approved:
+    registered = await records.embedding_records(session, ctx.organization_id, provider.model)
+    mine = [r for r in registered if r.provider == provider.provider]
+    if not mine:
         return _outcome(provider, "policy_excluded", "provider_unapproved")
-    if any(name != provider.provider for name, _ in registered):
+    if len(mine) != len(registered):
         return _outcome(provider, "incompatible_space", "model_ambiguous")
-    org_level = (
-        await session.execute(
-            select(OrgSettings.external_egress_level).where(
-                OrgSettings.organization_id == ctx.organization_id
-            )
-        )
-    ).scalar_one_or_none() or DEFAULT_LEVEL
-    if not may_send(classification, effective_level(org_level, approved[0])):
+    decision = provider_decision(
+        org,
+        mine[0],
+        deployment=provider.deployment,
+        training_opt_out=provider.training_opt_out,
+    )
+    if decision.level is None:
+        return _outcome(provider, "policy_excluded", decision.reason)
+    if not may_send(sensitivity, decision.level):
         return _outcome(provider, "policy_excluded", "query_classification")
     return None
 

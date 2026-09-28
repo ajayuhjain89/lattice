@@ -222,17 +222,37 @@ class Org:
         return document_id
 
     async def register_provider(
-        self, provider: str = "fake", model: str | None = None, level: str = "internal"
+        self,
+        provider: str = "fake",
+        model: str | None = None,
+        level: str = "internal",
+        *,
+        deployment: str = "external_api",
+        training_opt_out: bool = True,
     ) -> None:
         await self.execute(
             "INSERT INTO model_providers (organization_id, purpose, provider, model, deployment, "
             "approved_for_level, retention_mode, training_opt_out) VALUES (:o, 'embedding', :p, "
-            ":m, 'external_api', :l, 'none', true) ON CONFLICT (organization_id, purpose, "
+            ":m, :d, :l, 'none', :t) ON CONFLICT (organization_id, purpose, "
             "provider, model) DO UPDATE SET approved_for_level = EXCLUDED.approved_for_level",
             o=self.id,
             p=provider,
             m=model or FAKE.model,
+            d=deployment,
             l=level,
+            t=training_opt_out,
+        )
+
+    async def settings(self, **columns: str) -> None:
+        """Upsert ``org_settings`` columns (external_egress_level,
+        default_query_sensitivity, data_origin)."""
+        names = sorted(columns)
+        await self.execute(
+            f"INSERT INTO org_settings (organization_id, {', '.join(names)}) "  # noqa: S608
+            f"VALUES (:o, {', '.join(':' + n for n in names)}) ON CONFLICT (organization_id) "
+            f"DO UPDATE SET {', '.join(f'{n} = EXCLUDED.{n}' for n in names)}",
+            o=self.id,
+            **columns,
         )
 
     async def set_egress_level(self, level: str) -> None:

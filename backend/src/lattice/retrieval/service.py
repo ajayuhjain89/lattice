@@ -11,7 +11,7 @@ Order of work::
 
     analyse the query (deterministic)           → identifiers, temporal intent
     visible accounts                            → scope account, account mentions
-    query egress decision                       → embed the query concurrently, or not
+    question sensitivity (D-13), query egress   → embed the query concurrently, or not
     exact, lexical (SQL with the predicate)
     semantic (SQL with the predicate), if the query vector exists
     E4: assert_all_readable(every candidate's document)    ← abort, never filter
@@ -70,6 +70,7 @@ from lattice.retrieval.rerank import rerank, select_evidence
 from lattice.retrieval.semantic import (
     embed_query,
     query_egress_block,
+    question_policy,
     semantic_candidates,
 )
 from lattice.retrieval.trace import build_trace, log_trace
@@ -156,7 +157,8 @@ async def retrieve_with_context(
     scope = resolve_scope(query.scope, visible)
     mentions = mentioned_accounts(text, visible)
 
-    block = await query_egress_block(session, ctx, provider, query.classification)
+    org_egress, sensitivity = await question_policy(session, ctx, query.classification)
+    block = await query_egress_block(session, ctx, provider, sensitivity, org_egress)
     embedding: asyncio.Task[list[float] | SemanticOutcome] | None = None
     if block is None and provider is not None:
         embedding = asyncio.create_task(
@@ -198,6 +200,7 @@ async def retrieve_with_context(
                     status="matched" if semantic else "no_matches",
                     provider=provider.provider,
                     model=provider.model,
+                    deployment=provider.deployment,
                 )
     finally:
         if embedding is not None and not embedding.done():
@@ -241,6 +244,7 @@ async def retrieve_with_context(
         ctx=ctx,
         config=config,
         semantic=outcome,
+        question_sensitivity=sensitivity,
         stages=stages,
         fused=fused,
         ranked=ranked,
@@ -251,6 +255,7 @@ async def retrieve_with_context(
     return RetrievalResult(
         evidence=tuple(evidence),
         semantic=outcome,
+        question_sensitivity=sensitivity,
         identifiers=identifiers,
         account_mentions=tuple(VisibleAccount(id=a.id, key=a.key, name=a.name) for a in mentions),
         temporal_intent=temporal_intent,
