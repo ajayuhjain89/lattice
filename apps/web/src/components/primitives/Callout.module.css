@@ -1,0 +1,72 @@
+.callout {
+  border: var(--border-width) solid var(--callout-border);
+  border-radius: var(--radius-md);
+  background: var(--callout-bg);
+  padding: var(--space-4);
+  min-width: 0;
+}
+
+.neutral {
+  --callout-bg: var(--bg-sunken);
+  --callout-border: var(--border-strong);
+  --callout-text: var(--text-primary);
+}
+
+.plain {
+  --callout-bg: transparent;
+  --callout-border: var(--border-strong);
+  --callout-text: var(--text-primary);
+}
+
+.info {
+  --callout-bg: var(--status-info-bg);
+  --callout-border: var(--status-info-border);
+  --callout-text: var(--status-info-text);
+}
+
+.warning {
+  --callout-bg: var(--status-warning-bg);
+  --callout-border: var(--status-warning-border);
+  --callout-text: var(--status-warning-text);
+}
+
+.error {
+  --callout-bg: var(--status-error-bg);
+  --callout-border: var(--status-error-border);
+  --callout-text: var(--status-error-text);
+}
+
+.conflict {
+  --callout-bg: var(--status-conflict-bg);
+  --callout-border: var(--status-conflict-border);
+  --callout-text: var(--status-conflict-text);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--callout-text);
+  margin-bottom: var(--space-3);
+}
+
+.label {
+  composes: t-label from global;
+
+  margin: 0;
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-3);
+  color: var(--text-primary);
+  min-width: 0;
+}

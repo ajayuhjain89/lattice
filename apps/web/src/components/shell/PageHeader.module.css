@@ -1,0 +1,72 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  height: var(--header-height);
+  flex: none;
+  padding: 0 var(--gutter);
+  border-bottom: var(--border-width) solid var(--border-strong);
+  background: var(--bg-canvas);
+}
+
+.trail {
+  composes: t-label from global;
+
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.crumb {
+  white-space: nowrap;
+}
+
+.crumb a {
+  color: var(--text-muted);
+  text-decoration: none;
+  border-radius: var(--radius-xs);
+}
+
+.crumb a:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sep {
+  color: var(--text-muted);
+}
+
+.current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+@media (width < 768px) {
+  /* The top bar already says where you are; a one-crumb header would repeat it. */
+  .desktopOnly {
+    display: none;
+  }
+
+  .header {
+    position: static;
+    height: 48px;
+    border-bottom-color: var(--border-default);
+  }
+}

@@ -1,0 +1,174 @@
+/*
+ * Lattice design tokens (docs/design-system.md Part B). The only file allowed to hold
+ * raw colour values; components reference these custom properties only.
+ */
+
+:root {
+  /* B2 backgrounds */
+  --bg-canvas: #fffcf4;
+  --bg-surface: #fff;
+  --bg-sunken: #faf6ec;
+  --bg-muted: #f3eff2;
+  --bg-muted-strong: #e9e4e6;
+  --bg-inverse: #111;
+  --bg-inverse-hover: #2a2a2a;
+  --bg-inverse-active: #000;
+
+  /* B2 text (contrast measured on canvas / muted) */
+  --text-primary: #111;
+  --text-secondary: #4a4a4a;
+  --text-muted: #6b665f;
+  --text-inverse: #fffcf4;
+  --text-link: #4f46c8;
+
+  /* B2 borders */
+  --border-default: #d9d5d0;
+  --border-strong: #111;
+  --border-focus: #4f46c8;
+
+  /* B2 accents: one job each */
+  --accent-lime: #e3f266;
+  --accent-lime-subtle: #f4f9c9;
+  --accent-lavender: #8e84f7;
+  --accent-lavender-subtle: #e9e7fd;
+  --accent-lavender-text: #4f46c8;
+  --accent-pink: #cd56a0;
+  --accent-pink-subtle: #f7dcec;
+  --accent-pink-text: #9e2f74;
+
+  /* B2 status: text / background / border */
+  --status-success-text: #2f5e14;
+  --status-success-bg: #f4f9c9;
+  --status-success-border: #b9c94a;
+  --status-warning-text: #7a5000;
+  --status-warning-bg: #fbefd3;
+  --status-warning-border: #e3b85c;
+  --status-error-text: #b42318;
+  --status-error-bg: #fce4e0;
+  --status-error-border: #e8a197;
+  --status-info-text: #4f46c8;
+  --status-info-bg: #e9e7fd;
+  --status-info-border: #b5aeff;
+  --status-conflict-text: #9e2f74;
+  --status-conflict-bg: #f7dcec;
+  --status-conflict-border: #cd56a0;
+
+  --scrim: rgb(17 17 17 / 24%);
+  --shadow-overlay: 0 12px 32px rgb(17 17 17 / 12%);
+
+  /* B4 typography */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", menlo, monospace;
+
+  --type-display-size: 2.5rem;
+  --type-display-line: 2.75rem;
+  --type-h1-size: 1.75rem;
+  --type-h1-line: 2.125rem;
+  --type-h2-size: 1.25rem;
+  --type-h2-line: 1.75rem;
+  --type-h3-size: 1rem;
+  --type-h3-line: 1.5rem;
+  --type-lead-size: 1.1875rem;
+  --type-lead-line: 1.875rem;
+  --type-prose-size: 1rem;
+  --type-prose-line: 1.625rem;
+  --type-body-size: 0.875rem;
+  --type-body-line: 1.25rem;
+  --type-small-size: 0.8125rem;
+  --type-small-line: 1.125rem;
+  --type-caption-size: 0.75rem;
+  --type-caption-line: 1rem;
+  --type-label-size: 0.6875rem;
+  --type-label-line: 1rem;
+  --type-label-tracking: 0.08em;
+  --type-meta-size: 0.75rem;
+  --type-meta-line: 1rem;
+  --type-code-size: 0.8125rem;
+  --type-code-line: 1.25rem;
+
+  /* B5 spacing (4 px base) */
+  --space-0: 0;
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* B7 control heights */
+  --control-xs: 20px;
+  --control-sm: 28px;
+  --control-md: 36px;
+  --control-lg: 44px;
+  --nav-row: 32px;
+  --touch-target: 44px;
+
+  /* B8 borders, radii, z-index */
+  --border-width: 1px;
+  --focus-width: 2px;
+  --radius-none: 0;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-rail: 20;
+  --z-drawer: 30;
+  --z-dialog: 40;
+  --z-popover: 50;
+  --z-toast: 60;
+
+  /* B10 motion */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-panel: 220ms;
+  --motion-result: 180ms;
+
+  /* B6 layout: the shared axes */
+  --header-height: 56px;
+  --topbar-height: 52px;
+  --sidebar-width: 240px;
+  --rail-width: 56px;
+  --gutter: 32px;
+  --reading-max: 720px;
+  --inspector-width: 400px;
+  --admin-max: 1120px;
+  --prose-measure: 68ch;
+}
+
+@media (width >= 1440px) {
+  :root {
+    --reading-max: 760px;
+    --inspector-width: 440px;
+  }
+}
+
+@media (width < 1280px) {
+  :root {
+    --gutter: 24px;
+  }
+}
+
+@media (width < 768px) {
+  :root {
+    --gutter: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-panel: 0ms;
+    --motion-result: 0ms;
+  }
+}

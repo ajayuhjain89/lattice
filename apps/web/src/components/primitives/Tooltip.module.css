@@ -1,0 +1,17 @@
+.content {
+  z-index: var(--z-popover);
+  max-width: 280px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inverse);
+  color: var(--text-inverse);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+  animation: fade var(--motion-base) var(--ease);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
