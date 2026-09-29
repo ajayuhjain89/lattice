@@ -20,7 +20,7 @@ from lattice.config import Environment, load_provider_settings, load_worker_sett
 from lattice.db.engine import Database, create_engine
 from lattice.db.role_check import verify_runtime_role
 from lattice.jobs.worker import Worker
-from lattice.log import configure_logging
+from lattice.log import configure_logging, scrub_text
 from lattice.providers.factory import build_embedding_provider
 
 
@@ -66,7 +66,9 @@ async def run(args: argparse.Namespace) -> int:
         await worker.run_forever(stop, poll_seconds=settings.worker_poll_seconds)
         return 0
     except Exception as exc:
-        print(f"error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        # Startup failed (configuration, role, schema revision, database unreachable):
+        # exit non-zero for the supervisor to restart. Credential-shaped text is scrubbed.
+        print(f"error: {type(exc).__name__}: {scrub_text(str(exc))}", file=sys.stderr)
         return 1
     finally:
         if server is not None:

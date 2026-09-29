@@ -198,7 +198,9 @@ function OperationalStatus({ item }: { item: OperationalActivity }) {
 }
 
 function Provider({ item }: { item: OperationalActivity }) {
-  if (!item.provider) return <span className={styles.off}>No model call</span>;
+  // A configured provider that was not called (policy, kill switch, no evidence) is not
+  // shown as if it had answered.
+  if (!item.provider || item.generation_calls === 0) return <span className={styles.off}>No model call</span>;
   return (
     <>
       <span>{item.provider}</span>

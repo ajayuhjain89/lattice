@@ -26,6 +26,7 @@ describe("ActivityScreen", () => {
     expect(table).toHaveTextContent("No model call");
     expect(table).toHaveTextContent("4.2 s");
     expect(table).toHaveTextContent("2 calls");
+    expect(table.textContent?.match(/No model call/g)).toHaveLength(1);
     expect(screen.getByText(/Content of other members' questions isn't visible to administrators/)).toBeInTheDocument();
     expect(await screen.findByText("You haven't asked anything yet")).toBeInTheDocument();
   });

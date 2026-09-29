@@ -138,6 +138,8 @@ jobs:
         with:
           version: "0.12.19"
           enable-cache: true
+          # Its own cache: this job installs a smaller set than the backend job.
+          cache-suffix: web
 
       - uses: pnpm/action-setup@v6
         with:
