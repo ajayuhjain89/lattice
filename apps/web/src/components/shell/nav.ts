@@ -1,4 +1,4 @@
-import { Settings2, TextSearch, type LucideIcon } from "lucide-react";
+import { Database, History, Settings2, TextSearch, type LucideIcon } from "lucide-react";
 
 export interface NavEntry {
   href: string;
@@ -15,6 +15,18 @@ export const NAV: readonly NavEntry[] = [
     label: "Ask",
     icon: TextSearch,
     match: (p) => p === "/ask" || p.startsWith("/evidence/"),
+  },
+  {
+    href: "/sources",
+    label: "Sources",
+    icon: Database,
+    match: (p) => p.startsWith("/sources"),
+  },
+  {
+    href: "/activity",
+    label: "Activity",
+    icon: History,
+    match: (p) => p.startsWith("/activity") || p.startsWith("/traces/"),
   },
   {
     href: "/settings/providers",

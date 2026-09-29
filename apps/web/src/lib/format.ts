@@ -137,3 +137,29 @@ const RETENTION: Record<string, string> = {
 export function retentionLabel(mode: string): string {
   return RETENTION[mode] ?? `${humanize(mode)} retention`;
 }
+
+const CONNECTOR: Record<string, string> = {
+  document_repository: "Documents",
+  ticketing: "Tickets",
+  chat_export: "Chat",
+};
+
+/** Source connector types (ingestion-design §1). */
+export function connectorLabel(connectorType: string): string {
+  return CONNECTOR[connectorType] ?? humanize(connectorType);
+}
+
+const SYNC_STATUS: Record<string, string> = {
+  succeeded: "Synced",
+  partial: "Partial",
+  failed: "Failed",
+  aborted: "Interrupted",
+  running: "Syncing",
+  queued: "Queued",
+};
+
+/** A sync run's or requested job's status, as the Sources page shows it. */
+export function syncStatusLabel(status: string | null | undefined): string {
+  if (!status) return "Never synced";
+  return SYNC_STATUS[status] ?? humanize(status);
+}

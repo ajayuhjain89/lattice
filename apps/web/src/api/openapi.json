@@ -1,6 +1,146 @@
 {
   "components": {
     "schemas": {
+      "AdminSourceOut": {
+        "properties": {
+          "account_scoped": {
+            "title": "Account Scoped",
+            "type": "boolean"
+          },
+          "acl_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acl Synced At"
+          },
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "connector_type": {
+            "title": "Connector Type",
+            "type": "string"
+          },
+          "default_sensitivity": {
+            "title": "Default Sensitivity",
+            "type": "string"
+          },
+          "documents": {
+            "description": "Active documents in the source (aggregate).",
+            "title": "Documents",
+            "type": "integer"
+          },
+          "failure_codes": {
+            "items": {
+              "$ref": "#/components/schemas/FailureCountOut"
+            },
+            "title": "Failure Codes",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_succeeded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Succeeded At"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "connector_type",
+          "status",
+          "account_scoped",
+          "default_sensitivity",
+          "authority",
+          "documents",
+          "last_synced_at",
+          "last_succeeded_at",
+          "acl_synced_at",
+          "last_run",
+          "failure_codes",
+          "job"
+        ],
+        "title": "AdminSourceOut",
+        "type": "object"
+      },
+      "AdminSourcesResponse": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/AdminSourceOut"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "title": "AdminSourcesResponse",
+        "type": "object"
+      },
       "AdminTrace": {
         "properties": {
           "created_at": {
@@ -891,6 +1031,7 @@
           "not_found",
           "method_not_allowed",
           "validation_failed",
+          "request_too_large",
           "service_unavailable",
           "internal_error",
           "source_unavailable",
@@ -1315,6 +1456,99 @@
         "title": "EvidenceItem",
         "type": "object"
       },
+      "FailureCountOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "code",
+          "count"
+        ],
+        "title": "FailureCountOut",
+        "type": "object"
+      },
+      "FailureOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Params",
+            "type": "object"
+          },
+          "record": {
+            "title": "Record",
+            "type": "string"
+          },
+          "record_kind": {
+            "description": "identifier: the record's ID (you can read its document); opaque: a keyed reference only.",
+            "enum": [
+              "identifier",
+              "opaque"
+            ],
+            "title": "Record Kind",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "code",
+          "params",
+          "record_kind",
+          "record",
+          "created_at"
+        ],
+        "title": "FailureOut",
+        "type": "object"
+      },
+      "FailuresResponse": {
+        "properties": {
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/FailureOut"
+            },
+            "title": "Failures",
+            "type": "array"
+          }
+        },
+        "required": [
+          "failures"
+        ],
+        "title": "FailuresResponse",
+        "type": "object"
+      },
       "Freshness": {
         "additionalProperties": false,
         "properties": {
@@ -1399,6 +1633,118 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "JobOut": {
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "sync_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Run Id"
+          }
+        },
+        "required": [
+          "id",
+          "source_id",
+          "mode",
+          "status",
+          "attempts",
+          "error_code",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "sync_run_id"
+        ],
+        "title": "JobOut",
+        "type": "object"
+      },
+      "LiveResponse": {
+        "properties": {
+          "status": {
+            "const": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "LiveResponse",
+        "type": "object"
+      },
       "MeResponse": {
         "properties": {
           "capabilities": {
@@ -1427,6 +1773,90 @@
           "capabilities"
         ],
         "title": "MeResponse",
+        "type": "object"
+      },
+      "MemberSourceOut": {
+        "properties": {
+          "connector_type": {
+            "title": "Connector Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_run_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run Status"
+          },
+          "last_succeeded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Succeeded At"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "readable_documents": {
+            "description": "Active documents you can read here.",
+            "title": "Readable Documents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "connector_type",
+          "readable_documents",
+          "last_synced_at",
+          "last_succeeded_at",
+          "last_run_status"
+        ],
+        "title": "MemberSourceOut",
+        "type": "object"
+      },
+      "MemberSourcesResponse": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/MemberSourceOut"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "title": "MemberSourcesResponse",
         "type": "object"
       },
       "MembershipOut": {
@@ -1493,6 +1923,133 @@
         "title": "Notice",
         "type": "object"
       },
+      "OperationalActivityOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "generation_calls": {
+            "title": "Generation Calls",
+            "type": "integer"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "member_name": {
+            "title": "Member Name",
+            "type": "string"
+          },
+          "membership_id": {
+            "format": "uuid",
+            "title": "Membership Id",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
+          },
+          "trace_id": {
+            "format": "uuid",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trace_id",
+          "created_at",
+          "membership_id",
+          "member_name",
+          "status",
+          "status_reason",
+          "error_code",
+          "provider",
+          "model",
+          "duration_ms",
+          "generation_calls",
+          "input_tokens",
+          "output_tokens"
+        ],
+        "title": "OperationalActivityOut",
+        "type": "object"
+      },
+      "OperationalActivityResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OperationalActivityOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OperationalActivityResponse",
+        "type": "object"
+      },
       "OrganizationOut": {
         "properties": {
           "id": {
@@ -1515,6 +2072,64 @@
           "name"
         ],
         "title": "OrganizationOut",
+        "type": "object"
+      },
+      "OwnActivityOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
+          },
+          "trace_id": {
+            "format": "uuid",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trace_id",
+          "created_at",
+          "status",
+          "status_reason",
+          "question"
+        ],
+        "title": "OwnActivityOut",
+        "type": "object"
+      },
+      "OwnActivityResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OwnActivityOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OwnActivityResponse",
         "type": "object"
       },
       "ProviderOut": {
@@ -1599,6 +2214,32 @@
         "title": "ProvidersResponse",
         "type": "object"
       },
+      "ReadyResponse": {
+        "properties": {
+          "database": {
+            "const": "ok",
+            "title": "Database",
+            "type": "string"
+          },
+          "schema_revision": {
+            "const": "ok",
+            "title": "Schema Revision",
+            "type": "string"
+          },
+          "status": {
+            "const": "ready",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "database",
+          "schema_revision"
+        ],
+        "title": "ReadyResponse",
+        "type": "object"
+      },
       "RetrievalScope": {
         "additionalProperties": false,
         "description": "Optional filters. Each is ANDed with the authorization predicate: it can narrow\nwhat the reader may see, never widen it. ``account`` must name an account the\nreader may know exists (``authz.visible_accounts_predicate``); a hidden or unknown\naccount is refused identically.",
@@ -1657,6 +2298,74 @@
         "title": "RetrievalScope",
         "type": "object"
       },
+      "RunOut": {
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "deletion_guard_tripped": {
+            "title": "Deletion Guard Tripped",
+            "type": "boolean"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "mode",
+          "status",
+          "started_at",
+          "finished_at",
+          "counts",
+          "deletion_guard_tripped",
+          "error_code"
+        ],
+        "title": "RunOut",
+        "type": "object"
+      },
       "Supersession": {
         "additionalProperties": false,
         "properties": {
@@ -1691,6 +2400,22 @@
         "title": "Supersession",
         "type": "object"
       },
+      "SyncRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "default": "full",
+            "enum": [
+              "full",
+              "acl_only"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "title": "SyncRequest",
+        "type": "object"
+      },
       "UserOut": {
         "properties": {
           "display_name": {
@@ -1723,6 +2448,170 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/activity": {
+      "get": {
+        "operationId": "get_own_activity_v1_activity_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnActivityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Your own recent questions, newest first (open one with /v1/traces/{id})",
+        "tags": [
+          "activity"
+        ]
+      }
+    },
+    "/v1/admin/activity": {
+      "get": {
+        "operationId": "get_organization_activity_v1_admin_activity_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationalActivityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "The organization's Asks as operational rows: no questions, answers, evidence, counts or scope (administrators)",
+        "tags": [
+          "activity"
+        ]
+      }
+    },
     "/v1/admin/providers": {
       "get": {
         "operationId": "get_providers_v1_admin_providers_get",
@@ -1761,6 +2650,241 @@
         "summary": "The organization's AI egress settings and provider configuration (masked)",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/v1/admin/sources": {
+      "get": {
+        "operationId": "get_admin_sources_v1_admin_sources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSourcesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Every source's sync status and aggregate totals (administrators)",
+        "tags": [
+          "sources"
+        ]
+      }
+    },
+    "/v1/admin/sources/{source_id}/failures": {
+      "get": {
+        "operationId": "get_source_failures_v1_admin_sources__source_id__failures_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailuresResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "The latest sync's failed records: codes, and identifiers only for documents you can read (administrators)",
+        "tags": [
+          "sources"
+        ]
+      }
+    },
+    "/v1/admin/sources/{source_id}/sync": {
+      "post": {
+        "description": "Idempotent while a sync of the source is queued or running: that job is returned with 200. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_source_sync_v1_admin_sources__source_id__sync_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SyncRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "A sync is already queued"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Request a sync of a source (administrators); the worker runs it",
+        "tags": [
+          "sources"
         ]
       }
     },
@@ -2066,6 +3190,58 @@
         ]
       }
     },
+    "/v1/health/live": {
+      "get": {
+        "operationId": "live_v1_health_live_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness (no dependencies)",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/v1/health/ready": {
+      "get": {
+        "operationId": "ready_v1_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Readiness: the database answers and its schema matches this build",
+        "tags": [
+          "health"
+        ]
+      }
+    },
     "/v1/me": {
       "get": {
         "operationId": "me_v1_me_get",
@@ -2094,6 +3270,67 @@
         "summary": "The signed-in user, their organization and capabilities",
         "tags": [
           "me"
+        ]
+      }
+    },
+    "/v1/sources": {
+      "get": {
+        "operationId": "get_sources_v1_sources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberSourcesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "The sources you can read from, with counts of what you can read",
+        "tags": [
+          "sources"
         ]
       }
     },

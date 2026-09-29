@@ -1,0 +1,9 @@
+import type { Metadata } from "next";
+
+import { SourcesScreen } from "@/components/sources/SourcesScreen";
+
+export const metadata: Metadata = { title: "Sources" };
+
+export default function SourcesPage() {
+  return <SourcesScreen />;
+}

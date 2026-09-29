@@ -128,6 +128,27 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
     await page.goto("/settings/providers");
     await page.getByRole("heading", { name: "Providers", exact: true }).waitFor();
   },
+  "sources-member": async (page) => {
+    await mockApi(page);
+    await page.goto("/sources");
+    await page.getByRole("heading", { name: "Your sources" }).waitFor();
+  },
+  "sources-admin": async (page) => {
+    await mockApi(page, { me: ME_LENA });
+    await page.goto("/sources");
+    await page.getByRole("button", { name: "Show records" }).click();
+    await page.getByText("rec_3f9a0c1d2e4b5a67").waitFor();
+  },
+  "activity-member": async (page) => {
+    await mockApi(page);
+    await page.goto("/activity");
+    await page.getByRole("heading", { name: "Your questions" }).waitFor();
+  },
+  "activity-admin": async (page) => {
+    await mockApi(page, { me: ME_LENA });
+    await page.goto("/activity");
+    await page.getByRole("heading", { name: "Organization activity" }).waitFor();
+  },
   "providers-forbidden": async (page) => {
     await mockApi(page, { providers: "forbidden" });
     await page.goto("/settings/providers");
