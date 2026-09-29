@@ -7,9 +7,14 @@ on:
 permissions:
   contents: read
 
+# Pinned deliberately (docs/runbook.md §7): the runner image, uv and every action's
+# major version change only in a reviewed commit. `ubuntu-latest` moves to Ubuntu 26
+# in October 2026; setup-uv publishes no floating major tags.
+
 jobs:
   backend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -43,10 +48,11 @@ jobs:
         working-directory: backend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
+          version: "0.12.19"
           enable-cache: true
 
       - name: Install dependencies (locked, with the local-inference runtime; no model weights)
@@ -114,24 +120,26 @@ jobs:
         run: uv run pytest
 
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     defaults:
       run:
         working-directory: apps/web
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
+          version: "0.12.19"
           enable-cache: true
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: apps/web/package.json
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -172,7 +180,7 @@ jobs:
 
       - name: Upload the Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: apps/web/playwright-report
