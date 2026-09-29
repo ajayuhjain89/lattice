@@ -17,3 +17,4 @@ not recorded here. Status values: Proposed · Accepted · Superseded.
 | [010](010-gemini-embedding-provider.md) | Gemini as an optional external embedding provider: `gemini-embedding-2` at 1024; unpaid key = synthetic data only | Accepted |
 | [011](011-provider-configuration-byok.md) | Provider configuration, deployment trust classes (D-15) and organization BYOK (D-16 timing); a credential is never an approval | Accepted (policy and trust classes built; Phase 6 built configuration, credential references and audit events; admin UX Phase 7) |
 | [012](012-generation-providers.md) | Generation providers: local Ollama (`qwen3.5:4b`), Gemini BYOK (`gemini-3.5-flash-lite`), fake for CI; real-model evaluation not run (M1 8 GB) | Accepted (Phase 6; D-4 open) |
+| [013](013-background-worker-role.md) | A Postgres job queue and a dedicated `lattice_worker` runtime role for requested syncs | Accepted (Phase 8) |

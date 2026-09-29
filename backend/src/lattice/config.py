@@ -147,6 +147,54 @@ class MigrationSettings(BaseSettings):
     _check_url = field_validator("migration_database_url")(_require_asyncpg_url)
 
 
+class WorkerSettings(BaseSettings):
+    """Settings for the background worker (``lattice worker``; Phase 8, ADR-013)."""
+
+    model_config = SettingsConfigDict(env_prefix=ENV_PREFIX, extra="ignore", frozen=True)
+
+    env: Environment
+    # The worker's own runtime role (lattice_worker): writes ingestion tables through
+    # row-level security. Checked at startup like the API's role; never lattice_owner.
+    worker_database_url: SecretStr
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # The embedding provider for requested syncs (as `lattice sync --embedding`). Use
+    # the provider the corpus was embedded with; `none` leaves new chunks pending.
+    sync_embedding: Literal["none", "fake", "local", "gemini", "openai"] = "none"
+    worker_poll_seconds: float = Field(default=2.0, ge=0.1, le=300.0)
+    # A running job's lease; the worker renews it while the sync runs. A job whose
+    # lease expired (the worker died) is retried by another poll, up to its attempts.
+    worker_lease_seconds: int = Field(default=300, ge=30, le=3600)
+    # Statement timeout for the worker's own connections (syncs write in batches).
+    db_statement_timeout_ms: int = Field(default=300_000, ge=1_000, le=3_600_000)
+    db_connect_timeout_seconds: float = Field(default=5.0, ge=0.5, le=60.0)
+    metrics_address: str | None = None
+
+    _check_url = field_validator("worker_database_url")(_require_asyncpg_url)
+
+    @field_validator("metrics_address")
+    @classmethod
+    def _check_metrics_address(cls, value: str | None) -> str | None:
+        if value is not None:
+            parse_host_port(value)
+        return value
+
+    @model_validator(mode="after")
+    def _enforce_environment_guards(self) -> Self:
+        if self.env is Environment.PRODUCTION and self.sync_embedding == "fake":
+            raise ValueError(
+                "LATTICE_SYNC_EMBEDDING=fake is a test double and is refused when "
+                "LATTICE_ENV=production"
+            )
+        return self
+
+
+def load_worker_settings(**overrides: object) -> WorkerSettings:
+    try:
+        return WorkerSettings(**overrides)  # type: ignore[arg-type]
+    except ValidationError as exc:
+        raise ConfigurationError(_describe(exc)) from None
+
+
 def _describe(exc: ValidationError) -> str:
     problems: list[str] = []
     for error in exc.errors(include_input=False, include_url=False):

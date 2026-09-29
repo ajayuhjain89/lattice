@@ -6,6 +6,7 @@ Required environment (see .env.example; `make test` loads .env):
     LATTICE_TEST_DATABASE_URL            lattice_app on lattice_test
     LATTICE_TEST_MIGRATION_DATABASE_URL  lattice_owner on lattice_test
     LATTICE_TEST_SUPERUSER_DATABASE_URL  superuser on lattice_test (role-probe tests)
+    LATTICE_TEST_WORKER_DATABASE_URL     lattice_worker on lattice_test (Phase 8)
 
 At session start the schema is rebuilt from scratch (downgrade base, upgrade head),
 which also proves the migration chain applies to a clean database.
@@ -47,6 +48,7 @@ def _require_env(name: str) -> str:
 APP_URL = _require_env("LATTICE_TEST_DATABASE_URL")
 OWNER_URL = _require_env("LATTICE_TEST_MIGRATION_DATABASE_URL")
 SUPERUSER_URL = _require_env("LATTICE_TEST_SUPERUSER_DATABASE_URL")
+WORKER_URL = _require_env("LATTICE_TEST_WORKER_DATABASE_URL")
 
 
 def alembic_config(url: str = OWNER_URL) -> Config:
@@ -84,6 +86,13 @@ async def owner_db(migrated_schema: None) -> AsyncIterator[Database]:
 @pytest.fixture(scope="session")
 async def app_db(migrated_schema: None) -> AsyncIterator[Database]:
     db = Database(create_engine(APP_URL, application_name="lattice-tests-app"))
+    yield db
+    await db.dispose()
+
+
+@pytest.fixture(scope="session")
+async def worker_db(migrated_schema: None) -> AsyncIterator[Database]:
+    db = Database(create_engine(WORKER_URL, application_name="lattice-tests-worker"))
     yield db
     await db.dispose()
 

@@ -40,6 +40,8 @@ jobs:
       LATTICE_TEST_DATABASE_URL: postgresql+asyncpg://lattice_app:ci-app-password@localhost:5432/lattice_test
       LATTICE_TEST_MIGRATION_DATABASE_URL: postgresql+asyncpg://lattice_owner:ci-owner-password@localhost:5432/lattice_test
       LATTICE_TEST_SUPERUSER_DATABASE_URL: postgresql+asyncpg://postgres:ci-superuser-password@localhost:5432/lattice_test
+      LATTICE_TEST_WORKER_DATABASE_URL: postgresql+asyncpg://lattice_worker:ci-worker-password@localhost:5432/lattice_test
+      LATTICE_WORKER_DATABASE_URL: postgresql+asyncpg://lattice_worker:ci-worker-password@localhost:5432/lattice
       # Property-based SQL <-> reference policy proof: the plan's CI minimum.
       LATTICE_AUTHZ_EXAMPLES: "500"
 
@@ -72,7 +74,7 @@ jobs:
         run: >-
           psql -v ON_ERROR_STOP=1 -d postgres
           -v owner_password=ci-owner-password -v app_password=ci-app-password
-          -f infra/postgres/bootstrap.sql
+          -v worker_password=ci-worker-password -f infra/postgres/bootstrap.sql
 
       - name: Migrations apply to a clean database, round-trip, and match the models
         run: |
@@ -86,6 +88,8 @@ jobs:
           uv run lattice seed --manifest ../data/synthetic/halden/org.yaml --manifest ../data/synthetic/veridian/org.yaml
           uv run lattice seed --manifest ../data/synthetic/halden/org.yaml --manifest ../data/synthetic/veridian/org.yaml
           uv run lattice check-db-role
+          # The worker's startup checks (role, schema revision) with an empty queue.
+          uv run lattice worker --once
 
       - name: Sync the dataset twice (fake embeddings); the second sync writes nothing
         shell: bash

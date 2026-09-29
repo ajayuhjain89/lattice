@@ -854,6 +854,24 @@ async def store_embeddings(
 # --- sync runs and failures --------------------------------------------------------------
 
 
+async def abort_interrupted_runs(
+    session: AsyncSession, org: uuid.UUID, source_id: uuid.UUID
+) -> int:
+    """Runs of this source still ``running`` while the caller holds the source's sync lock
+    were interrupted (their process died before it could record the outcome): record
+    them ``aborted`` / ``internal_error:interrupted``, so no run stays running forever."""
+    result = await session.execute(
+        text(
+            "UPDATE source_sync_runs SET status = 'aborted', finished_at = now(), "
+            "error_code = 'internal_error:interrupted' "
+            "WHERE organization_id = :o AND source_id = :s AND status = 'running' "
+            "RETURNING id"
+        ),
+        {"o": org, "s": source_id},
+    )
+    return len(result.all())
+
+
 async def open_run(
     session: AsyncSession, org: uuid.UUID, source_id: uuid.UUID, mode: str
 ) -> uuid.UUID:

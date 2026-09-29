@@ -49,7 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        await verify_runtime_role(db.engine)
+        await verify_runtime_role(db.engine, forbid_content_writes=True)
         server = metrics.serve(settings.metrics_address) if settings.metrics_address else None
         try:
             yield

@@ -49,6 +49,8 @@ TENANT_TABLES = (
     "provider_credentials",
     "query_traces",
     "audit_events",
+    # Phase 8
+    "jobs",
 )
 # Tables the runtime role may not read at all (written and read by operator tools).
 RUNTIME_UNREADABLE = frozenset({"audit_events"})
@@ -195,6 +197,13 @@ async def _populate(db: Database, member: Member) -> None:
             ),
             {"o": member.organization_id},
         )
+        await s.execute(
+            text(
+                "INSERT INTO jobs (organization_id, kind, source_id, requested_by) "
+                "VALUES (:o, 'source_sync', :s, :m)"
+            ),
+            {"o": member.organization_id, "s": source, "m": member.membership_id},
+        )
 
 
 _HOUR = timedelta(hours=1)
@@ -303,6 +312,7 @@ async def test_org_b_rows_cannot_be_selected_by_id_from_org_a(
             ("SELECT 1 FROM provider_credentials WHERE organization_id = :x", b.organization_id),
             ("SELECT 1 FROM query_traces WHERE organization_id = :x", b.organization_id),
             ("SELECT 1 FROM query_traces WHERE membership_id = :x", b.membership_id),
+            ("SELECT 1 FROM jobs WHERE organization_id = :x", b.organization_id),
         ):
             assert (await s.execute(text(sql), {"x": param})).first() is None, sql
 

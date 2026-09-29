@@ -4,13 +4,18 @@
 -- creating login roles needs their passwords (secrets) and CREATEROLE, and creating
 -- extensions needs superuser. Migrations run as lattice_owner and never hold either.
 --
--- Usage: psql -v owner_password=... -v app_password=... -f bootstrap.sql
+-- Usage: psql -v owner_password=... -v app_password=... -v worker_password=... \
+--          -f bootstrap.sql
 --
 -- Roles:
 --   lattice_owner  owns the schema; runs migrations and operator tools (seed).
 --                  Subject to FORCE ROW LEVEL SECURITY on tenant tables.
---   lattice_app    runtime role for the API and worker. Never owns tables, never
---                  BYPASSRLS; the API refuses to start otherwise.
+--   lattice_app    runtime role for the API. Never owns tables, never BYPASSRLS, never
+--                  writes content; the API refuses to start otherwise.
+--   lattice_worker runtime role for the background worker (Phase 8, ADR-013): runs
+--                  the syncs administrators request. Never owns tables, never
+--                  BYPASSRLS; writes ingestion tables through row-level security, one
+--                  organization per job. The worker refuses to start otherwise.
 --   lattice_auth   NOLOGIN. Owns the narrow SECURITY DEFINER pre-authentication
 --                  lookup functions; has role-targeted read policies. Nobody logs
 --                  in as it and lattice_app is not a member of it. It holds no
@@ -22,14 +27,18 @@ SELECT format('CREATE ROLE lattice_owner LOGIN PASSWORD %L', :'owner_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lattice_owner') \gexec
 SELECT format('CREATE ROLE lattice_app LOGIN PASSWORD %L', :'app_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lattice_app') \gexec
+SELECT format('CREATE ROLE lattice_worker LOGIN PASSWORD %L', :'worker_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lattice_worker') \gexec
 SELECT 'CREATE ROLE lattice_auth NOLOGIN'
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lattice_auth') \gexec
 
 -- Re-assert attributes and passwords on every run so drift is corrected.
 SELECT format('ALTER ROLE lattice_owner LOGIN PASSWORD %L', :'owner_password') \gexec
 SELECT format('ALTER ROLE lattice_app LOGIN PASSWORD %L', :'app_password') \gexec
+SELECT format('ALTER ROLE lattice_worker LOGIN PASSWORD %L', :'worker_password') \gexec
 ALTER ROLE lattice_owner NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION;
 ALTER ROLE lattice_app   NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION;
+ALTER ROLE lattice_worker NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION;
 ALTER ROLE lattice_auth  NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION;
 
 -- lattice_owner must be able to hand function ownership to lattice_auth in migrations
