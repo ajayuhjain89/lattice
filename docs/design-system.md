@@ -652,3 +652,18 @@ above are implemented as written. Departures, each for a reason:
 | B13 loading | No stage names: one progress line and the elapsed time over a static skeleton | No streaming progress exists (D-6); no shimmer, per B10 |
 | B13 first-time user | Heading, deck and three principles; no scope line | No endpoint lists the member's accessible sources or accounts |
 | B14 phones | The one-crumb page header is hidden under the 52 px top bar; wrapped status facts drop their separators | The top bar already names the place; a line must not start with "·" |
+
+## Part D — Phase 8 as built
+
+Sources and Activity use the Part B tokens, the table anatomy of B12 and the provider
+settings page's layout (admin-width column, 32 px mono table header with an ink rule,
+stacked label/value rows below 1024 px). Departures:
+
+| Section | As built | Why |
+| ------- | -------- | --- |
+| B11 navigation | Ask, **Sources**, **Activity** in the main group for everyone; *This session* (in-tab history) kept; Admin → AI providers | Activity is everyone's own question history first; its administrator section appears on the same page, server-driven by `/v1/me` |
+| B12 "Sources page" | Members: one table (source, type, documents *you* can read, last sync with status). Administrators: source, permissions (account-scoped or from source metadata, default level), document total, last sync (status, code, deletion-guard note, permissions-synced date), failed records (count and top code), *Sync now*. Failed records open per source on demand: stage, code, allow-listed parameters, identifier or `rec_…` | §10 rules; failures are fetched only when asked for |
+| *Sync now* | A secondary small button; while a job is queued or running it reads *Queued* / *Syncing…*, is disabled, and the listing refreshes every 3 s; a failed request says so under the button | One active sync per source (the API enforces it); no optimistic state |
+| B12 "Trace view — admin" / Activity | Organization activity table: member (links to the operational trace), time, status (and error code or reason), provider · model (or "No model call"), duration, tokens; a one-line explanation of why no content is shown | The admin's view never carries question, answer, evidence, counts or scope (D-5) |
+| B13 "Empty knowledge base" | Sources page: "Lattice hasn't indexed any sources you can access yet" | The Ask first-run scope line still needs an account list endpoint (Phase 9) |
+| Tables below 768 px | Stacked row blocks from 1024 px down, as in provider settings | Six columns plus an action do not fit 1024 px |

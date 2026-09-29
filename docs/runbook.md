@@ -1,9 +1,11 @@
 # Lattice — Operational Runbook
 
-Status: §1 is implemented (Phases 1–2); §3 (embedding) Phase 4, provider configuration Phase 6; §4 (retrieval) Phase 5; §6 (answering) Phase 6. Everything else is **planned** unless marked
-otherwise; each section is
-marked with the phase that makes it real; sections are rewritten against the actual system
-when that phase lands. Do not follow planned procedures on a live system.
+Status: §1 is implemented (Phases 1–2, worker role Phase 8); §2 procedures are marked
+per row; §3 (embedding) Phase 4, provider configuration Phase 6; §4 (retrieval) Phase 5;
+§5 Phase 5 closure; §6 (answering) Phase 6; §7 (operations: health, metrics, logs, kill
+switches, limits, the worker, deployment, backups, CI) and §8 (failure drills) Phase 8.
+A row marked *planned* names the phase that makes it real; do not follow planned
+procedures on a live system.
 
 ---
 
@@ -23,13 +25,16 @@ operations:
 | Edited the synthetic dataset or a golden item | `make dataset-lint` (must print `OK`); after changing authored tickets, `make dataset-generate` and commit the regenerated `tickets-bulk.jsonl`. See `data/synthetic/README.md` §13 |
 | `dataset lint` reports `tickets-bulk.jsonl: out of date` | The bulk distractors were edited by hand or authored tickets changed: `make dataset-generate` |
 | Database created before the `lattice_auth` hardening (`\dn+ public` shows `lattice_auth=UC`, or the lookup functions show `=X/lattice_auth`) | `make db-bootstrap` and `make migrate` (migration 0002). Both are idempotent. Verify with `make test` (`tests/test_auth_role.py`) |
+| `make migrate` fails with `Role lattice_worker is required (Phase 8)`, or `make db-up` with `set LATTICE_WORKER_PASSWORD` | The database predates the worker role. Copy `LATTICE_WORKER_PASSWORD`, `LATTICE_WORKER_DATABASE_URL` and `LATTICE_TEST_WORKER_DATABASE_URL` from `.env.example` into `.env`, then `make db-up` (recreates the container with the new variable; the data volume is kept), `make db-bootstrap`, `make migrate` |
+| API or worker exits with `database schema is at revision X, this build expects Y` | The code and the database disagree. `make migrate` (development); in a deployment, run the migration job of the build being deployed, or deploy the build that matches the database. Never edit `alembic_version` by hand |
 
 ### Database roles and credentials
 
 | Role | Used by | Rule |
 | ---- | ------- | ---- |
-| `lattice_app` | API (and later the worker) via `LATTICE_DATABASE_URL` | The only runtime identity. The API refuses to start with any other kind of role; it never falls back to another credential |
-| `lattice_owner` | `make migrate`, `make seed`, operator tools via `LATTICE_MIGRATION_DATABASE_URL` | Migration/bootstrap/administrative role. Never configured as the API's `LATTICE_DATABASE_URL`. In production its credential lives in a different secret from the runtime one and is available only to the migration job |
+| `lattice_app` | API via `LATTICE_DATABASE_URL` | The API's runtime identity: reads, plus Ask traces and sync requests. The API refuses to start with a role that is a superuser, has `BYPASSRLS`, can act as a table owner, or can write documents or grants; it never falls back to another credential |
+| `lattice_worker` | The background worker via `LATTICE_WORKER_DATABASE_URL` (Phase 8, ADR-013) | Writes what a sync writes, through forced row-level security, one organization per job; sees every organization's *jobs* only. Refuses to start under the same checks as the API. Never configured as the API's role (the API refuses it) |
+| `lattice_owner` | `make migrate`, `make seed`, operator tools via `LATTICE_MIGRATION_DATABASE_URL` | Migration/bootstrap/administrative role. Never configured as the API's or the worker's database URL. In production its credential lives in a different secret from the runtime ones and is available only to the migration job and operators |
 | `lattice_auth` | Nobody (NOLOGIN) | Owns the two pre-authentication lookup functions only. Holds no `CREATE` anywhere at rest |
 
 ### Changing a pre-authentication lookup function
@@ -48,18 +53,20 @@ fails even for the owner). In a new migration, as `lattice_owner`:
    migration transaction.
 4. Run `make test`: `tests/test_auth_role.py` fails if any privilege is left behind.
 
-## 2. Procedures (planned)
+## 2. Procedures
 
-| Situation | Procedure (planned) | Phase |
-| --------- | ------------------- | ----- |
-| A sync run is `partial` or `failed` | Sources page → run → failures by code. `access_unmappable:*` → fix source config (account/department/group mapping) then `lattice sync <source>`. `source_unavailable` → check export path/credentials | 4 / 8 |
-| Deletion guard tripped | Inspect export completeness; if the deletions are genuine, re-run with `--allow-mass-deletion` after confirming with the source owner | 4 |
+| Situation | Procedure | Phase |
+| --------- | --------- | ----- |
+| A sync run is `partial` or `failed` | **As built (Phase 8):** Sources page (administrators) → the source's last sync and failure codes → *Show records*: stage, fixed code, safe parameters, and the record's identifier only if you can read its document (otherwise `rec_…`). `access_unmappable:account` shows the unmapped external account reference: map it in the source configuration, then *Sync now* (or `lattice sync <source>`). `source_unavailable:*` → check the export path and its mount. The raw identifier behind a `rec_…` is available to infrastructure operators only, with database access: `sync_record_failures.external_id` / `location` | 4 / 8 |
+| Re-sync a source now | Sources page → *Sync now* (administrators; queued for the worker, one per source at a time), or `lattice sync --org … --sources … --source <key>` as an operator. Both take the same per-source lock; a request that meets a running CLI sync is retried after a backoff | 8 |
+| Deletion guard tripped | Inspect export completeness; if the deletions are genuine, re-run with `--allow-mass-deletion` after confirming with the source owner. A sync requested from the web app never overrides the guard | 4 |
 | Urgently revoke a person's access | **Works today (Phase 2), without a UI:** set the member's `status: suspended` in the org manifest and `make seed`, or as `lattice_owner` with the organization bound: `UPDATE memberships SET status = 'suspended', authz_updated_at = now() WHERE id = …`. Sessions are rejected and no authorization context can be resolved on the very next request. Narrower changes (account assignment, department, group membership, grant) are single-row writes with the same immediacy. No re-index, re-embed or cache flush exists or is needed. Admin UI: Phase 9 | 2 / 9 |
 | Remove a source's content now | `lattice source disconnect <source>` → immediate soft delete; purge runs asynchronously | 4 |
-| `security_invariant_violated` alert | Treat as incident: the retrieval predicate returned an unreadable chunk. The `security.invariant_violated` log event (emitted by `assert_all_readable` and, since Phase 6, `readable_document_classifications`) carries organization, membership, `policy_version`, counts and the offending document UUIDs. Capture trace ID; stop generation for the org (`lattice provider disable --purpose generation ...`; an `ask_enabled` kill switch is not built); investigate `authz` changes (compare `policy_version`); add a regression test before re-enabling | 6 / 11 |
-| Provider outage | **As built (Phase 6):** Ask returns HTTP 200 with status `failed` / `provider_unavailable` and the evidence list; the trace's `error_code` says why (`generation_failed:timeout`, `rate_limited`, ...). Switch provider with `lattice provider configure` (a new record starts approved for `internal` only) if an approved alternative exists | 6 |
-| Change embedding model or provider | `lattice reindex --reembed --embedding <provider>` per source (the new model is a new embedding space; old vectors are replaced, never mixed). For an external provider, estimate volume first (§5) | 4 |
-| Organization deletion | Set status `deleting`; purge job; run verification query (0 rows per table for org) | 11 |
+| `security_invariant_violated` (HTTP 500 with that code; metric `lattice_security_invariant_violations_total` > 0; log event `security.invariant_violated` or `answer.citation_invariant_violated`) | Treat as incident: the retrieval predicate returned an unreadable chunk, or a response cited evidence it did not carry. The `security.invariant_violated` log event carries organization, membership, `policy_version`, counts and the offending document UUIDs; capture the request ID and trace ID. Stop generation: for one organization `lattice provider disable --purpose generation …` (live, audited); for everyone `LATTICE_GENERATION_ENABLED=false` and restart the API (§7.4). Investigate `authz` changes (compare `policy_version`); add a regression test before re-enabling. Alerting on the metric is Phase 11 | 6 / 8 |
+| Provider outage | **As built (Phase 6, bounded in Phase 8):** Ask returns HTTP 200 with status `failed` / `provider_unavailable` and the evidence list, within `LATTICE_GENERATION_DEADLINE_SECONDS` (default 120 s for both attempts together); the trace's `error_code` says why (`generation_failed:timeout`, `rate_limited`, `deadline_exceeded`, …) and `lattice_generation_calls_total{outcome}` counts it. Query embedding degrades to exact + lexical after 5 s (`lattice_retrieval_semantic_total{outcome="provider_failed"}`). Switch provider with `lattice provider configure` if an approved alternative exists; or stop generation (§7.4) and keep serving evidence | 6 / 8 |
+| Database outage | The API answers 503 `service_unavailable` with `Retry-After: 5` within `LATTICE_DB_CONNECT_TIMEOUT_SECONDS` (default 5 s) instead of hanging; `/v1/health/ready` fails (take the instance out of rotation), `/v1/health/live` stays up (do not restart for it). The worker keeps polling with back-off and resumes by itself. Nothing is retried on the user's behalf: Ask is safe to retry (a new trace each time) | 8 |
+| Change embedding model or provider | `lattice reindex --reembed --embedding <provider>` per source (the new model is a new embedding space; old vectors are replaced, never mixed). For an external provider, estimate volume first (§5). Set `LATTICE_SYNC_EMBEDDING` for the worker to the same provider | 4 / 8 |
+| Organization deletion | *Planned:* set status `deleting`; purge job; run verification query (0 rows per table for org) | 11 |
 
 ## 3. Model-provider configuration — *Phase 4 (embedding), Phase 5 closure (approval), Phase 6 (generation, credentials, audit)*
 
@@ -132,3 +139,157 @@ the provider's retention terms (security-model §6).
 | Status `insufficient_evidence` / `claims_unverified` | The model's claims all failed validation; `validation.rejection_codes` in the asker's trace counts why (`quote_not_found`, `unknown_handle`, ...). Never "fixed" by relaxing validation (evaluation-plan §5) |
 | Status `failed` | `provider_unavailable` (see the trace's `error_code`), `generation_invalid` (schema failure twice) or `citation_validation_failed` (a bug: the response invariant withheld the answer; logged as `answer.citation_invariant_violated`) |
 | A trace | `GET /v1/traces/{id}`: the asker sees their own (answer hidden if any of its evidence, cited or not, is no longer readable, or any account it depends on is no longer visible); an administrator sees other members' operational fields only; anyone else 404 |
+
+## 7. Operations — *implemented (Phase 8)*
+
+### 7.1 Processes
+
+| Process | Command | Role | Notes |
+| ------- | ------- | ---- | ----- |
+| API | `uvicorn lattice.api.app:create_app --factory --no-access-log` (`make api` in development) | `lattice_app` | One process per container (metrics are per process). Refuses to start on invalid configuration, an unsafe role, or a schema at another revision |
+| Worker | `lattice worker` (`make worker`) | `lattice_worker` | Runs requested syncs one at a time; SIGTERM/SIGINT finish the current job, then exit. `lattice worker --once` runs every due job and exits. Several workers may run: `SKIP LOCKED` hands each job to one of them |
+| Web | `next start` behind the reverse proxy (`make web` in development) | — | Proxies `/api/*` to the API only |
+| Migrations | `alembic upgrade head` (`make migrate`) | `lattice_owner` | Run **before** starting a new build: the API and worker refuse an older schema, and an older build refuses a newer one |
+
+### 7.2 Health and readiness
+
+| Endpoint | Checks | Probe | Failing means |
+| -------- | ------ | ----- | ------------- |
+| `GET /v1/health/live` | the process serves requests; touches nothing | liveness | restart the process |
+| `GET /v1/health/ready` | the database answers and its schema is at the revision this build expects | readiness / load balancer | send no traffic here; a restart will not help (database down, or migrations not applied) |
+| `GET /v1/health` | database connectivity (Phase 1, kept for compatibility) | — | — |
+
+All three are unauthenticated and return states only (`ok`, `ready`, 503 `service_unavailable`
+with `Retry-After`): never versions, revisions, hosts, counts or error text.
+The worker has no HTTP endpoint; watch `lattice_worker_polls_total` and `lattice_jobs_waiting`.
+
+### 7.3 Metrics and logs
+
+`LATTICE_METRICS_ADDRESS=host:port` starts a **separate** Prometheus listener in the API
+(and, set for the worker, in the worker). It has no authentication: bind it to an internal
+interface and never route it publicly. The web app proxies only `/api/*` to the API's
+own port, so metrics are never reachable through it. Every label comes from a closed set
+(route *template*, method, status, answer status/reason, provider implementation, fixed
+error and rejection codes, sync mode/status/stage, job kind/outcome); anything else is
+`other`. No organization, member, trace, document or source identifier and no text is
+ever a label (`lattice.metrics`, tested).
+
+| Metric | What to watch |
+| ------ | ------------- |
+| `lattice_http_requests_total{method,route,status}`, `lattice_http_request_duration_seconds` | error rate by route; latency |
+| `lattice_security_invariant_violations_total{check}` | **must stay 0**; page on any increase (§2) |
+| `lattice_asks_total{status,reason}`, `lattice_ask_duration_seconds{status}` | share of `failed` / `evidence_only`; Ask latency |
+| `lattice_generation_calls_total{provider,outcome}`, `lattice_generation_call_duration_seconds` | provider errors (`timeout`, `rate_limited`, `unauthorized`, …) |
+| `lattice_generation_decisions_total{decision}` | why generation was not invoked (`generation_disabled`, `credential_unavailable`, `provider_unapproved`, …) |
+| `lattice_retrieval_semantic_total{outcome}` | query-embedding degradation (`provider_failed`, `policy_excluded`) |
+| `lattice_claims_rejected_total{code}` | citation validation rejections by code |
+| `lattice_dependency_failures_total{dependency,check}` | database unavailable (requests, readiness, worker) |
+| `lattice_auth_rejections_total{reason}`, `lattice_http_requests_rejected_total{reason}` | session rejections; CSRF and oversized requests |
+| `lattice_sync_runs_total{mode,status}`, `lattice_sync_record_failures_total{stage}`, `lattice_sync_duration_seconds` | ingestion health |
+| `lattice_jobs_total{kind,outcome}`, `lattice_jobs_waiting`, `lattice_worker_polls_total{result}`, `lattice_job_duration_seconds` | worker throughput, backlog, errors; `abandoned` jobs |
+| `lattice_maintenance_rows_total{task}` | job retention |
+| `process_*`, `python_gc_*` | memory and CPU per process |
+
+**Logs** are JSON lines on stdout (architecture §8): one `http.request` per request
+(method, path, route template, status, duration, request ID, organization and user IDs),
+`answer.completed` per Ask (status, reason, provider, model, counts, duration, trace ID),
+`ingestion.sync` per run, `jobs.started` / `jobs.finished` / `jobs.abandoned` /
+`jobs.retention` per job, `db.unavailable`, `health.*`, `http.request_too_large`,
+`http.csrf_rejected`, `auth.session.rejected`, `security.invariant_violated`. Never
+question, answer, document or prompt text, titles, file names or secrets. Correlate a
+user report with its `X-Request-ID` header, then the trace ID in `answer.completed`.
+
+### 7.4 Kill switches and limits
+
+| Control | Scope | Effect | Takes effect |
+| ------- | ----- | ------ | ------------ |
+| `lattice provider disable --org … --purpose generation …` | one organization | no generation provider is built or called; answers are `evidence_only` / `generation_unavailable` | next request (audited) |
+| `LATTICE_GENERATION_ENABLED=false` | the deployment | the same, for every organization; no credential is resolved; trace reason `generation_disabled` | API restart |
+| `LATTICE_QUERY_EMBEDDING=none` | the deployment | no question leaves Lattice for embedding; exact + lexical retrieval only | API restart |
+| `LATTICE_GENERATION_DEADLINE_SECONDS` (120) | per Ask | both generation attempts together; on expiry `failed` / `provider_unavailable` with the evidence | API restart |
+| `LATTICE_MAX_REQUEST_BYTES` (65,536) | per request | larger bodies get 413 `request_too_large` before parsing | API restart |
+| `LATTICE_DB_STATEMENT_TIMEOUT_MS` (30,000), `LATTICE_DB_CONNECT_TIMEOUT_SECONDS` (5), `LATTICE_DB_POOL_SIZE` (5 + 5 overflow) | API connections | a long statement is cancelled (503); an unreachable database fails fast | API restart |
+| Question length 2,000 characters; one active sync job per source; generation output ≤ 2,048 tokens | per request | 422 / idempotent request / bounded model output | always |
+
+Per-member rate limiting (T19) is Phase 10; it is **not** built. Until then, bound cost at
+the provider (quota) and with the kill switches above.
+
+### 7.5 The worker
+
+| Situation | Action |
+| --------- | ------ |
+| Requests stay *Queued* | Is a worker running (`lattice_worker_polls_total` increasing)? At startup it exits 1 with a one-line reason (configuration, role, schema revision, database unreachable): run it under a supervisor that restarts it. Once running, it survives database outages by itself |
+| A job failed | The Sources row shows the code; the job's run (if one opened) has the details. `source_config:*` codes need the operator's `sources.yaml` and a CLI sync; `source_unavailable:*` the export path |
+| `source_busy` | Another sync of that source (CLI or worker) holds its lock; the request is retried after 60 s × attempt, up to 3 attempts |
+| A worker died mid-job | Its lease expires (`LATTICE_WORKER_LEASE_SECONDS`, 300; renewed while the sync runs) and another poll retries it; after 3 attempts the job is `failed` / `job_abandoned`. The interrupted run is recorded `aborted` / `internal_error:interrupted` by the next sync of that source |
+| Job history | Finished jobs are deleted after 30 days, in batches of 500, once an hour; the database policy forbids deleting younger ones. Sync runs and failures are kept (retention: Phase 11) |
+| Embeddings of requested syncs | `LATTICE_SYNC_EMBEDDING` (default `none`: new chunks stay `pending` until a sync with a provider). Use the provider the corpus was synced with |
+
+### 7.6 Deployment checklist
+
+Production refuses to start on any of: `LATTICE_ENV` unset; development login enabled;
+insecure cookies; `LATTICE_QUERY_EMBEDDING=fake` or `LATTICE_SYNC_EMBEDDING=fake`; an
+unsafe runtime role; a schema at another revision; an invalid operational setting. In
+addition, before a first deployment:
+
+1. Three database credentials in the platform's secret store: runtime (`lattice_app`),
+   worker (`lattice_worker`), owner (`lattice_owner`, migration job only). Bootstrap once
+   as a superuser (`infra/postgres/bootstrap.sql`), then never use the superuser again.
+2. Order: migrate → start API and worker → readiness passes → route traffic.
+3. Metrics listener on an internal interface; alert on
+   `lattice_security_invariant_violations_total > 0`, readiness failures,
+   `lattice_dependency_failures_total`, and a growing `lattice_jobs_waiting`.
+4. Real identity (OIDC, Phase 10) and container images / infrastructure (Phase 11) are
+   **not built**: the slice runs as documented in the README only.
+
+### 7.7 Backups, recovery and migrations
+
+Everything Lattice holds is in PostgreSQL (ADR-002): no second store to back up.
+Managed PostgreSQL with point-in-time recovery is the target (Phase 11, not built). For
+a self-managed database:
+
+| Task | Procedure |
+| ---- | --------- |
+| Back up | `pg_dump --format=custom --no-owner lattice > lattice-<date>.dump` as a superuser or a role that bypasses RLS (a dump as `lattice_owner` or a runtime role sees no tenant rows) |
+| Restore | Bootstrap an empty server (`bootstrap.sql`), `pg_restore --no-owner --role=lattice_owner -d lattice lattice-<date>.dump`, then `make check-db-role` and `lattice worker --once` (both verify roles and the schema revision) |
+| Migrate | Take a backup, run the new build's migrations as `lattice_owner`, then start the new build. Migrations are tested to round-trip (`alembic downgrade base` / `upgrade head` in CI); a downgrade is a last resort, after restoring is ruled out |
+| Rebuild derived data | Chunks, vectors and the lexical index are derived from the sources: `lattice reindex` rebuilds them without deleting documents |
+
+### 7.8 CI and releases
+
+CI (`.github/workflows/ci.yml`) pins its runner image (`ubuntu-24.04`, not `ubuntu-latest`),
+the uv version and each action's major version (all on Node.js 24; `setup-uv` by exact
+version, since it publishes no major tags). Update them deliberately, one commit at a
+time, and check the run. Each job has a 30-minute timeout. The backend job lints, type
+checks, bootstraps a clean database with all four roles, round-trips the migrations,
+seeds, verifies the API's and the worker's startup checks, syncs twice, runs both
+evaluation security gates and the full test suite; the web job checks the generated API
+contract, lints, type checks, runs unit tests, builds and runs the browser tests.
+
+## 8. Failure drills — *run for Phase 8 (2026-09-29)*
+
+Run against the real API and worker on the development database (fake generation
+provider recorded for Halden, fake embeddings), and as automated tests
+(`tests/test_operations.py`, `tests/answering/test_operations.py`,
+`tests/ingestion/test_worker.py`). Repeat them after changing any of the controls.
+
+| Drill | How | Observed |
+| ----- | --- | -------- |
+| Database unavailable | `docker stop lattice-postgres-1` with the API running | `/v1/health/ready` 503 `service_unavailable` + `Retry-After: 5`; Ask 503 in 0.09 s, Sources 503 in 0.02 s; `/v1/health/live` 200; no stack trace or host in any body. `docker start` → readiness recovers with no restart. `lattice worker` started while the database is down exits 1 with `ConnectionRefusedError: … Connect call failed`; a running worker keeps polling (test) |
+| Schema/config mismatch | `alembic downgrade 0010` under a running API | readiness 503, liveness 200; `lattice worker --once` and `lattice check-db-role` refuse with the revision problem; `alembic upgrade head` → ready again |
+| Provider timeout / hang | tests: a provider that never answers, a spent budget | `failed` / `provider_unavailable`, evidence returned, `generation_failed:timeout` or `:deadline_exceeded`, no second call past the deadline, `lattice_generation_calls_total{outcome="timeout"}` |
+| Malformed provider response | tests (Phase 6): malformed JSON twice | `failed` / `generation_invalid`; no claim shown |
+| Credential missing / revoked | tests (Phase 6) | `evidence_only` / `generation_unavailable` (`credential_unavailable`), nothing sent |
+| Deployment disallowed | tests (Phase 5-6) | `evidence_only` / `egress_policy` (`deployment_not_allowed`), nothing sent |
+| Kill switch | API restarted with `LATTICE_GENERATION_ENABLED=false`; Ask as Maya | `evidence_only` / `generation_unavailable`, 12 evidence items, 0 generation calls, trace `decision_reason: generation_disabled` |
+| Stale / revoked trace dependencies | tests (Phase 6) and Activity | the answer stays hidden in the trace; Activity lists the question only |
+| Ingestion failure | requested sync of `support` through the UI and `lattice worker --once` | run `partial` (147 unchanged, 1 failed), job `succeeded`; the failure shown as `access_unmappable:account`, `rec_…`, external account ref only. Missing export: job `failed` / `source_unavailable:missing_export` (test) |
+| Worker crash / busy source | tests | lease expiry → retried, then `job_abandoned` after 3 attempts; the interrupted run recorded `aborted`; `source_busy` → retried after 60 s |
+| Client retry | Sync now twice; Ask repeated | the second sync request returns the same job (200); each Ask is independent (a new trace) and read-only apart from it |
+| Oversized / pathological requests | 2,001-character question, 200-character account key, `limit=100000`, `before=not-a-uuid`, 70 KB body, 20 concurrent Asks | 422 naming the field (never its value) ×4, 413 `request_too_large`, 20 × 200 (max 1.6 s) |
+
+**Performance sanity (M1 8 GB, heavily swapped, dev data, fake providers).** Ask p50
+0.26 s over 8 requests (the first, cold, 11 s); `GET /v1/sources` p50 43 ms,
+`/v1/activity` 31 ms, `/v1/admin/sources` 30 ms, `/v1/admin/activity` 21 ms; a requested
+sync of 148 unchanged tickets 1.7 s, of Drive 0.3 s; API resident memory about 77 MB.
+No model benchmark was run (ADR-012).

@@ -5,8 +5,9 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–6 are implemented and merged; Phase 7 (the web app) is implemented on
-`phase/7-frontend`, awaiting review.** What runs today: a FastAPI backend with typed
+**Status: Phases 1–7 are implemented and merged; Phase 8 (operability: Sources,
+Activity, the background worker, health, metrics and operational limits) is implemented
+on `phase/8-operational-polish`, awaiting review.** What runs today: a FastAPI backend with typed
 fail-fast configuration, PostgreSQL 16 + pgvector with forced row-level security for
 organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -28,7 +29,12 @@ credentials stored by reference, claim-level fail-closed citations, deterministi
 supersession and potential conflicts, query traces, and the Ask API — and (Phase 7) the
 web app: Ask with every answer status designed, citation chips and an evidence
 inspector, conflict and supersession presentation, traces, and read-only AI provider
-settings. See the [implementation plan](docs/implementation-plan.md).
+settings — and (Phase 8) operability: a Sources page (members see only what they can
+read; administrators see aggregates, failures by opaque reference, and can request a
+sync), Activity (your own questions; an operational view for administrators), a
+background worker with its own least-privilege database role, liveness and readiness
+checks, Prometheus metrics, and fail-closed limits and kill switches. See the
+[implementation plan](docs/implementation-plan.md).
 
 ## Local setup
 
@@ -47,12 +53,17 @@ make check-db-role        # confirm the runtime role cannot bypass row-level sec
 make sync-dry-run         # what ingestion would do, writing nothing
 make sync                 # ingest both organizations (fake embeddings), then apply admin grants
 make api                  # http://127.0.0.1:8000 (interactive docs at /docs)
+make worker               # optional, in another terminal: runs syncs requested from the Sources page
 ```
+
+A database created before Phase 8 needs the worker's role once: copy the
+`LATTICE_WORKER_*` lines from `.env.example` into `.env`, then `make db-up db-bootstrap
+migrate` ([runbook §1](docs/runbook.md)).
 
 Try it (in a second terminal, while `make api` runs):
 
 ```bash
-curl -s http://127.0.0.1:8000/v1/health
+curl -s http://127.0.0.1:8000/v1/health/ready
 ```
 
 ```bash
@@ -115,6 +126,7 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 | `make dataset-lint` | Validate the synthetic dataset and golden set against the reference policy (no database, no model) |
 | `make sync-dry-run` / `make sync` / `make admin-grants` | Ingest the synthetic organizations ([ingestion design §9](docs/ingestion-design.md) documents `lattice sync`, `reindex`, `source disconnect`, `apply-admin-grants`) |
 | `make eval` | Retrieval metrics and security checks over the golden set, as each persona (after `make sync`; `EMBEDDING=fake\|local\|gemini\|openai\|none`, matching the sync); reports in `evals/reports/` |
+| `make worker` | The background worker (as `lattice_worker`): runs the syncs administrators request from the Sources page; `lattice worker --once` runs what is due and exits |
 | `make models-fetch` | Download and verify the pinned local embedding model (explicit; the only command that downloads weights) |
 | `make eval-answer` | Answer and security metrics over the golden set (after `make sync`; `GENERATION=fake` by default: plumbing and security, not answer quality); run it on an evaluation database, since it reconfigures the organizations' generation providers |
 | `lattice ask --org halden --as maya.okafor@halden.example "When will SCIM ship?"` | Ask as a member with the organization's generation configuration (`--json`; development/test only) |
@@ -131,12 +143,12 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 | `make api-contract` | Re-export the OpenAPI schema and regenerate the web app's TypeScript types (CI fails if they drift) |
 | `make help` | List all targets |
 
-CI (`.github/workflows/ci.yml`) runs lint, strict type checking, the dataset lint, the
-bootstrap, a migration round-trip on a clean database with a model-drift check, the
-seed (twice), the runtime-role check, a sync of the dataset (twice, the second writing
-nothing), the retrieval and answer evaluations as every persona with fake providers
-(each fails on any security violation), and the test suite against
-`pgvector/pgvector:0.8.1-pg16`. A second job checks the web app: the generated API
+CI (`.github/workflows/ci.yml`, on a pinned `ubuntu-24.04` runner) runs lint, strict type
+checking, the dataset lint, the bootstrap, a migration round-trip on a clean database
+with a model-drift check, the seed (twice), the API's and the worker's startup checks, a
+sync of the dataset (twice, the second writing nothing), the retrieval and answer
+evaluations as every persona with fake providers (each fails on any security
+violation), and the test suite against `pgvector/pgvector:0.8.1-pg16`. A second job checks the web app: the generated API
 contract matches the backend, lint, type check, unit and component tests, the
 production build, and the Playwright suite (desktop and phone).
 
@@ -256,6 +268,23 @@ fetched fresh and never filled in from the Ask page's memory. AI provider settin
 read-only: configuration is changed with the audited CLI. Details: [design
 system](docs/design-system.md), [implementation plan, Phase 7](docs/implementation-plan.md).
 
+## How operations work (Phase 8)
+
+Sources and Activity follow the operational-metadata rules of the [security
+model](docs/security-model.md) §10: a member sees only sources they can read from, with
+counts computed inside their access; an administrator sees every source's aggregate
+totals and last sync, and a failed record's identifier only when they can read its
+document (otherwise an opaque `rec_…` reference); administrators see who asked what
+*when*, never the question, answer or evidence. *Sync now* queues a job; `lattice
+worker` runs it as `lattice_worker`, a role that can write only what a sync writes, one
+organization at a time ([ADR-013](docs/decisions/013-background-worker-role.md)).
+`/v1/health/live` and `/v1/health/ready` report states only; with
+`LATTICE_METRICS_ADDRESS` set, Prometheus metrics (closed label sets, no identifiers)
+are served on a separate port the web app never proxies. The API and worker refuse to
+start against a schema of another revision; a database outage returns 503 in seconds;
+one Ask's model calls share a deadline; `LATTICE_GENERATION_ENABLED=false` stops every
+model call. Operating it: [runbook §7](docs/runbook.md).
+
 ## Repository layout
 
 ```
@@ -286,4 +315,4 @@ Makefile            developer commands (thin wrappers; read before running)
 | [Design system](docs/design-system.md) | Reference analysis, tokens, components, states |
 | [Implementation plan](docs/implementation-plan.md) | Phases, traceability, open decisions, as-built notes per phase |
 | [Decisions](docs/decisions/README.md) | ADRs |
-| [Runbook](docs/runbook.md) | Local operations (implemented) and later procedures (planned) |
+| [Runbook](docs/runbook.md) | Local development, procedures, operations (health, metrics, kill switches, the worker, deployment, backups, CI) and failure drills |

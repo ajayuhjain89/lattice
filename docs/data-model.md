@@ -14,8 +14,11 @@ closure added provider-policy columns (§7): migration `0006_provider_policy.py`
 `local` deployment, `org_settings.default_query_sensitivity` for D-13,
 `org_settings.data_origin`) and migration `0007_deployment_trust_classes.py` (D-15
 trust classes, `model_providers.approved_at`,
-`org_settings.organization_controlled_level`). `query_traces` is still
-design (Phase 6).
+`org_settings.organization_controlled_level`). Phase 6 added `query_traces`,
+`provider_credentials` and `audit_events` (migrations 0008, 0009). **Phase 8** added
+SELECT on `alembic_version` for the runtime role (0010: the schema-revision check) and
+the `jobs` table, the `lattice_worker` role's grants and policies, and an
+`(organization_id, created_at)` index on `query_traces` (0011; §3 and §8 below).
 Related: `authorization-model.md`, `ingestion-design.md`, `retrieval-design.md`.
 
 Conventions:
@@ -244,6 +247,32 @@ There is no free-text message column, so record content cannot leak through fail
 (a test pins the column set). Admins will see *what failed, when, why* (Phase 8); the
 raw `external_id` and `location` are displayed only if the admin can read the
 corresponding active document, otherwise `opaque_ref` (`security-model.md` §10).
+
+### jobs (Phase 8, migration 0011; ADR-013)
+
+The queue of syncs requested from the web app. Holds IDs, fixed codes and timestamps
+only.
+
+| Field | Type | Notes |
+| ----- | ---- | ----- |
+| id, organization_id | uuid | UQ (organization_id, id) |
+| kind | text | CHECK `source_sync` |
+| source_id | uuid | composite FK to `sources`, CASCADE |
+| mode | text | CHECK `full` \| `acl_only` (the web app requests `full`) |
+| requested_by | uuid | composite FK to `memberships` (the administrator), CASCADE |
+| status | text | `queued` → `running` → `succeeded` \| `failed`; a retry returns to `queued` |
+| attempts, max_attempts | int | CHECK `max_attempts` 1–10 (default 3) |
+| run_after | timestamptz | due time (retry back-off) |
+| lease_expires_at | timestamptz | set exactly while `running` (CHECK); renewed by the worker |
+| sync_run_id | uuid | composite FK to `source_sync_runs`, `ON DELETE SET NULL (sync_run_id)` |
+| error_code | text | CHECK fixed-code format (`source_busy`, `job_abandoned`, `internal_error`, a sync's source-level code) |
+| created_at, started_at, finished_at | timestamptz | `finished_at` set exactly when finished (CHECK) |
+
+A partial unique index keeps **one queued or running job per source** (a repeated
+request returns it). Forced RLS with the tenant policy; `lattice_worker` additionally
+has `worker_queue` (SELECT) and `worker_claim` (UPDATE) policies across organizations
+and `worker_retention` (DELETE only of jobs finished more than 30 days ago). The runtime
+role may SELECT and INSERT the request columns only.
 
 ---
 
@@ -507,7 +536,8 @@ here (environment / secret store only).
 | Role | Login | Purpose | RLS |
 | ---- | ----- | ------- | --- |
 | `lattice_owner` | yes | Owns the schema; runs migrations and operator tools (seed) | Subject to FORCE RLS on tenant tables; has provisioning policies on the three global/root tables only |
-| `lattice_app` | yes | API (and later the worker). Never owns tables, never BYPASSRLS | Subject to every policy; least-privilege grants (below) |
+| `lattice_app` | yes | API. Never owns tables, never BYPASSRLS, never writes documents or grants (the API refuses such a role, Phase 8) | Subject to every policy; least-privilege grants (below) |
+| `lattice_worker` | yes | Background worker (Phase 8, ADR-013). Never owns tables, never BYPASSRLS | Subject to every tenant policy; role-targeted policies on `jobs` (queue across organizations); restrictive policies limit its grant/group writes to `origin = 'source'` and its `model_providers` inserts to embedding records approved for `internal`. Exact privileges: `backend/tests/test_worker_role.py` |
 | `lattice_auth` | **no** | Owns the two SECURITY DEFINER pre-authentication functions — and nothing else | Role-targeted read policies on the tables those functions need |
 
 Roles, databases and extensions are created by `infra/postgres/bootstrap.sql` (run as
