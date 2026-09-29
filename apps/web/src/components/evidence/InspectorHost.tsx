@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
 import { Drawer } from "@/components/primitives/Drawer";
@@ -23,11 +23,18 @@ export function InspectorHost({ className }: { className?: string }) {
   const phone = !useMinWidth(BREAKPOINTS.mobile);
   const pathname = usePathname();
 
+  // In drawer mode focus can only move once Radix has released its focus trap, which it
+  // signals with onCloseAutoFocus; docked, the panel traps nothing and focus moves now.
+  const pendingFocus = useRef<HTMLElement | null>(null);
   const close = useCallback(() => {
     const { returnFocus } = state.inspector.get();
     state.inspector.set(CLOSED_INSPECTOR);
-    if (returnFocus?.isConnected) returnFocus.focus();
-  }, [state.inspector]);
+    if (docked) {
+      if (returnFocus?.isConnected) returnFocus.focus();
+    } else {
+      pendingFocus.current = returnFocus;
+    }
+  }, [state.inspector, docked]);
 
   const navigate = useCallback(
     (id: string) => state.inspector.set((s) => ({ ...s, evidenceId: id })),
@@ -59,7 +66,12 @@ export function InspectorHost({ className }: { className?: string }) {
       title="Evidence inspector"
       onOpenChange={(open) => !open && close()}
       onOpenAutoFocus={(e) => e.preventDefault()}
-      onCloseAutoFocus={(e) => e.preventDefault()}
+      onCloseAutoFocus={(e) => {
+        e.preventDefault();
+        const target = pendingFocus.current;
+        pendingFocus.current = null;
+        if (target?.isConnected) target.focus();
+      }}
     >
       {inspector}
     </Drawer>

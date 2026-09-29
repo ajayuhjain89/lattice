@@ -71,3 +71,28 @@
     padding: var(--space-4) var(--space-4) var(--space-10);
   }
 }
+
+.keys {
+  composes: t-meta from global;
+
+  margin-top: var(--space-6);
+  color: var(--text-muted);
+}
+
+.keys kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--space-1);
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-xs);
+  font-family: inherit;
+  color: var(--text-secondary);
+}
+
+@media (pointer: coarse) {
+  .keys {
+    display: none;
+  }
+}

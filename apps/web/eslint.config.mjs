@@ -8,6 +8,7 @@ const config = [
   {
     rules: {
       ...jsxA11y.configs.strict.rules,
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" }],
       "no-restricted-syntax": [
         "error",
         {

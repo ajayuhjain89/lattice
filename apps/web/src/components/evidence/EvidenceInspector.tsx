@@ -1,14 +1,13 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, type KeyboardEvent } from "react";
 
 import { useEvidence } from "@/api/queries";
 import { isApiError } from "@/api/errors";
 import { Button } from "@/components/primitives/Button";
 import { Icon } from "@/components/primitives/icons";
 import { SkeletonBlock, SkeletonLines } from "@/components/primitives/Skeleton";
-import { Tooltip } from "@/components/primitives/Tooltip";
 import { ErrorState } from "@/components/states/ErrorState";
 import { NotAvailable } from "@/components/states/NotAvailable";
 import { isUuid } from "@/lib/format";
@@ -48,37 +47,37 @@ export function EvidenceInspector({ evidenceId, context, onClose, onNavigate, fo
   }, [evidenceId, focusOnOpen]);
 
   // Escape closes; [ and ] step through the answer's evidence (while focus is inside).
-  useEffect(() => {
-    const el = panel.current;
-    if (!el) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
-      const target = event.target as HTMLElement;
-      if (target.closest("input, textarea, select, [contenteditable='true']")) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-      } else if (event.key === "[" && prev) {
-        event.preventDefault();
-        onNavigate(prev);
-      } else if (event.key === "]" && next) {
-        event.preventDefault();
-        onNavigate(next);
-      }
-    };
-    el.addEventListener("keydown", onKeyDown);
-    return () => el.removeEventListener("keydown", onKeyDown);
-  }, [onClose, onNavigate, prev, next]);
+  // Escape always closes, even when a tooltip layer has also handled it.
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable='true']")) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.defaultPrevented) return;
+    if (event.key === "[" && prev) {
+      event.preventDefault();
+      onNavigate(prev);
+    } else if (event.key === "]" && next) {
+      event.preventDefault();
+      onNavigate(next);
+    }
+  };
 
   const notFound = !valid || (query.isError && isApiError(query.error) && (query.error.isNotFound || query.error.status === 422));
 
   return (
+    // Keyboard shortcuts of a focusable panel; every control inside is a real button.
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <section
       ref={panel}
       className={styles.panel}
       tabIndex={-1}
       aria-labelledby={query.data ? headingId : `${headingId}-label`}
       data-testid="evidence-inspector"
+      onKeyDown={onKeyDown}
     >
       <div className={styles.header}>
         <p className={styles.headerLabel} id={`${headingId}-label`}>
@@ -92,17 +91,11 @@ export function EvidenceInspector({ evidenceId, context, onClose, onNavigate, fo
         <div className={styles.tools}>
           {order.length > 1 && (
             <>
-              <Tooltip content="Previous  [">
-                <Button variant="ghost" size="sm" icon={<Icon as={ChevronLeft} />} aria-label="Previous evidence" aria-keyshortcuts="[" disabled={!prev} onClick={() => prev && onNavigate(prev)} />
-              </Tooltip>
-              <Tooltip content="Next  ]">
-                <Button variant="ghost" size="sm" icon={<Icon as={ChevronRight} />} aria-label="Next evidence" aria-keyshortcuts="]" disabled={!next} onClick={() => next && onNavigate(next)} />
-              </Tooltip>
+              <Button variant="ghost" size="sm" icon={<Icon as={ChevronLeft} />} aria-label="Previous evidence" aria-keyshortcuts="[" disabled={!prev} onClick={() => prev && onNavigate(prev)} />
+              <Button variant="ghost" size="sm" icon={<Icon as={ChevronRight} />} aria-label="Next evidence" aria-keyshortcuts="]" disabled={!next} onClick={() => next && onNavigate(next)} />
             </>
           )}
-          <Tooltip content="Close  Esc">
-            <Button variant="ghost" size="sm" icon={<Icon as={X} />} aria-label="Close evidence" aria-keyshortcuts="Escape" onClick={onClose} />
-          </Tooltip>
+          <Button variant="ghost" size="sm" icon={<Icon as={X} />} aria-label="Close evidence" aria-keyshortcuts="Escape" onClick={onClose} />
         </div>
       </div>
 
@@ -117,7 +110,17 @@ export function EvidenceInspector({ evidenceId, context, onClose, onNavigate, fo
         ) : query.isError ? (
           <ErrorState error={query.error} title="Couldn't load this evidence" onRetry={() => query.refetch()} retrying={query.isFetching} />
         ) : query.data ? (
-          <EvidenceBody detail={query.data} context={context} headingId={headingId} onOpen={onNavigate} />
+          <>
+            <EvidenceBody detail={query.data} context={context} headingId={headingId} onOpen={onNavigate} />
+            <p className={styles.keys} aria-hidden="true">
+              {order.length > 1 && (
+                <>
+                  <kbd>[</kbd> previous · <kbd>]</kbd> next ·{" "}
+                </>
+              )}
+              <kbd>Esc</kbd> close
+            </p>
+          </>
         ) : (
           <div className={styles.loading}>
             <span className="visually-hidden" role="status">

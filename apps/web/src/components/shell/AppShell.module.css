@@ -3,6 +3,9 @@
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr) auto;
   grid-template-areas: "nav page inspector";
   min-height: 100dvh;
+
+  /* Panels slide in from the edge; the slide must never create page scroll. */
+  overflow-x: clip;
 }
 
 .skip {
