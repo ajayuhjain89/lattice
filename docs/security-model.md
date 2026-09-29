@@ -10,6 +10,9 @@ the query side of §6 (revised below), and the retrieval suites of §9. **Phase 
 implemented generation under the same invocation rule (§6), organization-owned
 credentials by reference (§5), prompt-injection defences (§7), query traces and their
 re-authorized views (§8), and the citation, egress, injection and API suites (§9).
+**Phase 8** implemented the operational-metadata rules of §10 for Sources, sync
+failures, requested syncs and Activity, with their side-channel suite; the worker's
+least-privilege role (ADR-013); and fail-closed operational controls (§5).
 Related: `authorization-model.md`, `trust-boundaries.md`, `threat-model.md`.
 
 ---
@@ -141,6 +144,19 @@ logout, and is checked before authentication.
   without forced RLS; an unmigrated schema. Dev login additionally is not routed in
   production and its provider refuses to construct there.
 - In production the OpenAPI/docs endpoints are not served.
+- **Phase 8 startup and runtime controls.** The API and the worker refuse to start on a
+  schema at another revision than their code, and the API refuses a role that can write
+  documents or grants (the worker's credential cannot be used for the API). Production
+  also refuses the fake query and sync embedding providers. Runtime connections carry
+  a statement timeout and fail fast when the database is unreachable (503 with
+  `Retry-After`, never a stack trace or a hang); request bodies are capped (413); one
+  Ask's generation calls share a deadline. `LATTICE_GENERATION_ENABLED=false` stops
+  every model call deployment-wide (no credential resolved, nothing sent); the
+  per-organization stop is still `lattice provider disable`.
+- **Operational signals never carry content.** Health endpoints report states only.
+  Metrics are served on a separate listener that the web app never proxies, and every
+  label comes from a closed set: no organization, member, trace, document or source
+  identifier, no text, no secret (`lattice.metrics`, tested). Logs keep the SEC-8 rules.
 
 ## 6. Model-provider data egress
 
@@ -352,7 +368,8 @@ evidence (D-5: off/deferred).
   counts and codes, statuses, timings, token counts, chunk IDs of permitted rows and the
   validated answer. Never the prompt, evidence text, rejected claim text, provider
   bodies, secrets or references. `GET /v1/traces/{id}` implements the three views below.
-  Retention jobs are Phase 11.
+  Retention jobs are Phase 11 (the 90-day question/answer retention is **not yet
+  enforced**; finished background jobs are deleted after 30 days since Phase 8).
 - **Asker's view of their own trace:** question, answer, evidence and stages.
   Evidence references are re-authorized against the asker's *current* access. If any
   evidence of that Ask is no longer readable -- cited or not, since supersession items
@@ -363,6 +380,10 @@ evidence (D-5: off/deferred).
   withheld); a trace without recorded account dependencies hides it too
   ("This answer cited sources you no longer have access to") — otherwise traces would
   let revoked users re-read derived content.
+- **Activity (Phase 8):** `GET /v1/activity` lists the member's *own* questions (time,
+  status, the question they typed); opening one is the re-authorized asker view below.
+  `GET /v1/admin/activity` lists the organization's Asks for administrators with the
+  operational fields of the next bullet only (and the member's display name).
 - **Admin's operational view of other members' traces:** member, time, status,
   error code, stage durations, provider/model, prompt and policy versions, token
   usage. **Not shown:** question text, answer text, evidence references, candidate or
@@ -397,7 +418,7 @@ evidence (D-5: off/deferred).
 | `tests/security/injection` | CI (deterministic parts) + eval harness (real model) | Schema validity, foreign-handle rejection, no instruction following |
 | `tests/security/citations` | CI | Claim-level fail-closed: invalid handle → claim absent; fabricated quote → claim absent; mixed valid/invalid → only validated claims survive (and a claim with one valid + one invalid citation is absent); all material claims invalid → answer withheld (`insufficient_evidence`, reason `claims_unverified`); every rendered citation references an evidence item present in the response and readable by the user |
 | `tests/security/egress` | CI | Default policy: recording provider never receives confidential/restricted chunk text or canaries, for any persona including Leadership; opt-in + approved provider: confidential reaches the provider, restricted still does not; excluded evidence still returned to the authorized user with the egress notice; `evidence_only` when all evidence excluded |
-| `tests/security/operational_metadata` | CI | Every channel in §10 checked for each persona/admin: no inaccessible account names, source names, titles, filenames, URLs, external IDs, counts or statuses |
+| `tests/security/test_operational_metadata.py`, `tests/security/operational/` ✔ (Phase 8) | CI | Sources: every persona of both organizations sees exactly the sources the reference policy lets them read from, with counts equal to the reference policy's (independent of the SQL predicate); a source a member cannot read from is byte-for-byte absent; revocation removes it on the next request; administrators get aggregates only, every source, no titles, paths or file names; a failed record is named only when the administrator can read its document, otherwise `rec_…`; parameters allow-listed; `access_unmappable:account` shows the external account reference only. Requested syncs and administrator views: 403 for non-admins whether or not the source exists; another organization's sources are 404 and never listed. Activity: members list only their own questions; administrators' rows carry no question, answer, scope or evidence; organizations never see each other's rows. Plus `tests/test_worker_role.py` (the worker's exact privileges and restrictive policies) and `tests/test_operations.py` (health, readiness, limits, metrics without identifiers). Accounts (§10 row 1) and access previews arrive with the Access page (Phase 9) |
 | Mutation check | By hand per phase (Phase 5: 18 retrieval defects, `implementation-plan.md`); CI nightly job still planned | Predicate disabled → suite must fail |
 
 Release gate: any failure in these suites blocks merge. `unauthorized_context_retrieved`

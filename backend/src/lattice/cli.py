@@ -36,6 +36,9 @@
     lattice org egress --org SLUG [--external-level L] [--organization-controlled-level L]
         Organization provider configuration and AI egress ceilings (administrative;
         each change needs --reason and is recorded in audit_events).
+    lattice worker [--once]
+        The background worker: runs the syncs administrators request from the web app,
+        as lattice_worker (LATTICE_WORKER_DATABASE_URL).
 
 Ingestion commands run as lattice_owner (operator tools, through row-level security)
 and print counts and fixed codes only -- never record content, titles or filenames.
@@ -55,7 +58,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from lattice import cli_answer, cli_providers, cli_retrieval
+from lattice import cli_answer, cli_providers, cli_retrieval, cli_worker
 from lattice.admin_grants import apply_admin_grants, load_admin_grants
 from lattice.config import (
     ConfigurationError,
@@ -123,7 +126,7 @@ async def _check_db_role() -> int:
         settings.database_url.get_secret_value(), application_name="lattice-check", pool_size=1
     )
     try:
-        report = await inspect_runtime_role(engine)
+        report = await inspect_runtime_role(engine, forbid_content_writes=True)
     finally:
         await engine.dispose()
     if report.problems:
@@ -337,6 +340,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     grants.add_argument("--prune", action="store_true")
     cli_answer.add_parsers(commands, cli_retrieval.add_parsers(commands))
     cli_providers.add_parsers(commands)
+    cli_worker.add_parser(commands)
     args = parser.parse_args(argv)
 
     if args.command == "dataset":
@@ -368,6 +372,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return cli_providers.models(args)
         if args.command in ("provider", "org"):
             return asyncio.run(cli_providers.provider(args))
+        if args.command == "worker":
+            return asyncio.run(cli_worker.run(args))
         return asyncio.run(_check_db_role())
     except ConfigurationError as exc:
         return _fail(str(exc))

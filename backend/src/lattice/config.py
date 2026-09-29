@@ -36,6 +36,15 @@ class ConfigurationError(Exception):
     """Configuration is missing or invalid; the process must not start."""
 
 
+def parse_host_port(value: str) -> tuple[str, int]:
+    """``host:port`` (IPv4 or a name; IPv6 in brackets) with a port in 1-65535."""
+    host, sep, port = value.rpartition(":")
+    host = host.removeprefix("[").removesuffix("]")
+    if not sep or not host or not port.isdigit() or not 0 < int(port) < 65536:
+        raise ValueError("must be host:port, for example 127.0.0.1:9464")
+    return host, int(port)
+
+
 def _require_asyncpg_url(value: SecretStr | None) -> SecretStr | None:
     if value is not None and not value.get_secret_value().startswith(_ASYNC_POSTGRES_SCHEME):
         raise ValueError(f"must be a PostgreSQL URL starting with {_ASYNC_POSTGRES_SCHEME}")
@@ -64,7 +73,34 @@ class Settings(BaseSettings):
     # organization's generation provider comes from its own recorded configuration.
     query_embedding: Literal["none", "fake", "local", "gemini", "openai"] = "none"
 
+    # --- Operations (Phase 8) ------------------------------------------------------------
+    # Deployment-wide generation kill switch: false = no generation provider is built or
+    # called for any organization (answers become evidence_only / generation_unavailable,
+    # retrieval still runs). The per-organization stop is `lattice provider disable`.
+    generation_enabled: bool = True
+    # Total time one Ask may spend in generation calls (first call and the regeneration
+    # together); on expiry the answer is `failed` / provider_unavailable with its
+    # evidence. Raise it only for slow local models (ADR-012).
+    generation_deadline_seconds: float = Field(default=120.0, ge=5.0, le=900.0)
+    # Largest request body accepted (bytes); larger requests get 413 before parsing.
+    max_request_bytes: int = Field(default=64 * 1024, ge=1024, le=10 * 1024 * 1024)
+    # Runtime database bounds: a statement longer than this is cancelled (the request
+    # fails with 503), and an unreachable database fails a request quickly.
+    db_statement_timeout_ms: int = Field(default=30_000, ge=1_000, le=600_000)
+    db_connect_timeout_seconds: float = Field(default=5.0, ge=0.5, le=60.0)
+    db_pool_size: int = Field(default=5, ge=1, le=50)
+    # host:port of the Prometheus metrics listener (a separate port, never proxied by
+    # the web app). Unset = no listener. Bind it to an internal interface only.
+    metrics_address: str | None = None
+
     _check_url = field_validator("database_url")(_require_asyncpg_url)
+
+    @field_validator("metrics_address")
+    @classmethod
+    def _check_metrics_address(cls, value: str | None) -> str | None:
+        if value is not None:
+            parse_host_port(value)
+        return value
 
     @model_validator(mode="after")
     def _enforce_environment_guards(self) -> Self:
@@ -76,6 +112,11 @@ class Settings(BaseSettings):
         if self.env is Environment.PRODUCTION and not self.session_cookie_secure:
             raise ValueError(
                 "LATTICE_SESSION_COOKIE_SECURE must be true when LATTICE_ENV=production"
+            )
+        if self.env is Environment.PRODUCTION and self.query_embedding == "fake":
+            raise ValueError(
+                "LATTICE_QUERY_EMBEDDING=fake is a test double and is refused when "
+                "LATTICE_ENV=production"
             )
         if self.session_idle_timeout_minutes > self.session_absolute_timeout_minutes:
             raise ValueError(
@@ -104,6 +145,54 @@ class MigrationSettings(BaseSettings):
     migration_database_url: SecretStr
 
     _check_url = field_validator("migration_database_url")(_require_asyncpg_url)
+
+
+class WorkerSettings(BaseSettings):
+    """Settings for the background worker (``lattice worker``; Phase 8, ADR-013)."""
+
+    model_config = SettingsConfigDict(env_prefix=ENV_PREFIX, extra="ignore", frozen=True)
+
+    env: Environment
+    # The worker's own runtime role (lattice_worker): writes ingestion tables through
+    # row-level security. Checked at startup like the API's role; never lattice_owner.
+    worker_database_url: SecretStr
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # The embedding provider for requested syncs (as `lattice sync --embedding`). Use
+    # the provider the corpus was embedded with; `none` leaves new chunks pending.
+    sync_embedding: Literal["none", "fake", "local", "gemini", "openai"] = "none"
+    worker_poll_seconds: float = Field(default=2.0, ge=0.1, le=300.0)
+    # A running job's lease; the worker renews it while the sync runs. A job whose
+    # lease expired (the worker died) is retried by another poll, up to its attempts.
+    worker_lease_seconds: int = Field(default=300, ge=30, le=3600)
+    # Statement timeout for the worker's own connections (syncs write in batches).
+    db_statement_timeout_ms: int = Field(default=300_000, ge=1_000, le=3_600_000)
+    db_connect_timeout_seconds: float = Field(default=5.0, ge=0.5, le=60.0)
+    metrics_address: str | None = None
+
+    _check_url = field_validator("worker_database_url")(_require_asyncpg_url)
+
+    @field_validator("metrics_address")
+    @classmethod
+    def _check_metrics_address(cls, value: str | None) -> str | None:
+        if value is not None:
+            parse_host_port(value)
+        return value
+
+    @model_validator(mode="after")
+    def _enforce_environment_guards(self) -> Self:
+        if self.env is Environment.PRODUCTION and self.sync_embedding == "fake":
+            raise ValueError(
+                "LATTICE_SYNC_EMBEDDING=fake is a test double and is refused when "
+                "LATTICE_ENV=production"
+            )
+        return self
+
+
+def load_worker_settings(**overrides: object) -> WorkerSettings:
+    try:
+        return WorkerSettings(**overrides)  # type: ignore[arg-type]
+    except ValidationError as exc:
+        raise ConfigurationError(_describe(exc)) from None
 
 
 def _describe(exc: ValidationError) -> str:

@@ -28,10 +28,11 @@ import re
 import time
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, Final
 
+from lattice import metrics
 from lattice.answering import assemble
 from lattice.answering.models import ANSWER_SCHEMA, Answer, AskRequest, Claim, EvidenceItem
 from lattice.answering.policy import GenerationAccess, resolve_generation
@@ -67,7 +68,12 @@ from lattice.tracing.recorder import record_trace
 logger = logging.getLogger(__name__)
 
 EVIDENCE_LIMIT: Final = 12  # the prompt budget's item count (retrieval-design §7.1)
-GENERATION_TIMEOUT_SECONDS: Final = 360.0  # outer bound; adapters have their own
+# Default total time for the generation calls of one Ask (both attempts); the API takes
+# it from LATTICE_GENERATION_DEADLINE_SECONDS. Adapters have their own, shorter, bounds.
+GENERATION_DEADLINE_SECONDS: Final = 120.0
+# Operator and evaluation commands (`lattice ask`, `lattice eval answer`) keep the Phase
+# 6 bound of two 360-second calls: a local model on modest hardware is slow (ADR-012).
+OFFLINE_GENERATION_DEADLINE_SECONDS: Final = 720.0
 # The relevance floor (retrieval-design §7.1, §11): an evidence item may enter the
 # prompt only if the exact or lexical channel matched it, or its semantic similarity is
 # at or above a threshold calibrated for that embedding model; with no such item, no
@@ -98,6 +104,10 @@ class AskDependencies:
     embedding: EmbeddingProvider | None
     generation: GenerationFactory
     secrets: SecretStore
+    # The operator's deployment-wide kill switch (LATTICE_GENERATION_ENABLED): when
+    # False no provider is built, no credential resolved and nothing sent.
+    generation_enabled: bool = True
+    generation_deadline_seconds: float = GENERATION_DEADLINE_SECONDS
 
 
 @dataclass
@@ -118,10 +128,21 @@ class AskOutcome:
 
 
 async def _generate(
-    access: GenerationAccess, prompt: Prompt, calls: _Calls, feedback: list[str] | None
+    access: GenerationAccess,
+    prompt: Prompt,
+    calls: _Calls,
+    feedback: list[str] | None,
+    deadline: float,
 ) -> Validation | None:
-    """One generation call and its validation; None when the provider failed."""
+    """One generation call and its validation; None when the provider failed or the
+    Ask's generation deadline (a ``time.perf_counter`` instant) has passed."""
     assert access.provider is not None  # noqa: S101 - checked by the caller
+    provider = metrics.bounded(access.provider_name, metrics.PROVIDERS)
+    remaining = deadline - time.perf_counter()
+    if remaining <= 0:
+        calls.error = "generation_failed:deadline_exceeded"
+        metrics.GENERATION_CALLS.labels(provider=provider, outcome="deadline_exceeded").inc()
+        return None
     request = GenerationRequest(
         system=SYSTEM_INSTRUCTIONS,
         prompt=prompt.text if feedback is None else with_feedback(prompt, feedback),
@@ -130,23 +151,28 @@ async def _generate(
     )
     calls.count += 1
     started = time.perf_counter()
+    error: str | None = None
     try:
-        result = await asyncio.wait_for(
-            access.provider.generate(request), timeout=GENERATION_TIMEOUT_SECONDS
-        )
+        result = await asyncio.wait_for(access.provider.generate(request), timeout=remaining)
     except TimeoutError:
-        calls.error = "generation_failed:timeout"
-        return None
+        error = "generation_failed:timeout"
     except GenerationError as exc:
-        calls.error = exc.code
+        error = exc.code
+    elapsed = time.perf_counter() - started
+    calls.timings_ms.append(round(elapsed * 1000, 1))
+    metrics.GENERATION_DURATION.labels(provider=provider).observe(elapsed)
+    if error is not None:
+        calls.error = error
+        metrics.GENERATION_CALLS.labels(provider=provider, outcome=metrics.outcome_of(error)).inc()
         return None
-    finally:
-        calls.timings_ms.append(round((time.perf_counter() - started) * 1000, 1))
     calls.input_tokens += result.input_tokens or 0
     calls.output_tokens += result.output_tokens or 0
     validation = validate_draft(result.text, prompt.by_handle)
     if not validation.schema_ok:
         calls.schema_failures += 1
+    metrics.GENERATION_CALLS.labels(
+        provider=provider, outcome="ok" if validation.schema_ok else "schema_invalid"
+    ).inc()
     return validation
 
 
@@ -188,6 +214,40 @@ def _response_invariant(claims: list[Claim], evidence: list[EvidenceItem]) -> bo
             if item.text[c.quote_start : c.quote_end] != c.quote:
                 return False
     return True
+
+
+def _observe(
+    status: str,
+    reason: str | None,
+    timings: dict[str, Any],
+    retrieval: RetrievalResult,
+    access: GenerationAccess,
+    calls: _Calls,
+    validation: Validation | None,
+) -> None:
+    """Operational metrics for one Ask: bounded codes and durations only."""
+    metrics.ASKS.labels(
+        status=metrics.bounded(status, metrics.ANSWER_STATUSES),
+        reason=metrics.bounded(reason, metrics.ANSWER_REASONS),
+    ).inc()
+    metrics.ASK_DURATION.labels(status=metrics.bounded(status, metrics.ANSWER_STATUSES)).observe(
+        timings["total"] / 1000
+    )
+    total = retrieval.trace.timings_ms.get("total")
+    if isinstance(total, (int, float)):
+        metrics.RETRIEVAL_DURATION.observe(total / 1000)
+    metrics.SEMANTIC_OUTCOMES_TOTAL.labels(
+        outcome=metrics.bounded(retrieval.semantic.status, metrics.SEMANTIC_OUTCOMES)
+    ).inc()
+    decision = "invoked" if calls.count else (access.reason or "not_invoked")
+    metrics.GENERATION_DECISIONS_TOTAL.labels(
+        decision=metrics.bounded(decision, metrics.GENERATION_DECISIONS)
+    ).inc()
+    if validation is not None:
+        for code, count in validation.rejection_codes().items():
+            metrics.CLAIMS_REJECTED.labels(code=metrics.bounded(code, metrics.REJECTION_CODES)).inc(
+                count
+            )
 
 
 async def answer_question(
@@ -240,8 +300,11 @@ async def answer_question(
             retrieval.question_sensitivity,
             factory=deps.generation,
             secrets=deps.secrets,
-            invoke=relevant and not ambiguous and not action,
+            invoke=relevant and not ambiguous and not action and deps.generation_enabled,
         )
+        if not deps.generation_enabled and access.reason is None:
+            # The policy would have allowed a call; the operator's switch did not.
+            access = replace(access, reason="generation_disabled")
         timings["policy"] = round((time.perf_counter() - policy_started) * 1000, 1)
     timings["retrieval"] = retrieval.trace.timings_ms
 
@@ -276,7 +339,8 @@ async def answer_question(
     else:
         prompt = build_prompt(normalize(request.question), fits, nonce=nonce)
         generation_started = time.perf_counter()
-        first = await _generate(access, prompt, calls, None)
+        deadline = generation_started + deps.generation_deadline_seconds
+        first = await _generate(access, prompt, calls, None, deadline)
         validation = first if first is not None and first.schema_ok else None
         if first is not None and (not first.schema_ok or first.rejections):
             calls.regenerated = True
@@ -285,7 +349,7 @@ async def answer_question(
                 if first.schema_ok
                 else ["the output did not match the JSON schema"]
             )
-            second = await _generate(access, prompt, calls, feedback)
+            second = await _generate(access, prompt, calls, feedback, deadline)
             if second is not None and second.schema_ok:
                 validation = second
         timings["generation"] = round((time.perf_counter() - generation_started) * 1000, 1)
@@ -319,6 +383,7 @@ async def answer_question(
         status, reason = "failed", "citation_validation_failed"
         error_code = "citation_validation_failed"
         claims, conflicts, shown = [], assemble.supersessions(evidence), []
+        metrics.SECURITY_INVARIANT_VIOLATIONS.labels(check="citation_response").inc()
         log_event(
             logger,
             logging.ERROR,
@@ -404,6 +469,7 @@ async def answer_question(
         "timings_ms": timings,
         "usage": {"input_tokens": calls.input_tokens, "output_tokens": calls.output_tokens},
     }
+    _observe(status, reason, timings, retrieval, access, calls, validation)
     log_event(
         logger,
         logging.INFO,

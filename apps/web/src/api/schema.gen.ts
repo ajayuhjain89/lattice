@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+  "/v1/activity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Your own recent questions, newest first (open one with /v1/traces/{id}) */
+    get: operations["get_own_activity_v1_activity_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/activity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** The organization's Asks as operational rows: no questions, answers, evidence, counts or scope (administrators) */
+    get: operations["get_organization_activity_v1_admin_activity_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/admin/providers": {
     parameters: {
       query?: never;
@@ -15,6 +49,60 @@ export interface paths {
     get: operations["get_providers_v1_admin_providers_get"];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/sources": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Every source's sync status and aggregate totals (administrators) */
+    get: operations["get_admin_sources_v1_admin_sources_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/sources/{source_id}/failures": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** The latest sync's failed records: codes, and identifiers only for documents you can read (administrators) */
+    get: operations["get_source_failures_v1_admin_sources__source_id__failures_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/sources/{source_id}/sync": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Request a sync of a source (administrators); the worker runs it
+     * @description Idempotent while a sync of the source is queued or running: that job is returned with 200. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_source_sync_v1_admin_sources__source_id__sync_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -112,6 +200,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/health/live": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Liveness (no dependencies) */
+    get: operations["live_v1_health_live_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/health/ready": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Readiness: the database answers and its schema matches this build */
+    get: operations["ready_v1_health_ready_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/me": {
     parameters: {
       query?: never;
@@ -121,6 +243,23 @@ export interface paths {
     };
     /** The signed-in user, their organization and capabilities */
     get: operations["me_v1_me_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/sources": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** The sources you can read from, with counts of what you can read */
+    get: operations["get_sources_v1_sources_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -150,6 +289,48 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** AdminSourceOut */
+    AdminSourceOut: {
+      /** Account Scoped */
+      account_scoped: boolean;
+      /** Acl Synced At */
+      acl_synced_at: string | null;
+      /** Authority */
+      authority: string;
+      /** Connector Type */
+      connector_type: string;
+      /** Default Sensitivity */
+      default_sensitivity: string;
+      /**
+       * Documents
+       * @description Active documents in the source (aggregate).
+       */
+      documents: number;
+      /** Failure Codes */
+      failure_codes: components["schemas"]["FailureCountOut"][];
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      job: components["schemas"]["JobOut"] | null;
+      /** Key */
+      key: string;
+      last_run: components["schemas"]["RunOut"] | null;
+      /** Last Succeeded At */
+      last_succeeded_at: string | null;
+      /** Last Synced At */
+      last_synced_at: string | null;
+      /** Name */
+      name: string;
+      /** Status */
+      status: string;
+    };
+    /** AdminSourcesResponse */
+    AdminSourcesResponse: {
+      /** Sources */
+      sources: components["schemas"]["AdminSourceOut"][];
+    };
     /** AdminTrace */
     AdminTrace: {
       /**
@@ -482,6 +663,7 @@ export interface components {
       | "not_found"
       | "method_not_allowed"
       | "validation_failed"
+      | "request_too_large"
       | "service_unavailable"
       | "internal_error"
       | "source_unavailable"
@@ -633,6 +815,44 @@ export interface components {
       /** Version */
       version: number;
     };
+    /** FailureCountOut */
+    FailureCountOut: {
+      /** Code */
+      code: string;
+      /** Count */
+      count: number;
+      /** Stage */
+      stage: string;
+    };
+    /** FailureOut */
+    FailureOut: {
+      /** Code */
+      code: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Params */
+      params: {
+        [key: string]: string | number;
+      };
+      /** Record */
+      record: string;
+      /**
+       * Record Kind
+       * @description identifier: the record's ID (you can read its document); opaque: a keyed reference only.
+       * @enum {string}
+       */
+      record_kind: "identifier" | "opaque";
+      /** Stage */
+      stage: string;
+    };
+    /** FailuresResponse */
+    FailuresResponse: {
+      /** Failures */
+      failures: components["schemas"]["FailureOut"][];
+    };
     /** Freshness */
     Freshness: {
       /** Is Stale */
@@ -659,6 +879,49 @@ export interface components {
        */
       status: "ok";
     };
+    /** JobOut */
+    JobOut: {
+      /** Attempts */
+      attempts: number;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Error Code */
+      error_code: string | null;
+      /** Finished At */
+      finished_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Mode */
+      mode: string;
+      /**
+       * Source Id
+       * Format: uuid
+       */
+      source_id: string;
+      /** Started At */
+      started_at: string | null;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "queued" | "running" | "succeeded" | "failed";
+      /** Sync Run Id */
+      sync_run_id: string | null;
+    };
+    /** LiveResponse */
+    LiveResponse: {
+      /**
+       * Status
+       * @constant
+       */
+      status: "ok";
+    };
     /** MeResponse */
     MeResponse: {
       /**
@@ -669,6 +932,34 @@ export interface components {
       membership: components["schemas"]["MembershipOut"];
       organization: components["schemas"]["OrganizationOut"];
       user: components["schemas"]["UserOut"];
+    };
+    /** MemberSourceOut */
+    MemberSourceOut: {
+      /** Connector Type */
+      connector_type: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Last Run Status */
+      last_run_status: string | null;
+      /** Last Succeeded At */
+      last_succeeded_at: string | null;
+      /** Last Synced At */
+      last_synced_at: string | null;
+      /** Name */
+      name: string;
+      /**
+       * Readable Documents
+       * @description Active documents you can read here.
+       */
+      readable_documents: number;
+    };
+    /** MemberSourcesResponse */
+    MemberSourcesResponse: {
+      /** Sources */
+      sources: components["schemas"]["MemberSourceOut"][];
     };
     /** MembershipOut */
     MembershipOut: {
@@ -700,6 +991,49 @@ export interface components {
       /** Message */
       message: string;
     };
+    /** OperationalActivityOut */
+    OperationalActivityOut: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Duration Ms */
+      duration_ms: number | null;
+      /** Error Code */
+      error_code: string | null;
+      /** Generation Calls */
+      generation_calls: number;
+      /** Input Tokens */
+      input_tokens: number;
+      /** Member Name */
+      member_name: string;
+      /**
+       * Membership Id
+       * Format: uuid
+       */
+      membership_id: string;
+      /** Model */
+      model: string | null;
+      /** Output Tokens */
+      output_tokens: number;
+      /** Provider */
+      provider: string | null;
+      /** Status */
+      status: string;
+      /** Status Reason */
+      status_reason: string | null;
+      /**
+       * Trace Id
+       * Format: uuid
+       */
+      trace_id: string;
+    };
+    /** OperationalActivityResponse */
+    OperationalActivityResponse: {
+      /** Items */
+      items: components["schemas"]["OperationalActivityOut"][];
+    };
     /** OrganizationOut */
     OrganizationOut: {
       /**
@@ -711,6 +1045,30 @@ export interface components {
       name: string;
       /** Slug */
       slug: string;
+    };
+    /** OwnActivityOut */
+    OwnActivityOut: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Question */
+      question: string;
+      /** Status */
+      status: string;
+      /** Status Reason */
+      status_reason: string | null;
+      /**
+       * Trace Id
+       * Format: uuid
+       */
+      trace_id: string;
+    };
+    /** OwnActivityResponse */
+    OwnActivityResponse: {
+      /** Items */
+      items: components["schemas"]["OwnActivityOut"][];
     };
     /** ProviderOut */
     ProviderOut: {
@@ -742,6 +1100,24 @@ export interface components {
       /** Providers */
       providers: components["schemas"]["ProviderOut"][];
     };
+    /** ReadyResponse */
+    ReadyResponse: {
+      /**
+       * Database
+       * @constant
+       */
+      database: "ok";
+      /**
+       * Schema Revision
+       * @constant
+       */
+      schema_revision: "ok";
+      /**
+       * Status
+       * @constant
+       */
+      status: "ready";
+    };
     /**
      * RetrievalScope
      * @description Optional filters. Each is ANDed with the authorization predicate: it can narrow
@@ -762,6 +1138,33 @@ export interface components {
       /** Until */
       until?: string | null;
     };
+    /** RunOut */
+    RunOut: {
+      /** Counts */
+      counts: {
+        [key: string]: number;
+      };
+      /** Deletion Guard Tripped */
+      deletion_guard_tripped: boolean;
+      /** Error Code */
+      error_code: string | null;
+      /** Finished At */
+      finished_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Mode */
+      mode: string;
+      /**
+       * Started At
+       * Format: date-time
+       */
+      started_at: string;
+      /** Status */
+      status: string;
+    };
     /** Supersession */
     Supersession: {
       /** Since */
@@ -776,6 +1179,15 @@ export interface components {
        * Format: uuid
        */
       superseding_document_id: string;
+    };
+    /** SyncRequest */
+    SyncRequest: {
+      /**
+       * Mode
+       * @default full
+       * @enum {string}
+       */
+      mode?: "full" | "acl_only";
     };
     /** UserOut */
     UserOut: {
@@ -798,6 +1210,106 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  get_own_activity_v1_activity_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+        before?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OwnActivityResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_organization_activity_v1_admin_activity_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+        before?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OperationalActivityResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   get_providers_v1_admin_providers_get: {
     parameters: {
       query?: never;
@@ -827,6 +1339,191 @@ export interface operations {
       };
       /** @description Forbidden */
       403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_admin_sources_v1_admin_sources_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdminSourcesResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_source_failures_v1_admin_sources__source_id__failures_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FailuresResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_source_sync_v1_admin_sources__source_id__sync_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["SyncRequest"] | null;
+      };
+    };
+    responses: {
+      /** @description A sync is already queued */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JobOut"];
+        };
+      };
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JobOut"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
         headers: {
           [name: string]: unknown;
         };
@@ -1097,6 +1794,55 @@ export interface operations {
       };
     };
   };
+  live_v1_health_live_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LiveResponse"];
+        };
+      };
+    };
+  };
+  ready_v1_health_ready_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReadyResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   me_v1_me_get: {
     parameters: {
       query?: never;
@@ -1117,6 +1863,62 @@ export interface operations {
       };
       /** @description Unauthorized */
       401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_sources_v1_sources_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MemberSourcesResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
         headers: {
           [name: string]: unknown;
         };

@@ -24,6 +24,7 @@ operational run row and the source's ``last_synced_at`` change.
 
 import hashlib
 import logging
+import time
 import uuid
 from collections import Counter
 from collections.abc import AsyncIterator, Iterator
@@ -36,6 +37,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lattice import metrics
 from lattice.connectors.contract import Connector, RecordError, SourceRecord, SourceUnavailable
 from lattice.connectors.registry import build_connector
 from lattice.db.engine import Database
@@ -73,6 +75,9 @@ class SyncOptions:
     reembed: bool = False
     guard_ratio: float = DELETION_GUARD_RATIO
     batch_size: int = 50
+    # False: sync an existing source with the configuration already recorded on its row
+    # (the worker, ADR-013), never writing it; True: record ``config`` first (the CLI).
+    record_config: bool = True
 
 
 @dataclass
@@ -235,6 +240,7 @@ class Syncer:
         self.level: str | None = None
         self.connector: Connector = build_connector(config.connector_type, export_path)
         self.source: store.SourceRow | None = None
+        self.started = time.perf_counter()
 
     def _tx(self) -> AbstractAsyncContextManager[AsyncSession]:
         if self.options.dry_run:
@@ -265,12 +271,14 @@ class Syncer:
             directory = await store.load_directory(s, self.org)
             try:
                 store.check_config(self.config, directory)
-                if self.options.dry_run:
+                if self.options.dry_run or not self.options.record_config:
                     source = await store.get_source(s, self.org, self.config.key)
                     if source is not None and source.status != "active":
                         raise store.SourceConfigurationError(
                             f"source_config:source_{source.status}"
                         )
+                    if source is None and not self.options.dry_run:
+                        raise store.SourceConfigurationError("source_config:source_missing")
                 else:
                     source = await store.upsert_source(s, self.org, self.config, str(self.path))
             except store.SourceConfigurationError as exc:
@@ -287,6 +295,14 @@ class Syncer:
         assert source is not None  # noqa: S101 - upserted above
         async with _source_lock(self.db, self.org, self.config.key):
             async with self.db.tenant_transaction(self.org) as s:
+                if interrupted := await store.abort_interrupted_runs(s, self.org, source.id):
+                    log_event(
+                        _log,
+                        logging.WARNING,
+                        "ingestion.sync.interrupted_runs_aborted",
+                        source_id=str(source.id),
+                        runs=interrupted,
+                    )
                 self.result.run_id = await store.open_run(s, self.org, source.id, self.options.mode)
             try:
                 await self._run(directory)
@@ -323,6 +339,17 @@ class Syncer:
                 counts=r.run_counts(),
                 acl_synced=r.status not in ("failed", "aborted"),
             )
+        metrics.SYNC_RUNS.labels(
+            mode=metrics.bounded(r.mode, metrics.SYNC_MODES),
+            status=metrics.bounded(r.status, metrics.SYNC_STATUSES),
+        ).inc()
+        metrics.SYNC_DURATION.labels(mode=metrics.bounded(r.mode, metrics.SYNC_MODES)).observe(
+            time.perf_counter() - self.started
+        )
+        for failure in self.failures:
+            metrics.SYNC_RECORD_FAILURES.labels(
+                stage=metrics.bounded(failure.stage, metrics.SYNC_STAGES)
+            ).inc()
         log_event(
             _log,
             logging.INFO,

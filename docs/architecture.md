@@ -6,7 +6,9 @@ dataset tooling; Phase 4 sources, connectors, ingestion and providers; Phase 5
 `retrieval` and the retrieval half of `evals` (CLI only); Phase 6 `answering`, `tracing`,
 generation providers, provider configuration and credentials by reference, the Ask,
 evidence, trace and admin-provider endpoints, and `lattice eval answer`; Phase 7 the web
-app (`apps/web`).
+app (`apps/web`); Phase 8 the job queue and background worker (`jobs`, `lattice worker`,
+ADR-013), Sources and Activity endpoints and pages, health/readiness, metrics and the
+operational limits of §8.
 Later-phase modules below are still design; the ✔ marks in §3 say which.
 Related: `data-model.md`, `authorization-model.md`, `retrieval-design.md`,
 `trust-boundaries.md`, ADRs 001–007.
@@ -50,8 +52,10 @@ Why this shape (details in ADR-001, ADR-002):
   authorization predicate runs in the same SQL statement as the similarity search.
 - **Worker as a process, not a platform.** Ingestion runs in a separate process so it
   cannot block interactive requests. It shares code and database with the API. No
-  broker: in the slice, ingestion is triggered by CLI; when the UI needs to trigger
-  syncs (Phase 8), a Postgres `jobs` table with `FOR UPDATE SKIP LOCKED` is enough.
+  broker: operators sync with the CLI; syncs requested from the web app (Phase 8) are
+  rows of a Postgres `jobs` table that `lattice worker` claims with
+  `FOR UPDATE SKIP LOCKED`, leases and bounded retries. The worker has its own runtime
+  role, `lattice_worker`, with exactly the privileges a sync needs (ADR-013).
 
 Deliberately absent: Redis, Celery, Kafka, Elasticsearch, a vector DB, LangChain /
 LangGraph, Kubernetes, microservices. Each has a named reconsideration trigger in
@@ -95,17 +99,19 @@ Package: `backend/src/lattice/`.
 | `seed` ✔      | Manifest model + idempotent upsert of orgs, users, memberships and admin-defined access groups (by stable key, D-9) | db, orgs, identity, authz (group models only) |
 | `dataset` ✔   | Synthetic dataset tooling (Phase 3): loaders for the three raw export formats, the expected-access oracle (reference policy over fixture metadata), `lattice dataset lint`, the deterministic distractor generator. Never touches the database | authz (public API), seed (manifest model) |
 | `authz` ✔     | `AuthorizationContext` + resolver, reference policy, SQL predicate, account visibility, explanations, E4 tripwire, `POLICY_VERSION`; owns the access tables (`access_groups`, `access_group_members`, `documents` access record, `document_grants`) | orgs, db, errors, log |
-| `sources` ✔   | Lattice-side source configuration (`sources.yaml`) models and loader (Phase 4). Source rows, runs and failures are written by `ingestion.store` | — |
+| `sources` ✔   | Lattice-side source configuration (`sources.yaml`) models and loader (Phase 4). Source rows, runs and failures are written by `ingestion.store`. `status`: what members and administrators may know about sources and failures (security-model §10; Phase 8) | authz (public API), jobs |
 | `connectors` ✔ | Connector contract, registry + three connectors (Markdown documents, ticket JSONL, Slack export) (Phase 4) | — (pure: stdlib, Pydantic, PyYAML; a test enforces it) |
 | `ingestion` ✔ | Canonical text and hashing, chunking, fail-closed access mapping, embedding input, persistence (`store`: the one writer of document access columns, source grants and source groups), sync pipeline, deletion sweep, source disconnect (Phase 4) | connectors, sources, providers, db |
 | `providers` ✔ | `EmbeddingProvider` Protocol; adapters: fake + recording (Phase 4), OpenAI (Phase 4), local ONNX model + pinned weights cache, Gemini (Phase 5 closure); the AI egress policy / invocation rule (`egress`, pure) and the reader of each organization's provider configuration (`records`); Phase 6: `GenerationProvider` (fake, scripted, recording, Ollama, Gemini), the factory (`declare` without secrets, `build` after the rule), secret references (`secrets`), audited configuration (`configuration`) | config, db (records, configuration) |
 | `admin_grants` ✔ | Applies `admin-grants.yaml` as admin-origin grants after ingestion (D-12) | db |
 | `retrieval` ✔ | Query model and analysis; exact, lexical and semantic channels (each one statement with the authz predicate, tenant and lifecycle conditions); query-side AI egress and embedding-space checks; RRF, `rerank_v1`, selection; evidence hydration; E4 tripwire; trace (Phase 5, `retrieval-design.md` Part I) | authz, providers, ingestion (chunk model), orgs, sources, db |
 | `answering` ✔ | Prompt construction (`prompt`), the invocation rule for generation (`policy`), claim-level validation (`validate`), deterministic assembly of statuses, freshness, supersession, potential conflicts and notices (`assemble`), the Ask service (`service`), evidence lookup (`evidence`) (Phase 6) | retrieval, providers, authz (public API), tracing |
-| `tracing` ✔   | `query_traces` and `audit_events` models; one INSERT per Ask; re-authorized trace reads (asker / administrator operational / 404) (Phase 6) | authz, retrieval, db        |
-| `api` ✔       | FastAPI app, routers (thin), request dependencies (session → identity → org → authz ctx); Phase 6: `POST /v1/ask`, `GET /v1/evidence/{id}`, `GET /v1/traces/{id}`, `GET /v1/admin/providers` | all service modules         |
+| `tracing` ✔   | `query_traces` and `audit_events` models; one INSERT per Ask; re-authorized trace reads (asker / administrator operational / 404) (Phase 6); Activity lists (own questions; administrators' operational rows) (Phase 8) | authz, retrieval, db        |
+| `jobs` ✔      | The job queue (`jobs` table): sync requests from the API (`queue`, as `lattice_app`) and the worker loop that claims, leases, runs and retires them (`worker`, as `lattice_worker`) (Phase 8, ADR-013) | ingestion, sources, db |
+| `metrics` ✔   | Prometheus metrics with closed label sets, served on a separate listener (Phase 8) | config, log |
+| `api` ✔       | FastAPI app, routers (thin), request dependencies (session → identity → org → authz ctx); Phase 6: `POST /v1/ask`, `GET /v1/evidence/{id}`, `GET /v1/traces/{id}`, `GET /v1/admin/providers`; Phase 8: `GET /v1/health/live`, `GET /v1/health/ready`, `GET /v1/sources`, `GET /v1/admin/sources`, `GET /v1/admin/sources/{id}/failures`, `POST /v1/admin/sources/{id}/sync`, `GET /v1/activity`, `GET /v1/admin/activity` | all service modules         |
 | `evals` ✔     | Retrieval + security runner (Phase 5); answer + security runner with an optional uncalibrated local judge (Phase 6) | retrieval, answering, dataset |
-| `cli` ✔ (partial) | `seed`, `check-db-role`, `dataset`, `sync`, `reindex`, `source disconnect`, `apply-admin-grants`, `search` and `eval retrieval` (Phase 5, development/test only: they act as a member), `models list/fetch/verify` and `provider approve` (Phase 5 closure); `ask` and `eval answer` later | services                    |
+| `cli` ✔ | `seed`, `check-db-role`, `dataset`, `sync`, `reindex`, `source disconnect`, `apply-admin-grants`, `search` and `eval retrieval` (Phase 5, development/test only: they act as a member), `models list/fetch/verify` and `provider approve` (Phase 5 closure); `ask`, `eval answer`, `provider …`, `org egress` (Phase 6); `worker` (Phase 8) | services                    |
 
 ✔ = implemented (Phases 1–5). Alembic migrations live in `backend/alembic/`, outside the
 package. Boundary rules (enforced by review; the `authz` rule is also enforced
@@ -262,7 +268,8 @@ SQL and paths never reach a response.
 | `authentication_failed`        | 401  | Sign-in attempt failed (generic: never says why)                      |
 | `csrf_rejected`                | 403  | State-changing request without CSRF proof                             |
 | `method_not_allowed`           | 405  | Route exists, method does not                                         |
-| `service_unavailable`          | 503  | Dependency (database) unavailable                                     |
+| `service_unavailable`          | 503  | Dependency (database) unavailable, unreachable or too slow (connection refused/lost, pool wait, `statement_timeout`), or readiness failed; carries `Retry-After: 5` (Phase 8) |
+| `request_too_large`            | 413  | Request body over `LATTICE_MAX_REQUEST_BYTES` (Phase 8); refused before parsing |
 | `permission_denied`            | 403  | Missing *capability* (e.g. non-admin on admin route); only where existence is not secret |
 | `not_found`                    | 404  | Resource absent **or not readable** — the two are indistinguishable by design |
 | `validation_failed`            | 422  | Request failed schema/semantic validation                            |
@@ -271,7 +278,7 @@ SQL and paths never reach a response.
 | `retrieval_failed`             | 500  | Search stage error                                                    |
 | `provider_unavailable`         | 503  | Embedding/generation provider error or timeout                        |
 | `generation_invalid`           | 502  | Model output failed schema validation after retry                     |
-| `security_invariant_violated`  | 500  | Pre-generation authz invariant failed; answer withheld; alert         |
+| `security_invariant_violated`  | 500  | Pre-generation authz invariant failed; answer withheld; alert (mapped from `AuthorizationInvariantViolation` since Phase 8; metric `lattice_security_invariant_violations_total`) |
 | `internal_error`               | 500  | Anything else; never leaks internals                                  |
 
 `insufficient_evidence` (reasons `no_relevant_evidence`, `claims_unverified`),
@@ -297,6 +304,19 @@ response-invariant bug case (`retrieval-design.md` §9 step 10).
   type + stack frames only, because driver exceptions embed SQL parameters. Logs carry
   IDs, counts, durations and codes; never question text, document text, embeddings, or
   provider payloads.
+- **Operational signals (Phase 8).** Health: `/v1/health/live` (process) and
+  `/v1/health/ready` (database reachable and schema at the revision this build
+  expects, `lattice.db.schema`); both report states only. Metrics: Prometheus on a
+  separate listener (`LATTICE_METRICS_ADDRESS`), closed label sets, never an identifier
+  or text (`lattice.metrics`). The per-query trace (Postgres) and the structured logs
+  remain the detailed record; OpenTelemetry stays deferred (no consumer).
+- **Fail closed at startup (Phase 8).** The API and the worker refuse to start on a
+  schema at another revision than their code; the API also refuses a role that can
+  write documents or grants (so the worker's credential cannot be used by mistake).
+- **Bounds (Phase 8).** Per-statement timeout and fast connection failure for runtime
+  connections; a total generation deadline per Ask; a request-body limit; one queued or
+  running sync per source; bounded job attempts and leases. Details and defaults:
+  runbook §7.4.
 - **Time.** All timestamps `timestamptz`, stored UTC; the API emits ISO-8601 UTC.
 - **IDs.** UUIDs (`gen_random_uuid()`), except chunk IDs which are deterministic
   (`uuid5(document_id, chunk_content_hash, occurrence)`) so unchanged chunks keep their
@@ -335,7 +355,7 @@ lattice/
   infra/postgres/               ✔ superuser bootstrap: roles, databases, extensions
   backend/
     pyproject.toml  uv.lock     ✔ (Python 3.12 pinned in .python-version)
-    alembic.ini  alembic/       ✔ 0001–0005
+    alembic.ini  alembic/       ✔ 0001–0011
     src/lattice/                ✔ config, errors, log, db/, identity/, orgs/, authz/, dataset/,
                                   sources/, connectors/, ingestion/, providers/,
                                   admin_grants, api/, seed, cli

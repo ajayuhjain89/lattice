@@ -63,3 +63,29 @@ test("provider settings", async ({ page }) => {
   await expect(page.getByRole("table")).toBeVisible();
   await audit(page);
 });
+
+test("sources (member and administrator) and activity", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/sources");
+  await expect(page.getByRole("table", { name: "Sources you can read from" })).toBeVisible();
+  await expect(page.locator("[aria-busy='true']")).toHaveCount(0);
+  await audit(page);
+  await page.goto("/activity");
+  await expect(page.getByRole("link", { name: /When will SCIM ship for Acme/ })).toBeVisible();
+  await expect(page.locator("[aria-busy='true']")).toHaveCount(0);
+  await audit(page);
+});
+
+test("sources and activity (administrator)", async ({ page }) => {
+  await mockApi(page, { me: ME_LENA });
+  await page.goto("/sources");
+  await page.getByRole("button", { name: "Show records" }).click();
+  await expect(page.getByText("rec_3f9a0c1d2e4b5a67")).toBeVisible();
+  await expect(page.locator("[aria-busy='true']")).toHaveCount(0);
+  await audit(page);
+  await page.goto("/activity");
+  await expect(page.getByRole("table", { name: "Organization activity (operational view)" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /When will SCIM ship for Acme/ })).toBeVisible();
+  await expect(page.locator("[aria-busy='true']")).toHaveCount(0);
+  await audit(page);
+});

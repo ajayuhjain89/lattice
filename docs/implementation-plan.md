@@ -5,7 +5,9 @@ hardening below). Phase 2 approved, with decisions D-8 and D-9 (implemented at t
 of Phase 3). Phase 3 approved and merged to `main`. Phase 4 approved and merged to
 `main` (5e12616), with decisions D-10 and D-12 applied and D-11 recorded for Phase 6.
 **Phase 5 approved and merged to `main`** (78e5640, 2026-09-29; branch
-`phase/5-retrieval` kept for reference). The Phase 5 closure added a local model, Gemini and the provider invocation
+`phase/5-retrieval` kept for reference). **Phase 6** (dc0973c) and **Phase 7** (5fe873f)
+are merged. **Phase 8 is implemented on `phase/8-operational-polish` and awaits review**
+(not merged); its as-built notes follow the Phase 8 plan below. The Phase 5 closure added a local model, Gemini and the provider invocation
 rule, and decided and implemented D-13 and D-14. The final closure (2026-09-29)
 removed the rejected cross-encoder experiment, resolved D-15 (deployment trust
 classes, migration 0007) and decided D-16's timing, and it froze retrieval.
@@ -14,7 +16,8 @@ verification passed). The product objective Recall@10 ≥ 0.90 is **not yet achi
 best real result is Gemini 0.726, local 0.695 (evaluation-plan §12). **Phase 6 is
 implemented on `phase/6-generation` and awaits review** (not merged): engineering and
 security verification complete; the real-model answer-quality evaluation was **not run**
-(reference hardware constraint, M1 8 GB; ADR-012).
+(reference hardware constraint, M1 8 GB; ADR-012). (Historical note: Phase 6 was merged
+after that review.)
 
 ---
 
@@ -843,6 +846,45 @@ done): all security suites green; retrieval metrics at target; generation metric
 recorded; every §B13 state reachable; README verified by someone other than the
 author (or a fresh machine).
 
+**Phase 8 as built.** Scope: the Phase 8 deliverables above, plus the operational
+readiness the user asked for within the existing architecture (no new infrastructure).
+
+| Planned | As built | Why |
+| ------- | -------- | --- |
+| `jobs` table + worker loop for UI-triggered syncs | Migration 0011 `jobs` (one queued/running job per source, leases, bounded attempts, fixed error codes); `lattice worker` (`make worker`) claims with `FOR UPDATE SKIP LOCKED`, renews its lease, retries `source_busy` and unexpected errors with back-off, abandons after 3 attempts, deletes finished jobs after 30 days in batches. A new runtime role **`lattice_worker`** (ADR-013); a worker sync uses the source's recorded configuration and can update only its sync timestamps | `lattice_app` must not write content; the owner role must not run in a long-lived process. The next sync of a source records an interrupted run `aborted` |
+| Sources page | `GET /v1/sources` (members: sources with ≥ 1 readable document, counts inside the predicate), `GET /v1/admin/sources` (aggregates, last run, failure codes, latest job), `GET /v1/admin/sources/{id}/failures` (identifier only if the admin can read the document, else `rec_…`; parameters allow-listed), `POST /v1/admin/sources/{id}/sync` (202 / 200 idempotent); `/sources` page | security-model §10 |
+| Activity (own questions; admin operational view) | `GET /v1/activity`, `GET /v1/admin/activity` (keyset pages; operational fields only); `/activity` page; index `query_traces (organization_id, created_at DESC)` | D-5, security-model §8 |
+| Trace views per security-model §8 | Unchanged from Phase 6 (already per §8); Activity links to them | — |
+| Operational-metadata side-channel suite green | `tests/security/test_operational_metadata.py` (hand-built worlds) and `tests/security/operational/` (every persona of both organizations over the real corpus, expected values from the reference policy) | T20 |
+| README and runbook complete, clean-clone verified | README status, setup, operations section; runbook §2 procedures made real, §7 operations, §8 failure drills | OPS-1 |
+| Design QA pass | Screenshot harness extended with four screens, reviewed at five widths; two findings fixed (codes wrapping inside a word at 1024 px, opaque references at 390 px), and one from the real API (a configured but uncalled provider shown as "No model call") | DS-1 |
+| — (operational readiness) | `/v1/health/live`, `/v1/health/ready` (database + schema revision); schema-revision guard at startup (API, worker; migration 0010 lets the runtime role read `alembic_version`); API refuses a role that can write content; 503 + `Retry-After` for database outages and cancelled statements instead of 500s; `security_invariant_violated` mapped (it was a generic 500); statement/connect timeouts and pool size settings; generation deadline per Ask (was 2 × 360 s); request-body cap (413); deployment-wide generation kill switch; Prometheus metrics on a separate listener with closed label sets; sync, job, Ask, generation, auth and dependency metrics | Requested for production readiness; each fits the existing modules |
+| — (CI) | Node 24 action majors, `ubuntu-24.04` pinned, uv pinned, 30-minute job timeouts, separate uv cache per job, worker startup check in CI | GitHub deprecation warnings (both gone) |
+| `org_settings.ask_enabled`, `trace_retention_days`, rate limits, alerting, container images, backups | **Not built**: the env kill switch covers the incident stop deployment-wide, `lattice provider disable` per organization; trace retention, rate limits (T19), alerting, images and PITR stay in Phases 10–11 | Phase boundaries (§4 "Later phases") |
+
+**Final Phase 8 verification (2026-09-29).** Clean clone of `phase/8-operational-polish`
+(69c7bf0) with no external API key in the environment, in an isolated Compose project on
+its own port (development database stopped; one PostgreSQL at a time): `make setup`,
+`db-up` (bootstrap with all four roles), `migrate` (0001-0011), `seed`, `check-db-role`
+(including the new content-write check), `lattice worker --once` (worker startup checks),
+`dataset-lint`, `sync` twice (the second wrote nothing), `eval` (fake; R@10 0.512,
+unchanged; every security count 0), `eval-answer` (fake; every security count 0),
+`lint`, `typecheck` (mypy strict, 228 files), **1,788 backend tests**; `web-setup`,
+`web-check` (ESLint, Stylelint, TypeScript, **48 unit and component tests**),
+`web-build`, `web-e2e` (**68 Playwright tests**, desktop and phone, no retries needed).
+GitHub CI green on the branch (backend and web) with no annotations. Secret scan of
+tracked files and of every commit on the branch: no key patterns, and the real `.env`
+key value appears nowhere. Live drills against the running API and worker: runbook §8.
+Mutation check: not repeated for Phase 8 (no retrieval, authorization or answering logic
+changed); the new controls are pinned by the privilege-matrix and side-channel tests.
+
+**Slice definition of done, as it stands.** Security suites green (including the new
+side-channel suite); every §B13 state reachable. **Not met:** retrieval metrics at
+target (R@10 ≥ 0.90; best real 0.726, evaluation-plan §12) and generation metrics
+recorded with a real model (not run, ADR-012). The slice is operable; its quality
+objectives remain open.
+
+
 ---
 
 ### Later phases (order to be revisited after the slice)
@@ -877,7 +919,8 @@ make eval           # retrieval metrics + security checks as each persona (Phase
 ```
 Phase 7 added the web app (Node 22+, pnpm): `make web-setup`, `make web` (on :3000,
 proxying `/api` to `make api`), `make web-build`, `make web-check`, `make web-e2e`,
-`make api-contract`.
+`make api-contract`. Phase 8 added `make worker` (requested syncs, as `lattice_worker`;
+a database created earlier needs `make db-up db-bootstrap migrate` once).
 
 ## 6. Phase 1 traceability check
 

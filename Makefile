@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -27,7 +27,7 @@ db-down: ## Stop Postgres (data is kept)
 db-bootstrap: ## Re-run the idempotent superuser bootstrap (roles, databases, extensions)
 	docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
 	  -v owner_password="$$LATTICE_OWNER_PASSWORD" -v app_password="$$LATTICE_APP_PASSWORD" \
-	  -f /bootstrap/bootstrap.sql'
+	  -v worker_password="$$LATTICE_WORKER_PASSWORD" -f /bootstrap/bootstrap.sql'
 
 db-destroy: ## DELETE the local database volume (all local data)
 	docker compose down -v
@@ -81,6 +81,9 @@ check-db-role: ## Verify the runtime role cannot bypass row-level security
 api: ## Run the API on http://127.0.0.1:8000 with reload
 	$(UV_RUN) uvicorn lattice.api.app:create_app --factory --reload \
 	  --host 127.0.0.1 --port 8000 --no-access-log
+
+worker: ## Run the background worker (the syncs requested from the Sources page) as lattice_worker
+	$(UV_RUN) lattice worker
 
 test: ## Run the test suite against the lattice_test database
 	$(UV_RUN) pytest

@@ -7,9 +7,14 @@ on:
 permissions:
   contents: read
 
+# Pinned deliberately (docs/runbook.md §7): the runner image, uv and every action's
+# major version change only in a reviewed commit. `ubuntu-latest` moves to Ubuntu 26
+# in October 2026; setup-uv publishes no floating major tags.
+
 jobs:
   backend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -35,6 +40,8 @@ jobs:
       LATTICE_TEST_DATABASE_URL: postgresql+asyncpg://lattice_app:ci-app-password@localhost:5432/lattice_test
       LATTICE_TEST_MIGRATION_DATABASE_URL: postgresql+asyncpg://lattice_owner:ci-owner-password@localhost:5432/lattice_test
       LATTICE_TEST_SUPERUSER_DATABASE_URL: postgresql+asyncpg://postgres:ci-superuser-password@localhost:5432/lattice_test
+      LATTICE_TEST_WORKER_DATABASE_URL: postgresql+asyncpg://lattice_worker:ci-worker-password@localhost:5432/lattice_test
+      LATTICE_WORKER_DATABASE_URL: postgresql+asyncpg://lattice_worker:ci-worker-password@localhost:5432/lattice
       # Property-based SQL <-> reference policy proof: the plan's CI minimum.
       LATTICE_AUTHZ_EXAMPLES: "500"
 
@@ -43,10 +50,11 @@ jobs:
         working-directory: backend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
+          version: "0.12.19"
           enable-cache: true
 
       - name: Install dependencies (locked, with the local-inference runtime; no model weights)
@@ -66,7 +74,7 @@ jobs:
         run: >-
           psql -v ON_ERROR_STOP=1 -d postgres
           -v owner_password=ci-owner-password -v app_password=ci-app-password
-          -f infra/postgres/bootstrap.sql
+          -v worker_password=ci-worker-password -f infra/postgres/bootstrap.sql
 
       - name: Migrations apply to a clean database, round-trip, and match the models
         run: |
@@ -80,6 +88,8 @@ jobs:
           uv run lattice seed --manifest ../data/synthetic/halden/org.yaml --manifest ../data/synthetic/veridian/org.yaml
           uv run lattice seed --manifest ../data/synthetic/halden/org.yaml --manifest ../data/synthetic/veridian/org.yaml
           uv run lattice check-db-role
+          # The worker's startup checks (role, schema revision) with an empty queue.
+          uv run lattice worker --once
 
       - name: Sync the dataset twice (fake embeddings); the second sync writes nothing
         shell: bash
@@ -114,24 +124,28 @@ jobs:
         run: uv run pytest
 
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     defaults:
       run:
         working-directory: apps/web
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
+          version: "0.12.19"
           enable-cache: true
+          # Its own cache: this job installs a smaller set than the backend job.
+          cache-suffix: web
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: apps/web/package.json
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -172,7 +186,7 @@ jobs:
 
       - name: Upload the Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: apps/web/playwright-report

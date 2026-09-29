@@ -23,6 +23,7 @@ class ErrorCode(StrEnum):
     NOT_FOUND = "not_found"
     METHOD_NOT_ALLOWED = "method_not_allowed"
     VALIDATION_FAILED = "validation_failed"
+    REQUEST_TOO_LARGE = "request_too_large"
     SERVICE_UNAVAILABLE = "service_unavailable"
     INTERNAL_ERROR = "internal_error"
     # Documented for later phases; defined now so the contract is stable.
@@ -41,6 +42,7 @@ HTTP_STATUS: dict[ErrorCode, HTTPStatus] = {
     ErrorCode.NOT_FOUND: HTTPStatus.NOT_FOUND,
     ErrorCode.METHOD_NOT_ALLOWED: HTTPStatus.METHOD_NOT_ALLOWED,
     ErrorCode.VALIDATION_FAILED: HTTPStatus.UNPROCESSABLE_ENTITY,
+    ErrorCode.REQUEST_TOO_LARGE: HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
     ErrorCode.SERVICE_UNAVAILABLE: HTTPStatus.SERVICE_UNAVAILABLE,
     ErrorCode.INTERNAL_ERROR: HTTPStatus.INTERNAL_SERVER_ERROR,
     ErrorCode.SOURCE_UNAVAILABLE: HTTPStatus.SERVICE_UNAVAILABLE,
@@ -58,6 +60,7 @@ DEFAULT_MESSAGE: dict[ErrorCode, str] = {
     ErrorCode.NOT_FOUND: "Not found.",
     ErrorCode.METHOD_NOT_ALLOWED: "This method is not allowed here.",
     ErrorCode.VALIDATION_FAILED: "The request is invalid.",
+    ErrorCode.REQUEST_TOO_LARGE: "The request is too large.",
     ErrorCode.SERVICE_UNAVAILABLE: "Lattice is temporarily unavailable.",
     ErrorCode.INTERNAL_ERROR: (
         "Something went wrong. Try again, and contact support if it persists."

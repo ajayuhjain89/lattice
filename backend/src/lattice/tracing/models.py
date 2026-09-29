@@ -31,6 +31,10 @@ class QueryTrace(Base):
             "membership_id",
             text("created_at DESC"),
         ),
+        # The administrator's operational activity list (Phase 8).
+        Index(
+            "ix_query_traces_organization_id_created_at", "organization_id", text("created_at DESC")
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_DEFAULT)

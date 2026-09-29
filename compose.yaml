@@ -11,6 +11,7 @@ services:
       # Consumed by infra/postgres/initdb.sh on first start of an empty volume.
       LATTICE_OWNER_PASSWORD: ${LATTICE_OWNER_PASSWORD:?set LATTICE_OWNER_PASSWORD in .env}
       LATTICE_APP_PASSWORD: ${LATTICE_APP_PASSWORD:?set LATTICE_APP_PASSWORD in .env}
+      LATTICE_WORKER_PASSWORD: ${LATTICE_WORKER_PASSWORD:?set LATTICE_WORKER_PASSWORD in .env}
     ports:
       - "127.0.0.1:${LATTICE_DB_HOST_PORT:-5433}:5432"
     volumes:

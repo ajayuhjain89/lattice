@@ -22,6 +22,9 @@ def error_json(
         error=ErrorBody(code=code, message=message, request_id=request_id, details=details)
     )
     status = LatticeError(code).status
+    if status == 503:
+        # A transient condition: tell well-behaved clients when to try again.
+        headers = {"Retry-After": "5", **(headers or {})}
     return JSONResponse(
         body.model_dump(mode="json", exclude_none=True), status_code=status, headers=headers
     )

@@ -1,6 +1,7 @@
 """ASGI middleware (pure ASGI, no BaseHTTPMiddleware).
 
-Order, outermost first: RequestContextMiddleware -> CsrfMiddleware -> FastAPI.
+Order, outermost first: RequestContextMiddleware -> BodyLimitMiddleware ->
+CsrfMiddleware -> FastAPI.
 
 RequestContextMiddleware
     * assigns a server-generated request ID (client-supplied IDs are ignored, so they
@@ -9,7 +10,14 @@ RequestContextMiddleware
     * logs one structured line per request: method, path, status, duration. Never the
       query string, headers, cookies or body;
     * converts any unhandled exception into the ``internal_error`` envelope, logging
-      the exception type and frames only (see lattice.log).
+      the exception type and frames only (see lattice.log);
+    * counts the request in ``lattice.metrics`` by method, *route template* (never the
+      raw path, which carries IDs) and status.
+
+BodyLimitMiddleware
+    Refuses a request body larger than ``LATTICE_MAX_REQUEST_BYTES`` with 413
+    ``request_too_large`` -- by its declared Content-Length before anything is read,
+    and by counting when the body is streamed without one.
 
 CsrfMiddleware (docs/authorization-model.md §2)
     Every state-changing request (anything but GET/HEAD/OPTIONS) must carry
@@ -28,6 +36,7 @@ from typing import Any
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from lattice import metrics
 from lattice.api.responses import error_json
 from lattice.errors import DEFAULT_MESSAGE, ErrorCode
 from lattice.log import log_event, request_id_var
@@ -65,6 +74,8 @@ class RequestContextMiddleware:
         status_code = 500
         response_started = False
         path: str = scope.get("path", "")
+        method = metrics.bounded(scope.get("method"), metrics.METHODS)
+        metrics.HTTP_IN_FLIGHT.inc()
 
         async def send_wrapper(message: Message) -> None:
             nonlocal status_code, response_started
@@ -91,11 +102,17 @@ class RequestContextMiddleware:
             )
             await response(scope, receive, send_wrapper)
         finally:
+            elapsed = time.perf_counter() - started
+            route = _route_template(scope)
+            metrics.HTTP_IN_FLIGHT.dec()
+            metrics.HTTP_REQUESTS.labels(method=method, route=route, status=str(status_code)).inc()
+            metrics.HTTP_DURATION.labels(method=method, route=route).observe(elapsed)
             fields: dict[str, Any] = {
                 "method": scope.get("method"),
                 "path": path,
+                "route": route,
                 "status": status_code,
-                "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                "duration_ms": round(elapsed * 1000, 1),
             }
             principal_fields = state.get("log_fields")
             if isinstance(principal_fields, dict):
@@ -121,6 +138,70 @@ class RequestContextMiddleware:
         return headers
 
 
+def _route_template(scope: Scope) -> str:
+    """The matched route's path template, or ``unmatched``: a bounded metric label."""
+    route = scope.get("route")
+    template = getattr(route, "path", None)
+    return template if isinstance(template, str) else "unmatched"
+
+
+class BodyLimitMiddleware:
+    def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        declared = _get_header(scope, b"content-length")
+        if declared is not None and (not declared.isdigit() or int(declared) > self.max_bytes):
+            await self._refuse(scope, receive, send)
+            return
+
+        received = 0
+        started = False
+        refused = False
+
+        async def counting_receive() -> Message:
+            # A streamed body over the limit: answer 413 now and tell the application
+            # the client went away, so it stops reading; its own response is dropped.
+            nonlocal received, refused
+            if refused:
+                return {"type": "http.disconnect"}
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.max_bytes and not started:
+                    refused = True
+                    await self._refuse(scope, receive, send)
+                    return {"type": "http.disconnect"}
+            return message
+
+        async def guarded_send(message: Message) -> None:
+            nonlocal started
+            if refused:
+                return
+            if message["type"] == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, counting_receive, guarded_send)
+        except Exception:
+            if not refused:
+                raise
+
+    async def _refuse(self, scope: Scope, receive: Receive, send: Send) -> None:
+        metrics.REQUESTS_REJECTED.labels(reason="too_large").inc()
+        log_event(logger, logging.WARNING, "http.request_too_large", method=scope.get("method"))
+        request_id = str(scope.get("state", {}).get("request_id", ""))
+        response = error_json(
+            ErrorCode.REQUEST_TOO_LARGE, DEFAULT_MESSAGE[ErrorCode.REQUEST_TOO_LARGE], request_id
+        )
+        await response(scope, receive, send)
+
+
 class CsrfMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -132,6 +213,7 @@ class CsrfMiddleware:
 
         fetch_site = _get_header(scope, b"sec-fetch-site")
         if _get_header(scope, CSRF_HEADER) != CSRF_HEADER_VALUE or fetch_site == b"cross-site":
+            metrics.REQUESTS_REJECTED.labels(reason="csrf").inc()
             request_id = str(scope.get("state", {}).get("request_id", ""))
             log_event(
                 logger,

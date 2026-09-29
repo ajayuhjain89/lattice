@@ -10,7 +10,7 @@ refuse to serve if the connected role:
   can ALTER TABLE ... DISABLE ROW LEVEL SECURITY);
 
 or if any application table lacks ENABLED + FORCED row-level security, or the schema
-has not been migrated.
+is not at the revision this build expects (``lattice.db.schema``).
 """
 
 from dataclasses import dataclass
@@ -18,7 +18,9 @@ from dataclasses import dataclass
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-# alembic_version holds no tenant data; the runtime role has no privileges on it.
+from lattice.db.schema import current_revision, revision_problem
+
+# alembic_version holds no tenant data; the runtime role may only read it (0010).
 RLS_EXEMPT_TABLES = frozenset({"alembic_version"})
 
 _ROLE_SQL = text(
@@ -63,10 +65,26 @@ class RoleReport:
     problems: tuple[str, ...]
 
 
-async def inspect_runtime_role(engine: AsyncEngine) -> RoleReport:
+_CONTENT_WRITES_SQL = text(
+    "SELECT has_table_privilege('public.documents', 'INSERT, UPDATE, DELETE')"
+)
+
+
+async def inspect_runtime_role(
+    engine: AsyncEngine, *, forbid_content_writes: bool = False
+) -> RoleReport:
+    """``forbid_content_writes``: the API's role must not be able to write documents
+    (only ingestion does, as the worker or an operator). This also stops the
+    worker's credential from being configured as the API's."""
     async with engine.connect() as conn:
         role = (await conn.execute(_ROLE_SQL)).mappings().one()
         tables = (await conn.execute(_TABLES_SQL)).mappings().all()
+        revision = await current_revision(conn)
+        writes_content = bool(
+            forbid_content_writes
+            and any(t["table_name"] == "documents" for t in tables)
+            and (await conn.execute(_CONTENT_WRITES_SQL)).scalar_one()
+        )
 
     problems: list[str] = []
     if role["is_superuser"]:
@@ -78,17 +96,22 @@ async def inspect_runtime_role(engine: AsyncEngine) -> RoleReport:
     if role["can_act_as_table_owner"]:
         problems.append("role owns (or is a member of the owner of) application tables")
 
+    if writes_content:
+        problems.append("role can write documents (use the API's own role, lattice_app)")
+
     checked = [t for t in tables if t["table_name"] not in RLS_EXEMPT_TABLES]
     if not any(t["table_name"] == "alembic_version" for t in tables):
         problems.append("database schema is not migrated (run `make migrate`)")
+    elif (problem := revision_problem(revision)) is not None:
+        problems.append(problem)
     for table in checked:
         if not (table["enabled"] and table["forced"]):
             problems.append(f"table {table['table_name']} does not have forced row-level security")
     return RoleReport(role_name=str(role["role_name"]), problems=tuple(problems))
 
 
-async def verify_runtime_role(engine: AsyncEngine) -> None:
-    report = await inspect_runtime_role(engine)
+async def verify_runtime_role(engine: AsyncEngine, *, forbid_content_writes: bool = False) -> None:
+    report = await inspect_runtime_role(engine, forbid_content_writes=forbid_content_writes)
     if report.problems:
         raise UnsafeDatabaseRoleError(
             f"Refusing to start: database role {report.role_name!r} is unsafe for runtime use: "

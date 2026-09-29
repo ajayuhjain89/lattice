@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
+from lattice import metrics
 from lattice.config import Settings
 from lattice.errors import ErrorCode, LatticeError
 from lattice.identity.sessions import Principal, SessionService
@@ -27,6 +28,7 @@ async def get_principal(
 ) -> Principal:
     token = request.cookies.get(settings.session_cookie_name)
     if not token:
+        metrics.AUTH_REJECTED.labels(reason="missing").inc()
         raise LatticeError(ErrorCode.AUTHENTICATION_REQUIRED)
     principal = await sessions.authenticate(token)
     # IDs only, for the request log line.

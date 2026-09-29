@@ -24,6 +24,7 @@ from typing import NoReturn
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lattice import metrics
 from lattice.db.engine import Database, bind_organization
 from lattice.errors import ErrorCode, LatticeError
 from lattice.identity.models import Session, User
@@ -164,6 +165,7 @@ class SessionService:
         await self.revoke(principal)
 
     def _reject(self, reason: str, session_id: uuid.UUID | None = None) -> NoReturn:
+        metrics.AUTH_REJECTED.labels(reason=metrics.bounded(reason, metrics.AUTH_REJECTIONS)).inc()
         log_event(
             logger,
             logging.INFO,

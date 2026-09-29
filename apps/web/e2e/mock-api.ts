@@ -1,7 +1,20 @@
 import type { Page, Route } from "@playwright/test";
 
 import type { components } from "../src/api/schema.gen";
-import { DETAILS, ME_MAYA, NOT_FOUND, PROVIDERS, TRACE_ADMIN, TRACE_ASKER, TRACE_HIDDEN } from "../src/test/fixtures";
+import {
+  ACTIVITY_ADMIN,
+  ACTIVITY_OWN,
+  DETAILS,
+  FAILURES,
+  ME_MAYA,
+  NOT_FOUND,
+  PROVIDERS,
+  SOURCES_ADMIN,
+  SOURCES_MEMBER,
+  TRACE_ADMIN,
+  TRACE_ASKER,
+  TRACE_HIDDEN,
+} from "../src/test/fixtures";
 
 type S = components["schemas"];
 
@@ -14,9 +27,15 @@ export interface MockOptions {
   providers?: S["ProvidersResponse"] | "forbidden";
   /** Milliseconds before the Ask response (to observe the pending state). */
   askDelay?: number;
+  sources?: S["MemberSourcesResponse"];
+  adminSources?: S["AdminSourcesResponse"] | "forbidden";
+  failures?: S["FailuresResponse"];
+  activity?: S["OwnActivityResponse"];
+  adminActivity?: S["OperationalActivityResponse"] | "forbidden";
 }
 
 export interface MockLog {
+  syncs: string[];
   asks: S["AskRequest"][];
   evidence: string[];
   traces: string[];
@@ -28,7 +47,9 @@ const json = (route: Route, status: number, body: unknown) =>
 
 /** Fulfil every /api/* request from typed fixtures; anything unknown is a 404 envelope. */
 export async function mockApi(page: Page, options: MockOptions = {}): Promise<MockLog> {
-  const log: MockLog = { asks: [], evidence: [], traces: [], headers: [] };
+  const log: MockLog = { syncs: [], asks: [], evidence: [], traces: [], headers: [] };
+  const forbidden = (route: Route) =>
+    json(route, 403, { error: { code: "permission_denied", message: "You don't have permission to do this.", request_id: "req-403" } });
   const evidence = options.evidence ?? DETAILS;
   const traces = options.traces ?? {
     [TRACE_ASKER.trace_id]: TRACE_ASKER,
@@ -78,6 +99,34 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
       return p === "forbidden"
         ? json(route, 403, { error: { code: "permission_denied", message: "You don't have permission to do this.", request_id: "req-403" } })
         : json(route, 200, p);
+    }
+    if (path === "/v1/sources" && method === "GET") return json(route, 200, options.sources ?? SOURCES_MEMBER);
+    if (path === "/v1/admin/sources" && method === "GET") {
+      const a = options.adminSources ?? SOURCES_ADMIN;
+      return a === "forbidden" ? forbidden(route) : json(route, 200, a);
+    }
+    const failures = /^\/v1\/admin\/sources\/([^/]+)\/failures$/.exec(path);
+    if (failures && method === "GET") return json(route, 200, options.failures ?? FAILURES);
+    const sync = /^\/v1\/admin\/sources\/([^/]+)\/sync$/.exec(path);
+    if (sync && method === "POST") {
+      log.syncs.push(sync[1]!);
+      return json(route, 202, {
+        id: "7f2a1b0c-9999-4d3e-9f4a-1b2c3d4e5f99",
+        source_id: sync[1]!,
+        mode: "full",
+        status: "queued",
+        attempts: 0,
+        error_code: null,
+        created_at: "2026-09-29T09:10:00Z",
+        started_at: null,
+        finished_at: null,
+        sync_run_id: null,
+      } satisfies S["JobOut"]);
+    }
+    if (path === "/v1/activity" && method === "GET") return json(route, 200, options.activity ?? ACTIVITY_OWN);
+    if (path === "/v1/admin/activity" && method === "GET") {
+      const a = options.adminActivity ?? ACTIVITY_ADMIN;
+      return a === "forbidden" ? forbidden(route) : json(route, 200, a);
     }
     return json(route, 404, NOT_FOUND);
   });

@@ -3,9 +3,11 @@
 import asyncio
 
 from alembic import command
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 
 from lattice.db.engine import Database
+from lattice.db.schema import SCHEMA_REVISION
 from lattice.providers import records
 from lattice.providers.egress import ProviderDecision, provider_decision
 
@@ -16,6 +18,13 @@ from .factories import create_org
 async def test_models_match_migrated_schema() -> None:
     # Raises if autogenerate would produce any operation (model/schema drift).
     await asyncio.to_thread(command.check, alembic_config())
+
+
+def test_the_expected_schema_revision_is_the_head_of_the_chain() -> None:
+    """The API and worker refuse any other revision (lattice.db.schema): a new migration
+    must move SCHEMA_REVISION with it."""
+    heads = ScriptDirectory.from_config(alembic_config()).get_heads()
+    assert heads == [SCHEMA_REVISION]
 
 
 async def test_downgrade_and_upgrade_round_trip(owner_db: Database, app_db: Database) -> None:

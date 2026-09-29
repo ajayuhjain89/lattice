@@ -9,11 +9,17 @@ import createClient, { type Middleware } from "openapi-fetch";
 import { fromResponse, networkError } from "./errors";
 import type { paths } from "./schema.gen";
 import type {
+  AdminSourcesResponse,
   Answer,
   AskRequest,
   EvidenceDetail,
+  FailuresResponse,
   Me,
+  MemberSourcesResponse,
+  OperationalActivityResponse,
+  OwnActivityResponse,
   ProvidersResponse,
+  SyncJob,
   Trace,
 } from "./types";
 
@@ -80,4 +86,27 @@ export const api = {
     ),
   providers: (signal?: AbortSignal) =>
     call<ProvidersResponse>(() => http.GET("/v1/admin/providers", { signal })),
+  sources: (signal?: AbortSignal) =>
+    call<MemberSourcesResponse>(() => http.GET("/v1/sources", { signal })),
+  adminSources: (signal?: AbortSignal) =>
+    call<AdminSourcesResponse>(() => http.GET("/v1/admin/sources", { signal })),
+  sourceFailures: (id: string, signal?: AbortSignal) =>
+    call<FailuresResponse>(() =>
+      http.GET("/v1/admin/sources/{source_id}/failures", { params: { path: { source_id: id } }, signal }),
+    ),
+  requestSync: (id: string) =>
+    call<SyncJob>(() =>
+      http.POST("/v1/admin/sources/{source_id}/sync", {
+        params: { path: { source_id: id } },
+        body: { mode: "full" },
+      }),
+    ),
+  activity: (before?: string, signal?: AbortSignal) =>
+    call<OwnActivityResponse>(() =>
+      http.GET("/v1/activity", { params: { query: before ? { before } : {} }, signal }),
+    ),
+  adminActivity: (before?: string, signal?: AbortSignal) =>
+    call<OperationalActivityResponse>(() =>
+      http.GET("/v1/admin/activity", { params: { query: before ? { before } : {} }, signal }),
+    ),
 };

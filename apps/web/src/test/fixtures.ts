@@ -608,3 +608,202 @@ export const PROVIDERS: S["ProvidersResponse"] = {
 export const NOT_FOUND = {
   error: { code: "not_found", message: "Not found.", request_id: "req-404-fixture" },
 } as const;
+
+// --- sources (Phase 8) -------------------------------------------------------------------------
+
+export const SOURCE = {
+  drive: "5d2c1b0a-1111-4e3f-9a8b-7c6d5e4f3a01",
+  support: "5d2c1b0a-2222-4e3f-9a8b-7c6d5e4f3a02",
+  slack: "5d2c1b0a-3333-4e3f-9a8b-7c6d5e4f3a03",
+};
+
+export const SOURCES_MEMBER: S["MemberSourcesResponse"] = {
+  sources: [
+    {
+      id: SOURCE.drive,
+      name: "Halden Drive",
+      connector_type: "document_repository",
+      readable_documents: 41,
+      last_synced_at: "2026-09-28T07:12:40Z",
+      last_succeeded_at: "2026-09-28T07:12:40Z",
+      last_run_status: "succeeded",
+    },
+    {
+      id: SOURCE.support,
+      name: "Halden Support (Zendesk)",
+      connector_type: "ticketing",
+      readable_documents: 12,
+      last_synced_at: "2026-09-28T07:12:44Z",
+      last_succeeded_at: "2026-09-21T06:00:02Z",
+      last_run_status: "partial",
+    },
+  ],
+};
+
+const RUN_COUNTS = {
+  records_seen: 0,
+  created: 0,
+  updated: 0,
+  access_updated: 0,
+  unchanged: 0,
+  deleted: 0,
+  failed: 0,
+  chunks_embedded: 0,
+  embeddings_reused: 0,
+  chunks_policy_excluded: 0,
+  embedding_failures: 0,
+};
+
+export const SOURCES_ADMIN: S["AdminSourcesResponse"] = {
+  sources: [
+    {
+      id: SOURCE.drive,
+      key: "drive",
+      name: "Halden Drive",
+      connector_type: "document_repository",
+      status: "active",
+      account_scoped: false,
+      default_sensitivity: "internal",
+      authority: "working",
+      documents: 58,
+      last_synced_at: "2026-09-28T07:12:40Z",
+      last_succeeded_at: "2026-09-28T07:12:40Z",
+      acl_synced_at: "2026-09-28T07:12:40Z",
+      last_run: {
+        id: "6e1f0a9b-1111-4c2d-8e3f-0a1b2c3d4e01",
+        mode: "full",
+        status: "succeeded",
+        started_at: "2026-09-28T07:12:38Z",
+        finished_at: "2026-09-28T07:12:40Z",
+        counts: { ...RUN_COUNTS, records_seen: 58, unchanged: 58 },
+        deletion_guard_tripped: false,
+        error_code: null,
+      },
+      failure_codes: [],
+      job: {
+        id: "7f2a1b0c-1111-4d3e-9f4a-1b2c3d4e5f01",
+        source_id: SOURCE.drive,
+        mode: "full",
+        status: "running",
+        attempts: 1,
+        error_code: null,
+        created_at: "2026-09-29T09:00:00Z",
+        started_at: "2026-09-29T09:00:01Z",
+        finished_at: null,
+        sync_run_id: null,
+      },
+    },
+    {
+      id: SOURCE.support,
+      key: "support",
+      name: "Halden Support (Zendesk)",
+      connector_type: "ticketing",
+      status: "active",
+      account_scoped: true,
+      default_sensitivity: "internal",
+      authority: "working",
+      documents: 214,
+      last_synced_at: "2026-09-28T07:12:44Z",
+      last_succeeded_at: "2026-09-21T06:00:02Z",
+      acl_synced_at: "2026-09-28T07:12:44Z",
+      last_run: {
+        id: "6e1f0a9b-2222-4c2d-8e3f-0a1b2c3d4e02",
+        mode: "full",
+        status: "partial",
+        started_at: "2026-09-28T07:12:41Z",
+        finished_at: "2026-09-28T07:12:44Z",
+        counts: { ...RUN_COUNTS, records_seen: 215, unchanged: 214, failed: 1 },
+        deletion_guard_tripped: false,
+        error_code: null,
+      },
+      failure_codes: [{ stage: "map_access", code: "access_unmappable:account", count: 1 }],
+      job: null,
+    },
+    {
+      id: SOURCE.slack,
+      key: "slack",
+      name: "Halden Slack",
+      connector_type: "chat_export",
+      status: "active",
+      account_scoped: false,
+      default_sensitivity: "internal",
+      authority: "conversational",
+      documents: 96,
+      last_synced_at: null,
+      last_succeeded_at: null,
+      acl_synced_at: null,
+      last_run: null,
+      failure_codes: [],
+      job: null,
+    },
+  ],
+};
+
+export const FAILURES: S["FailuresResponse"] = {
+  failures: [
+    {
+      stage: "map_access",
+      code: "access_unmappable:account",
+      params: { external_account_ref: "360009913" },
+      record_kind: "opaque",
+      record: "rec_3f9a0c1d2e4b5a67",
+      created_at: "2026-09-28T07:12:43Z",
+    },
+  ],
+};
+
+// --- activity (Phase 8) --------------------------------------------------------------------
+
+export const ACTIVITY_OWN: S["OwnActivityResponse"] = {
+  items: [
+    {
+      trace_id: TRACE.answered,
+      created_at: "2026-09-29T08:41:07Z",
+      status: "answered",
+      status_reason: null,
+      question: "When will SCIM ship for Acme, and what did we tell them?",
+    },
+    {
+      trace_id: TRACE.hidden,
+      created_at: "2026-09-28T16:02:55Z",
+      status: "partial",
+      status_reason: "claims_removed",
+      question: "What did Kestrel agree to in the renewal?",
+    },
+  ],
+};
+
+export const ACTIVITY_ADMIN: S["OperationalActivityResponse"] = {
+  items: [
+    {
+      trace_id: TRACE.other,
+      created_at: "2026-09-29T08:44:12Z",
+      membership_id: "9e8d7c6b-5a49-4382-9170-6f5e4d3c2b55",
+      member_name: "Grace Whitfield",
+      status: "evidence_only",
+      status_reason: "egress_policy",
+      error_code: null,
+      provider: null,
+      model: null,
+      duration_ms: 288.0,
+      generation_calls: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+    },
+    {
+      trace_id: TRACE.answered,
+      created_at: "2026-09-29T08:41:07Z",
+      membership_id: ME_MAYA.membership.id,
+      member_name: "Maya Okafor",
+      status: "answered",
+      status_reason: null,
+      error_code: null,
+      provider: "gemini",
+      model: "gemini-3.5-flash-lite",
+      duration_ms: 4213.4,
+      generation_calls: 2,
+      input_tokens: 2940,
+      output_tokens: 311,
+    },
+  ],
+};
