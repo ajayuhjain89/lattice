@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -93,3 +93,27 @@ format: ## Apply ruff formatting and safe fixes
 
 typecheck: ## mypy --strict
 	$(UV) mypy
+
+# --- Web app (Phase 7; Node 22+, pnpm) ---------------------------------------------------
+# Development sign-in lists the seeded personas; the API refuses it outside development/test.
+WEB := cd apps/web &&
+WEB_ENV := LATTICE_WEB_DEV_SIGN_IN=true \
+  LATTICE_DEV_PERSONA_MANIFESTS=../../data/synthetic/halden/org.yaml,../../data/synthetic/veridian/org.yaml
+
+web-setup: ## Install the web app's dependencies from its lockfile
+	$(WEB) pnpm install --frozen-lockfile
+
+web: ## Run the web app on http://127.0.0.1:3000 (proxies /api to `make api`)
+	$(WEB) $(WEB_ENV) pnpm dev
+
+web-build: ## Production build of the web app
+	$(WEB) NEXT_TELEMETRY_DISABLED=1 pnpm build
+
+web-check: ## Web lint (ESLint, jsx-a11y, Stylelint), type check and unit/component tests
+	$(WEB) pnpm lint && pnpm typecheck && pnpm test
+
+web-e2e: ## Browser tests against the production build, API mocked (run `make web-build` first)
+	$(WEB) pnpm exec playwright test --project=desktop --project=mobile
+
+api-contract: ## Re-export the OpenAPI schema and regenerate the web app's TypeScript types
+	$(WEB) pnpm api:schema && pnpm api:types

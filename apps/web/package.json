@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "api:schema": "cd ../../backend && uv run python scripts/export_openapi.py ../apps/web/src/api/openapi.json",
+    "api:schema": "cd ../../backend && uv run --extra local python scripts/export_openapi.py ../apps/web/src/api/openapi.json",
     "api:types": "openapi-typescript src/api/openapi.json -o src/api/schema.gen.ts --default-non-nullable false && prettier --write src/api/schema.gen.ts"
   },
   "dependencies": {

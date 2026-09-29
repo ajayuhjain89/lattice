@@ -1,7 +1,7 @@
 # Lattice — Design System
 
-Status: Foundation draft (Phase 0). Implementation-oriented; tokens here become
-`apps/web/src/styles/tokens.css` in Phase 7. Nothing is built yet.
+Status: Implemented in Phase 7 (`apps/web/src/styles/tokens.css`, `src/components/`).
+Where the build departs from this document, Part C says so.
 
 ---
 
@@ -632,3 +632,23 @@ documents they can read, with counts computed inside their predicate.
 - Visual QA checklist per screen (Phase 7): shared axes checked with an overlay grid;
   equal control heights; icon/text centering; truncation with long account names and
   200-character titles; all states rendered with fixtures; five review widths.
+
+---
+
+## Part C — Phase 7 as built
+
+Tokens, type scale, spacing, radii, motion, the shell grid and the component anatomy
+above are implemented as written. Departures, each for a reason:
+
+| Section | As built | Why |
+| ------- | -------- | --- |
+| B11 navigation | Ask; *This session* (questions asked in this tab, linking to their traces; memory only); Admin → AI providers | Sources, Access and Activity arrive with their APIs (Phases 8–9); no empty entries |
+| B12 answer block | Direct-answer claims form a lead paragraph (19/30, 500) above supporting claims (prose 16/26); the status line carries the only status word, and state blocks carry the reason (e.g. `AI DATA POLICY`), never a repeat | Reads as a brief, not a chat reply; no duplicated hierarchy |
+| B12 evidence list | Per-item "not sent" reasons appear only when a model call was in play | The API marks items even when no call was possible (implementation plan, Phase 7 contract observation 2) |
+| B12 inspector | Header tools are plain icon buttons with accessible names and `aria-keyshortcuts`; the key hints (`[` `]` `Esc`) are a quiet line at the end of the panel | A focus-opened tooltip became the topmost dismissable layer and swallowed Escape |
+| B12 inspector | Single hard line breaks in source text are joined (blank lines, list items and headings keep theirs) | Source exports are hard-wrapped; offsets stay exact (one character for one) |
+| B12 conflict callout | Rules inside the callout are the conflict border at 40 % | Full-strength pink rules competed with the content |
+| B12 tables (provider settings) | Rows grouped by purpose under quiet group labels; stacked label/value blocks below 1024 px | Seven columns did not fit the 1024 px content width without breaking model identifiers |
+| B13 loading | No stage names: one progress line and the elapsed time over a static skeleton | No streaming progress exists (D-6); no shimmer, per B10 |
+| B13 first-time user | Heading, deck and three principles; no scope line | No endpoint lists the member's accessible sources or accounts |
+| B14 phones | The one-crumb page header is hidden under the 52 px top bar; wrapped status facts drop their separators | The top bar already names the place; a line must not start with "·" |
