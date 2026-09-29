@@ -178,6 +178,12 @@ function Terms({ p }: { p: ProviderOut }) {
   );
 }
 
+function byPurpose(providers: ProviderOut[]): [string, ProviderOut[]][] {
+  const groups = new Map<string, ProviderOut[]>();
+  for (const p of providers) groups.set(p.purpose, [...(groups.get(p.purpose) ?? []), p]);
+  return [...groups.entries()];
+}
+
 function Providers({ providers }: { providers: ProviderOut[] }) {
   return (
     <section className={styles.section} aria-labelledby="providers-label">
@@ -196,7 +202,6 @@ function Providers({ providers }: { providers: ProviderOut[] }) {
               <caption className="visually-hidden">Configured AI providers (read-only)</caption>
               <thead>
                 <tr>
-                  <th scope="col">Purpose</th>
                   <th scope="col">Provider · model</th>
                   <th scope="col">Trust class</th>
                   <th scope="col">Approved for</th>
@@ -205,35 +210,39 @@ function Providers({ providers }: { providers: ProviderOut[] }) {
                   <th scope="col">Data terms</th>
                 </tr>
               </thead>
-              <tbody>
-                {providers.map((p) => (
-                  <tr key={`${p.purpose}-${p.provider}-${p.model}`}>
-                    <td>
-                      <span className={styles.primary}>{humanize(p.purpose)}</span>
-                    </td>
-                    <td>
-                      <span className={styles.primary}>{p.provider}</span>
-                      <span className={styles.secondary}>
-                        {p.model}
-                        {p.endpoint_configured ? " · custom endpoint" : ""}
-                      </span>
-                    </td>
-                    <td>{trustClassLabel(p.deployment)}</td>
-                    <td>
-                      <Approval p={p} />
-                    </td>
-                    <td>
-                      <Status p={p} />
-                    </td>
-                    <td>
-                      <Credential p={p} />
-                    </td>
-                    <td>
-                      <Terms p={p} />
-                    </td>
+              {byPurpose(providers).map(([purpose, rows]) => (
+                <tbody key={purpose}>
+                  <tr className={styles.groupRow}>
+                    <th scope="rowgroup" colSpan={6}>
+                      {humanize(purpose)}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
+                  {rows.map((p) => (
+                    <tr key={`${p.purpose}-${p.provider}-${p.model}`}>
+                      <td>
+                        <span className={styles.primary}>{p.provider}</span>
+                        <span className={`${styles.secondary} ${styles.model}`}>
+                          {p.model}
+                          {p.endpoint_configured ? " · custom endpoint" : ""}
+                        </span>
+                      </td>
+                      <td>{trustClassLabel(p.deployment)}</td>
+                      <td>
+                        <Approval p={p} />
+                      </td>
+                      <td>
+                        <Status p={p} />
+                      </td>
+                      <td>
+                        <Credential p={p} />
+                      </td>
+                      <td>
+                        <Terms p={p} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
           <ul className={styles.cards} aria-label="Configured AI providers (read-only)">
