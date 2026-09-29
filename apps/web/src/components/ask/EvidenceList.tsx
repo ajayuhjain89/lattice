@@ -50,7 +50,7 @@ export const EvidenceList = memo(function EvidenceList({
 
   return (
     <section className={styles.section} aria-labelledby="evidence-label" data-testid="evidence">
-      <SectionLabel id="evidence-label" meta={counts}>
+      <SectionLabel id="evidence-label" meta={collapsed && !hasClaims ? undefined : counts}>
         Evidence
       </SectionLabel>
       {hasClaims ? (

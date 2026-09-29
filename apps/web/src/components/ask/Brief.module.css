@@ -139,6 +139,7 @@
 .positions {
   --rule: color-mix(in srgb, var(--status-conflict-border) 40%, transparent);
 
+  container-type: inline-size;
   display: grid;
   border-top: var(--border-width) solid var(--rule);
 }
@@ -207,10 +208,11 @@
   }
 }
 
-@media (width < 1024px) {
+/* The reading column narrows with the viewport and with the docked inspector: the
+   positions respond to their own width, not the viewport's. */
+@container (width < 600px) {
   .position {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-1);
   }
-
 }
