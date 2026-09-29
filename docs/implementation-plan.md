@@ -862,6 +862,22 @@ readiness the user asked for within the existing architecture (no new infrastruc
 | — (CI) | Node 24 action majors, `ubuntu-24.04` pinned, uv pinned, 30-minute job timeouts, separate uv cache per job, worker startup check in CI | GitHub deprecation warnings (both gone) |
 | `org_settings.ask_enabled`, `trace_retention_days`, rate limits, alerting, container images, backups | **Not built**: the env kill switch covers the incident stop deployment-wide, `lattice provider disable` per organization; trace retention, rate limits (T19), alerting, images and PITR stay in Phases 10–11 | Phase boundaries (§4 "Later phases") |
 
+**Final Phase 8 verification (2026-09-29).** Clean clone of `phase/8-operational-polish`
+(69c7bf0) with no external API key in the environment, in an isolated Compose project on
+its own port (development database stopped; one PostgreSQL at a time): `make setup`,
+`db-up` (bootstrap with all four roles), `migrate` (0001-0011), `seed`, `check-db-role`
+(including the new content-write check), `lattice worker --once` (worker startup checks),
+`dataset-lint`, `sync` twice (the second wrote nothing), `eval` (fake; R@10 0.512,
+unchanged; every security count 0), `eval-answer` (fake; every security count 0),
+`lint`, `typecheck` (mypy strict, 228 files), **1,788 backend tests**; `web-setup`,
+`web-check` (ESLint, Stylelint, TypeScript, **48 unit and component tests**),
+`web-build`, `web-e2e` (**68 Playwright tests**, desktop and phone, no retries needed).
+GitHub CI green on the branch (backend and web) with no annotations. Secret scan of
+tracked files and of every commit on the branch: no key patterns, and the real `.env`
+key value appears nowhere. Live drills against the running API and worker: runbook §8.
+Mutation check: not repeated for Phase 8 (no retrieval, authorization or answering logic
+changed); the new controls are pinned by the privilege-matrix and side-channel tests.
+
 **Slice definition of done, as it stands.** Security suites green (including the new
 side-channel suite); every §B13 state reachable. **Not met:** retrieval metrics at
 target (R@10 ≥ 0.90; best real 0.726, evaluation-plan §12) and generation metrics
