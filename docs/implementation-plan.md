@@ -11,8 +11,10 @@ removed the rejected cross-encoder experiment, resolved D-15 (deployment trust
 classes, migration 0007) and decided D-16's timing, and it froze retrieval.
 Phase 5 engineering and security are **complete** (every security metric 0, final
 verification passed). The product objective Recall@10 ≥ 0.90 is **not yet achieved**:
-best real result is Gemini 0.726, local 0.695 (evaluation-plan §12). **Phase 6 has not
-started.**
+best real result is Gemini 0.726, local 0.695 (evaluation-plan §12). **Phase 6 is
+implemented on `phase/6-generation` and awaits review** (not merged): engineering and
+security verification complete; the real-model answer-quality evaluation was **not run**
+(reference hardware constraint, M1 8 GB; ADR-012).
 
 ---
 
@@ -658,6 +660,96 @@ recorder (asker view; admin operational view without content); `POST /v1/ask`,
 **Non-goals.** Streaming of answer text; multi-turn; any admin capability to read
 other members' content.
 
+**Phase 6 as built.** Deliverables: `lattice.answering` (prompt `answer-prompt-1`,
+claim-level validation, the generation invocation rule, deterministic assembly, the Ask
+service, evidence lookup), `lattice.tracing` (query traces, re-authorized views, audit
+event model), generation providers (`fake`, scripted, recording, `ollama`, `gemini`;
+ADR-012), the provider factory, secret references (`lattice.providers.secrets`), audited
+provider configuration (`lattice.providers.configuration`), migration 0008
+(`model_providers.endpoint/enabled`, `provider_credentials`, `query_traces`,
+`audit_events`), `authz.readable_document_classifications` and
+`authz.summarize_context`, `retrieval.lookup_evidence`, the routes `POST /v1/ask`,
+`GET /v1/evidence/{id}`, `GET /v1/traces/{id}`, `GET /v1/admin/providers`, the CLI
+`lattice ask`, `lattice eval answer`, `lattice provider configure|approve|enable|disable|
+credential set|credential revoke|list`, `lattice org egress`, `make eval-answer`, and a CI
+step running the answer evaluation with fake providers (security gate). No retrieval
+tunable or algorithm changed (`retrieval-6`).
+
+| Planned | As built | Why |
+| ------- | -------- | --- |
+| Real generation provider; D-4 recommends Anthropic | Ollama (`qwen3.5:4b`, local) and Gemini (`gemini-3.5-flash-lite`, BYOK) adapters, mock-tested; no Anthropic/OpenAI adapter; D-4 open | No Anthropic/OpenAI credential exists or may be requested; the user's constraint is no paid API. The factory's `declare`/`build` pair is where they go |
+| Real-provider `lattice eval answer` with judges | Harness and optional local judge built; **real-model run NOT RUN -- reference hardware constraint (M1 8 GB)** (ADR-012); Gemini quota exhausted | A 940-token smoke prompt ran at ~10 tokens/s and the machine stopped responding; the product owner chose not to run it or substitute a smaller model |
+| Secret values "encrypted at rest or held through a secret-manager abstraction" | References only (`env:LATTICE_PROVIDER_SECRET_<NAME>`, legacy provider names); a `SecretStore` Protocol with environment and in-memory stores; references to other process variables refused in code and schema | The database never holds a value; a production secret manager is one more scheme behind the Protocol (decision before Phase 7: which one, for the UI's "paste a key" flow) |
+| Provider-configuration API for Phase 7 | Read-only masked `GET /v1/admin/providers`; writes by audited CLI | Writes need the Phase 7 UX decisions (who, reasons, confirmation); the audited functions are what the UI will call |
+| `audit_events` for egress-level changes | Also provider configuration, approval, enablement and credential set/rotate/revoke; append-only by trigger; runtime role has no privilege | Every D-16 administrative action needs a record |
+| Relevance floor | Per item: exact/lexical match, or semantic similarity above a per-model calibrated threshold (none calibrated) | Semantic nearest neighbours always exist (retrieval-design §13) |
+| `ambiguous` when ≥ 2 in-scope accounts match | Only when no matched account is named in full | "Acme Corp" contains Acme Health's alias |
+| Validation: handles + verbatim quotes | Plus quote length floor, unsupported numbers, shared content terms, unsafe content (links, addresses, markup) | One valid quote must not legitimize an unrelated statement; no rendered exfiltration |
+| Prompt delimiters | Per-request nonce-suffixed delimiters | Retrieved text cannot close its own block |
+| `evidence_only (egress_policy)` | Plus `evidence_only (generation_unavailable)` for missing/disabled/unsupported configuration or credentials | Configuration states are not policy outcomes |
+| `org_settings.ask_enabled`, `freshness_thresholds`, `trace_retention_days`, `filter_fingerprint`, cost estimates | Not built; `lattice provider disable --purpose generation` is the per-organization stop | No consumer yet; retention jobs are Phase 11 |
+| OpenAPI → TS generation script | Not built (Phase 7) | No web app exists yet to consume it |
+| Streaming progress | Not built (D-6, Phase 7) | — |
+
+Evidence: `backend/tests/answering/` (validation and prompt units, the Ask pipeline over
+hand-built worlds, the generation invocation rule, the HTTP API, the golden corpus with
+the harness's security gate, the critical Acme scenario's payload/response/lookup
+halves, an obedient model against the injection fixtures),
+`tests/providers/test_generation_adapters.py`, `tests/test_provider_configuration.py`,
+and the Phase 1 isolation suites extended to the three new tables.
+
+**Final Phase 6 verification (2026-09-29).** Clean clone of `phase/6-generation` with no
+external API key in the environment, in an isolated Compose project (dev database
+stopped; one PostgreSQL at a time): setup, migrate (0001-0009), seed, runtime-role
+check, dataset lint, sync twice, `make eval` (fake; R@10 0.512, unchanged; security 0),
+`make eval-answer` (fake; every security metric 0), lint, format, mypy strict (203
+files), and 1,638 tests: all passed. Secret scan of tracked files and of every commit on
+the branch: no key patterns, and the real `.env` key value appears nowhere. The real
+answer-quality evaluation is **NOT RUN — reference hardware constraint (M1 8 GB)**
+(evaluation-plan §13, ADR-012).
+
+**Phase 6 mutation check** (by hand, never committed; each defect applied alone to the
+working tree, the Phase 6 suites run -- `tests/answering/` including the golden corpus,
+`tests/providers/test_generation_adapters.py`, `tests/test_provider_configuration.py` --
+every file restored and verified byte-identical by SHA-256). The first run caught 25 of
+28. The three survivors were test gaps, not code defects; the tests named below were
+added and the three mutations re-run. **All 28 are caught.** The G27 test also found a
+real defect: the service derived freshness from citations *before* the response
+invariant, so a dangling citation would have raised instead of withholding the answer;
+the invariant now runs first. Counts exclude one API assertion that was flaky (a short
+rejected value could occur by chance inside the random request ID), since fixed.
+
+| # | Defect introduced | Tests failed | Caught by |
+| - | ----------------- | -----------: | --------- |
+| G1 | Egress level ignored: every evidence item may enter the prompt | 10 | default-policy, opt-in, evidence-only, credential-cannot-widen tests; critical Acme payload half |
+| G2 | Question sensitivity (D-13) not applied to generation | 3 | `test_a_question_that_may_not_be_sent_is_never_sent[*]` |
+| G3 | Credential resolved before the invocation rule | 2 | `test_no_secret_is_resolved_when_the_policy_refuses[*]` (added after the first run) |
+| G4 | Declared trust class ignored (record trusted) | 4 | class-mismatch tests, unknown declared class |
+| G5 | Disabled configuration still used | 1 | `test_a_disabled_provider_receives_nothing` |
+| G6 | Provider built although no call will be made | 1 | `test_no_evidence_is_insufficient_without_a_model_call` |
+| G7 | Revoked credentials still resolve | 1 | `test_revocation_and_rotation_take_effect_on_the_next_request` |
+| G8 | A claim keeps its valid citations when one fails (bad one stripped) | 5 | invalid handle, one-valid-one-invalid citation (unit and end to end) |
+| G9 | Quotes not verified against the evidence | 2 | quote-not-found unit cases |
+| G10 | Unsafe content (links, addresses) allowed in claims | 4 | unsafe-content unit cases, non-claim text |
+| G11 | Unsupported numbers allowed | 1 | unsupported-number unit case |
+| G12 | Conflicts kept with positions from one document | 2 | conflict unit and end-to-end tests |
+| G13 | Fixed delimiters (no nonce) | 1 | `test_prompt_blocks_handles_and_order` |
+| G14 | Document IDs sent in the prompt | 1 | `test_prompt_blocks_handles_and_order` (no UUIDs in prompts) |
+| G15 | Supersession inferred from dates for model conflicts | 1 | `test_a_potential_conflict_keeps_both_positions_and_declares_no_winner` |
+| G16 | unsupported_request shows the model's claims | 1 | `test_unsupported_request_shows_no_claims` |
+| G17 | Relevance floor removed (semantic neighbours reach the model) | 2 | no-evidence and evidence-only tests |
+| G18 | No regeneration after rejected claims | 2 | regeneration tests |
+| G19 | The trace stores the prompt | 1 | `test_the_trace_row_holds_references_not_content` |
+| G20 | Trace answer not hidden after revocation | 1 | `test_trace_views` (revocation) |
+| G21 | Administrators see other members' questions | 1 | `test_trace_views` (administrator view) |
+| G22 | Any member reads another member's trace in full | 1 | `test_trace_views` (other member 404) |
+| G23 | Secret references to any variable accepted | 7 | secret-reference tests (code and configuration) |
+| G24 | Ollama remote endpoint declared local | 5 | endpoint trust-class and factory tests |
+| G25 | Gemini key sent in the URL | 2 | Gemini request shape, key never logged |
+| G26 | Credential secret logged | 1 | `test_a_credential_is_required_and_resolved_last` |
+| G27 | Response invariant disabled and dangling citations kept | 1 | `test_a_forced_invariant_violation_withholds_the_answer` (added after the first run) |
+| G28 | Classification of an unreadable document answered (egress input not re-authorized) | 1 | `test_classifications_are_answered_for_readable_documents_only` (added after the first run) |
+
 ---
 
 ### Phase 7 — Web app: Ask, evidence, inspector
@@ -768,7 +860,7 @@ Added in later phases: `make web` (Phase 7, Node 22 LTS + pnpm).
 | D-8 | A document readable **only through a grant** belongs to an account outside the reader's scope: may its evidence card / inspector show that account's name? | Phase 5 (evidence), Phase 7 (UI) | **Decided: no.** The document and its content stay readable; its structured account field is omitted (no substitute), and the account never enters lists, filters, mention detection or autocomplete. Implemented as `authz.visible_document_account` (authz-2) | Product owner — decided |
 | D-9 | Stable key for access groups | Phase 3 | **Decided:** `access_groups.key` (citext, unique per organization, slug format); stable across renames; a key change is an identity change; never an authorization input. Migration 0004 | Engineering — decided |
 | D-10 | The chunk contextual header (embedded, and in the shared `tsv`) includes the document's account name, per document, not per reader. After D-8, a query naming an out-of-scope account would still match a granted document of that account through the header alone, hinting at the association | Phase 4 (header design) | **Decided:** structured account names are never added to shared search or embedding text; account terms are kept separate and used only when `account_visible` — at query time, over the reader's visible accounts (no stored per-account field is needed). Implemented in Phase 4 (header and `tsv`); the query side is Phase 5. Golden item `visibility-kestrel-latest-maya` pins the expected behaviour | Engineering + Product owner — decided |
-| D-11 | Answer status for requests Lattice does not perform (draft an email, change access, update a ticket, read others' questions) | Phase 6 | **Decided:** add `unsupported_request` (reason `action_request`), decided by the model under a fixed rubric and validated like any status; never used for unreadable evidence. Implemented with answering (Phase 6) | Product owner — decided |
+| D-11 | Answer status for requests Lattice does not perform (draft an email, change access, update a ticket, read others' questions) | Phase 6 | **Decided:** add `unsupported_request` (reason `action_request`); never used for unreadable evidence. Decided first by code from the question alone (`answering.request_kind`), before the evidence and provider decisions, so it holds with no evidence and with no model available, and no model is called; the model's fixed rubric still covers phrasings the patterns do not list. Implemented with answering (Phase 6) | Product owner — decided |
 | D-12 | How Phase 4 applies admin grants that exist before the Phase 9 access UI (the dataset's `admin-grants.yaml`) | Phase 4 | **Decided:** a separate post-sync command (`lattice apply-admin-grants`), never a connector, resolves each record key (optionally with its source) to a document and writes `origin = admin` membership grants; any unresolvable, ambiguous or duplicate entry fails the whole application with nothing written; idempotent; `--prune` revokes | Engineering — decided |
 | D-13 | Query egress: who sets a question's sensitivity, and does generation obey it? | Phase 5 closure | **Decided and implemented:** `effective = more_restrictive(org_settings.default_query_sensitivity, per-question declaration)`. A user, client, provider key or provider selection can raise it, never lower it (unrecognised = `restricted`). External query embedding is skipped when policy forbids it; exact + lexical always run; a `local` provider approved for the sensitivity may still embed the question; no silent external fallback. Returned as `RetrievalResult.question_sensitivity`. **Phase 6 must apply the same effective sensitivity to the question in the generation prompt** (`evidence_only` without a model call when it may not be sent), under the same invocation rule (ADR-011). Phase 7 offers the per-question "more sensitive" control. Migration 0006; tests `test_question_sensitivity.py` | Product owner — decided |
 | D-14 | Notice for a document superseded by one the reader cannot read | Phase 5 closure | **Decided and implemented:** drop any notice derived solely from an unreadable successor: no "newer document exists", no "may be outdated", no successor ID, count, title, timestamp, source or relationship. Readable ↔ readable explicit supersession is exposed; never inferred from age. Tests `test_successor_visibility.py` (the reader's whole result is identical with and without a hidden successor; losing access removes the link on the next request) | Product owner — decided |
@@ -783,7 +875,7 @@ Issues found while reviewing the first draft of these documents, and what change
 | ---- | ----------- | ---------- |
 | Authorization | "Private channel" and "restricted" were the same thing, so the AI egress policy would have blocked every private Slack channel from answers | Split *who* (`access_mode`: policy / grants_only) from *how sensitive* (`sensitivity`) |
 | Authorization | Tripwire (E4) re-reading permissions after retrieval could false-alarm, or check different permissions than the search used, if access changed mid-request | Context, retrieval and E4 share one `REPEATABLE READ` snapshot |
-| Security | Stored answer text in traces would let a revoked user re-read content derived from evidence they lost access to | Answer text is hidden when any cited evidence is no longer readable by the viewer |
+| Security | Stored answer text in traces would let a revoked user re-read content derived from evidence they lost access to | Answer text is hidden when any evidence of that Ask (cited or not: supersession items and notices name uncited documents) is no longer readable by the viewer, or any account it depends on (clarification choices, prompt evidence accounts, scope; recorded as IDs, migration 0009) is no longer visible |
 | Security | "Audit capability" was referenced but never modelled | Admins see operational trace structure only; D-5 later decided OFF (see §9) |
 | Ingestion | Unmapped account on an account-scoped source would have made tickets visible to everyone (fail-open) | Such records fail closed and are reported |
 | Data model | `tsv` was described as a generated column but needs document-level header terms | Computed at ingestion; header staleness after account changes documented as a ranking lag, never an access lag |

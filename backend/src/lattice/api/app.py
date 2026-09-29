@@ -11,15 +11,19 @@ from datetime import timedelta
 
 from fastapi import FastAPI
 
+from lattice.answering.service import AskDependencies
 from lattice.api.handlers import register_exception_handlers
 from lattice.api.middleware import CsrfMiddleware, RequestContextMiddleware
-from lattice.api.routes import auth, health, me
-from lattice.config import Environment, Settings, load_settings
+from lattice.api.routes import admin, ask, auth, health, me
+from lattice.config import Environment, Settings, load_provider_settings, load_settings
 from lattice.db.engine import Database, create_engine
 from lattice.db.role_check import verify_runtime_role
 from lattice.identity.dev_provider import DevIdentityProvider
 from lattice.identity.sessions import SessionPolicy, SessionService
 from lattice.log import configure_logging
+from lattice.providers.factory import build_embedding_provider
+from lattice.providers.generation_factory import DefaultGenerationFactory
+from lattice.providers.secrets import EnvironmentSecretStore
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -58,9 +62,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
     )
 
+    # Ask (Phase 6): the query-embedding provider is a deployment setting; generation is
+    # resolved per organization from its recorded configuration and credential
+    # references, per request, through the invocation rule.
+    app.state.ask_dependencies = AskDependencies(
+        embedding=(
+            None
+            if settings.query_embedding == "none"
+            else build_embedding_provider(settings.query_embedding, load_provider_settings())
+        ),
+        generation=DefaultGenerationFactory(settings.env),
+        secrets=EnvironmentSecretStore(),
+    )
+
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(me.router)
+    app.include_router(ask.router)
+    app.include_router(admin.router)
     if settings.dev_auth_active:
         app.state.dev_identity_provider = DevIdentityProvider(settings, db)
         app.include_router(auth.dev_router)

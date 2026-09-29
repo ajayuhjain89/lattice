@@ -218,7 +218,10 @@ async def eval_retrieval(args: argparse.Namespace) -> int:
     return 0
 
 
-def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
+def add_parsers(
+    commands: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> "argparse._SubParsersAction[argparse.ArgumentParser]":
+    """Registers ``search`` and ``eval retrieval``; returns the ``eval`` subcommands."""
     embedding_choices = list(PROVIDER_NAMES)
     search_cmd = commands.add_parser("search", help="Retrieve evidence as a member (dev/test)")
     search_cmd.add_argument("--org", required=True)
@@ -250,3 +253,4 @@ def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]")
     retrieval.add_argument("--golden", type=Path, default=GOLDEN)
     retrieval.add_argument("--out", type=Path, default=REPORTS)
     retrieval.add_argument("--quiet", action="store_true")
+    return eval_commands

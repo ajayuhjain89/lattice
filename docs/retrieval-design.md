@@ -1,8 +1,9 @@
 # Lattice — Retrieval, Ranking, Generation & Citations
 
 Status: **Part I implemented in Phase 5** (`backend/src/lattice/retrieval/`, evaluated by
-`lattice eval retrieval`; tests in `backend/tests/retrieval/`). Part II is still design
-(Phase 6). Where Phase 5 differs from the Phase 0 draft, the section says so and
+`lattice eval retrieval`; tests in `backend/tests/retrieval/`). **Part II implemented in
+Phase 6** (`backend/src/lattice/answering/`, `lattice eval answer`; tests in
+`backend/tests/answering/`); §13 lists where the build differs from §8–11. Where Phase 5 differs from the Phase 0 draft, the section says so and
 `implementation-plan.md` (Phase 5, as built) lists why.
 Related: `authorization-model.md`, `data-model.md` §6, ADR-003, ADR-004, ADR-006, ADR-008.
 
@@ -520,3 +521,29 @@ anything inferred from hidden documents.
 | Generation | 4 s | 12 s |
 | Validation + trace write | 20 ms | 60 ms |
 | **Total** | **≤ 6 s** | **≤ 15 s** |
+
+## 13. Part II as built (Phase 6)
+
+Pipeline (`lattice.answering.service.ask`): one snapshot for the context, retrieval (12
+evidence chunks, the prompt budget's item count), the classification of every evidence
+document (`authz.readable_document_classifications`, which aborts on anything
+unreadable) and the generation access decision; the snapshot is closed before any model
+call; one INSERT records the trace.
+
+| Design (§8–11) | As built | Why |
+| -------------- | -------- | --- |
+| `AnswerDraft` via Pydantic schema | Hand-written `ANSWER_SCHEMA` (type/properties/required/enum/items/additionalProperties only; `claims` first, `status` last; `clarifying_question` a string, `""` = none). The top level is parsed strictly, each claim, citation and conflict separately | One schema every structured-output mode accepts (Gemini `responseJsonSchema`, Ollama `format`); a malformed claim invalidates only that claim |
+| Evidence blocks `<evidence id="E3" ...>` | Delimiters end in a per-request random nonce (`<evidence-3f9a2c41d0be id="E1" rank=".." kind=".." title=".." ref=".." account=".." date=".." author=".." authority="..">`); attribute values cannot contain `"`, `<`, `>`; the question has its own nonce block | Retrieved text cannot close a block whose name it cannot guess; tested with injected `</evidence>` and fake "SYSTEM:" lines |
+| Validation steps 1–4 | Plus a quote floor (≥ 2 words, ≥ 6 characters, ≤ 300), a **support floor** (every number in a claim must occur in the text or prompt metadata of the evidence it cites, `unsupported_number`; a claim's content words, not counting the cited sources' titles, authors, references and generic attribution/date words, must share one with the sentence around one of its quotes, `no_shared_terms`) and **safe content** (no URL, web or email address, markdown link/image or HTML in any shown text, `unsafe_content`) | One valid quote must not legitimize an unrelated statement; exfiltration through rendered links is impossible even if the model repeats an injected payload. Entailment itself stays a judge metric (§9 step 9) |
+| Relevance floor "not met → insufficient_evidence" | Per item: an evidence item may enter the prompt only if the exact or lexical channel matched it, or its semantic similarity reaches a threshold calibrated for that embedding model (`SEMANTIC_FLOOR`; none is calibrated, so semantic-only neighbours never pass alone). No item passes → `insufficient_evidence` / `no_relevant_evidence`, no model call, no provider built. Items below the floor stay in the asker's list (`not_used_reason = relevance_floor`) | Nearest neighbours always exist; they are not evidence of relevance, and sending them wastes egress |
+| `ambiguous` when ≥ 2 in-scope accounts match | Only when ≥ 2 visible accounts matched and **none is named in full** ("What did we promise Acme?"); "Acme Corp" also contains Acme Health's alias "Acme", and several full names are a comparison. The model may also return `ambiguous` with a clarifying question (`missing_referent`) | Phase 5 reports every visible match and leaves what to ask to Phase 6 |
+| `unsupported_request` (D-11) | Decided first by code from the question alone (`answering.request_kind`: an imperative that performs something, or a request to read others' use of Lattice), before the relevance, ambiguity and provider decisions: no model is called, no provider is built, and the status holds with no relevant evidence and with no provider available. Phrasings the patterns do not list reach the model, whose fixed rubric can still return it. Shows no claims and a fixed sentence; evidence still returned | D-11; an action request must not become `insufficient_evidence` or `evidence_only` because of what retrieval found. Patterns are narrow because a false positive refuses a real question |
+| `evidence_only` reasons | `egress_policy` (the invocation rule or the question's sensitivity forbids the call, or every relevant item is above the level) or `generation_unavailable` (no configuration, disabled, unsupported, no resolvable credential) | Configuration states are not policy outcomes; the trace keeps the exact reason code |
+| `failed` | `provider_unavailable` (the provider raised; trace `error_code` `generation_failed:*`), `generation_invalid` (schema failure after the regeneration), `citation_validation_failed` (the response invariant withheld the answer; logged) | §9 step 10 |
+| Supersession | Deterministic items for every explicit link between two evidence documents (whatever the status); a model-proposed conflict between linked documents is reclassified, not duplicated | §10 |
+| Freshness thresholds org-configurable | Code defaults (ticket/chat 30 d, doc 180 d, system-of-record docs 365 d); no `org_settings.freshness_thresholds` column | No consumer needs the setting yet |
+| Streaming progress | Not built (Phase 7, D-6) | — |
+
+Deterministic answer metadata (dates, titles, authority, classification, accounts)
+comes from the database through chunk IDs. The model's `status` is advisory; the final
+status is computed by `answering.assemble.decide_status`.

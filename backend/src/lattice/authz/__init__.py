@@ -13,6 +13,9 @@ without any model involvement. Its public contract:
   structured metadata: none when the account is outside the member's scope (D-8).
 * ``explain`` (internal), ``explain_own_access``, ``explain_for_reviewer``.
 * ``assert_all_readable`` -- the pre-generation tripwire (E4).
+* ``readable_document_classifications`` -- the classification of readable evidence
+  documents, for the AI egress decision (Phase 6; aborts on anything unreadable).
+* ``summarize_context`` -- counts-only summary of a context for query traces.
 * ``POLICY_VERSION``.
 
 Other modules import from ``lattice.authz`` only (never its submodules) and never
@@ -22,6 +25,7 @@ ingestion and access management); the boundary test rejects their use anywhere e
 """
 
 from lattice.authz.access import load_document_access
+from lattice.authz.classification import readable_document_classifications
 from lattice.authz.context import AuthorizationContext
 from lattice.authz.explain import (
     AccessExplanation,
@@ -44,6 +48,7 @@ from lattice.authz.policy import (
 )
 from lattice.authz.resolve import AuthorizationContextUnavailable, resolve_authorization_context
 from lattice.authz.sql import readable_documents_predicate, visible_accounts_predicate
+from lattice.authz.summary import summarize_context
 
 __all__ = [
     "POLICY_VERSION",
@@ -66,8 +71,10 @@ __all__ = [
     "explain_own_access",
     "load_document_access",
     "readable",
+    "readable_document_classifications",
     "readable_documents_predicate",
     "resolve_authorization_context",
+    "summarize_context",
     "visible_accounts_predicate",
     "visible_document_account",
 ]

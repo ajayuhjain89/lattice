@@ -343,7 +343,9 @@ source name, author, account, date, count, or existence. Concretely:
 
 Assertions (automated; the retrieval half -- 1, the retrieval part of 3, and 5 -- is
 `backend/tests/retrieval/golden/test_critical_acme.py` since Phase 5; the payload,
-response, trace and 404 halves arrive with Phase 6):
+response, trace and lookup halves -- 1, 2, 3 under both egress configurations, and 4 --
+are `backend/tests/answering/golden/test_golden_answers.py` since Phase 6, with the
+HTTP 404 equality in `tests/answering/test_api.py`):
 
 1. For User 1, Doc B's chunk IDs are absent from lexical candidates, semantic
    candidates, fused list, selected context, and the recorded provider payload.

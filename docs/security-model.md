@@ -6,7 +6,10 @@ visibility, including D-8 structured account metadata) and SEC-15 at the policy 
 (Phase 2); see §9 for which suites exist. The Phase 3 synthetic dataset places 19
 canaries for the canary suites (`data/synthetic/canaries.yaml`). Phase 4 implemented
 the embedding side of §6; **Phase 5** implemented E3 in every retrieval path (SEC-3),
-the query side of §6 (revised below), and the retrieval suites of §9.
+the query side of §6 (revised below), and the retrieval suites of §9. **Phase 6**
+implemented generation under the same invocation rule (§6), organization-owned
+credentials by reference (§5), prompt-injection defences (§7), query traces and their
+re-authorized views (§8), and the citation, egress, injection and API suites (§9).
 Related: `authorization-model.md`, `trust-boundaries.md`, `threat-model.md`.
 
 ---
@@ -115,7 +118,20 @@ logout, and is checked before authentication.
   `x-goog-api-key` header (never in a URL). Today these are process-wide variables for
   operator commands. Organization-owned credentials (BYOK: encrypted at rest or in a
   secret manager, never returned or logged, masked in the UI, rotatable and revocable)
-  are the target (ADR-011) and are **not built yet**.
+  are the target (ADR-011). **Phase 6 built the backend minimum (D-16):** a
+  `provider_credentials` row holds only a *secret reference* (`env:LATTICE_PROVIDER_SECRET_<NAME>`
+  or a documented legacy provider variable; the schema's CHECK and the code refuse
+  anything else, so a reference can never name the database URL or another secret of
+  the process), the key's declared data-use tier and its lifecycle (`active`/`revoked`,
+  one active per organization and provider, history kept). A `SecretStore`
+  (`lattice.providers.secrets`) resolves the reference only after the invocation rule
+  has allowed the call; the value is a `SecretStr` end to end and never appears in API
+  responses (the admin view says only whether a credential is configured and
+  resolvable), logs, traces, prompts, errors or audit events (tested). Rotation,
+  revocation and disablement take effect on the next request. A production secret
+  manager is another scheme behind the same Protocol (not built). The embedding
+  providers of the operator CLI and `LATTICE_QUERY_EMBEDDING` still read the Phase 5
+  process variables.
 - A credential is never an approval: whether a provider may receive anything is the
   egress policy's decision (§6), and it does not consult credentials.
 - Startup validation (implemented) rejects: missing/invalid `LATTICE_*` settings;
@@ -231,7 +247,12 @@ availability ≠ provider approval ≠ data-egress authorization.**
   The organization-level ceilings have no operator command yet (set by the owner role;
   no `organization_controlled` provider exists in Phase 5). The settings API, page and
   audit table come with Phase 6/7 (ADR-011, D-16).
-- **Generation:** authorized evidence above the effective level is removed from the
+- **Generation (implemented, Phase 6; `lattice.answering.policy`):** the organization's
+  one enabled generation configuration is resolved per request (never a global key),
+  the invocation rule above is applied to it, the question's effective sensitivity
+  (D-13) must be within the level or the question is not sent at all (`evidence_only`,
+  `question_classification`), and only then is the credential reference resolved and
+  the adapter built. Authorized evidence above the effective level is removed from the
   prompt only. It stays in the user's evidence list, labelled **"Not used to draft
   this answer"**, with a notice naming the reason: "2 Confidential sources you can
   access weren't sent to the AI model because of Halden's AI data policy. Review
@@ -305,6 +326,16 @@ See `trust-boundaries.md` §4. Architecture, not prompt wording, carries the wei
 no tools, only permitted evidence, schema-constrained output, handle-only citations,
 verbatim quote verification, plain-text rendering.
 
+As built (Phase 6): fixed versioned instructions (`answer-prompt-1`) that name the rules;
+the question and every evidence block inside delimiters ending in a per-request random
+nonce, so retrieved text cannot close its block; request-local handles (no IDs); no tools
+in any provider payload (asserted per adapter); claims containing URLs, web or email
+addresses, markdown or HTML rejected; model output never feeds authorization, retrieval,
+the organization or provider configuration. `tests/answering/golden/test_golden_answers.py`
+runs a model that *obeys* every injected instruction in the corpus (cite HAL-9999, load
+the exfiltration image, confirm the planted approval, list confidential documents,
+record a contractual date) and proves none of it reaches the asker.
+
 **Retrieved content is untrusted data, never model instructions** -- a hard Phase 6
 requirement with adversarial tests, listed in `trust-boundaries.md` §4.
 
@@ -315,10 +346,21 @@ there is **no** capability for anyone to read another member's question, answer 
 evidence (D-5: off/deferred).
 
 - Traces store references, scores and timings; the asker's question and answer text
-  are stored under retention (default 90 days) for the asker's own history.
+  are stored under retention (default 90 days) for the asker's own history. **As built
+  (Phase 6):** `query_traces` (one INSERT per Ask as the runtime role, which has no
+  UPDATE or DELETE) holds versions, the egress decision and reason code, validation
+  counts and codes, statuses, timings, token counts, chunk IDs of permitted rows and the
+  validated answer. Never the prompt, evidence text, rejected claim text, provider
+  bodies, secrets or references. `GET /v1/traces/{id}` implements the three views below.
+  Retention jobs are Phase 11.
 - **Asker's view of their own trace:** question, answer, evidence and stages.
   Evidence references are re-authorized against the asker's *current* access. If any
-  evidence the answer cited is no longer readable, the stored answer text is hidden
+  evidence of that Ask is no longer readable -- cited or not, since supersession items
+  and notices name uncited documents -- or any account whose metadata the answer may
+  carry (recorded as IDs: clarification choices, the account attribute of prompt
+  evidence) or the account the request was scoped to is no longer visible to the asker
+  or no longer exists, the stored answer text is hidden (and the scope's account
+  withheld); a trace without recorded account dependencies hides it too
   ("This answer cited sources you no longer have access to") — otherwise traces would
   let revoked users re-read derived content.
 - **Admin's operational view of other members' traces:** member, time, status,
@@ -349,6 +391,7 @@ evidence (D-5: off/deferred).
 | `tests/dataset/` ✔ | CI | The synthetic dataset and golden set validated against the reference policy; canaries unique and placed; the dataset's access oracle equals the seeded resolver |
 | `tests/retrieval/golden/test_critical_acme.py` ✔ (retrieval half) | CI | The permanent scenario (`authorization-model.md` §10): Doc B absent from every stage for Maya, retrieved for Grace, revocation on the next request. Payload, response and 404 halves arrive with Phase 6 |
 | `tests/retrieval/` ✔ (Phase 5) | CI | Each statement's WHERE clause structurally contains the reader's predicate, tenant and lifecycle conditions; adversarial strongest-match cases per channel; cross-org identifier collisions; D-8/D-10; query egress and semantic degradation with a recording provider; E4 aborts and never filters; snapshot consistency; no existence oracle (results identical with or without an unreadable match); a 200-world property test, also with RLS bypassed; raw SQL capture (the database returns only permitted rows, retrieval keeps exactly those); all 89 golden items with zero violations |
+| `tests/answering/` ✔ (Phase 6) | CI | `test_validate_prompt.py` (every claim-rejection code, one bad citation rejects the claim, normalization not fuzzy, nonce delimiters, no IDs in prompts), `test_ask.py` (statuses, regeneration once, mixed claims, rejected text nowhere, supersession/potential conflicts, trace content), `test_generation_policy.py` (the invocation rule for generation: levels, approvals, D-13, trust classes, credentials last, rotation/revocation, cross-org configuration), `test_api.py` (contract, 404 equality, trace views, masked admin view), `golden/test_golden_answers.py` (every golden item through the harness's security gate, the critical Acme scenario's payload/response/lookup halves, an obedient model versus the injection fixtures); `tests/test_provider_configuration.py` (audit, append-only, references only) |
 | `tests/security/canary` | CI | Recording fake providers capture every payload; canary strings from restricted/confidential docs must never appear for unauthorized personas — in payloads, responses, traces or captured logs |
 | `tests/security/test_authz_revocation.py` ✔ | CI | Each access change type → next check differs, no document rewritten; snapshot consistency |
 | `tests/security/injection` | CI (deterministic parts) + eval harness (real model) | Schema validity, foreign-handle rejection, no instruction following |

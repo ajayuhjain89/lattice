@@ -5,7 +5,8 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–5 are implemented and merged** (Phase 6, answering, has not started). What runs today: a FastAPI backend with typed
+**Status: Phases 1–5 are implemented and merged; Phase 6 (answering) is implemented on
+`phase/6-generation`, awaiting review.** What runs today: a FastAPI backend with typed
 fail-fast configuration, PostgreSQL 16 + pgvector with forced row-level security for
 organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -21,8 +22,11 @@ policy, a guarded deletion sweep, source disconnect, and administrator grants ap
 as a separate step — and (Phase 5) permission-aware hybrid retrieval: exact
 identifier, full-text and vector search, each with the authorization predicate inside
 its SQL, fused and deterministically reranked into permitted evidence, with a
-retrieval evaluation over the golden set. There is no answering or web UI yet — see
-the [implementation plan](docs/implementation-plan.md).
+retrieval evaluation over the golden set — and (Phase 6) grounded answers from that
+evidence only: organization-scoped generation providers under the same egress rule,
+credentials stored by reference, claim-level fail-closed citations, deterministic
+supersession and potential conflicts, query traces, and the Ask API. There is no web UI
+yet — see the [implementation plan](docs/implementation-plan.md).
 
 ## Local setup
 
@@ -92,6 +96,9 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 | `make sync-dry-run` / `make sync` / `make admin-grants` | Ingest the synthetic organizations ([ingestion design §9](docs/ingestion-design.md) documents `lattice sync`, `reindex`, `source disconnect`, `apply-admin-grants`) |
 | `make eval` | Retrieval metrics and security checks over the golden set, as each persona (after `make sync`; `EMBEDDING=fake\|local\|gemini\|openai\|none`, matching the sync); reports in `evals/reports/` |
 | `make models-fetch` | Download and verify the pinned local embedding model (explicit; the only command that downloads weights) |
+| `make eval-answer` | Answer and security metrics over the golden set (after `make sync`; `GENERATION=fake` by default: plumbing and security, not answer quality); run it on an evaluation database, since it reconfigures the organizations' generation providers |
+| `lattice ask --org halden --as maya.okafor@halden.example "When will SCIM ship?"` | Ask as a member with the organization's generation configuration (`--json`; development/test only) |
+| `lattice provider configure\|approve\|credential\|enable\|disable\|list`, `lattice org egress` | Organization provider configuration and AI egress ceilings; every change needs `--reason` and is audited ([runbook §3](docs/runbook.md)) |
 | `lattice search --org halden --as maya.okafor@halden.example "What did we promise Acme?"` | A member's permitted evidence with per-channel ranks (`--text`, `--pool`, `--json`; development/test only). Run from `backend/` with `uv run --env-file ../.env` |
 | `make dataset-generate` | Regenerate the deterministic bulk distractor tickets after editing authored tickets |
 | `make format` | Apply formatting and safe lint fixes |
@@ -103,8 +110,8 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 CI (`.github/workflows/ci.yml`) runs lint, strict type checking, the dataset lint, the
 bootstrap, a migration round-trip on a clean database with a model-drift check, the
 seed (twice), the runtime-role check, a sync of the dataset (twice, the second writing
-nothing), the retrieval evaluation as every persona (fails on any security
-violation), and the test suite against
+nothing), the retrieval and answer evaluations as every persona with fake providers
+(each fails on any security violation), and the test suite against
 `pgvector/pgvector:0.8.1-pg16`.
 
 ## How isolation works (Phase 1)
@@ -173,6 +180,35 @@ frozen for Phase 5. No test or CI run needs an external API key. Details:
 [retrieval design, Part I](docs/retrieval-design.md); results:
 [evaluation plan §9–§12](docs/evaluation-plan.md).
 
+## How answering works (Phase 6)
+
+`POST /v1/ask` runs retrieval as above, then decides -- in the same authorization
+snapshot -- whether any model may be called. Each organization configures its own
+generation provider (a local Ollama model, Gemini with its own key, or others later).
+A key is stored only as a reference to a secret held outside the database, and it never
+authorizes anything: the provider's trust class, the organization's ceiling, the
+provider's approval, its data-use terms and the question's sensitivity decide, and
+evidence above the allowed level stays in the asker's list, marked "not used". The
+prompt carries only evidence the asker may read, inside delimiters that retrieved text
+cannot close. The model must return claims, each citing request-local handles with
+verbatim quotes. A claim survives only if every citation checks out; one bad citation
+removes the whole claim, and with no verified direct answer the answer is withheld.
+Supersession comes only from explicit source metadata. A disagreement the model points
+out is shown as a potential conflict, with both sides. Action requests ("draft an
+email", "update the ticket") return `unsupported_request`; nothing is performed. Every
+Ask writes a trace of identifiers, versions, codes and timings; the asker can reread it
+(the answer is hidden once its sources become unreadable), administrators see only its
+operational fields.
+
+Evaluation: with fake providers, every golden item passes every security check
+(unauthorized or cross-organization evidence in a payload or answer, egress level,
+hidden accounts, canaries, injected payloads, unverified or dangling citations: all 0).
+**Answer quality with a real model has not been measured**: the local model could not
+run on the 8 GB reference machine, and no external quota was available
+([ADR-012](docs/decisions/012-generation-providers.md)). Details:
+[retrieval design, Part II and §13](docs/retrieval-design.md); results:
+[evaluation plan §13](docs/evaluation-plan.md).
+
 ## Repository layout
 
 ```
@@ -197,7 +233,7 @@ Makefile            developer commands (thin wrappers; read before running)
 | [Trust boundaries](docs/trust-boundaries.md) · [Threat model](docs/threat-model.md) · [Security model](docs/security-model.md) | Security design |
 | [Connector design](docs/connector-design.md) · [Ingestion design](docs/ingestion-design.md) | Getting data in, idempotently and fail-closed |
 | [Retrieval design](docs/retrieval-design.md) | Hybrid retrieval, ranking, generation, citations, freshness, conflicts, refusals |
-| [Evaluation plan](docs/evaluation-plan.md) | Synthetic dataset, golden set, metrics, retrieval results |
+| [Evaluation plan](docs/evaluation-plan.md) | Synthetic dataset, golden set, metrics, retrieval and answer results |
 | [Synthetic dataset](data/synthetic/README.md) | Halden and Veridian: personas, storylines, timeline, access design, canaries, golden set |
 | [Design system](docs/design-system.md) | Reference analysis, tokens, components, states |
 | [Implementation plan](docs/implementation-plan.md) | Phases, traceability, open decisions, as-built notes per phase |

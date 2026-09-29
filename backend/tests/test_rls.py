@@ -45,7 +45,13 @@ TENANT_TABLES = (
     "chunks",
     "org_settings",
     "model_providers",
+    # Phase 6
+    "provider_credentials",
+    "query_traces",
+    "audit_events",
 )
+# Tables the runtime role may not read at all (written and read by operator tools).
+RUNTIME_UNREADABLE = frozenset({"audit_events"})
 GLOBAL_TABLES = ("organizations", "users", "external_identities")
 ALL_TABLES = (*GLOBAL_TABLES, *TENANT_TABLES)
 
@@ -166,6 +172,29 @@ async def _populate(db: Database, member: Member) -> None:
             ),
             {"o": member.organization_id},
         )
+        await s.execute(
+            text(
+                "INSERT INTO provider_credentials (organization_id, provider, secret_ref) "
+                "VALUES (:o, 'gemini', 'env:LATTICE_PROVIDER_SECRET_TEST')"
+            ),
+            {"o": member.organization_id},
+        )
+        await s.execute(
+            text(
+                "INSERT INTO query_traces (organization_id, membership_id, question_text, "
+                "question_sensitivity, authz_snapshot, retrieval, egress, validation, status, "
+                "timings_ms) VALUES (:o, :m, 'q', 'internal', '{}', '{}', '{}', '{}', "
+                "'answered', '{}')"
+            ),
+            {"o": member.organization_id, "m": member.membership_id},
+        )
+        await s.execute(
+            text(
+                "INSERT INTO audit_events (organization_id, actor, action, target, reason) "
+                "VALUES (:o, 'test', 'provider.configured', '{}', 'test')"
+            ),
+            {"o": member.organization_id},
+        )
 
 
 _HOUR = timedelta(hours=1)
@@ -209,8 +238,9 @@ async def test_every_application_table_has_rls_enabled_and_forced(app_db: Databa
         assert forced, f"{name}: RLS not forced"
 
 
-async def test_every_table_with_organization_id_has_the_tenant_policy(app_db: Database) -> None:
-    async with app_db.unscoped_transaction() as s:
+async def test_every_table_with_organization_id_has_the_tenant_policy(owner_db: Database) -> None:
+    # As the owner: information_schema lists only tables the role holds privileges on.
+    async with owner_db.unscoped_transaction() as s:
         tables: set[str] = set(
             (
                 await s.execute(
@@ -237,12 +267,13 @@ async def test_every_table_with_organization_id_has_the_tenant_policy(app_db: Da
 
 @pytest.mark.parametrize("table", ALL_TABLES)
 async def test_org_a_sees_only_its_own_rows(
-    app_db: Database, two_orgs: TwoOrgs, table: str
+    app_db: Database, owner_db: Database, two_orgs: TwoOrgs, table: str
 ) -> None:
-    both = await _count(app_db, table, two_orgs.a.organization_id) + await _count(
-        app_db, table, two_orgs.b.organization_id
+    db = owner_db if table in RUNTIME_UNREADABLE else app_db
+    both = await _count(db, table, two_orgs.a.organization_id) + await _count(
+        db, table, two_orgs.b.organization_id
     )
-    assert await _count(app_db, table, two_orgs.a.organization_id) == 1
+    assert await _count(db, table, two_orgs.a.organization_id) == 1
     assert both == 2
 
 
@@ -269,15 +300,19 @@ async def test_org_b_rows_cannot_be_selected_by_id_from_org_a(
             ("SELECT 1 FROM sync_record_failures WHERE organization_id = :x", b.organization_id),
             ("SELECT 1 FROM org_settings WHERE organization_id = :x", b.organization_id),
             ("SELECT 1 FROM model_providers WHERE organization_id = :x", b.organization_id),
+            ("SELECT 1 FROM provider_credentials WHERE organization_id = :x", b.organization_id),
+            ("SELECT 1 FROM query_traces WHERE organization_id = :x", b.organization_id),
+            ("SELECT 1 FROM query_traces WHERE membership_id = :x", b.membership_id),
         ):
             assert (await s.execute(text(sql), {"x": param})).first() is None, sql
 
 
 @pytest.mark.parametrize("table", ALL_TABLES)
 async def test_no_organization_context_exposes_no_rows(
-    app_db: Database, two_orgs: TwoOrgs, table: str
+    app_db: Database, owner_db: Database, two_orgs: TwoOrgs, table: str
 ) -> None:
-    assert await _count(app_db, table, None) == 0
+    db = owner_db if table in RUNTIME_UNREADABLE else app_db
+    assert await _count(db, table, None) == 0
 
 
 @pytest.mark.parametrize("table", TENANT_TABLES)
@@ -359,6 +394,25 @@ async def test_cannot_update_another_organizations_sessions(
         "UPDATE org_settings SET external_egress_level = 'restricted'",
         "INSERT INTO org_settings (organization_id) VALUES (lattice_current_org_id())",
         "UPDATE model_providers SET approved_for_level = 'restricted'",
+        # Phase 6: provider configuration and credentials are administrative writes
+        # (operator tools); traces are append-only for the runtime; audit events are
+        # not the runtime's at all.
+        "UPDATE model_providers SET enabled = true",
+        "INSERT INTO model_providers (organization_id, purpose, provider, model, deployment, "
+        "retention_mode, training_opt_out) VALUES (lattice_current_org_id(), 'generation', "
+        "'gemini', 'm', 'external_api', 'none', true)",
+        "INSERT INTO provider_credentials (organization_id, provider, secret_ref) VALUES "
+        "(lattice_current_org_id(), 'gemini', 'env:LATTICE_PROVIDER_SECRET_X')",
+        "UPDATE provider_credentials SET secret_ref = 'env:LATTICE_PROVIDER_SECRET_Y'",
+        "UPDATE provider_credentials SET status = 'revoked', revoked_at = now()",
+        "DELETE FROM provider_credentials",
+        "UPDATE query_traces SET answer = NULL",
+        "UPDATE query_traces SET question_text = ''",
+        "DELETE FROM query_traces",
+        "SELECT 1 FROM audit_events",
+        "INSERT INTO audit_events (organization_id, actor, action, target, reason) VALUES "
+        "(lattice_current_org_id(), 'x', 'x', '{}', 'x')",
+        "DELETE FROM audit_events",
     ],
 )
 async def test_runtime_role_lacks_unneeded_privileges(

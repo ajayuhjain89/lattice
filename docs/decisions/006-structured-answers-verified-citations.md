@@ -1,6 +1,6 @@
 # ADR-006: Structured answers with quote-verified citations; no streaming of unvalidated text
 
-Status: Proposed (Phase 0)
+Status: Accepted; implemented in Phase 6 (`lattice.answering`; see retrieval-design Part II as built)
 
 ## Context
 Citations are the trust model. A model can fabricate sources, cite the wrong evidence,
