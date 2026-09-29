@@ -138,4 +138,11 @@ async def test_openapi_documents_the_error_envelope(client: httpx.AsyncClient) -
         "/v1/evidence/{evidence_id}",
         "/v1/traces/{trace_id}",
         "/v1/admin/providers",
+        # Phase 8
+        "/v1/sources",
+        "/v1/admin/sources",
+        "/v1/admin/sources/{source_id}/failures",
+        "/v1/admin/sources/{source_id}/sync",
+        "/v1/activity",
+        "/v1/admin/activity",
     }

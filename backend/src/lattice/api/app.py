@@ -17,7 +17,7 @@ from lattice import metrics
 from lattice.answering.service import AskDependencies
 from lattice.api.handlers import register_exception_handlers
 from lattice.api.middleware import BodyLimitMiddleware, CsrfMiddleware, RequestContextMiddleware
-from lattice.api.routes import admin, ask, auth, health, me
+from lattice.api.routes import activity, admin, ask, auth, health, me, sources
 from lattice.config import Environment, Settings, load_provider_settings, load_settings
 from lattice.db.engine import Database, create_engine
 from lattice.db.role_check import verify_runtime_role
@@ -97,6 +97,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(me.router)
     app.include_router(ask.router)
     app.include_router(admin.router)
+    app.include_router(sources.router)
+    app.include_router(activity.router)
     if settings.dev_auth_active:
         app.state.dev_identity_provider = DevIdentityProvider(settings, db)
         app.include_router(auth.dev_router)
