@@ -355,7 +355,8 @@ evidence (D-5: off/deferred).
   Retention jobs are Phase 11.
 - **Asker's view of their own trace:** question, answer, evidence and stages.
   Evidence references are re-authorized against the asker's *current* access. If any
-  evidence the answer cited is no longer readable, the stored answer text is hidden
+  evidence of that Ask is no longer readable -- cited or not, since supersession items
+  and notices name uncited documents -- the stored answer text is hidden
   ("This answer cited sources you no longer have access to") — otherwise traces would
   let revoked users re-read derived content.
 - **Admin's operational view of other members' traces:** member, time, status,

@@ -12,9 +12,11 @@ secret references.
 Reading (``read_trace``) re-authorizes for the *viewer*, now:
 
 * **the asker** sees their question, status, the answer and the evidence references
-  that are still readable to them. If any evidence the answer cited is no longer
-  readable, the stored answer is hidden (``answer_hidden``): a trace must not let a
-  revoked user re-read content derived from it;
+  that are still readable to them. If any evidence of that Ask -- cited or not -- is no
+  longer readable, the stored answer is hidden (``answer_hidden``): a trace must not let
+  a revoked user re-read content derived from it, and the answer carries metadata of
+  uncited evidence too (supersession items and notices name documents, their IDs and
+  dates);
 * **an administrator** looking at another member's trace sees operational structure
   only: member, time, status, error code, stage durations, provider/model, prompt and
   policy versions, token usage. Never the question, answer, evidence references,
@@ -130,7 +132,7 @@ async def read_trace(
         )
         wanted = sorted(set(row.evidence_chunk_ids) | set(row.cited_chunk_ids))
         readable = await lookup_evidence(session, ctx, wanted)
-    hidden = any(c not in readable for c in row.cited_chunk_ids)
+    hidden = any(c not in readable for c in wanted)
     return AskerTrace(
         **_operational(row),
         question=row.question_text,

@@ -417,7 +417,7 @@ Design (Phase 0):
 | selected_chunk_ids  | Context actually sent to generation |
 | egress              | `{provider, model, effective_egress_level, excluded_by_egress_policy_count, prompt_version}` |
 | validation          | `{generation_calls, claims_proposed, claims_rejected, rejection_codes[]}` — counts and codes only; rejected claim text is never stored |
-| answer              | Final validated answer JSON (only validated claims + citations), retention-limited; hidden on read if any cited evidence is no longer readable by the viewer |
+| answer              | Final validated answer JSON (only validated claims + citations), retention-limited; hidden on read if any of the Ask's evidence (cited or not) is no longer readable by the viewer |
 | status              | `answered`, `partial`, `insufficient_evidence`, `evidence_only`, `ambiguous`, `failed` (+ `status_reason`) |
 | error_code          | |
 | timings_ms          | `{authz, lexical, embed_query, semantic, fuse_rerank, generation, validation, total}` |

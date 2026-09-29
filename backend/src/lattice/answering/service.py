@@ -7,6 +7,7 @@
       → classifications of the evidence (readable only) → generation access
         (configuration, invocation rule, question sensitivity, credential reference)
     [snapshot closed -- no transaction is held during a model call]
+    an action request (by code)     → unsupported_request / action_request (evidence kept)
     no evidence                     → insufficient_evidence / no_relevant_evidence
     ≥ 2 visible accounts named      → ambiguous / multiple_accounts (choices)
     no provider may be called       → evidence_only (egress_policy | generation_unavailable)
@@ -43,6 +44,7 @@ from lattice.answering.prompt import (
     build_prompt,
     with_feedback,
 )
+from lattice.answering.request_kind import is_action_request
 from lattice.answering.validate import Validation, validate_draft
 from lattice.authz import resolve_authorization_context, summarize_context
 from lattice.db.engine import Database
@@ -205,6 +207,8 @@ async def answer_question(
     now = now or datetime.now(UTC)
     trace_id = uuid.uuid4()
     timings: dict[str, Any] = {}
+    # D-11, decided from the question alone: never depends on evidence or a provider.
+    action = is_action_request(normalize(request.question))
 
     async with db.tenant_snapshot(organization_id) as session:
         ctx = await resolve_authorization_context(
@@ -236,7 +240,7 @@ async def answer_question(
             retrieval.question_sensitivity,
             factory=deps.generation,
             secrets=deps.secrets,
-            invoke=relevant and not ambiguous,
+            invoke=relevant and not ambiguous and not action,
         )
         timings["policy"] = round((time.perf_counter() - policy_started) * 1000, 1)
     timings["retrieval"] = retrieval.trace.timings_ms
@@ -244,7 +248,9 @@ async def answer_question(
     evidence = list(retrieval.evidence)
     candidates = [e for e in evidence if e.chunk_id in relevant_ids]
     permitted = [e for e in candidates if access.permits(e)]
-    excluded = [e for e in candidates if not access.permits(e)] if access.level else []
+    excluded = (
+        [e for e in candidates if not access.permits(e)] if access.level and not action else []
+    )
     fits, _ = budget(permitted)
     calls = _Calls()
     validation: Validation | None = None
@@ -253,7 +259,9 @@ async def answer_question(
     reason: str | None
     clarification = None
 
-    if not relevant:
+    if action:
+        status, reason = "unsupported_request", "action_request"
+    elif not relevant:
         status, reason = "insufficient_evidence", "no_relevant_evidence"
     elif ambiguous:
         status, reason = "ambiguous", "multiple_accounts"
