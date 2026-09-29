@@ -27,12 +27,21 @@ const REASON: Record<string, string> = {
  * the AI data policy kept from the model (expanded: the person may read them and they may
  * matter), and the rest (collapsed). With no claims, everything is one list.
  */
-export const EvidenceList = memo(function EvidenceList({ evidence, collapsed = false }: { evidence: readonly EvidenceItem[]; collapsed?: boolean }) {
+export const EvidenceList = memo(function EvidenceList({
+  evidence,
+  collapsed = false,
+  showReasons = true,
+}: {
+  evidence: readonly EvidenceItem[];
+  collapsed?: boolean;
+  /** Per-item "not sent" reasons; off when no model call was in play (the status says why). */
+  showReasons?: boolean;
+}) {
   const { model } = useAnswer();
-  const groups = groupEvidence(evidence, model);
+  const shown = showReasons ? evidence : evidence.map((e) => ({ ...e, not_used_reason: null }));
+  const groups = groupEvidence(shown, model);
   const hasClaims = model.numberOf.size > 0;
   if (!evidence.length) return null;
-
   const counts = hasClaims
     ? [`${groups.cited.length} cited`, groups.policyExcluded.length ? `${groups.policyExcluded.length} not sent` : null, groups.other.length ? `${groups.other.length} also retrieved` : null]
         .filter(Boolean)
@@ -59,9 +68,9 @@ export const EvidenceList = memo(function EvidenceList({ evidence, collapsed = f
           {groups.other.length > 0 && <Collapsible label="Also retrieved, not cited" items={groups.other} />}
         </>
       ) : collapsed ? (
-        <Collapsible label="Sources retrieved for this question" items={[...evidence]} />
+        <Collapsible label="Sources retrieved for this question" items={[...shown]} />
       ) : (
-        <Rows items={[...evidence]} />
+        <Rows items={[...shown]} />
       )}
     </section>
   );

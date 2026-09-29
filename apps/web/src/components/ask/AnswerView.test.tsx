@@ -97,9 +97,10 @@ describe("AnswerView", () => {
     expect(within(screen.getByTestId("evidence")).getAllByRole("button")).toHaveLength(2);
   });
 
-  it("evidence_only (no model): a different heading", () => {
+  it("evidence_only (no model): a different heading, and no per-item policy note contradicting it", () => {
     show(UNAVAILABLE);
     expect(screen.getByRole("heading", { name: "Sources found — no AI model available" })).toBeInTheDocument();
+    expect(screen.queryByText(/AI data policy/)).toBeNull();
   });
 
   it("ambiguous: only the API's choices, sent back by key", async () => {

@@ -345,7 +345,8 @@ export const UNAVAILABLE: S["Answer"] = {
   status: "evidence_only",
   status_reason: "generation_unavailable",
   message: "No AI model is available to draft an answer right now. Review the sources below.",
-  evidence: [{ ...I.ticket, used_for_answer: false }, { ...I.kickoff, used_for_answer: false }],
+  // As the API sends it: items are marked egress_policy although no provider exists.
+  evidence: [EXCLUDED(I.ticket), EXCLUDED(I.kickoff)],
   freshness: { ...BASE.freshness, newest_evidence_at: "2026-08-14T10:20:00Z" },
 };
 

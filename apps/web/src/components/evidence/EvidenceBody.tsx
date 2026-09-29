@@ -51,7 +51,7 @@ export const EvidenceBody = memo(function EvidenceBody({ detail, context, headin
       .map((c) => locateQuote(detail.text, c.quote, c.quote_start, c.quote_end))
       .filter((r): r is { start: number; end: number } => r !== null),
   );
-  const segments = markRanges(detail.text, ranges);
+  const segments = markRanges(unwrap(detail.text), ranges);
 
   const byDocument = (documentId: string) =>
     context ? [...context.items.values()].find((e) => e.document_id === documentId) : undefined;
@@ -190,6 +190,16 @@ export const EvidenceBody = memo(function EvidenceBody({ detail, context, headin
     </div>
   );
 });
+
+/**
+ * Source text keeps its hard line wraps; a single newline inside a paragraph becomes a
+ * space, while blank lines, list items and headings keep their breaks. One character for one, so quote offsets
+ * into the original text stay exact.
+ */
+export function unwrap(text: string): string {
+  // Lines that start a list item or heading keep their break.
+  return text.replace(/(?<!\n)\n(?!\n|[ \t]*(?:[-*+•]|\d+[.)])\s|#)/g, " ");
+}
 
 function EvidenceActions({ href, evidenceId }: { href: string | null; evidenceId: string }) {
   const [copied, setCopied] = useState(false);

@@ -30,6 +30,18 @@ export interface AnswerViewProps {
 }
 
 /**
+ * Whether per-item "not sent to the AI model" reasons mean anything for this outcome. The
+ * API marks items it did not send even when no model call was possible (no provider, an
+ * action request, nothing relevant); there the status already says why, and a per-item
+ * "AI data policy" note would contradict it.
+ */
+function modelInPlay(status: Answer["status"], reason: string | null): boolean {
+  if (status === "evidence_only") return reason === "egress_policy";
+  if (status === "insufficient_evidence") return reason === "claims_unverified";
+  return status === "answered" || status === "partial" || status === "failed";
+}
+
+/**
  * One Ask response. Every status has its own presentation; the view model is derived once
  * and the inspector's selection never re-renders it (only chips and rows subscribe).
  */
@@ -108,7 +120,11 @@ export const AnswerView = memo(function AnswerView(props: AnswerViewProps) {
       {(status === "answered" || status === "partial") && <Unknowns unknowns={answer.unknowns} />}
 
       {status !== "ambiguous" && (
-        <EvidenceList evidence={answer.evidence} collapsed={status === "unsupported_request"} />
+        <EvidenceList
+          evidence={answer.evidence}
+          collapsed={status === "unsupported_request"}
+          showReasons={modelInPlay(status, reason)}
+        />
       )}
     </AnswerContextProvider>
   );
