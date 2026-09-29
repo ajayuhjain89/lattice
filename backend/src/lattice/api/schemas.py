@@ -16,6 +16,16 @@ class HealthResponse(BaseModel):
     database: Literal["ok"]
 
 
+class LiveResponse(BaseModel):
+    status: Literal["ok"]
+
+
+class ReadyResponse(BaseModel):
+    status: Literal["ready"]
+    database: Literal["ok"]
+    schema_revision: Literal["ok"]
+
+
 class DevLoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

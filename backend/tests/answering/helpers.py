@@ -106,11 +106,17 @@ class Harness:
         return [f"{r.system}\n{r.prompt}" for r in self.requests]
 
 
-def deps(harness: Harness, memory: dict[str, SecretStr] | None = None) -> AskDependencies:
+def deps(
+    harness: Harness,
+    memory: dict[str, SecretStr] | None = None,
+    **operations: Any,
+) -> AskDependencies:
+    """``operations``: ``generation_enabled``, ``generation_deadline_seconds``."""
     return AskDependencies(
         embedding=FAKE,
         generation=harness,
         secrets=EnvironmentSecretStore(environ={}, memory=memory if memory is not None else {}),
+        **operations,
     )
 
 
@@ -175,6 +181,7 @@ async def run(
     *,
     memory: dict[str, SecretStr] | None = None,
     persist: bool = False,
+    operations: dict[str, Any] | None = None,
     **request: Any,
 ) -> AskOutcome:
     body = AskRequest.model_validate({"question": question, **request})
@@ -184,7 +191,7 @@ async def run(
         organization_id=org.id,
         membership_id=org.members[member],
         request=body,
-        deps=deps(harness, memory),
+        deps=deps(harness, memory, **(operations or {})),
         now=NOW,
     )
 

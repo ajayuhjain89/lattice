@@ -128,6 +128,8 @@ async def test_openapi_documents_the_error_envelope(client: httpx.AsyncClient) -
     paths = set(schema["paths"])
     assert paths == {
         "/v1/health",
+        "/v1/health/live",
+        "/v1/health/ready",
         "/v1/auth/dev-login",
         "/v1/auth/logout",
         "/v1/me",

@@ -24,6 +24,7 @@ operational run row and the source's ``last_synced_at`` change.
 
 import hashlib
 import logging
+import time
 import uuid
 from collections import Counter
 from collections.abc import AsyncIterator, Iterator
@@ -36,6 +37,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lattice import metrics
 from lattice.connectors.contract import Connector, RecordError, SourceRecord, SourceUnavailable
 from lattice.connectors.registry import build_connector
 from lattice.db.engine import Database
@@ -235,6 +237,7 @@ class Syncer:
         self.level: str | None = None
         self.connector: Connector = build_connector(config.connector_type, export_path)
         self.source: store.SourceRow | None = None
+        self.started = time.perf_counter()
 
     def _tx(self) -> AbstractAsyncContextManager[AsyncSession]:
         if self.options.dry_run:
@@ -323,6 +326,17 @@ class Syncer:
                 counts=r.run_counts(),
                 acl_synced=r.status not in ("failed", "aborted"),
             )
+        metrics.SYNC_RUNS.labels(
+            mode=metrics.bounded(r.mode, metrics.SYNC_MODES),
+            status=metrics.bounded(r.status, metrics.SYNC_STATUSES),
+        ).inc()
+        metrics.SYNC_DURATION.labels(mode=metrics.bounded(r.mode, metrics.SYNC_MODES)).observe(
+            time.perf_counter() - self.started
+        )
+        for failure in self.failures:
+            metrics.SYNC_RECORD_FAILURES.labels(
+                stage=metrics.bounded(failure.stage, metrics.SYNC_STAGES)
+            ).inc()
         log_event(
             _log,
             logging.INFO,

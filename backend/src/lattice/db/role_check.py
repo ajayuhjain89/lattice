@@ -10,7 +10,7 @@ refuse to serve if the connected role:
   can ALTER TABLE ... DISABLE ROW LEVEL SECURITY);
 
 or if any application table lacks ENABLED + FORCED row-level security, or the schema
-has not been migrated.
+is not at the revision this build expects (``lattice.db.schema``).
 """
 
 from dataclasses import dataclass
@@ -18,7 +18,9 @@ from dataclasses import dataclass
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-# alembic_version holds no tenant data; the runtime role has no privileges on it.
+from lattice.db.schema import current_revision, revision_problem
+
+# alembic_version holds no tenant data; the runtime role may only read it (0010).
 RLS_EXEMPT_TABLES = frozenset({"alembic_version"})
 
 _ROLE_SQL = text(
@@ -67,6 +69,7 @@ async def inspect_runtime_role(engine: AsyncEngine) -> RoleReport:
     async with engine.connect() as conn:
         role = (await conn.execute(_ROLE_SQL)).mappings().one()
         tables = (await conn.execute(_TABLES_SQL)).mappings().all()
+        revision = await current_revision(conn)
 
     problems: list[str] = []
     if role["is_superuser"]:
@@ -81,6 +84,8 @@ async def inspect_runtime_role(engine: AsyncEngine) -> RoleReport:
     checked = [t for t in tables if t["table_name"] not in RLS_EXEMPT_TABLES]
     if not any(t["table_name"] == "alembic_version" for t in tables):
         problems.append("database schema is not migrated (run `make migrate`)")
+    elif (problem := revision_problem(revision)) is not None:
+        problems.append(problem)
     for table in checked:
         if not (table["enabled"] and table["forced"]):
             problems.append(f"table {table['table_name']} does not have forced row-level security")

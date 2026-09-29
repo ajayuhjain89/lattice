@@ -22,7 +22,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from lattice.answering.models import Answer, AskRequest
-from lattice.answering.service import AskDependencies, ask
+from lattice.answering.service import OFFLINE_GENERATION_DEADLINE_SECONDS, AskDependencies, ask
 from lattice.cli_retrieval import GOLDEN, REPORTS, _databases, _fail, _member
 from lattice.config import Environment, load_provider_settings
 from lattice.dataset.distractors import DATA
@@ -101,6 +101,7 @@ async def ask_command(args: argparse.Namespace) -> int:
         embedding=build_embedding_provider(args.embedding, load_provider_settings()),
         generation=DefaultGenerationFactory(_env()),
         secrets=EnvironmentSecretStore(),
+        generation_deadline_seconds=OFFLINE_GENERATION_DEADLINE_SECONDS,
     )
     app, owner = _databases("lattice-ask")
     try:

@@ -2,7 +2,9 @@
 
 ``uvicorn lattice.api.app:create_app --factory`` loads settings from the environment
 (fail-fast), configures logging, and at startup refuses to serve unless the runtime
-database role is safe (lattice.db.role_check).
+database role is safe and the schema is at the revision this build expects
+(lattice.db.role_check). With ``LATTICE_METRICS_ADDRESS`` set it also serves
+Prometheus metrics on that separate listener (lattice.metrics).
 """
 
 from collections.abc import AsyncIterator
@@ -11,9 +13,10 @@ from datetime import timedelta
 
 from fastapi import FastAPI
 
+from lattice import metrics
 from lattice.answering.service import AskDependencies
 from lattice.api.handlers import register_exception_handlers
-from lattice.api.middleware import CsrfMiddleware, RequestContextMiddleware
+from lattice.api.middleware import BodyLimitMiddleware, CsrfMiddleware, RequestContextMiddleware
 from lattice.api.routes import admin, ask, auth, health, me
 from lattice.config import Environment, Settings, load_provider_settings, load_settings
 from lattice.db.engine import Database, create_engine
@@ -35,14 +38,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     db = Database(
-        create_engine(settings.database_url.get_secret_value(), application_name="lattice-api")
+        create_engine(
+            settings.database_url.get_secret_value(),
+            application_name="lattice-api",
+            pool_size=settings.db_pool_size,
+            statement_timeout_ms=settings.db_statement_timeout_ms,
+            connect_timeout_seconds=settings.db_connect_timeout_seconds,
+        )
     )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await verify_runtime_role(db.engine)
-        yield
-        await db.dispose()
+        server = metrics.serve(settings.metrics_address) if settings.metrics_address else None
+        try:
+            yield
+        finally:
+            if server is not None:
+                server[0].shutdown()  # type: ignore[attr-defined]
+                server[0].server_close()  # type: ignore[attr-defined]
+            await db.dispose()
 
     app = FastAPI(
         title="Lattice API",
@@ -73,6 +88,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         generation=DefaultGenerationFactory(settings.env),
         secrets=EnvironmentSecretStore(),
+        generation_enabled=settings.generation_enabled,
+        generation_deadline_seconds=settings.generation_deadline_seconds,
     )
 
     app.include_router(health.router)
@@ -87,5 +104,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app, settings)
     # add_middleware wraps: the last added is outermost.
     app.add_middleware(CsrfMiddleware)
+    app.add_middleware(BodyLimitMiddleware, max_bytes=settings.max_request_bytes)
     app.add_middleware(RequestContextMiddleware, production=production)
     return app

@@ -34,16 +34,40 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from lattice.db.schema import current_revision
+
 _BIND_ORG_SQL = text("SELECT set_config('app.org_id', :org_id, true)")
 
 
-def create_engine(url: str, *, application_name: str, pool_size: int = 5) -> AsyncEngine:
+def create_engine(
+    url: str,
+    *,
+    application_name: str,
+    pool_size: int = 5,
+    statement_timeout_ms: int | None = None,
+    connect_timeout_seconds: float | None = None,
+) -> AsyncEngine:
+    """Long-running processes (the API, the worker) pass the timeouts: a statement over
+    ``statement_timeout_ms`` is cancelled by the server, a transaction left idle as long
+    is terminated, and an unreachable server fails a checkout after
+    ``connect_timeout_seconds`` (also the pool's wait for a free connection). Operator
+    tools (migrations, seed, sync from the CLI) keep the server defaults."""
+    server_settings = {"application_name": application_name}
+    if statement_timeout_ms is not None:
+        server_settings["statement_timeout"] = str(statement_timeout_ms)
+        server_settings["idle_in_transaction_session_timeout"] = str(statement_timeout_ms)
+    connect_args: dict[str, object] = {"server_settings": server_settings}
+    extra: dict[str, object] = {}
+    if connect_timeout_seconds is not None:
+        connect_args["timeout"] = connect_timeout_seconds
+        extra["pool_timeout"] = connect_timeout_seconds
     return create_async_engine(
         url,
         pool_size=pool_size,
         max_overflow=pool_size,
         pool_pre_ping=True,
-        connect_args={"server_settings": {"application_name": application_name}},
+        connect_args=connect_args,
+        **extra,
     )
 
 
@@ -85,6 +109,11 @@ class Database:
         """Connectivity check for /v1/health. Touches no tenant data."""
         async with self.unscoped_transaction() as session:
             await session.execute(text("SELECT 1"))
+
+    async def schema_revision(self) -> str | None:
+        """The applied migration revision (readiness). Touches no tenant data."""
+        async with self.engine.connect() as conn:
+            return await current_revision(conn)
 
     async def dispose(self) -> None:
         await self.engine.dispose()

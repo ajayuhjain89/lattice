@@ -61,7 +61,7 @@ from pydantic import SecretStr
 from sqlalchemy import text
 
 from lattice.answering.models import Answer, AskRequest
-from lattice.answering.service import AskDependencies, ask
+from lattice.answering.service import OFFLINE_GENERATION_DEADLINE_SECONDS, AskDependencies, ask
 from lattice.dataset.access import EGRESS_LEVEL
 from lattice.dataset.lint import Dataset
 from lattice.dataset.manifests import AS_OF, CANARY, GoldenItem
@@ -744,7 +744,12 @@ async def evaluate_answers(
 ) -> AnswerReport:
     texts = await load_texts(owner, identities.org_ids)
     recorder = RecordingFactory(factory)
-    deps = AskDependencies(embedding=embedding, generation=recorder, secrets=secrets)
+    deps = AskDependencies(
+        embedding=embedding,
+        generation=recorder,
+        secrets=secrets,
+        generation_deadline_seconds=OFFLINE_GENERATION_DEADLINE_SECONDS,
+    )
     runs: dict[tuple[str, str], list[tuple[GoldenItem, Any]]] = defaultdict(list)
     for item in items:
         for config, expected in item.expectations():
