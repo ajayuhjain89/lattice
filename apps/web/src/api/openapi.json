@@ -1,0 +1,2192 @@
+{
+  "components": {
+    "schemas": {
+      "AdminTrace": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deployment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "generation_calls": {
+            "title": "Generation Calls",
+            "type": "integer"
+          },
+          "membership_id": {
+            "format": "uuid",
+            "title": "Membership Id",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Version"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "retrieval_config_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Config Version"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
+          },
+          "timings_ms": {
+            "additionalProperties": true,
+            "title": "Timings Ms",
+            "type": "object"
+          },
+          "trace_id": {
+            "format": "uuid",
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "usage": {
+            "additionalProperties": true,
+            "title": "Usage",
+            "type": "object"
+          },
+          "view": {
+            "const": "operational",
+            "default": "operational",
+            "title": "View",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trace_id",
+          "membership_id",
+          "created_at",
+          "status",
+          "status_reason",
+          "error_code",
+          "provider",
+          "model",
+          "deployment",
+          "prompt_version",
+          "policy_version",
+          "retrieval_config_version",
+          "generation_calls",
+          "timings_ms",
+          "usage"
+        ],
+        "title": "AdminTrace",
+        "type": "object"
+      },
+      "Answer": {
+        "additionalProperties": false,
+        "properties": {
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "clarification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Clarification"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/Conflict"
+            },
+            "title": "Conflicts",
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceItem"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A fixed sentence for the status, or null.",
+            "title": "Message"
+          },
+          "notices": {
+            "items": {
+              "$ref": "#/components/schemas/Notice"
+            },
+            "title": "Notices",
+            "type": "array"
+          },
+          "question_sensitivity": {
+            "enum": [
+              "internal",
+              "confidential",
+              "restricted"
+            ],
+            "title": "Question Sensitivity",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "answered",
+              "partial",
+              "insufficient_evidence",
+              "evidence_only",
+              "ambiguous",
+              "unsupported_request",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
+          },
+          "trace_id": {
+            "format": "uuid",
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "unknowns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unknowns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "trace_id",
+          "status",
+          "status_reason",
+          "message",
+          "claims",
+          "conflicts",
+          "unknowns",
+          "clarification",
+          "evidence",
+          "freshness",
+          "notices",
+          "question_sensitivity"
+        ],
+        "title": "Answer",
+        "type": "object"
+      },
+      "AskRequest": {
+        "additionalProperties": false,
+        "description": "What a client may send. Nothing here is authority: the organization and member come\nfrom the session, every access fact from the database; ``classification`` can only\nraise the question's sensitivity (D-13).",
+        "properties": {
+          "classification": {
+            "anyOf": [
+              {
+                "enum": [
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification"
+          },
+          "question": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RetrievalScope"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AskRequest",
+        "type": "object"
+      },
+      "AskerTrace": {
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "answer_hidden": {
+            "title": "Answer Hidden",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Reason"
+          },
+          "deployment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "evidence_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "generation_calls": {
+            "title": "Generation Calls",
+            "type": "integer"
+          },
+          "membership_id": {
+            "format": "uuid",
+            "title": "Membership Id",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Version"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "question_sensitivity": {
+            "title": "Question Sensitivity",
+            "type": "string"
+          },
+          "retrieval_config_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Config Version"
+          },
+          "scope": {
+            "additionalProperties": true,
+            "title": "Scope",
+            "type": "object"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
+          },
+          "timings_ms": {
+            "additionalProperties": true,
+            "title": "Timings Ms",
+            "type": "object"
+          },
+          "trace_id": {
+            "format": "uuid",
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "usage": {
+            "additionalProperties": true,
+            "title": "Usage",
+            "type": "object"
+          },
+          "validation": {
+            "additionalProperties": true,
+            "title": "Validation",
+            "type": "object"
+          },
+          "view": {
+            "const": "asker",
+            "default": "asker",
+            "title": "View",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trace_id",
+          "membership_id",
+          "created_at",
+          "status",
+          "status_reason",
+          "error_code",
+          "provider",
+          "model",
+          "deployment",
+          "prompt_version",
+          "policy_version",
+          "retrieval_config_version",
+          "generation_calls",
+          "timings_ms",
+          "usage",
+          "question",
+          "question_sensitivity",
+          "scope",
+          "answer",
+          "answer_hidden",
+          "evidence_ids",
+          "decision_reason",
+          "validation"
+        ],
+        "title": "AskerTrace",
+        "type": "object"
+      },
+      "Citation": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "evidence_id": {
+            "description": "The chunk ID of an item in `evidence`.",
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "quote": {
+            "description": "Verbatim from the evidence text.",
+            "title": "Quote",
+            "type": "string"
+          },
+          "quote_end": {
+            "title": "Quote End",
+            "type": "integer"
+          },
+          "quote_start": {
+            "description": "Offset of the quote in the evidence text.",
+            "title": "Quote Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "document_id",
+          "quote",
+          "quote_start",
+          "quote_end"
+        ],
+        "title": "Citation",
+        "type": "object"
+      },
+      "Claim": {
+        "additionalProperties": false,
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "role": {
+            "enum": [
+              "direct_answer",
+              "supporting"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "role",
+          "citations"
+        ],
+        "title": "Claim",
+        "type": "object"
+      },
+      "Clarification": {
+        "additionalProperties": false,
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/ClarificationChoice"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "choices"
+        ],
+        "title": "Clarification",
+        "type": "object"
+      },
+      "ClarificationChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "ClarificationChoice",
+        "type": "object"
+      },
+      "Conflict": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "superseded",
+              "potential_conflict"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "positions": {
+            "items": {
+              "$ref": "#/components/schemas/ConflictPosition"
+            },
+            "title": "Positions",
+            "type": "array"
+          },
+          "summary": {
+            "description": "Deterministic; never declares a winner.",
+            "title": "Summary",
+            "type": "string"
+          },
+          "supersession": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Supersession"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
+          }
+        },
+        "required": [
+          "kind",
+          "topic",
+          "summary",
+          "positions"
+        ],
+        "title": "Conflict",
+        "type": "object"
+      },
+      "ConflictPosition": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "claim": {
+            "$ref": "#/components/schemas/Claim"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "claim",
+          "document_id",
+          "title",
+          "source_type",
+          "authority",
+          "occurred_at",
+          "version"
+        ],
+        "title": "ConflictPosition",
+        "type": "object"
+      },
+      "CredentialOut": {
+        "properties": {
+          "data_use": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Use"
+          },
+          "resolvable": {
+            "title": "Resolvable",
+            "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "state": {
+            "enum": [
+              "none",
+              "active"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "source",
+          "resolvable",
+          "data_use"
+        ],
+        "title": "CredentialOut",
+        "type": "object"
+      },
+      "DevLoginRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "organization": {
+            "anyOf": [
+              {
+                "maxLength": 63,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Organization slug; required only when the persona has several.",
+            "title": "Organization"
+          },
+          "subject": {
+            "description": "Seeded persona email.",
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject"
+        ],
+        "title": "DevLoginRequest",
+        "type": "object"
+      },
+      "EgressOut": {
+        "properties": {
+          "data_origin": {
+            "title": "Data Origin",
+            "type": "string"
+          },
+          "default_query_sensitivity": {
+            "title": "Default Query Sensitivity",
+            "type": "string"
+          },
+          "external_egress_level": {
+            "title": "External Egress Level",
+            "type": "string"
+          },
+          "organization_controlled_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization Controlled Level"
+          }
+        },
+        "required": [
+          "external_egress_level",
+          "organization_controlled_level",
+          "default_query_sensitivity",
+          "data_origin"
+        ],
+        "title": "EgressOut",
+        "type": "object"
+      },
+      "ErrorBody": {
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "request_id"
+        ],
+        "title": "ErrorBody",
+        "type": "object"
+      },
+      "ErrorCode": {
+        "enum": [
+          "authentication_required",
+          "authentication_failed",
+          "permission_denied",
+          "csrf_rejected",
+          "not_found",
+          "method_not_allowed",
+          "validation_failed",
+          "service_unavailable",
+          "internal_error",
+          "source_unavailable",
+          "retrieval_failed",
+          "provider_unavailable",
+          "generation_invalid",
+          "security_invariant_violated"
+        ],
+        "title": "ErrorCode",
+        "type": "string"
+      },
+      "ErrorDetail": {
+        "description": "One problem with the request. Never contains the submitted value.",
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "issue": {
+            "title": "Issue",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "issue"
+        ],
+        "title": "ErrorDetail",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "EvidenceAccount": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "EvidenceAccount",
+        "type": "object"
+      },
+      "EvidenceDetail": {
+        "additionalProperties": false,
+        "description": "``GET /v1/evidence/{id}``: one readable chunk, for the inspector.",
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceAccount"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "char_end": {
+            "title": "Char End",
+            "type": "integer"
+          },
+          "char_start": {
+            "description": "Offset of this chunk in its document body.",
+            "title": "Char Start",
+            "type": "integer"
+          },
+          "classification": {
+            "enum": [
+              "internal",
+              "confidential",
+              "restricted"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "display_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Ref"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_kind": {
+            "title": "Document Kind",
+            "type": "string"
+          },
+          "document_updated_at": {
+            "format": "date-time",
+            "title": "Document Updated At",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "heading_path": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Heading Path",
+            "type": "array"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "superseded_by_document_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Superseded By Document Ids",
+            "type": "array"
+          },
+          "supersedes_document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Document Id"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uri"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "document_id",
+          "source_type",
+          "document_kind",
+          "source_name",
+          "title",
+          "display_ref",
+          "uri",
+          "heading_path",
+          "author",
+          "occurred_at",
+          "document_updated_at",
+          "version",
+          "authority",
+          "classification",
+          "account",
+          "text",
+          "char_start",
+          "char_end",
+          "supersedes_document_id",
+          "superseded_by_document_ids"
+        ],
+        "title": "EvidenceDetail",
+        "type": "object"
+      },
+      "EvidenceItem": {
+        "additionalProperties": false,
+        "description": "A permitted chunk the asker may read (D-8: the account only when visible).",
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceAccount"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "classification": {
+            "enum": [
+              "internal",
+              "confidential",
+              "restricted"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "display_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Ref"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_kind": {
+            "title": "Document Kind",
+            "type": "string"
+          },
+          "document_updated_at": {
+            "format": "date-time",
+            "title": "Document Updated At",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "heading_path": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Heading Path",
+            "type": "array"
+          },
+          "not_used_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "egress_policy",
+                  "relevance_floor",
+                  "prompt_budget"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Not Used Reason"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "superseded_by_document_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Superseded By Document Ids",
+            "type": "array"
+          },
+          "supersedes_document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Document Id"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uri"
+          },
+          "used_for_answer": {
+            "title": "Used For Answer",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "document_id",
+          "rank",
+          "source_type",
+          "document_kind",
+          "source_name",
+          "title",
+          "display_ref",
+          "uri",
+          "heading_path",
+          "author",
+          "occurred_at",
+          "document_updated_at",
+          "version",
+          "authority",
+          "classification",
+          "account",
+          "text",
+          "supersedes_document_id",
+          "superseded_by_document_ids",
+          "used_for_answer"
+        ],
+        "title": "EvidenceItem",
+        "type": "object"
+      },
+      "Freshness": {
+        "additionalProperties": false,
+        "properties": {
+          "is_stale": {
+            "title": "Is Stale",
+            "type": "boolean"
+          },
+          "newest_cited_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newest Cited At"
+          },
+          "newest_evidence_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newest Evidence At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "threshold_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold Days"
+          }
+        },
+        "required": [
+          "newest_cited_at",
+          "newest_evidence_at",
+          "is_stale",
+          "threshold_days",
+          "note"
+        ],
+        "title": "Freshness",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "database": {
+            "const": "ok",
+            "title": "Database",
+            "type": "string"
+          },
+          "status": {
+            "const": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "database"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "MeResponse": {
+        "properties": {
+          "capabilities": {
+            "description": "Administrative capabilities. None of them grants access to content.",
+            "items": {
+              "const": "admin",
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "membership": {
+            "$ref": "#/components/schemas/MembershipOut"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/OrganizationOut"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserOut"
+          }
+        },
+        "required": [
+          "user",
+          "organization",
+          "membership",
+          "capabilities"
+        ],
+        "title": "MeResponse",
+        "type": "object"
+      },
+      "MembershipOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "role_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Display label only; not a permission.",
+            "title": "Role Label"
+          }
+        },
+        "required": [
+          "id",
+          "role_label"
+        ],
+        "title": "MembershipOut",
+        "type": "object"
+      },
+      "Notice": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "egress_excluded",
+              "claims_removed",
+              "stale_evidence",
+              "cites_superseded",
+              "semantic_degraded"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "Notice",
+        "type": "object"
+      },
+      "OrganizationOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name"
+        ],
+        "title": "OrganizationOut",
+        "type": "object"
+      },
+      "ProviderOut": {
+        "properties": {
+          "approved_for_level": {
+            "title": "Approved For Level",
+            "type": "string"
+          },
+          "credential": {
+            "$ref": "#/components/schemas/CredentialOut"
+          },
+          "deployment": {
+            "title": "Deployment",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "endpoint_configured": {
+            "title": "Endpoint Configured",
+            "type": "boolean"
+          },
+          "explicitly_approved": {
+            "title": "Explicitly Approved",
+            "type": "boolean"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "retention_mode": {
+            "title": "Retention Mode",
+            "type": "string"
+          },
+          "training_opt_out": {
+            "title": "Training Opt Out",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "purpose",
+          "provider",
+          "model",
+          "deployment",
+          "approved_for_level",
+          "explicitly_approved",
+          "enabled",
+          "endpoint_configured",
+          "retention_mode",
+          "training_opt_out",
+          "credential"
+        ],
+        "title": "ProviderOut",
+        "type": "object"
+      },
+      "ProvidersResponse": {
+        "properties": {
+          "egress": {
+            "$ref": "#/components/schemas/EgressOut"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderOut"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "egress",
+          "providers"
+        ],
+        "title": "ProvidersResponse",
+        "type": "object"
+      },
+      "RetrievalScope": {
+        "additionalProperties": false,
+        "description": "Optional filters. Each is ANDed with the authorization predicate: it can narrow\nwhat the reader may see, never widen it. ``account`` must name an account the\nreader may know exists (``authz.visible_accounts_predicate``); a hidden or unknown\naccount is refused identically.",
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "source_types": {
+            "default": [],
+            "items": {
+              "enum": [
+                "doc",
+                "ticket",
+                "chat"
+              ],
+              "type": "string"
+            },
+            "title": "Source Types",
+            "type": "array"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "title": "RetrievalScope",
+        "type": "object"
+      },
+      "Supersession": {
+        "additionalProperties": false,
+        "properties": {
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "superseded_document_id": {
+            "format": "uuid",
+            "title": "Superseded Document Id",
+            "type": "string"
+          },
+          "superseding_document_id": {
+            "format": "uuid",
+            "title": "Superseding Document Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "superseded_document_id",
+          "superseding_document_id",
+          "since"
+        ],
+        "title": "Supersession",
+        "type": "object"
+      },
+      "UserOut": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "display_name"
+        ],
+        "title": "UserOut",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Lattice API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/admin/providers": {
+      "get": {
+        "operationId": "get_providers_v1_admin_providers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvidersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "summary": "The organization's AI egress settings and provider configuration (masked)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/ask": {
+      "post": {
+        "description": "Statuses (answered, partial, insufficient_evidence, evidence_only, ambiguous, unsupported_request, failed) are HTTP 200 outcomes. Every citation references an item of `evidence`. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_ask_v1_ask_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Answer"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Ask a question; get a grounded answer over the evidence you may read",
+        "tags": [
+          "ask"
+        ]
+      }
+    },
+    "/v1/auth/dev-login": {
+      "post": {
+        "description": "Available only when LATTICE_ENV is development or test and LATTICE_DEV_AUTH_ENABLED=true. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "dev_login_v1_auth_dev_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DevLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Development-only persona sign-in",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "operationId": "logout_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Revoke the current session",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/evidence/{evidence_id}": {
+      "get": {
+        "operationId": "get_evidence_item_v1_evidence__evidence_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "One evidence passage you may read (404 for anything else)",
+        "tags": [
+          "ask"
+        ]
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "operationId": "health_v1_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Liveness and database connectivity",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "operationId": "me_v1_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "The signed-in user, their organization and capabilities",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/v1/traces/{trace_id}": {
+      "get": {
+        "operationId": "get_trace_v1_traces__trace_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Trace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AskerTrace"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AdminTrace"
+                    }
+                  ],
+                  "title": "Response Get Trace V1 Traces  Trace Id  Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "A query trace: your own in full (re-authorized); others' operational only (administrators)",
+        "tags": [
+          "ask"
+        ]
+      }
+    }
+  }
+}

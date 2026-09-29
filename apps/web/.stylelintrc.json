@@ -1,0 +1,53 @@
+{
+  "extends": [
+    "stylelint-config-standard"
+  ],
+  "rules": {
+    "color-no-hex": true,
+    "color-named": "never",
+    "selector-class-pattern": null,
+    "custom-property-pattern": null,
+    "value-keyword-case": "lower",
+    "import-notation": "string",
+    "declaration-property-value-disallowed-list": {
+      "box-shadow": [
+        "/rgba/",
+        "/#/"
+      ],
+      "z-index": [
+        "/^[0-9]+$/"
+      ]
+    },
+    "property-no-unknown": [
+      true,
+      {
+        "ignoreProperties": [
+          "composes"
+        ]
+      }
+    ],
+    "declaration-empty-line-before": null,
+    "selector-pseudo-class-no-unknown": [
+      true,
+      {
+        "ignorePseudoClasses": [
+          "global"
+        ]
+      }
+    ],
+    "property-no-vendor-prefix": null,
+    "no-descending-specificity": null,
+    "custom-property-empty-line-before": null
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/styles/tokens.css"
+      ],
+      "rules": {
+        "color-no-hex": null,
+        "declaration-property-value-disallowed-list": null
+      }
+    }
+  ]
+}
