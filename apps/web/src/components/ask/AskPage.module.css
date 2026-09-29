@@ -1,0 +1,168 @@
+.main {
+  flex: 1;
+  outline: none;
+}
+
+.column {
+  width: 100%;
+  max-width: calc(var(--reading-max) + 2 * var(--gutter));
+  margin: 0 auto;
+  padding: var(--space-8) var(--gutter) var(--space-16);
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.result {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+  animation: arrive var(--motion-result) var(--ease);
+}
+
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result {
+    animation: none;
+  }
+}
+
+/* Intro (first visit) ------------------------------------------------------------- */
+
+.intro {
+  display: grid;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+}
+
+.display {
+  composes: t-display from global;
+
+  max-width: 18ch;
+}
+
+.deck {
+  max-width: 56ch;
+  font-size: var(--type-lead-size);
+  line-height: var(--type-lead-line);
+  color: var(--text-secondary);
+}
+
+.principles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: var(--border-width) solid var(--border-strong);
+  margin-top: var(--space-4);
+}
+
+.principle {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4) 0 0;
+}
+
+.principle + .principle {
+  padding-left: var(--space-4);
+  border-left: var(--border-width) solid var(--border-default);
+}
+
+.principleLabel {
+  composes: t-label from global;
+
+  color: var(--text-primary);
+}
+
+.principleBody {
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+/* Progress -------------------------------------------------------------------------- */
+
+.progress {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.progressLine {
+  composes: t-label from global;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--control-sm);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-width) solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+.progressStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pulse {
+  width: 8px;
+  height: 8px;
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--accent-lime);
+}
+
+.elapsed {
+  composes: t-meta from global;
+
+  color: var(--text-muted);
+}
+
+.progressNote {
+  color: var(--text-muted);
+  max-width: var(--prose-measure);
+}
+
+.skeletonRows {
+  display: grid;
+  gap: var(--space-4);
+  padding-top: var(--space-2);
+  border-top: var(--border-width) solid var(--border-default);
+}
+
+@media (width < 1024px) {
+  .principles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .principle,
+  .principle + .principle {
+    padding: var(--space-3) 0;
+    border-left: 0;
+    border-bottom: var(--border-width) solid var(--border-default);
+  }
+}
+
+@media (width < 768px) {
+  .column {
+    padding-top: var(--space-5);
+    gap: var(--space-6);
+  }
+
+  .display {
+    font-size: 2rem;
+    line-height: 2.25rem;
+  }
+
+  .deck {
+    font-size: var(--type-prose-size);
+    line-height: var(--type-prose-line);
+  }
+}

@@ -1,0 +1,53 @@
+.state {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 520px;
+  padding: var(--space-6) 0;
+}
+
+.inset {
+  padding: var(--space-6) 0;
+}
+
+.label {
+  composes: t-label from global;
+
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+}
+
+.errorLabel {
+  color: var(--status-error-text);
+}
+
+.title {
+  composes: t-h2 from global;
+}
+
+.body {
+  color: var(--text-secondary);
+  max-width: 60ch;
+}
+
+.reference {
+  composes: t-meta from global;
+
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}

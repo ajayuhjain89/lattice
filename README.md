@@ -5,8 +5,8 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–5 are implemented and merged; Phase 6 (answering) is implemented on
-`phase/6-generation`, awaiting review.** What runs today: a FastAPI backend with typed
+**Status: Phases 1–6 are implemented and merged; Phase 7 (the web app) is implemented on
+`phase/7-frontend`, awaiting review.** What runs today: a FastAPI backend with typed
 fail-fast configuration, PostgreSQL 16 + pgvector with forced row-level security for
 organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -25,13 +25,16 @@ its SQL, fused and deterministically reranked into permitted evidence, with a
 retrieval evaluation over the golden set — and (Phase 6) grounded answers from that
 evidence only: organization-scoped generation providers under the same egress rule,
 credentials stored by reference, claim-level fail-closed citations, deterministic
-supersession and potential conflicts, query traces, and the Ask API. There is no web UI
-yet — see the [implementation plan](docs/implementation-plan.md).
+supersession and potential conflicts, query traces, and the Ask API — and (Phase 7) the
+web app: Ask with every answer status designed, citation chips and an evidence
+inspector, conflict and supersession presentation, traces, and read-only AI provider
+settings. See the [implementation plan](docs/implementation-plan.md).
 
 ## Local setup
 
 Prerequisites: Docker with Compose v2, [`uv`](https://docs.astral.sh/uv/), `make`,
-`git`. `uv` installs Python 3.12 itself.
+`git`; for the web app, Node.js 22+ and [`pnpm`](https://pnpm.io/). `uv` installs
+Python 3.12 itself.
 
 ```bash
 git clone <this repository> lattice && cd lattice
@@ -82,6 +85,23 @@ unpaid key may receive only the synthetic organizations' data (ADR-010).
 `EMBEDDING=openai` needs `LATTICE_OPENAI_API_KEY` (ADR-008). Tests and CI use the
 deterministic fake provider and a tiny committed model; they never download weights.
 
+**The web app** (in a second terminal, while `make api` runs):
+
+```bash
+make web-setup            # install the web app's dependencies from its lockfile
+make web                  # http://127.0.0.1:3000 — pick a persona on the development sign-in
+```
+
+The browser talks only to the web app's origin; `/api/*` is proxied to the API, so the
+session cookie stays first-party. With no generation provider recorded, Ask shows the
+evidence it finds (`evidence_only`). To see drafted answers locally without any model or
+key, record the development-only fake provider (audited; `lattice provider disable`
+undoes it):
+
+```bash
+cd backend && uv run --env-file ../.env lattice provider configure --org halden --purpose generation --provider fake --model fake --deployment external_api --reason "local UI development"
+```
+
 Seeded personas are listed in [`data/synthetic/halden/org.yaml`](data/synthetic/halden/org.yaml)
 and [`data/synthetic/veridian/org.yaml`](data/synthetic/veridian/org.yaml). Every
 state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection).
@@ -105,6 +125,10 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 | `make typecheck` | `mypy --strict` over source, tests and migrations |
 | `make db-bootstrap` | Re-run the idempotent superuser bootstrap (e.g. after changing passwords in `.env`) |
 | `make db-down` / `make db-destroy` | Stop Postgres / **delete** the local database volume |
+| `make web` / `make web-build` | Web app dev server on :3000 / production build |
+| `make web-check` | Web lint (ESLint with jsx-a11y, Stylelint: no raw colours outside `tokens.css`), type check, unit and component tests |
+| `make web-e2e` | Browser tests against the production build with the API mocked from typed fixtures: flows, not-found safety, keyboard, axe WCAG 2.2 AA, responsive shell (after `make web-build`) |
+| `make api-contract` | Re-export the OpenAPI schema and regenerate the web app's TypeScript types (CI fails if they drift) |
 | `make help` | List all targets |
 
 CI (`.github/workflows/ci.yml`) runs lint, strict type checking, the dataset lint, the
@@ -112,7 +136,9 @@ bootstrap, a migration round-trip on a clean database with a model-drift check, 
 seed (twice), the runtime-role check, a sync of the dataset (twice, the second writing
 nothing), the retrieval and answer evaluations as every persona with fake providers
 (each fails on any security violation), and the test suite against
-`pgvector/pgvector:0.8.1-pg16`.
+`pgvector/pgvector:0.8.1-pg16`. A second job checks the web app: the generated API
+contract matches the backend, lint, type check, unit and component tests, the
+production build, and the Playwright suite (desktop and phone).
 
 ## How isolation works (Phase 1)
 
@@ -209,10 +235,32 @@ run on the 8 GB reference machine, and no external quota was available
 [retrieval design, Part II and §13](docs/retrieval-design.md); results:
 [evaluation plan §13](docs/evaluation-plan.md).
 
+## How the web app works (Phase 7)
+
+`apps/web` is a Next.js (App Router, TypeScript strict) app that renders and nothing
+more: every permission decision is the API's. Its types are generated from the API's
+OpenAPI schema; one client adds the CSRF header and normalizes errors; one module holds
+every query. Ask sends the question with scope filters that can only narrow the search
+(source types, dates, and a per-question sensitivity that can only be raised). Each
+answer status has its own presentation — an answer with a lead and supporting claims,
+each followed by citation chips numbered in reading order; a partial answer with what
+the evidence doesn't establish; a quiet "nothing you can access answers this"; evidence
+without a summary when the AI data policy or a missing model stops generation; the
+API's own clarification choices; an explanation when a request asks Lattice to act; a
+safe failure with retry. A claim citing evidence absent from the response is not
+rendered. Potential conflicts keep every position, oldest first, with equal weight; a
+supersession appears only when the source records it. The evidence inspector (docked at
+≥1280 px, a drawer below, a bottom sheet on phones) reads `GET /v1/evidence/{id}` each
+time it opens; a 404 — nonexistent or unreadable — has one presentation. Traces are
+fetched fresh and never filled in from the Ask page's memory. AI provider settings are
+read-only: configuration is changed with the audited CLI. Details: [design
+system](docs/design-system.md), [implementation plan, Phase 7](docs/implementation-plan.md).
+
 ## Repository layout
 
 ```
 backend/            FastAPI app (src/lattice), Alembic migrations, tests
+apps/web/           Next.js web app (src/: app routes, components, API client; e2e/: Playwright)
 infra/postgres/     superuser bootstrap: roles, databases, extensions
 data/synthetic/     synthetic organizations: manifests, raw source exports, ground truth
                     (see data/synthetic/README.md)

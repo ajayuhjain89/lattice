@@ -1,0 +1,41 @@
+.tag {
+  composes: t-label from global;
+
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--control-xs);
+  max-width: 100%;
+  padding: 0 var(--space-2);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  flex: none;
+}
+
+.muted {
+  background: var(--bg-muted);
+}
+
+.inverse {
+  background: var(--bg-inverse);
+  color: var(--text-inverse);
+}
+
+.quiet {
+  border-color: var(--border-default);
+  color: var(--text-muted);
+}
+
+.icon {
+  display: inline-grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  flex: none;
+}

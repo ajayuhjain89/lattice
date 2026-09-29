@@ -5,7 +5,8 @@ skeleton, seed CLI); Phase 2 implemented `authz` (no HTTP surface yet); Phase 3 
 dataset tooling; Phase 4 sources, connectors, ingestion and providers; Phase 5
 `retrieval` and the retrieval half of `evals` (CLI only); Phase 6 `answering`, `tracing`,
 generation providers, provider configuration and credentials by reference, the Ask,
-evidence, trace and admin-provider endpoints, and `lattice eval answer`.
+evidence, trace and admin-provider endpoints, and `lattice eval answer`; Phase 7 the web
+app (`apps/web`).
 Later-phase modules below are still design; the ✔ marks in §3 say which.
 Related: `data-model.md`, `authorization-model.md`, `retrieval-design.md`,
 `trust-boundaries.md`, ADRs 001–007.
@@ -200,9 +201,9 @@ A relevance floor (retrieval-design §13) and the ambiguity rule precede the cal
 provider is built only when a call will happen.
 ```
 
-The web client receives progress events (Phase 7 decision: SSE) for stages 7–13 so
-evidence can appear before the answer text. Unvalidated model text is never streamed
-to the user (ADR-006).
+Progress events (D-6: SSE, for stages 7–13 so evidence could appear before the answer
+text) are not built: Phase 7 shows elapsed-time progress over the single response.
+Unvalidated model text is never streamed to the user (ADR-006).
 
 ## 5. Ingestion lifecycle (summary; full design in `ingestion-design.md`)
 
@@ -346,9 +347,11 @@ lattice/
     halden/                     ✔ org.yaml, sources.yaml, admin-grants.yaml, ground-truth.yaml,
                                   documents/ (Markdown), tickets/ (JSONL), slack/ (export)
     veridian/                   ✔ isolation twin, same shape
-  apps/web/                     Phase 7
+  apps/web/                     ✔ Next.js web app (Phase 7): src/app routes, src/components,
+                                  src/api (generated types, client, queries), e2e/ (Playwright)
   evals/golden/*.yaml           ✔ golden set v1 (89 items)
   docs/ …
 ```
 
-Tooling: `uv` for Python (lockfile + interpreter pinning), `pnpm` for Node (Phase 7).
+Tooling: `uv` for Python (lockfile + interpreter pinning), `pnpm` for Node (Phase 7;
+`apps/web/pnpm-lock.yaml`).

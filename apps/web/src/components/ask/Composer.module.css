@@ -1,0 +1,107 @@
+.composer {
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  transition: box-shadow var(--motion-fast) var(--ease);
+}
+
+.composer:focus-within {
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+.field {
+  display: block;
+  padding: var(--space-4) var(--space-4) var(--space-2);
+}
+
+.textarea {
+  display: block;
+  width: 100%;
+  min-height: calc(var(--type-prose-line) * 2);
+  max-height: calc(var(--type-prose-line) * 8);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  resize: none;
+  font-size: var(--type-prose-size);
+  line-height: var(--type-prose-line);
+  color: var(--text-primary);
+  field-sizing: content;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.textarea:focus-visible {
+  outline: none;
+}
+
+.textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--control-lg);
+  padding: var(--space-1) var(--space-2) var(--space-2) var(--space-3);
+}
+
+.submitGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: none;
+  align-self: flex-end;
+}
+
+.hint {
+  composes: t-meta from global;
+
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.hint kbd {
+  font-family: inherit;
+}
+
+.over {
+  color: var(--status-error-text);
+}
+
+.problem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  color: var(--status-error-text);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+}
+
+.submitLabel {
+  display: inline;
+}
+
+@media (width < 768px) {
+  .composer .submit {
+    --button-height: var(--control-lg);
+
+    width: var(--control-lg);
+    padding: 0;
+  }
+
+  .submitLabel {
+    display: none;
+  }
+
+  .hint {
+    display: none;
+  }
+
+  .footer {
+    align-items: flex-end;
+  }
+}

@@ -1,0 +1,185 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-canvas);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--header-height);
+  flex: none;
+  padding: 0 var(--space-4);
+  border-bottom: var(--border-width) solid var(--border-strong);
+}
+
+.homeLink {
+  display: inline-flex;
+  border-radius: var(--radius-xs);
+  text-decoration: none;
+}
+
+.divider {
+  width: 0;
+  height: 16px;
+  border-left: var(--border-width) solid var(--border-default);
+}
+
+.org {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-2);
+  display: grid;
+  align-content: start;
+  gap: var(--space-6);
+}
+
+.group {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.groupLabel {
+  composes: t-label from global;
+
+  color: var(--text-muted);
+  padding: 0 var(--space-3) var(--space-1);
+}
+
+.item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--nav-row);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--ease);
+}
+
+.item:hover {
+  background: var(--bg-sunken);
+}
+
+.item[aria-current="page"] {
+  background: var(--bg-muted);
+  font-weight: 600;
+}
+
+.item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: var(--space-1);
+  bottom: var(--space-1);
+  width: 2px;
+  border-radius: 1px;
+  background: var(--border-strong);
+}
+
+.itemIcon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.itemLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history {
+  display: grid;
+  gap: var(--space-0-5);
+}
+
+.historyItem {
+  display: grid;
+  gap: 0;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--ease);
+}
+
+.historyItem:hover {
+  background: var(--bg-sunken);
+}
+
+.historyItem[aria-current="page"] {
+  background: var(--bg-muted);
+}
+
+.historyQuestion {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.historyStatus {
+  composes: t-meta from global;
+
+  font-size: var(--type-label-size);
+  color: var(--text-muted);
+}
+
+.historyNote {
+  padding: 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+}
+
+.footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
+  border-top: var(--border-width) solid var(--border-default);
+}
+
+.user {
+  min-width: 0;
+}
+
+.userName {
+  composes: t-body-strong from global;
+
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userRole {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+}
