@@ -8,17 +8,26 @@ the above. Anything that fails sends nothing and builds nothing.
 """
 
 import logging
+import uuid
 from typing import Any
 
 import pytest
 from pydantic import SecretStr
 
+from lattice.answering.models import AskRequest
+from lattice.answering.service import AskDependencies, answer_question
+from lattice.authz import (
+    AuthorizationInvariantViolation,
+    readable_document_classifications,
+    resolve_authorization_context,
+)
 from lattice.db.engine import Database
 from lattice.providers import configuration
 from lattice.providers.generation_factory import Declaration
 from lattice.providers.records import CredentialRef, GenerationConfig
+from lattice.providers.secrets import EnvironmentSecretStore
 
-from ..retrieval.world import Org, new_org
+from ..retrieval.world import FAKE, NOW, Org, new_org
 from .helpers import ACTOR, Harness, configure_generation, run, set_credential
 
 INTERNAL = "The onboarding checklist has five steps for new admins."
@@ -407,3 +416,83 @@ async def test_another_organizations_configuration_is_never_used(
     outcome = await run(app_db, org, "tom", QUESTION, harness)
     assert outcome.trace["egress"]["decision_reason"] == "not_configured"
     assert harness.builds == 0
+
+
+class _CountingStore(EnvironmentSecretStore):
+    """Records every resolution attempt, successful or not."""
+
+    def __init__(self, memory: dict[str, SecretStr]) -> None:
+        super().__init__(environ={}, memory=memory)
+        self.resolved: list[str] = []
+
+    def resolve(self, reference: str) -> SecretStr:
+        self.resolved.append(reference)
+        return super().resolve(reference)
+
+
+@pytest.mark.parametrize(
+    "setup",
+    ["customer_data", "question_classification", "disabled", "class_not_allowed"],
+)
+async def test_no_secret_is_resolved_when_the_policy_refuses(
+    app_db: Database, org: Org, setup: str
+) -> None:
+    """The credential is consulted last: when any policy step refuses, the secret store
+    is never asked -- not even to check that the reference resolves."""
+    await _gemini(org, data_origin="customer" if setup == "customer_data" else "synthetic")
+    await set_credential(
+        org, "gemini", "memory:k", data_use="paid" if setup != "customer_data" else "unpaid"
+    )
+    kwargs: dict[str, Any] = {}
+    if setup == "question_classification":
+        kwargs["classification"] = "confidential"
+    if setup == "disabled":
+        async with org.owner.tenant_transaction(org.id) as s:
+            await configuration.set_enabled(
+                s,
+                org.id,
+                purpose="generation",
+                provider="gemini",
+                model="gemini-3.5-flash-lite",
+                enabled=False,
+                reason="x",
+                actor=ACTOR,
+            )
+    if setup == "class_not_allowed":
+        await configure_generation(
+            org,
+            "ollama",
+            "qwen3.5:4b",
+            deployment="organization_controlled",
+            endpoint="https://llm.halden.example",
+            level="internal",
+        )
+    store = _CountingStore({"k": SecretStr(KEY)})
+    harness = Harness()
+    outcome = await answer_question(
+        app_db,
+        organization_id=org.id,
+        membership_id=org.members["tom"],
+        request=AskRequest(question=QUESTION, **kwargs),
+        deps=AskDependencies(embedding=FAKE, generation=harness, secrets=store),
+        now=NOW,
+    )
+    assert outcome.answer.status == "evidence_only"
+    assert store.resolved == []
+    assert harness.builds == 0
+
+
+async def test_classifications_are_answered_for_readable_documents_only(
+    app_db: Database, org: Org
+) -> None:
+    """The egress input is itself re-authorized: asking for the classification of a
+    document the reader cannot read aborts the request (a bug, never filtered)."""
+    async with app_db.tenant_snapshot(org.id) as s:
+        ctx = await resolve_authorization_context(
+            s, organization_id=org.id, membership_id=org.members["tom"]
+        )
+        readable = await readable_document_classifications(s, ctx, [org.documents["internal"]])
+        assert readable == {org.documents["internal"]: "internal"}
+        for hidden in (org.documents["confidential"], org.documents["restricted"], uuid.uuid4()):
+            with pytest.raises(AuthorizationInvariantViolation):
+                await readable_document_classifications(s, ctx, [org.documents["internal"], hidden])

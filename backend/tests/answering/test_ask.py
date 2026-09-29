@@ -274,3 +274,33 @@ async def test_the_trace_row_holds_references_not_content(app_db: Database, org:
     assert "answer drafter" not in stored  # no prompt
     assert "delimiter" not in stored
     assert isinstance(row["id"], uuid.UUID)
+
+
+async def test_a_forced_invariant_violation_withholds_the_answer(
+    app_db: Database, org: Org, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Defence in depth (retrieval-design §9 step 10): if a bug let a citation point at
+    evidence outside the response, the whole answer is withheld and logged."""
+    from lattice.answering import assemble
+    from lattice.answering.models import Citation, Claim
+
+    real = assemble.to_claim
+
+    def dangling(valid: Any) -> Claim:
+        claim_ = real(valid)
+        bad = Citation(
+            evidence_id=uuid.uuid4(),
+            document_id=uuid.uuid4(),
+            quote="x",
+            quote_start=0,
+            quote_end=1,
+        )
+        return Claim(text=claim_.text, role=claim_.role, citations=[*claim_.citations, bad])
+
+    monkeypatch.setattr(assemble, "to_claim", dangling)
+    outcome = await run(app_db, org, "maya", "What is the enterprise refund window?", Harness())
+    assert outcome.answer.status == "failed"
+    assert outcome.answer.status_reason == "citation_validation_failed"
+    assert outcome.answer.claims == []
+    assert outcome.trace["error_code"] == "citation_validation_failed"
+    assert outcome.answer.evidence  # the sources are still shown

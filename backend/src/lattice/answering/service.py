@@ -301,21 +301,9 @@ async def answer_question(
         assemble.conflicts(validation, evidence) if validation and show_claims else [],
         assemble.supersessions(evidence),
     )
-    by_chunk = {e.chunk_id: e for e in evidence}
     shown = claims + [p.claim for k in conflicts for p in k.positions]
-    cited = [by_chunk[c.evidence_id] for claim in shown for c in claim.citations]
-    fresh = assemble.freshness(cited, evidence, now)
-    removed = validation.claims_rejected if validation is not None and show_claims else 0
-    notice_list = assemble.notices(
-        excluded=excluded,
-        used=[by_chunk[i] for i in used_ids],
-        removed=removed,
-        cited=cited,
-        evidence=evidence,
-        stale=fresh,
-        semantic_degraded=retrieval.semantic.degraded,
-    )
     error_code = calls.error if status == "failed" else None
+    # The response invariant runs before anything is derived from the citations.
     if not _response_invariant(shown, items):
         # A bug, never an expected outcome: withhold everything the model produced.
         status, reason = "failed", "citation_validation_failed"
@@ -328,6 +316,19 @@ async def answer_question(
             trace_id=str(trace_id),
             organization_id=str(organization_id),
         )
+    by_chunk = {e.chunk_id: e for e in evidence}
+    cited = [by_chunk[c.evidence_id] for claim in shown for c in claim.citations]
+    fresh = assemble.freshness(cited, evidence, now)
+    removed = validation.claims_rejected if validation is not None and claims else 0
+    notice_list = assemble.notices(
+        excluded=excluded,
+        used=[by_chunk[i] for i in used_ids],
+        removed=removed,
+        cited=cited,
+        evidence=evidence,
+        stale=fresh,
+        semantic_degraded=retrieval.semantic.degraded,
+    )
 
     answer = Answer(
         trace_id=trace_id,

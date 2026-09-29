@@ -698,6 +698,48 @@ halves, an obedient model against the injection fixtures),
 `tests/providers/test_generation_adapters.py`, `tests/test_provider_configuration.py`,
 and the Phase 1 isolation suites extended to the three new tables.
 
+**Phase 6 mutation check** (by hand, never committed; each defect applied alone to the
+working tree, the Phase 6 suites run -- `tests/answering/` including the golden corpus,
+`tests/providers/test_generation_adapters.py`, `tests/test_provider_configuration.py` --
+every file restored and verified byte-identical by SHA-256). The first run caught 25 of
+28. The three survivors were test gaps, not code defects; the tests named below were
+added and the three mutations re-run. **All 28 are caught.** The G27 test also found a
+real defect: the service derived freshness from citations *before* the response
+invariant, so a dangling citation would have raised instead of withholding the answer;
+the invariant now runs first. Counts exclude one API assertion that was flaky (a short
+rejected value could occur by chance inside the random request ID), since fixed.
+
+| # | Defect introduced | Tests failed | Caught by |
+| - | ----------------- | -----------: | --------- |
+| G1 | Egress level ignored: every evidence item may enter the prompt | 10 | default-policy, opt-in, evidence-only, credential-cannot-widen tests; critical Acme payload half |
+| G2 | Question sensitivity (D-13) not applied to generation | 3 | `test_a_question_that_may_not_be_sent_is_never_sent[*]` |
+| G3 | Credential resolved before the invocation rule | 2 | `test_no_secret_is_resolved_when_the_policy_refuses[*]` (added after the first run) |
+| G4 | Declared trust class ignored (record trusted) | 4 | class-mismatch tests, unknown declared class |
+| G5 | Disabled configuration still used | 1 | `test_a_disabled_provider_receives_nothing` |
+| G6 | Provider built although no call will be made | 1 | `test_no_evidence_is_insufficient_without_a_model_call` |
+| G7 | Revoked credentials still resolve | 1 | `test_revocation_and_rotation_take_effect_on_the_next_request` |
+| G8 | A claim keeps its valid citations when one fails (bad one stripped) | 5 | invalid handle, one-valid-one-invalid citation (unit and end to end) |
+| G9 | Quotes not verified against the evidence | 2 | quote-not-found unit cases |
+| G10 | Unsafe content (links, addresses) allowed in claims | 4 | unsafe-content unit cases, non-claim text |
+| G11 | Unsupported numbers allowed | 1 | unsupported-number unit case |
+| G12 | Conflicts kept with positions from one document | 2 | conflict unit and end-to-end tests |
+| G13 | Fixed delimiters (no nonce) | 1 | `test_prompt_blocks_handles_and_order` |
+| G14 | Document IDs sent in the prompt | 1 | `test_prompt_blocks_handles_and_order` (no UUIDs in prompts) |
+| G15 | Supersession inferred from dates for model conflicts | 1 | `test_a_potential_conflict_keeps_both_positions_and_declares_no_winner` |
+| G16 | unsupported_request shows the model's claims | 1 | `test_unsupported_request_shows_no_claims` |
+| G17 | Relevance floor removed (semantic neighbours reach the model) | 2 | no-evidence and evidence-only tests |
+| G18 | No regeneration after rejected claims | 2 | regeneration tests |
+| G19 | The trace stores the prompt | 1 | `test_the_trace_row_holds_references_not_content` |
+| G20 | Trace answer not hidden after revocation | 1 | `test_trace_views` (revocation) |
+| G21 | Administrators see other members' questions | 1 | `test_trace_views` (administrator view) |
+| G22 | Any member reads another member's trace in full | 1 | `test_trace_views` (other member 404) |
+| G23 | Secret references to any variable accepted | 7 | secret-reference tests (code and configuration) |
+| G24 | Ollama remote endpoint declared local | 5 | endpoint trust-class and factory tests |
+| G25 | Gemini key sent in the URL | 2 | Gemini request shape, key never logged |
+| G26 | Credential secret logged | 1 | `test_a_credential_is_required_and_resolved_last` |
+| G27 | Response invariant disabled and dangling citations kept | 1 | `test_a_forced_invariant_violation_withholds_the_answer` (added after the first run) |
+| G28 | Classification of an unreadable document answered (egress input not re-authorized) | 1 | `test_classifications_are_answered_for_readable_documents_only` (added after the first run) |
+
 ---
 
 ### Phase 7 — Web app: Ask, evidence, inspector
