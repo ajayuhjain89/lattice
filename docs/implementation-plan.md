@@ -698,6 +698,16 @@ halves, an obedient model against the injection fixtures),
 `tests/providers/test_generation_adapters.py`, `tests/test_provider_configuration.py`,
 and the Phase 1 isolation suites extended to the three new tables.
 
+**Final Phase 6 verification (2026-09-29).** Clean clone of `phase/6-generation` with no
+external API key in the environment, in an isolated Compose project (dev database
+stopped; one PostgreSQL at a time): setup, migrate (0001-0008), seed, runtime-role
+check, dataset lint, sync twice, `make eval` (fake; R@10 0.512, unchanged; security 0),
+`make eval-answer` (fake; every security metric 0), lint, format, mypy strict (203
+files), and 1,638 tests: all passed. Secret scan of tracked files and of every commit on
+the branch: no key patterns, and the real `.env` key value appears nowhere. The real
+answer-quality evaluation is **NOT RUN — reference hardware constraint (M1 8 GB)**
+(evaluation-plan §13, ADR-012).
+
 **Phase 6 mutation check** (by hand, never committed; each defect applied alone to the
 working tree, the Phase 6 suites run -- `tests/answering/` including the golden corpus,
 `tests/providers/test_generation_adapters.py`, `tests/test_provider_configuration.py` --

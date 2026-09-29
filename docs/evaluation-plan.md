@@ -690,3 +690,63 @@ which never mentions Acme). All multi-hop golden questions stay in the set, with
 categories unchanged. Possible future approaches include deterministic evidence
 expansion, relationship-aware traversal, carefully bounded query decomposition and
 multi-stage retrieval. None is approved, and none is implemented.
+
+## 13. Phase 6 results (answering)
+
+### Real-provider answer quality: NOT RUN — reference hardware constraint (M1 8 GB)
+
+No real generation provider has been evaluated.
+
+- **Local (`ollama`, `qwen3.5:4b`)**: a single ~940-token smoke prompt on the reference
+  MacBook (M1, 8 GB) processed at about 10 tokens per second and timed out at 300 s.
+  The machine, also running PostgreSQL in Docker and the test suite, reached about
+  14.5 GB of swap and stopped responding to input. The product owner decided that the
+  real local evaluation is **not run** on this hardware, and that no smaller model is
+  substituted to produce a number (ADR-012). The adapter and its mock tests stay; the
+  Ollama server stays stopped.
+- **Gemini (`gemini-3.5-flash-lite`)**: the only key is an unpaid key whose quota is
+  exhausted. A synthetic-only run (`lattice eval answer --generation gemini
+  --allow-external`) may be done later if quota becomes available. It is not required
+  for CI or for Phase 6 engineering completion.
+- **OpenAI / Anthropic**: no adapter, no credential (D-4 open).
+
+So there is **no measured answer-quality figure**: no required-fact coverage, judged
+unsupported-claim rate or potential-conflict recall for any real model. The numbers
+below come from the deterministic fake provider, which quotes the first sentence of the
+best-ranked evidence. They prove plumbing and security, **not answer quality**.
+
+### Fake-provider run (clean clone, no API keys, 2026-09-29)
+
+`make sync && make eval-answer` (fake embeddings, fake generation): 89 items, 96 runs
+(items × egress configurations).
+
+**Security (all must be 0): all 0.** unauthorized_in_prompt 0, cross_org_in_prompt 0,
+unauthorized_in_answer 0, egress_violations 0, hidden_account_leaks 0, canary_hits 0
+(payloads, answers, stored traces, log lines), must_not_contain_in_answer 0,
+visible_unverified_claims 0, dangling_citations 0, secret_leaks 0,
+successful_prompt_injections 0.
+
+| Deterministic check | Result | n |
+| ------------------- | -----: | -: |
+| No "superseded" label without an explicit link in the dataset's ground truth | 1.0 | 96 |
+| No egress notice unless evidence was held back by policy | 1.0 | 96 |
+| Egress notice when expected readable evidence was held back | 1.0 | 2 |
+| `unsupported_request` items show no claims | 1.0 | 4 |
+| Supersession found on supersession items (deterministic assembly) | 0.875 | 8 |
+| Potential conflict found | 0.0 | 16 |
+| Staleness flag as expected | 0.75 | 8 |
+| Status as expected | 0.771 | 96 |
+
+Read these as properties of the pipeline, not of a model. The fake never proposes a
+conflict (so potential-conflict recall is 0 by construction), never reports insufficient
+evidence while any relevant evidence exists (the insufficient-evidence and inaccessible
+categories score 0), and quotes its own sentences (claim validity 1.0: 178 of 178, no
+regeneration). Supersession missed one of 8 because one side of the link was not
+retrieved (a retrieval limit, not assembly). Citation coverage (expected targets cited /
+targets given to the model) is 0.587. 19 answerable items are retrieval-limited (no
+expected target reached the prompt). Retrieval with the same fake embeddings is
+unchanged: R@10 0.512 (§9).
+
+The security results are also enforced in CI on every push (`lattice eval answer
+--generation fake`) and by `tests/answering/golden/`, alongside the targeted suites and
+the 28-defect mutation check (implementation-plan, Phase 6 as built).
