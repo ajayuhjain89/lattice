@@ -1,0 +1,74 @@
+.chips {
+  display: inline-flex;
+  gap: var(--space-0-5);
+  margin-left: var(--space-1);
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.chip {
+  composes: t-meta from global;
+
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--space-1);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-xs);
+  background: var(--accent-lavender-subtle);
+  color: var(--accent-lavender-text);
+  font-size: var(--type-label-size);
+  line-height: 1;
+  font-weight: 500;
+  vertical-align: 0.1em;
+  transition:
+    background-color var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease);
+}
+
+.chip:hover {
+  border-color: var(--accent-lavender-text);
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--accent-lime);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.claim {
+  border-radius: var(--radius-xs);
+  transition: background-color var(--motion-fast) var(--ease);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.claimActive {
+  background: var(--accent-lime-subtle);
+  box-shadow: 0 2px 0 var(--accent-lime);
+}
+
+.tooltipTitle {
+  display: block;
+  font-weight: 600;
+}
+
+.tooltipMeta {
+  composes: t-meta from global;
+
+  display: block;
+  opacity: 0.8;
+}
+
+@media (pointer: coarse) {
+  .chip {
+    position: relative;
+  }
+
+  .chip::after {
+    content: "";
+    position: absolute;
+    inset: -13px -6px;
+  }
+}
