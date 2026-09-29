@@ -700,7 +700,7 @@ and the Phase 1 isolation suites extended to the three new tables.
 
 **Final Phase 6 verification (2026-09-29).** Clean clone of `phase/6-generation` with no
 external API key in the environment, in an isolated Compose project (dev database
-stopped; one PostgreSQL at a time): setup, migrate (0001-0008), seed, runtime-role
+stopped; one PostgreSQL at a time): setup, migrate (0001-0009), seed, runtime-role
 check, dataset lint, sync twice, `make eval` (fake; R@10 0.512, unchanged; security 0),
 `make eval-answer` (fake; every security metric 0), lint, format, mypy strict (203
 files), and 1,638 tests: all passed. Secret scan of tracked files and of every commit on
@@ -875,7 +875,7 @@ Issues found while reviewing the first draft of these documents, and what change
 | ---- | ----------- | ---------- |
 | Authorization | "Private channel" and "restricted" were the same thing, so the AI egress policy would have blocked every private Slack channel from answers | Split *who* (`access_mode`: policy / grants_only) from *how sensitive* (`sensitivity`) |
 | Authorization | Tripwire (E4) re-reading permissions after retrieval could false-alarm, or check different permissions than the search used, if access changed mid-request | Context, retrieval and E4 share one `REPEATABLE READ` snapshot |
-| Security | Stored answer text in traces would let a revoked user re-read content derived from evidence they lost access to | Answer text is hidden when any evidence of that Ask (cited or not: supersession items and notices name uncited documents) is no longer readable by the viewer |
+| Security | Stored answer text in traces would let a revoked user re-read content derived from evidence they lost access to | Answer text is hidden when any evidence of that Ask (cited or not: supersession items and notices name uncited documents) is no longer readable by the viewer, or any account it depends on (clarification choices, prompt evidence accounts, scope; recorded as IDs, migration 0009) is no longer visible |
 | Security | "Audit capability" was referenced but never modelled | Admins see operational trace structure only; D-5 later decided OFF (see §9) |
 | Ingestion | Unmapped account on an account-scoped source would have made tickets visible to everyone (fail-open) | Such records fail closed and are reported |
 | Data model | `tsv` was described as a generated column but needs document-level header terms | Computed at ingestion; header staleness after account changes documented as a ranking lag, never an access lag |

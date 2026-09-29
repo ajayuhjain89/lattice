@@ -53,6 +53,8 @@ class QueryTrace(Base):
     cited_chunk_ids: Mapped[list[uuid.UUID]] = mapped_column(
         ARRAY(UUID(as_uuid=True)), server_default=text("'{}'")
     )
+    # Accounts whose metadata the stored answer may carry; NULL = unknown (migration 0009).
+    answer_account_ids: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(UUID(as_uuid=True)))
     egress: Mapped[dict[str, Any]] = mapped_column(JSONB)
     validation: Mapped[dict[str, Any]] = mapped_column(JSONB)
     answer: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

@@ -356,7 +356,11 @@ evidence (D-5: off/deferred).
 - **Asker's view of their own trace:** question, answer, evidence and stages.
   Evidence references are re-authorized against the asker's *current* access. If any
   evidence of that Ask is no longer readable -- cited or not, since supersession items
-  and notices name uncited documents -- the stored answer text is hidden
+  and notices name uncited documents -- or any account whose metadata the answer may
+  carry (recorded as IDs: clarification choices, the account attribute of prompt
+  evidence) or the account the request was scoped to is no longer visible to the asker
+  or no longer exists, the stored answer text is hidden (and the scope's account
+  withheld); a trace without recorded account dependencies hides it too
   ("This answer cited sources you no longer have access to") — otherwise traces would
   let revoked users re-read derived content.
 - **Admin's operational view of other members' traces:** member, time, status,

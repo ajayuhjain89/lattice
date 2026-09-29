@@ -258,6 +258,7 @@ async def answer_question(
     status: str
     reason: str | None
     clarification = None
+    clarified_accounts: set[uuid.UUID] = set()
 
     if action:
         status, reason = "unsupported_request", "action_request"
@@ -266,6 +267,7 @@ async def answer_question(
     elif ambiguous:
         status, reason = "ambiguous", "multiple_accounts"
         clarification = assemble.clarification_for(retrieval.account_mentions)
+        clarified_accounts = {a.id for a in retrieval.account_mentions}
     elif access.provider is None:
         status = "evidence_only"
         reason = "egress_policy" if access.reason in POLICY_REASONS else "generation_unavailable"
@@ -365,6 +367,12 @@ async def answer_question(
         "evidence_chunk_ids": [e.chunk_id for e in evidence],
         "prompt_chunk_ids": sorted(used_ids),
         "cited_chunk_ids": sorted({c.evidence_id for claim in shown for c in claim.citations}),
+        # Account metadata the stored answer may carry (re-authorized when it is read):
+        # the clarification choices, and the account attribute of prompt evidence.
+        "answer_account_ids": sorted(
+            clarified_accounts
+            | {acct.id for i in used_ids if (acct := by_chunk[i].account) is not None}
+        ),
         "egress": {
             "provider": access.provider_name,
             "model": access.model,

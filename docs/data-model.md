@@ -389,12 +389,14 @@ week; freshness must be judged on the evidence actually cited, not the container
 
 Security-sensitive. Stores **references and measurements**, not document content.
 
-**As built (Phase 6, migration 0008):** `id` (the trace ID), `organization_id`,
+**As built (Phase 6, migrations 0008-0009):** `id` (the trace ID), `organization_id`,
 `membership_id` (composite FK to `memberships`), `created_at`, `question_text`,
 `question_sensitivity` (D-13), `scope`, `authz_snapshot` (counts only:
 `authz.summarize_context`), `retrieval` (the Phase 5 `RetrievalTrace`),
 `evidence_chunk_ids`, `prompt_chunk_ids` (what the model received), `cited_chunk_ids`,
-`egress` (`{provider, model, deployment, effective_level, decision_reason,
+`answer_account_ids` (0009: the accounts whose metadata the stored answer may carry --
+clarification choices and the accounts of prompt evidence; NULL = unknown, which hides
+the answer on read), `egress` (`{provider, model, deployment, effective_level, decision_reason,
 question_sensitivity, excluded_by_egress_policy, excluded_by_prompt_budget,
 below_relevance_floor, prompt_version}`), `validation` (`{generation_calls, regenerated,
 schema_failures, claims_proposed, claims_valid, claims_rejected, rejection_codes,
@@ -417,7 +419,7 @@ Design (Phase 0):
 | selected_chunk_ids  | Context actually sent to generation |
 | egress              | `{provider, model, effective_egress_level, excluded_by_egress_policy_count, prompt_version}` |
 | validation          | `{generation_calls, claims_proposed, claims_rejected, rejection_codes[]}` — counts and codes only; rejected claim text is never stored |
-| answer              | Final validated answer JSON (only validated claims + citations), retention-limited; hidden on read if any of the Ask's evidence (cited or not) is no longer readable by the viewer |
+| answer              | Final validated answer JSON (only validated claims + citations), retention-limited; hidden on read if any of the Ask's evidence (cited or not) is no longer readable by the viewer, or any account in `answer_account_ids` or the scope is no longer visible to them (or no longer exists) |
 | status              | `answered`, `partial`, `insufficient_evidence`, `evidence_only`, `ambiguous`, `failed` (+ `status_reason`) |
 | error_code          | |
 | timings_ms          | `{authz, lexical, embed_query, semantic, fuse_rerank, generation, validation, total}` |

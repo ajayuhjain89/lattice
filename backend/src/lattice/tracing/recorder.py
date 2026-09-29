@@ -16,7 +16,11 @@ Reading (``read_trace``) re-authorizes for the *viewer*, now:
   longer readable, the stored answer is hidden (``answer_hidden``): a trace must not let
   a revoked user re-read content derived from it, and the answer carries metadata of
   uncited evidence too (supersession items and notices name documents, their IDs and
-  dates);
+  dates). Likewise for accounts (D-8): the trace records, as IDs, the accounts whose
+  metadata the answer may carry (``answer_account_ids``: clarification choices, the
+  account attribute of prompt evidence); if any of them -- or the account the request
+  was scoped to -- is no longer visible to the asker, or no longer exists, the answer is
+  hidden and the scope's account withheld. Unknown dependencies (NULL) hide the answer;
 * **an administrator** looking at another member's trace sees operational structure
   only: member, time, status, error code, stage durations, provider/model, prompt and
   policy versions, token usage. Never the question, answer, evidence references,
@@ -34,6 +38,7 @@ from sqlalchemy import insert, select
 from lattice.authz import resolve_authorization_context
 from lattice.db.engine import Database
 from lattice.retrieval import lookup_evidence
+from lattice.retrieval.service import visible_accounts
 from lattice.tracing.models import QueryTrace
 
 
@@ -132,12 +137,24 @@ async def read_trace(
         )
         wanted = sorted(set(row.evidence_chunk_ids) | set(row.cited_chunk_ids))
         readable = await lookup_evidence(session, ctx, wanted)
-    hidden = any(c not in readable for c in wanted)
+        visible = await visible_accounts(session, ctx)
+    scope = dict(row.scope or {})
+    scope_key = scope.get("account")
+    # Account keys are case-insensitive (citext), as when the scope was resolved.
+    scope_lost = scope_key is not None and str(scope_key).casefold() not in {
+        a.key.casefold() for a in visible
+    }
+    if scope_lost:
+        del scope["account"]
+    accounts_lost = row.answer_account_ids is None or any(
+        a not in {v.id for v in visible} for a in row.answer_account_ids
+    )
+    hidden = any(c not in readable for c in wanted) or accounts_lost or scope_lost
     return AskerTrace(
         **_operational(row),
         question=row.question_text,
         question_sensitivity=row.question_sensitivity,
-        scope=row.scope,
+        scope=scope,
         answer=None if hidden else row.answer,
         answer_hidden=hidden,
         evidence_ids=[c for c in row.evidence_chunk_ids if c in readable],
