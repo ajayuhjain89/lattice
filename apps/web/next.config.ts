@@ -5,18 +5,17 @@ import type { NextConfig } from "next";
 const API_URL = process.env.LATTICE_API_URL ?? "http://127.0.0.1:8000";
 const production = process.env.NODE_ENV === "production";
 
-const csp = [
-  "default-src 'self'",
-  // Next.js inlines its bootstrap scripts; development also needs eval for HMR.
-  `script-src 'self' 'unsafe-inline'${production ? "" : " 'unsafe-eval'"}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
-  "font-src 'self'",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join("; ");
+// The Content-Security-Policy (with a per-request script nonce) is set in src/proxy.ts.
+// These apply to every response, including static assets.
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "same-origin" },
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+  // Browsers honour HSTS over HTTPS only; production is served over HTTPS.
+  ...(production ? [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" }] : []),
+];
 
 const config: NextConfig = {
   reactStrictMode: true,
@@ -28,12 +27,7 @@ const config: NextConfig = {
     return [
       {
         source: "/:path*",
-        headers: [
-          { key: "Content-Security-Policy", value: csp },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "Referrer-Policy", value: "same-origin" },
-        ],
+        headers: securityHeaders,
       },
     ];
   },
