@@ -186,7 +186,7 @@ export function Verdict({ memberId, name, doc }: { memberId: string; name: strin
     );
   }
   const e = query.data;
-  const via = e.via.map((v) => v.name ?? `a private channel (${v.reference ?? "synced"})`);
+  const via = e.via.map((v) => v.name ?? "a private channel you aren't in");
   return (
     <div className={styles.verdict} role="status">
       <p>

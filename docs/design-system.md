@@ -557,9 +557,9 @@ isn't visible to administrators").
 **Access explanation** (Access page) — sentences, not policy objects:
 "Maya can see **Acme Corp** and **Northpeak Logistics** content (assigned accounts),
 up to **Internal** sensitivity, plus **1 private channel synced from Slack**." A
-source-synced group is named only if the admin is a member of it; otherwise it
-appears as "Private channel (synced from Slack)" with its opaque reference and member
-list. Change-preview dialogs describe effects as rules ("Maya will lose access to all
+source-synced group is shown only if the admin is a member of it; otherwise the page
+says only that the member is in private channels the admin isn't in (as built after
+the Phase 9 review: no name, members, count or reference; Part E). Change-preview dialogs describe effects as rules ("Maya will lose access to all
 Kestrel Bank content"); document counts appear only over documents the admin can
 read (`security-model.md` §10).
 
@@ -676,7 +676,7 @@ rows below 1024 px of Sources and Activity. Departures and additions:
 | Section | As built | Why |
 | ------- | -------- | --- |
 | B11 navigation | Admin → **Access** (members and the audit log as two tabs), AI providers | The audit log is about access and AI-policy changes, so it sits with Access instead of taking a nav entry |
-| B12 "Access explanation" | A lead sentence built from the typed API: "**Maya Okafor** can see **Acme Corp** and **Northpeak Logistics** content (assigned accounts), up to **Internal** sensitivity, including content restricted to **Sales**, plus 1 private channel synced from a source and 1 document granted directly." Then the facts (definition rows), groups and channels, direct grants, *Check a document* | Sentences first, facts behind them; a channel the administrator isn't in is "Private channel (synced from Chat)" with its `rec_…` and members; grants on documents the administrator can't read are one sentence, never a list or a count |
+| B12 "Access explanation" | A lead sentence built from the typed API: "**Maya Okafor** can see **Acme Corp** and **Northpeak Logistics** content (assigned accounts), up to **Internal** sensitivity, including content restricted to **Sales**, plus what's shared with **Exec staff** and 1 document granted directly. **Maya Okafor** is also in private channels you aren't in. They aren't named, listed or counted here." Then the facts (definition rows), groups and channels, direct grants, *Check a document* | Sentences first, facts behind them; channels the administrator isn't in are only acknowledged (review closure, D-18); grants on documents the administrator can't read are one sentence, never a list or a count |
 | B12 change previews | Dialog: edit (radio and checklist groups) → review: effects as sentences ("Maya Okafor will lose access to all Kestrel Bank content, except documents granted directly."), then *Gains / Loses* counts with "Counted only among documents you can read", a required reason, *Apply change* | Rules carry what counts can't (security-model §10); the reason is recorded with the administrator's name |
 | B12 dialogs | `Modal` primitive: 560 px (440 confirm), ink border, overlay shadow; a bottom sheet below 768 px; returns focus to whatever opened it | Radix returns focus only to its own trigger |
 | B12 scope chips | `Account` chip always present, listing `GET /v1/accounts` (a filter field from 7 accounts); `Sources` offers only types with a readable source | Phase 7 could only set an account from a clarification |

@@ -18,7 +18,7 @@ import { humanize, isUuid, levelLabel } from "@/lib/format";
 import styles from "./Access.module.css";
 import { AccessFrame, Loading } from "./AccessFrame";
 import { ChangeAccessDialog, StatusDialog } from "./ChangeAccess";
-import { accessSummary, groupLabel, scopeLabel, type Part } from "./copy";
+import { accessSummary, groupOrigin, scopeLabel, type Part } from "./copy";
 import { DocumentSearch } from "./DocumentSearch";
 import { GrantsSection, Verdict } from "./Grants";
 
@@ -117,28 +117,18 @@ function Member({ access }: { access: MemberAccess }) {
       </section>
 
       <section className={styles.section} aria-labelledby="groups-label">
-        <SectionLabel id="groups-label" meta={access.groups.length ? `${access.groups.length}` : undefined}>
+        <SectionLabel id="groups-label">
           Groups and channels
         </SectionLabel>
         {access.groups.length === 0 ? (
-          <p className={styles.off}>Not in any group or synced channel.</p>
+          <p className={styles.off}>{access.has_hidden_groups ? "No group or channel you can see." : "Not in any group or synced channel."}</p>
         ) : (
           <ul className={styles.list}>
             {access.groups.map((g) => (
               <li key={g.id} className={styles.row}>
                 <span className={styles.rowBody}>
-                  <span className={styles.primary}>{groupLabel(g)}</span>
-                  <span className={styles.secondary}>
-                    {g.origin === "admin" ? "Administrator-defined" : "Follows the source"}
-                    {g.reference && (
-                      <>
-                        {" · "}
-                        <span className={styles.mono} title="Opaque reference: you aren't a member of this channel">
-                          {g.reference}
-                        </span>
-                      </>
-                    )}
-                  </span>
+                  <span className={styles.primary}>{g.name}</span>
+                  <span className={styles.secondary}>{groupOrigin(g)}</span>
                   <span className={styles.secondary}>
                     {g.members.length} {g.members.length === 1 ? "member" : "members"}: {memberNames(g.members.map((x) => x.name))}
                   </span>
@@ -146,6 +136,12 @@ function Member({ access }: { access: MemberAccess }) {
               </li>
             ))}
           </ul>
+        )}
+        {access.has_hidden_groups && (
+          <p className={styles.note}>
+            Private channels you aren&apos;t in aren&apos;t named, listed or counted here, and can&apos;t be changed: they
+            follow their source.
+          </p>
         )}
       </section>
 

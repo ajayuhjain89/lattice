@@ -17,8 +17,10 @@ describe("MemberScreen", () => {
     renderInWorkspace(<MemberScreen id={ID.maya} />, { me: ME_LENA });
     const summary = await screen.findByTestId("access-summary");
     expect(summary).toHaveTextContent("Maya Okafor can see Acme Corp and Northpeak Logistics content (assigned accounts)");
-    expect(screen.getByText("Private channel (synced from Chat)")).toBeInTheDocument();
-    expect(screen.getByText("rec_10a5d8d9e4546abc")).toBeInTheDocument();
+    expect(screen.getByText("Administrator-defined")).toBeInTheDocument();
+    expect(summary).toHaveTextContent("is also in private channels you aren't in");
+    expect(screen.getByText(/Private channels you aren't in aren't named, listed or counted here/)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/rec_|Private channel \(/);
     expect(summary).toHaveTextContent("also has direct access to documents you can't read");
     expect(screen.getByText("Granted by Lena Brandt", { exact: false })).toBeInTheDocument();
     expect(screen.getByText("“Onboarding cover”")).toBeInTheDocument();

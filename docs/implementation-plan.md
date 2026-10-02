@@ -903,11 +903,11 @@ for it: the Ask account picker and first-run scope line (Phase 7 contract observ
    source the composer is disabled (B13 "Empty knowledge base").
 2. *Access page (administrators).* Member directory (keyset pages, name/e-mail
    filter); a member's access as plain sentences built from typed data (clearance,
-   account scope and assignments, departments, groups, explicit grants); the
-   source-synced group rule of security-model §10 (named only when the administrator
-   is a member, otherwise "Private channel (synced from Slack)" + opaque reference +
-   member list); grants on documents the administrator cannot read shown only as an
-   opaque reference; "check a document" (`authz.explain_for_reviewer`) over a search of
+   account scope and assignments, departments, groups, explicit grants); a
+   source-synced (private) group exists for the administrator only if they are a member
+   of it, otherwise the member's access only acknowledges "private channels you aren't
+   in" (closure, below); grants on documents the administrator cannot read
+   acknowledged only as a yes/no; "check a document" (`authz.explain_for_reviewer`) over a search of
    documents the administrator can read.
 3. *Changes with previews.* Clearance, account scope, account assignments,
    departments, membership of administrator-defined groups, suspension/reactivation,
@@ -957,6 +957,7 @@ forward.
 | Database | Migration 0012 (ADR-014): the API role's fenced writes; audit index. `authz` gains `resolve_member_context` and `proposed_context` in a new, unfingerprinted module: `POLICY_VERSION` stays `authz-2` | Least privilege in the database, not only in code |
 | `document_grants.granted_by` | Not built: the grant's audit event is the record (data-model §5) | It must outlive the grant and the granting membership |
 | — | Found and fixed during verification: duplicate fields and Python booleans in settings audit details; Radix returned focus only to its own trigger (dialogs now restore focus to their opener); the reason field's accessible name included its help text; a "can't read" explanation listed passing clauses too | Live API check, Playwright, component tests |
+| — (review closure, 2026-10-02) | Private groups an administrator isn't in are no longer returned anywhere (filtered in SQL: no name, member list, count or reference; `has_hidden_groups`; explanations say "a private channel you aren't in"); any non-administrator-defined group ID is refused as `unknown` (was `source_group`, which told a private group's ID from a missing one); the audit view omits events about documents the viewer can't read (`document_reference` removed from the contract). `tests/security/test_access_private_objects.py` | D-18 revised: existence, timing and count side channels |
 | Not built (later phases) | Group/department/account creation, `is_admin` changes, member removal and provisioning (Phase 10 with OIDC/SCIM), department or group grants from the UI, time-bound grants, trigger-enforced audit (Phase 10 review candidate, ADR-014), audit retention and alerting (Phase 11) | Phase boundaries |
 
 **Final Phase 9 verification (2026-10-02).** Clean clone of
@@ -971,8 +972,8 @@ nothing), `eval` (fake; R@10 0.512, unchanged; every security count 0), `eval-an
 desktop and phone, axe audits of every Access screen, five-width overflow checks).
 Secret scan of every commit on the branch: no key patterns; the real `.env` key appears
 nowhere. Against the real API (development database migrated to 0012, as Lena): member
-list, Maya's page (unnamed private channel by `rec_…`, grants she holds on documents
-Lena can't read acknowledged only), change preview (0 / 0 counted: Lena reads no
+list, Maya's page (grants she holds on documents Lena can't read acknowledged only;
+the private channel then shown by `rec_…`, since withdrawn by the review closure), change preview (0 / 0 counted: Lena reads no
 Kestrel content) → apply → revert, grant → explanation → revoke, audit log; as Maya:
 the scope line, the account picker, a scoped Ask, and the administrator-only page with
 no admin request made. Those verification changes remain in the development database's
@@ -1061,7 +1062,7 @@ a database created earlier needs `make db-up db-bootstrap migrate` once). Phase 
 | D-15 | Deployment trust classes: how is inference outside the Lattice deployment governed, and what does "private" mean? | Final Phase 5 closure | **Decided (2026-09-29, ADR-011):** "private" has no security meaning. The classes are `local` (inside the deployment; own approval), `organization_controlled` (outside Lattice, on organization-controlled infrastructure: not allowed until the organization sets a ceiling, and needs an explicit record approval), `external_api` (third party: external level, approval, data use) and `unknown` (fail closed). A credential satisfies only the credential requirement. Implemented in migration 0007 and `providers.egress` | Product owner — decided |
 | D-16 | Organization-owned provider credentials (BYOK): when are the secret store, encryption at rest, rotation, revocation, masked admin UI and approval audit events built? | Final Phase 5 closure | **Decided (2026-09-29, timing only, ADR-011):** the Phase 6 backend builds the minimum organization-scoped provider configuration and secret abstraction (organization → provider configuration → trust class → provider/model → secret reference → invocation; secrets never in API responses, logs, traces, prompts or errors; rotation, replacement, revocation, disablement; environment variables stay as the development fallback). The Phase 7 frontend builds the admin UX (masked state, connection test, enable/disable, egress communication). Nothing in Phase 5 | Product owner + Engineering — decided |
 | D-17 | May an administrator change their own access through the Access page? | Phase 9 | **Decided (engineering default, Phase 9; for review): no.** Every change to the caller's own membership — including a grant to themselves — is refused (403 `own_access`); another administrator, the manifest or (Phase 10) the identity provider must do it. T3 stays detectable either way (audit log) | Product owner (review) |
-| D-18 | What does an administrator see of a member's grants on documents the administrator cannot read? | Phase 9 | **Decided (Phase 9; for review):** on the member page, one yes/no sentence — never a list, count, title or reference, and they cannot be revoked from there. The audit log lists each grant *event* with the document's opaque `rec_…` reference (accountability, T3), so events about such grants are visible one by one | Product owner (review) |
+| D-18 | What does an administrator see of a member's grants on documents — and of private groups — the administrator cannot see? | Phase 9 | **Decided (Phase 9 review closure, 2026-10-02):** on the member page, one yes/no sentence for each (`has_other_grants`, `has_hidden_groups`) — never a list, count, title, name, member list or identifier, and nothing about them can be edited from there. The audit view (`GET /v1/admin/audit-events`) does **not list** an event whose target document the viewer cannot read now (filtered in SQL with the viewer's predicate, also for the keyset anchor), so such events change neither its result set nor its paging; the events stay in the database for operators. *(The first version listed them one by one by opaque `rec_…`; withdrawn as an existence, timing and count side channel.)* | Product owner — decided |
 | D-19 | Who is authoritative for a member's access when the manifest (later the IdP) and the Access page disagree? | Phase 9 | **Decided (Phase 9; for review):** provisioning. Re-running `make seed` makes members match the manifest and records `operator:seed` events, so a reverted UI change is visible, never silent. Revisit with SCIM/OIDC (Phase 10): which attributes the IdP owns and which Lattice owns | Product owner (review) |
 
 ## 8. Self-review log (Phase 0)

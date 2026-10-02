@@ -294,9 +294,10 @@ model call. Operating it: [runbook §7](docs/runbook.md).
 
 Administrators open **Access** (sign in as `lena.brandt@halden.example`). Each member's
 page explains their access in a sentence, lists the facts behind it and their groups —
-a private channel the administrator isn't in stays unnamed, shown by an opaque
-reference and its members — and their direct grants on documents the administrator can
-read; grants on anything else are acknowledged, never listed or counted. Every change
+private channels the administrator isn't in are only acknowledged, never named,
+listed, counted or identified — and their direct grants on documents the administrator
+can read; grants on anything else are acknowledged the same way, and the audit log
+leaves out events about documents the administrator can't read. Every change
 (clearance, account scope, accounts, departments, administrator-defined groups,
 suspension, single-document grants) is previewed first — effects as rules, document
 counts only among documents the administrator can read — needs a reason, is applied

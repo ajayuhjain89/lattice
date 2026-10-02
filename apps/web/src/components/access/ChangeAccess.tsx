@@ -11,7 +11,7 @@ import { Modal } from "@/components/primitives/Modal";
 import { levelLabel } from "@/lib/format";
 
 import styles from "./Access.module.css";
-import { groupLabel, previewSentence } from "./copy";
+import { previewSentence } from "./copy";
 import { changeError } from "./errors";
 import { ReasonField } from "./ReasonField";
 
@@ -143,8 +143,8 @@ function EditFields({ member, directory, draft, onChange }: { member: MemberAcce
       <Checklist
         legend="Groups"
         help={
-          synced.length > 0
-            ? `${member.member.name} is also in ${synced.length} ${synced.length === 1 ? "channel" : "channels"} synced from a source: ${synced.map(groupLabel).join("; ")}. Those follow the source and can't be changed here.`
+          synced.length > 0 || member.has_hidden_groups
+            ? "Channels synced from a source follow the source and can't be changed here; this change leaves them as they are."
             : "Groups synced from a source follow the source and aren't listed here."
         }
         items={directory.groups.map((g) => ({ id: g.id, label: g.name }))}

@@ -857,19 +857,7 @@
                 "type": "null"
               }
             ],
-            "description": "Only if you can read the document now."
-          },
-          "document_reference": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Opaque reference of a document you cannot read.",
-            "title": "Document Reference"
+            "description": "The target document. Events about documents you cannot read now are not listed."
           },
           "effects": {
             "items": {
@@ -907,7 +895,6 @@
           "reason",
           "member",
           "document",
-          "document_reference",
           "effects",
           "details"
         ],
@@ -2219,7 +2206,7 @@
                 "type": "null"
               }
             ],
-            "description": "Null for a source-synced group you are not in.",
+            "description": "Null for a private group you are not in (nothing else is given).",
             "title": "Name"
           },
           "principal_type": {
@@ -2230,23 +2217,11 @@
             ],
             "title": "Principal Type",
             "type": "string"
-          },
-          "reference": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reference"
           }
         },
         "required": [
           "principal_type",
-          "name",
-          "reference"
+          "name"
         ],
         "title": "GrantVia",
         "type": "object"
@@ -2283,16 +2258,8 @@
             "type": "array"
           },
           "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Null for a source-synced group the viewer is not a member of.",
-            "title": "Name"
+            "title": "Name",
+            "type": "string"
           },
           "origin": {
             "enum": [
@@ -2301,18 +2268,6 @@
             ],
             "title": "Origin",
             "type": "string"
-          },
-          "reference": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Opaque reference of an unnamed source group.",
-            "title": "Reference"
           }
         },
         "required": [
@@ -2320,7 +2275,6 @@
           "origin",
           "name",
           "connector_type",
-          "reference",
           "members",
           "editable"
         ],
@@ -2514,11 +2468,17 @@
             "type": "array"
           },
           "groups": {
+            "description": "Administrator-defined groups, and synced groups you are a member of.",
             "items": {
               "$ref": "#/components/schemas/GroupAccess"
             },
             "title": "Groups",
             "type": "array"
+          },
+          "has_hidden_groups": {
+            "description": "The member is in private groups you are not in (not named, listed, counted or identified).",
+            "title": "Has Hidden Groups",
+            "type": "boolean"
           },
           "has_other_grants": {
             "description": "The member has grants on documents you cannot read (not listed or counted).",
@@ -2547,6 +2507,7 @@
           "accounts",
           "departments",
           "groups",
+          "has_hidden_groups",
           "grants",
           "has_other_grants"
         ],

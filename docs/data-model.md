@@ -504,8 +504,9 @@ Never a secret, a secret reference or document content.
 | `access.grant_created`, `access.grant_revoked` | API, `apply-admin-grants` (`operator:admin-grants`) | `membership_id`, `document_id`, `grant_id`, `source_id`, `reference` (the document's opaque `rec_…`) | `{origin, principal_type}` |
 
 IDs, never names: the audit view resolves names at read time (deleted ones show as
-gone) and names a document only if the viewing administrator can read it now,
-otherwise its `reference`. Index `(organization_id, created_at DESC, id DESC)` for the
+gone) and lists an event that targets a document only while the viewing administrator
+can read that document (D-18; the stored `reference` is for operators and is never
+returned by the API). Index `(organization_id, created_at DESC, id DESC)` for the
 keyset pages of `GET /v1/admin/audit-events`. The runtime role may SELECT and may
 INSERT only `access.*` events by a `member:` actor (restrictive policy, ADR-014).
 

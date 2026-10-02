@@ -910,18 +910,18 @@ export const MEMBER_MAYA: S["MemberAccess"] = {
   departments: [SALES],
   groups: [
     {
-      id: ID.channel,
-      origin: "source",
-      name: null,
-      connector_type: "chat_export",
-      reference: "rec_10a5d8d9e4546abc",
+      id: ID.exec,
+      origin: "admin",
+      name: "Exec staff",
+      connector_type: null,
       members: [
         { id: ID.grace, name: "Grace Whitfield" },
         { id: ID.maya, name: "Maya Okafor" },
       ],
-      editable: false,
+      editable: true,
     },
   ],
+  has_hidden_groups: true,
   grants: [
     {
       id: ID.grant,
@@ -943,6 +943,7 @@ export const MEMBER_LENA_SELF: S["MemberAccess"] = {
   accounts: [],
   departments: [],
   groups: [],
+  has_hidden_groups: false,
   grants: [],
   has_other_grants: false,
 };
@@ -979,7 +980,6 @@ export const AUDIT: S["AuditPage"] = {
       reason: "Covering Kestrel during the renewal",
       member: { id: ID.maya, name: "Maya Okafor" },
       document: null,
-      document_reference: null,
       effects: [{ kind: "account_added", before: null, after: null, subject: { id: ID.kestrel, name: "Kestrel Bank" } }],
       details: [],
     },
@@ -988,10 +988,9 @@ export const AUDIT: S["AuditPage"] = {
       created_at: "2026-09-29T09:13:03Z",
       action: "access.grant_created",
       actor: { kind: "operator", name: null, operator: "admin-grants" },
-      reason: "Kestrel SSO incident follow-up",
+      reason: "Onboarding cover",
       member: { id: ID.maya, name: "Maya Okafor" },
-      document: null,
-      document_reference: "rec_7c1e2a9b3d4f5e60",
+      document: HANDBOOK,
       effects: [],
       details: [],
     },

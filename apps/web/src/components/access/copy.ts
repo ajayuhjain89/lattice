@@ -1,8 +1,8 @@
 /**
  * Access-page sentences, built only from what the API returned (design-system B12
  * "Access explanation": sentences, not policy objects). No counts, names or documents
- * are added here: a private channel the administrator isn't in stays unnamed, and
- * documents they can't read are never described beyond "documents you can't read".
+ * are added here: private channels the administrator isn't in and documents they can't
+ * read are acknowledged only as such -- never named, counted or identified.
  */
 import type { AccessEffect, AuditEvent, GroupAccess, MemberAccess } from "@/api/types";
 import { connectorLabel, humanize, levelLabel } from "@/lib/format";
@@ -24,10 +24,10 @@ function strongList(names: readonly string[]): Part[] {
   return parts;
 }
 
-/** "Private channel (synced from Chat)" for a source group the viewer isn't in. */
-export function groupLabel(group: GroupAccess): string {
-  if (group.name) return group.name;
-  return `Private channel (synced from ${group.connector_type ? connectorLabel(group.connector_type) : "a source"})`;
+/** Where a group comes from: "Administrator-defined" or "Synced from Chat". */
+export function groupOrigin(group: GroupAccess): string {
+  if (group.origin === "admin") return "Administrator-defined";
+  return `Synced from ${group.connector_type ? connectorLabel(group.connector_type) : "a source"} · you're a member`;
 }
 
 export function scopeLabel(scope: string): string {
@@ -49,15 +49,9 @@ export function accessSummary(access: MemberAccess): Part[][] {
   if (access.departments.length > 0) {
     first.push(", including content restricted to ", ...strongList(access.departments.map((d) => d.name)));
   }
-  const admin = access.groups.filter((g) => g.origin === "admin");
-  const named = access.groups.filter((g) => g.origin === "source" && g.name);
-  const unnamed = access.groups.filter((g) => g.origin === "source" && !g.name);
   const extras: Part[][] = [];
-  if (admin.length + named.length > 0) {
-    extras.push(["what's shared with ", ...strongList([...admin, ...named].map((g) => g.name as string))]);
-  }
-  if (unnamed.length > 0) {
-    extras.push([`${unnamed.length} private ${unnamed.length === 1 ? "channel" : "channels"} synced from a source`]);
+  if (access.groups.length > 0) {
+    extras.push(["what's shared with ", ...strongList(access.groups.map((g) => g.name))]);
   }
   if (access.grants.length > 0) {
     extras.push([`${access.grants.length} ${access.grants.length === 1 ? "document" : "documents"} granted directly`]);
@@ -67,6 +61,12 @@ export function accessSummary(access: MemberAccess): Part[][] {
   });
   first.push(".");
   const sentences = [first];
+  if (access.has_hidden_groups) {
+    sentences.push([
+      { strong: name },
+      " is also in private channels you aren't in. They aren't named, listed or counted here.",
+    ]);
+  }
   if (access.has_other_grants) {
     sentences.push([
       { strong: name },

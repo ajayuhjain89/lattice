@@ -19,8 +19,8 @@ test("an administrator reviews a member's access from the Access page", async ({
   await expect(page.getByTestId("access-summary")).toContainText(
     "Maya Okafor can see Acme Corp and Northpeak Logistics content (assigned accounts), up to Internal sensitivity",
   );
-  await expect(page.getByText("Private channel (synced from Chat)")).toBeVisible();
-  await expect(page.getByText("rec_10a5d8d9e4546abc")).toBeVisible();
+  await expect(page.getByTestId("access-summary")).toContainText("is also in private channels you aren't in");
+  await expect(page.locator("main")).not.toContainText("rec_");
 });
 
 test("a change is previewed, given a reason and applied against the reviewed version", async ({ page }) => {
@@ -90,7 +90,7 @@ test("grants: explain, grant and revoke documents the administrator can read", a
   expect(log.revokes).toEqual([ID.grant]);
 });
 
-test("the audit log names a document only when the viewer can read it", async ({ page }) => {
+test("the audit log shows recorded changes, with documents the viewer can read", async ({ page }) => {
   await mockApi(page, { me: ME_LENA });
   await page.goto("/access/audit");
   const events = page.getByRole("listitem").filter({ hasText: "By " });
@@ -98,8 +98,10 @@ test("the audit log names a document only when the viewer can read it", async ({
   await expect(events.nth(0)).toContainText("Access changed");
   await expect(events.nth(0)).toContainText("Assigned Kestrel Bank");
   await expect(events.nth(0)).toContainText("“Covering Kestrel during the renewal”");
-  await expect(events.nth(1)).toContainText("A document you can't read · rec_7c1e2a9b3d4f5e60");
+  await expect(events.nth(1)).toContainText("Document granted");
+  await expect(events.nth(1)).toContainText("Employee handbook");
   await expect(events.nth(1)).toContainText("By admin-grants.yaml");
+  await expect(page.locator("main")).not.toContainText("rec_");
 });
 
 test("members who aren't administrators see one page, and the API is never asked", async ({ page }) => {

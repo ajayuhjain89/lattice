@@ -17,8 +17,8 @@ import { actionLabel, actorLabel, auditPhrase } from "./copy";
 
 /**
  * The audit log (GET /v1/admin/audit-events): every access and AI-provider change, who
- * made it and why, newest first. A document is named only if you can read it now;
- * otherwise only its opaque reference is shown.
+ * made it and why, newest first. An event about a document is listed only while you can
+ * read that document: the API leaves out the others entirely.
  */
 export function AuditScreen() {
   const { isAdmin } = useWorkspace();
@@ -30,8 +30,8 @@ export function AuditScreen() {
       <header className={styles.head}>
         <h1 className={styles.title}>Audit log</h1>
         <p className={styles.deck}>
-          Every change to who can read what, and to the AI data policy: who made it, when and why. Entries can&apos;t be
-          edited or deleted.
+          Every change to who can read what, and to the AI data policy: who made it, when and why. Changes about
+          documents you can&apos;t read aren&apos;t listed. Entries can&apos;t be edited or deleted.
         </p>
       </header>
       <AccessTabs />
@@ -107,13 +107,6 @@ function Subject({ event: e }: { event: AuditEvent }) {
         <span className={styles.secondary}>
           {[e.document.display_ref, e.document.source_name, connectorLabel(e.document.connector_type)].filter(Boolean).join(" · ")}
         </span>
-      </p>
-    );
-  }
-  if (e.document_reference) {
-    return (
-      <p className={styles.off}>
-        A document you can&apos;t read · <span className={styles.mono}>{e.document_reference}</span>
       </p>
     );
   }

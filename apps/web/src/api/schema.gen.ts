@@ -783,13 +783,8 @@ export interface components {
        * @description Provider and egress settings events.
        */
       details: components["schemas"]["AuditDetail"][];
-      /** @description Only if you can read the document now. */
+      /** @description The target document. Events about documents you cannot read now are not listed. */
       document: components["schemas"]["DocumentRef"] | null;
-      /**
-       * Document Reference
-       * @description Opaque reference of a document you cannot read.
-       */
-      document_reference: string | null;
       /** Effects */
       effects: components["schemas"]["AccessEffect"][];
       /**
@@ -1304,7 +1299,7 @@ export interface components {
     GrantVia: {
       /**
        * Name
-       * @description Null for a source-synced group you are not in.
+       * @description Null for a private group you are not in (nothing else is given).
        */
       name: string | null;
       /**
@@ -1312,8 +1307,6 @@ export interface components {
        * @enum {string}
        */
       principal_type: "membership" | "department" | "group";
-      /** Reference */
-      reference: string | null;
     };
     /** GroupAccess */
     GroupAccess: {
@@ -1334,21 +1327,13 @@ export interface components {
       id: string;
       /** Members */
       members: components["schemas"]["Named"][];
-      /**
-       * Name
-       * @description Null for a source-synced group the viewer is not a member of.
-       */
-      name: string | null;
+      /** Name */
+      name: string;
       /**
        * Origin
        * @enum {string}
        */
       origin: "admin" | "source";
-      /**
-       * Reference
-       * @description Opaque reference of an unnamed source group.
-       */
-      reference: string | null;
     };
     /** HealthResponse */
     HealthResponse: {
@@ -1428,8 +1413,16 @@ export interface components {
        * @description Grants on documents you can read.
        */
       grants: components["schemas"]["GrantOut"][];
-      /** Groups */
+      /**
+       * Groups
+       * @description Administrator-defined groups, and synced groups you are a member of.
+       */
       groups: components["schemas"]["GroupAccess"][];
+      /**
+       * Has Hidden Groups
+       * @description The member is in private groups you are not in (not named, listed, counted or identified).
+       */
+      has_hidden_groups: boolean;
       /**
        * Has Other Grants
        * @description The member has grants on documents you cannot read (not listed or counted).
