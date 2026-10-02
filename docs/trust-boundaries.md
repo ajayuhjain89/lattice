@@ -22,6 +22,7 @@ validated Slack message can still contain a prompt-injection payload.
 ```
  ┌─────────────────────────── Untrusted zone ───────────────────────────┐
  │  Browser (user input)        Source exports / connectors             │
+ │  Organization identity providers (OIDC tokens, SCIM requests; B6)    │
  └───────┬──────────────────────────────┬───────────────────────────────┘
          │ B1 HTTP (session cookie)     │ B4 connector records
  ┌───────▼────────┐                     │
@@ -53,6 +54,7 @@ validated Slack message can still contain a prompt-injection payload.
 | **B3** API → Postgres | both | Parameterized SQL only; `SET LOCAL app.org_id`; non-owner role | `db` |
 | **B4** Connector → ingestion | in | Pydantic `SourceRecord` schema; size limits; UTF-8/NFC normalization; control-char stripping; URI scheme allow-list (`https`); timestamp sanity (not in the future beyond 24 h skew); access metadata must map through source config or the record fails | `connectors`, `ingestion` |
 | **B5** API → provider | out | AI egress policy (default: internal only; confidential/restricted only with explicit org opt-in for an approved provider) — separate from authorization; minimized payload (no internal IDs, no user identity, no authz data); secrets never in prompts | `answering`, `providers` |
+| **B6** identity provider → API (Phase 10) | in | OIDC: discovery issuer equals the configured issuer; ID token signature (asymmetric allow-list, key type matched), `iss`, `aud`/`azp`, `exp`/`iat`, `nonce`; single-use state bound to the browser and connection; bounded HTTP (time, size, no redirects, HTTPS in production). SCIM: bearer token (hashed, per organization), fixed attribute set (no access attribute read), `externalId` immutable, uniqueness inside the organization only, fixed error details. Trusted only for its own organization's provisioned people (ADR-015) | `identity.oidc`, `provisioning` |
 | **B5** provider → API | in | Strict JSON-schema parse; claim-level validation (every citation's handle ∈ provided set and quote verified, or the claim is rejected); length caps; refusal/stop-reason handling | `answering` |
 
 ## 4. How untrusted content is prevented from becoming instructions

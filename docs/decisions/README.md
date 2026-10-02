@@ -9,7 +9,7 @@ not recorded here. Status values: Proposed · Accepted · Superseded.
 | [002](002-postgres-pgvector-single-datastore.md) | PostgreSQL + pgvector + FTS as the single datastore | Accepted (implemented) |
 | [003](003-authorization-inside-retrieval.md) | Authorization compiled into retrieval SQL; RLS for tenant isolation; pre-generation invariant | Accepted (implemented in Phases 1, 2, 5; pre-generation check applied in Phase 6) |
 | [004](004-hybrid-retrieval-rrf-deterministic-rerank.md) | Hybrid retrieval with RRF and a deterministic first reranker | Accepted; implemented in Phase 5 (lexical query change noted) |
-| [005](005-server-side-sessions.md) | Server-side sessions; dev identity for the slice; OIDC before deployment | Accepted (sessions implemented; OIDC before deployment) |
+| [005](005-server-side-sessions.md) | Server-side sessions; dev identity for the slice; OIDC before deployment | Accepted (sessions implemented; OIDC built in Phase 10, ADR-015) |
 | [006](006-structured-answers-verified-citations.md) | Structured answers with quote-verified citations; no streaming of unvalidated text | Accepted (implemented in Phase 6) |
 | [007](007-single-turn-ask.md) | Single-turn Ask; no conversational memory in the first release | Accepted (implemented in Phase 6) |
 | [008](008-embedding-provider.md) | External embedding provider: OpenAI `text-embedding-3-small` at 1024 dimensions (optional, BYOK); Voyage AI kept compatible | Accepted |
@@ -19,3 +19,4 @@ not recorded here. Status values: Proposed · Accepted · Superseded.
 | [012](012-generation-providers.md) | Generation providers: local Ollama (`qwen3.5:4b`), Gemini BYOK (`gemini-3.5-flash-lite`), fake for CI; real-model evaluation not run (M1 8 GB) | Accepted (Phase 6; D-4 open) |
 | [013](013-background-worker-role.md) | A Postgres job queue and a dedicated `lattice_worker` runtime role for requested syncs | Accepted (Phase 8) |
 | [014](014-access-management-writes.md) | Access management writes by the API role, each fenced by a restrictive row-level policy and audited in the same transaction | Accepted (Phase 9) |
+| [015](015-oidc-sign-in-and-scim-provisioning.md) | OIDC sign-in and SCIM provisioning, organization-scoped (owned users, directory identities); database-enforced access audit | Accepted (Phase 10; D-1 and D-20 for review) |

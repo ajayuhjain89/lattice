@@ -8,7 +8,9 @@ generation providers, provider configuration and credentials by reference, the A
 evidence, trace and admin-provider endpoints, and `lattice eval answer`; Phase 7 the web
 app (`apps/web`); Phase 8 the job queue and background worker (`jobs`, `lattice worker`,
 ADR-013), Sources and Activity endpoints and pages, health/readiness, metrics and the
-operational limits of §8.
+operational limits of §8; Phase 9 `access`; Phase 10 OIDC sign-in (`identity.oidc`), SCIM
+provisioning (`provisioning`), rate limits (`ratelimit`) and operator identity commands
+(ADR-015).
 Later-phase modules below are still design; the ✔ marks in §3 say which.
 Related: `data-model.md`, `authorization-model.md`, `retrieval-design.md`,
 `trust-boundaries.md`, ADRs 001–007.
@@ -94,7 +96,9 @@ Package: `backend/src/lattice/`.
 | `errors` ✔    | Error taxonomy (`LatticeError` + codes), mapping to HTTP                                  | —                           |
 | `log` ✔       | JSON log formatter with redaction; `log_event` helper                                     | —                           |
 | `db` ✔        | Engine, tenant-bound transactions (`set_config('app.org_id', …, true)`), base model, runtime-role safety check | config |
-| `identity` ✔  | Users, external identities, server-side sessions, identity providers (dev now, OIDC later) | db                          |
+| `identity` ✔  | Users, external identities, server-side sessions, identity providers: development persona; OIDC with PKCE and organization-scoped mapping (`oidc`, Phase 10); operator actions on connections, SCIM tokens and the administrator capability (`admin`) | db, access (audit)          |
+| `provisioning` ✔ | SCIM 2.0 `Users` (Phase 10, D-20): representation, filters and PATCH (`scim`, pure), the database side (`service`: owned users, least-access memberships, directory identities, lifecycle with session revocation, audit), bearer tokens (`tokens`) | access (audit, snapshots), db |
+| `ratelimit` ✔ | Fixed-window limits in PostgreSQL per membership/token, in-process concurrency and pre-authentication client limits; `RateLimited` → 429 (Phase 10) | db, metrics |
 | `orgs` ✔      | Organizations, memberships, departments, accounts, account assignments (models)           | db                          |
 | `seed` ✔      | Manifest model + idempotent upsert of orgs, users, memberships and admin-defined access groups (by stable key, D-9) | db, orgs, identity, authz (group models only) |
 | `dataset` ✔   | Synthetic dataset tooling (Phase 3): loaders for the three raw export formats, the expected-access oracle (reference policy over fixture metadata), `lattice dataset lint`, the deterministic distractor generator. Never touches the database | authz (public API), seed (manifest model) |
@@ -110,9 +114,9 @@ Package: `backend/src/lattice/`.
 | `tracing` ✔   | `query_traces` and `audit_events` models; one INSERT per Ask; re-authorized trace reads (asker / administrator operational / 404) (Phase 6); Activity lists (own questions; administrators' operational rows) (Phase 8) | authz, retrieval, db        |
 | `jobs` ✔      | The job queue (`jobs` table): sync requests from the API (`queue`, as `lattice_app`) and the worker loop that claims, leases, runs and retires them (`worker`, as `lattice_worker`) (Phase 8, ADR-013) | ingestion, sources, db |
 | `metrics` ✔   | Prometheus metrics with closed label sets, served on a separate listener (Phase 8) | config, log |
-| `api` ✔       | FastAPI app, routers (thin), request dependencies (session → identity → org → authz ctx); Phase 6: `POST /v1/ask`, `GET /v1/evidence/{id}`, `GET /v1/traces/{id}`, `GET /v1/admin/providers`; Phase 8: `GET /v1/health/live`, `GET /v1/health/ready`, `GET /v1/sources`, `GET /v1/admin/sources`, `GET /v1/admin/sources/{id}/failures`, `POST /v1/admin/sources/{id}/sync`, `GET /v1/activity`, `GET /v1/admin/activity`; Phase 9: `GET /v1/accounts`, `/v1/admin/access/*` (members, directory, member, preview, change, documents, explanation, grants, revoke), `GET /v1/admin/audit-events` | all service modules         |
+| `api` ✔       | FastAPI app, routers (thin), request dependencies (session → identity → org → authz ctx); Phase 6: `POST /v1/ask`, `GET /v1/evidence/{id}`, `GET /v1/traces/{id}`, `GET /v1/admin/providers`; Phase 8: `GET /v1/health/live`, `GET /v1/health/ready`, `GET /v1/sources`, `GET /v1/admin/sources`, `GET /v1/admin/sources/{id}/failures`, `POST /v1/admin/sources/{id}/sync`, `GET /v1/activity`, `GET /v1/admin/activity`; Phase 9: `GET /v1/accounts`, `/v1/admin/access/*` (members, directory, member, preview, change, documents, explanation, grants, revoke), `GET /v1/admin/audit-events`; Phase 10: `GET /v1/auth/oidc/{login_key}/start`, `…/callback`, `/scim/v2/*` (bearer token; not in OpenAPI) | all service modules         |
 | `evals` ✔     | Retrieval + security runner (Phase 5); answer + security runner with an optional uncalibrated local judge (Phase 6) | retrieval, answering, dataset |
-| `cli` ✔ | `seed`, `check-db-role`, `dataset`, `sync`, `reindex`, `source disconnect`, `apply-admin-grants`, `search` and `eval retrieval` (Phase 5, development/test only: they act as a member), `models list/fetch/verify` and `provider approve` (Phase 5 closure); `ask`, `eval answer`, `provider …`, `org egress` (Phase 6); `worker` (Phase 8) | services                    |
+| `cli` ✔ | `seed`, `check-db-role`, `dataset`, `sync`, `reindex`, `source disconnect`, `apply-admin-grants`, `search` and `eval retrieval` (Phase 5, development/test only: they act as a member), `models list/fetch/verify` and `provider approve` (Phase 5 closure); `ask`, `eval answer`, `provider …`, `org egress` (Phase 6); `worker` (Phase 8); `sso add/show/disable`, `scim token create/list/revoke`, `member admin` (Phase 10) | services                    |
 
 ✔ = implemented (Phases 1–5). Alembic migrations live in `backend/alembic/`, outside the
 package. Boundary rules (enforced by review; the `authz` rule is also enforced

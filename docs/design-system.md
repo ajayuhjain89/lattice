@@ -689,3 +689,21 @@ the five review widths; one finding fixed (the member header's facts lacked a
 separator), plus two from the live API (a provider event repeated its fields; booleans
 read as Python's `True`).
 
+
+## Part F — Phase 10 as built
+
+No new primitives: the identity and limit states reuse `Callout`, `Tag` and the sign-in
+layout of Part C.
+
+| Section | As built | Why |
+| ------- | -------- | --- |
+| Sign-in (production) | The panel says "Sign in with your organization's identity provider: open Lattice from its app dashboard, or use the sign-in link your administrator shared." No organization picker, no e-mail box, no list of connections; `/sso/<login key>` (the link an administrator shares, or the provider's app tile) hands over to the API | Listing organizations or doing home-realm discovery by e-mail would tell anyone which organizations use Lattice |
+| Sign-in errors | One `role="alert"` row in the panel, from a closed set: `sso_failed` "Sign-in didn't complete. Try again from your identity provider. If it keeps failing, ask your administrator whether your account has access to Lattice." · `sso_unavailable` "Your identity provider couldn't be reached. Try again in a moment." · `rate_limited` "Too many sign-in attempts from this browser. Wait a minute and try again." Any other `error` value is ignored, never echoed | One generic failure: the page cannot tell an unprovisioned person from a bad token |
+| B13 rate limited (Ask) | `Callout` (error tone, label "Limit", hourglass): "Too many questions in a row" · "Lattice limits how often each person can ask. Try again in 30 seconds; your question is still in the box above." (`Retry-After`, phrased in seconds / minutes) with *Try again* | A limit is not a failure of the question; the wait is stated, the draft kept |
+| B12 provisioned member | `Tag` "Identity provider" in the member header and the members table; *Suspend / Reactivate* replaced by "Pat Rivera's name, e-mail and whether they're active come from your identity provider. Suspend or reactivate them there; access is managed here."; the Status fact adds "· set by your identity provider". Refusals (`managed_by_identity_provider`, 429) map to fixed sentences | D-20: the provider owns lifecycle, Lattice owns access |
+| B12 audit log | Actor "Your identity provider (SCIM)"; actions "Profile updated", "Sign-in connection added/disabled", "Provisioning token created/revoked"; identity changes as "Name: Pat Doe → Pat Rivera" detail rows | Same anatomy as provider events |
+| Contrast fix | The request reference on tinted callouts uses `--text-secondary` (was `--text-muted`, 4.19:1 on the error tint) | Found by axe on the new rate-limit state; affected every error callout with a reference |
+
+Verified with Playwright on desktop and phone widths (no horizontal overflow) and axe
+(WCAG 2.2 AA) for the sign-in errors, the rate-limit callout, a provisioned member and
+the audit log.

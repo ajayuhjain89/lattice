@@ -12,7 +12,10 @@ credentials by reference (§5), prompt-injection defences (§7), query traces an
 re-authorized views (§8), and the citation, egress, injection and API suites (§9).
 **Phase 8** implemented the operational-metadata rules of §10 for Sources, sync
 failures, requested syncs and Activity, with their side-channel suite; the worker's
-least-privilege role (ADR-013); and fail-closed operational controls (§5).
+least-privilege role (ADR-013); and fail-closed operational controls (§5). **Phase 10**
+implemented OIDC sign-in and SCIM provisioning scoped to each organization (§4, ADR-015),
+the access audit enforced by the database (§8), rate limits (§11), the security-headers
+review (§4) and the route-inventory isolation sweep (§9).
 Related: `authorization-model.md`, `trust-boundaries.md`, `threat-model.md`.
 
 ---
@@ -104,10 +107,46 @@ See `authorization-model.md` §2. Implemented in Phase 1:
   `Referrer-Policy: same-origin`, `Cache-Control: no-store`, and HSTS in production.
   The web app's own CSP (with its scripts) is defined in Phase 7.
 
+**Phase 10 headers review.** The API adds `Cross-Origin-Opener-Policy: same-origin`,
+`Cross-Origin-Resource-Policy: same-origin` and a restrictive `Permissions-Policy`; it
+grants no CORS. The web app sets its Content-Security-Policy per request in
+`apps/web/src/proxy.ts`: `script-src 'self' 'nonce-<fresh>' 'strict-dynamic'` (no
+`'unsafe-inline'`; `'unsafe-eval'` only in development), `object-src 'none'`,
+`frame-ancestors 'none'`, `base-uri`/`form-action 'self'`; `style-src` keeps
+`'unsafe-inline'` for inline style attributes. Every page renders per request so
+Next.js can put the nonce on its scripts. Also COOP, Permissions-Policy and HSTS in
+production. Verified in Playwright (every script carries the nonce, a fresh nonce per
+load, no violation).
+
+**OIDC sign-in (Phase 10, ADR-015, D-1).** Authorization code with PKCE (S256), `state`,
+`nonce`, and a browser-binding cookie (`__Host-lattice_oidc`, HttpOnly, SameSite=Lax,
+ten minutes); the attempt is stored server-side (hashes) and consumed before anything
+else. The sign-in URL carries an opaque login key, never the organization (pre-auth
+lookup `lattice_oidc_connection`). ID tokens are verified against the provider's JWKS
+with an allow-list of asymmetric algorithms matched to the key type (never `none` or
+HMAC), `iss` (also checked in discovery), `aud`/`azp`, `exp`/`iat` (60 s leeway) and the
+`nonce`. The configured claim maps to a *directory identity* of that connection in that
+organization only; no e-mail linking, no just-in-time membership. Every failure is one
+redirect (`/sign-in?error=sso_failed`; `sso_unavailable` when the provider cannot be
+reached) with a fixed outcome in metrics and logs; nothing from the provider is logged.
+A successful sign-in rotates the session like any other.
+
+**SCIM provisioning (Phase 10, D-20).** `/scim/v2/Users` with a per-organization bearer
+token (SHA-256 stored; pre-auth lookup `lattice_resolve_scim_token`). The provider owns
+user name, e-mail, name and `active`; no access attribute is ever read. Provisioned
+people are users owned by the organization, so they cannot collide with, reveal or
+modify another organization's users. New members get least access; suspension and
+removal revoke sessions in the same transaction and take effect on the next request
+everywhere (sessions, Ask, retrieval, traces, Access views). Identical requests are
+no-ops; `If-Match` supported; every change audited (actor `scim:<token>`).
+
 CSRF (implemented): every non-GET/HEAD/OPTIONS request must send
 `X-Lattice-Request: 1`, and requests marked `Sec-Fetch-Site: cross-site` are rejected
 even with the header. It applies to all routes, including sign-in (login CSRF) and
-logout, and is checked before authentication.
+logout, and is checked before authentication. SCIM (`/scim/v2/`) is the one exception
+to the header rule: it is authenticated by a bearer token in `Authorization` only and
+never reads the cookie, which a cross-site page can neither send nor read; cross-site
+fetch metadata is still refused there.
 
 ## 5. Secrets and configuration
 
@@ -153,6 +192,11 @@ logout, and is checked before authentication.
   Ask's generation calls share a deadline. `LATTICE_GENERATION_ENABLED=false` stops
   every model call deployment-wide (no credential resolved, nothing sent); the
   per-organization stop is still `lattice provider disable`.
+- **Phase 10.** Production also requires `LATTICE_PUBLIC_URL` (https), from which OIDC
+  redirect URIs and the SCIM base URL are built. An OIDC client secret is only ever a
+  reference `env:LATTICE_OIDC_SECRET_<NAME>` (a separate namespace from provider
+  credentials, refused by the schema and the code otherwise), resolved at the token
+  exchange. httpx's own request logging is set to WARNING (it logs URLs).
 - **Operational signals never carry content.** Health endpoints report states only.
   Metrics are served on a separate listener that the web app never proxies, and every
   label comes from a closed set: no organization, member, trace, document or source
@@ -402,15 +446,22 @@ evidence (D-5: off/deferred).
   `GET /v1/admin/audit-events` shows administrators the events newest first; an event
   about a document is listed only while the viewer can read that document (D-18), so
   events about other documents change neither the result nor its paging. Reasons are free text written by administrators and visible to every
-  administrator. That each API change has its event is enforced by the code path,
-  not yet by the database (ADR-014, residual risk).
+  administrator. **Since Phase 10 the database enforces it:** a deferred constraint
+  trigger refuses to commit any access write by the API role unless the same transaction
+  recorded an `access.*` event for that membership (`audit_events.txid`, migration 0013;
+  ADR-015). SCIM writes `access.member_changed` and `access.identity_changed` (actor
+  `scim:<token id>`); operator commands write `sso.*`, `scim.token_*` and the
+  administrator-capability change (`access.member_changed` by `operator:<user>`).
 - **Access management (Phase 9):** administrators review and change members' access on
   the Access page. Capability first (403 identical for any target); never their own
   access; changes previewed (effects as rules, counts only over documents the
   administrator can read), with a reason, against the version reviewed (409 if
   stale). Grants only of documents the administrator can read; a member's grants on
   other documents, and their membership of private groups the administrator isn't in,
-  are acknowledged as a yes/no, never listed, counted or identified (D-18).
+  are acknowledged as a yes/no, never listed, counted or identified (D-18). Members
+  provisioned by the identity provider are marked as such; their suspension and
+  reactivation belong to the provider (422 `managed_by_identity_provider`), their access
+  stays editable here (D-19 revisited, D-20).
 
 ## 9. Security testing strategy
 
@@ -433,6 +484,7 @@ evidence (D-5: off/deferred).
 | `tests/security/citations` | CI | Claim-level fail-closed: invalid handle → claim absent; fabricated quote → claim absent; mixed valid/invalid → only validated claims survive (and a claim with one valid + one invalid citation is absent); all material claims invalid → answer withheld (`insufficient_evidence`, reason `claims_unverified`); every rendered citation references an evidence item present in the response and readable by the user |
 | `tests/security/egress` | CI | Default policy: recording provider never receives confidential/restricted chunk text or canaries, for any persona including Leadership; opt-in + approved provider: confidential reaches the provider, restricted still does not; excluded evidence still returned to the authorized user with the egress notice; `evidence_only` when all evidence excluded |
 | `tests/security/test_operational_metadata.py`, `tests/security/operational/` ✔ (Phase 8) | CI | Sources: every persona of both organizations sees exactly the sources the reference policy lets them read from, with counts equal to the reference policy's (independent of the SQL predicate); a source a member cannot read from is byte-for-byte absent; revocation removes it on the next request; administrators get aggregates only, every source, no titles, paths or file names; a failed record is named only when the administrator can read its document, otherwise `rec_…`; parameters allow-listed; `access_unmappable:account` shows the external account reference only. Requested syncs and administrator views: 403 for non-admins whether or not the source exists; another organization's sources are 404 and never listed. Activity: members list only their own questions; administrators' rows carry no question, answer, scope or evidence; organizations never see each other's rows. Plus `tests/test_worker_role.py` (the worker's exact privileges and restrictive policies) and `tests/test_operations.py` (health, readiness, limits, metrics without identifiers). Phase 9: `tests/security/test_access_management.py` (403 equality for non-administrators, other organizations' members/grants/events 404 and never listed, search and explanations only over readable documents, unreadable grants neither listed nor counted, private channels shown only to their members, previews identical with or without documents the administrator can't read, audit naming documents only while readable, one event per change and none when refused, CSRF), `tests/security/test_access_private_objects.py` (review closure: nothing about a private channel the admin isn't in — name, members, count, identifier — on member pages, explanations, the directory or refusals; grant/revoke on an unreadable document leaves the viewer's audit result set and paging identical, a hidden event ID as anchor behaves like a missing one, readable events appear normally; becoming admin reveals nothing; organizations separate), `tests/security/operational/test_access_personas.py` (every persona's `/v1/accounts` equals the reference `account_visible`; for every administrator × member: no unreadable title, grants exactly the readable ones, channel naming, suspension previews equal the reference policy's count), `tests/security/test_authz_review.py`, `tests/test_app_role_access.py` (the API role's exact privileges and restrictive policies) |
+| Phase 10 suites ✔ | CI | `tests/identity/test_oidc.py` (flow, every ID-token defect, replay, binding, expiry, connection mix-up, organization-scoped mapping, provider faults, logs), `tests/provisioning/` (SCIM contract, idempotency, attribute ownership, cross-organization isolation, revocation effective everywhere), `tests/identity/test_admin.py` (operator commands audited, no secrets in events), `tests/test_rate_limits.py`, `tests/test_access_audit_enforcement.py` (unaudited writes refused at commit), `tests/test_app_role_access.py` (provisioning fences), `tests/security/test_route_inventory.py` (every route classified; anonymous/member/SCIM/cross-organization sweeps; closed metric labels), `e2e/identity.spec.ts` (CSP nonce, SSO errors, 429 and provisioned-member states, axe) |
 | Mutation check | By hand per phase (Phase 5: 18 retrieval defects, `implementation-plan.md`); CI nightly job still planned | Predicate disabled → suite must fail |
 
 Release gate: any failure in these suites blocks merge. `unauthorized_context_retrieved`
@@ -460,3 +512,22 @@ channel or document can itself be sensitive. Rules per channel:
 | **Trace structure** | Own traces (§8) | Operational view without counts, scope, account or source names (§8) |
 | **"No evidence" / refusal responses** | Identical for nonexistent and unreadable (SEC-5); "what was searched" lists only their own scope | — |
 | **Logs** | — | IDs, codes, durations only (SEC-8); document IDs in logs are UUIDs, never titles/filenames |
+
+## 11. Rate limits and resource protection (Phase 10)
+
+Server-side only (`lattice.ratelimit`; T19, T24). Per membership: Asks per minute and per
+day (PostgreSQL counters shared by every API process, under row-level security) and in
+flight (per process); per administrator: access previews and writes; per SCIM token:
+requests; per client address before authentication: development sign-in, OIDC start and
+callback, failed SCIM authentication (per process, keyed hashes, bounded table; a client
+over the limit is refused before its SCIM token is even checked). A refusal is 429
+`rate_limited` with `Retry-After`; browser sign-in redirects with `error=rate_limited`.
+
+Rules: the subject comes from the session or token, never the request; a limit is taken
+after authentication and the capability check and before anything that depends on the
+target, so a 429 says nothing about documents, accounts, members or other organizations;
+all limits of one request are taken in one transaction and nothing is counted when one
+refuses; parallel requests never exceed a limit (conditional upsert on a locked row);
+every role is limited, administrators included, and no setting disables a limit (each
+must be ≥ 1); the only metric label is the bucket name; no address, identifier or
+content is logged or stored.

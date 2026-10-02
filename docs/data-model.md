@@ -19,6 +19,10 @@ trust classes, `model_providers.approved_at`,
 SELECT on `alembic_version` for the runtime role (0010: the schema-revision check) and
 the `jobs` table, the `lattice_worker` role's grants and policies, and an
 `(organization_id, created_at)` index on `query_traces` (0011; §3 and §8 below).
+**Phase 9** added the API role's fenced access writes (0012). **Phase 10** (migration
+0013, ADR-015) added `oidc_connections`, `oidc_login_attempts`, `directory_identities`,
+`scim_tokens`, `rate_limit_counters`, `users.home_organization_id` and
+`audit_events.txid` with the access-audit triggers (§2, §7).
 Related: `authorization-model.md`, `ingestion-design.md`, `retrieval-design.md`.
 
 Conventions:
@@ -91,6 +95,13 @@ contractors, consultants), so user ≠ membership.
 | email         | citext UQ  |      | Login hint only; never an authz input  |
 | display_name  | text       | CITE | Shown as author/asker                  |
 | status        | enum       | DEL  | `active`, `disabled`, `deleted` (anonymized) |
+| home_organization_id | uuid FK NULL | ISO | Phase 10: set for a user created by an organization's SCIM provisioning — the user is *owned* by it and can be a member of no other organization (trigger `lattice_membership_home_organization`). NULL for global users (the manifest) |
+
+E-mail uniqueness (0013): unique among global users (`uq_users_email`, partial) and per
+owning organization among owned users (`uq_users_home_organization_email`), so one
+organization's provisioning never collides with — and so never reveals — another
+organization's user. The API role may insert owned users of the bound organization and
+update their e-mail and display name only; it sees them through `home_visible`.
 
 ### external_identities
 
@@ -101,7 +112,27 @@ contractors, consultants), so user ≠ membership.
 | issuer    | text    | OIDC issuer URL, or `dev` for development login    |
 | subject   | text    | Stable subject from IdP. UQ (issuer, subject)      |
 
-Email is **not** used to link identities (email reuse / takeover risk).
+Email is **not** used to link identities (email reuse / takeover risk). OIDC sign-in
+(Phase 10) does not use this global table at all: identities from an organization's own
+provider are `directory_identities`, scoped to that organization and connection (below).
+
+### oidc_connections, oidc_login_attempts, directory_identities, scim_tokens (Phase 10)
+
+Tenant tables, forced RLS (migration 0013; ADR-015).
+
+| Table | Fields | Notes |
+| ----- | ------ | ----- |
+| `oidc_connections` | `id, organization_id, login_key, issuer, client_id, client_secret_ref, subject_claim, status (active/disabled)`, timestamps | One active per organization. `login_key` opaque (22–64 URL-safe characters, globally unique): the sign-in URL names it, never the organization. `client_secret_ref` only `env:LATTICE_OIDC_SECRET_<NAME>`. Operator-written; the API reads it only through `lattice_oidc_connection(login_key)` (owned by `lattice_auth`) |
+| `oidc_login_attempts` | `id, organization_id, connection_id, state_hash, binding_hash, nonce, code_verifier, return_to, created_at, expires_at, consumed_at` | One authorization-code flow: SHA-256 of `state` and of the browser-binding cookie, ten minutes, consumed once (`consumed_at`). The API inserts, consumes and deletes finished ones (restrictive policy: only consumed or expired) |
+| `directory_identities` | `id, organization_id, connection_id, membership_id, external_id, user_name, given_name, family_name, version`, timestamps | The provider's person: UQ `(connection_id, external_id)` (the OIDC claim value), UQ `(organization_id, membership_id)`, UQ `(connection_id, lower(user_name))`. Written by SCIM as the API role (no DELETE; `external_id` and `membership_id` not updatable). Its `id` is the SCIM resource ID. A membership with a directory identity is *provisioned*: its lifecycle belongs to the provider |
+| `scim_tokens` | `id, organization_id, connection_id, token_hash, created_at, revoked_at` | SHA-256 of `lsc_…` tokens; operator-written; resolved through `lattice_resolve_scim_token(hash)` only while the token, its connection and its organization are active |
+
+### rate_limit_counters (Phase 10)
+
+`organization_id, bucket, subject, window_start, count`; PK `(organization_id, bucket,
+subject)`: one row per membership or SCIM token and bucket (closed set: `ask_minute`,
+`ask_day`, `access_write`, `scim`), holding the current fixed window, updated by a
+conditional upsert. Tenant RLS; IDs and counts only.
 
 ### sessions
 
@@ -490,7 +521,7 @@ Organization-owned provider credentials **by reference only** (D-16, ADR-011):
 provider (partial unique index); rotation revokes and inserts, history is kept. Forced
 RLS; the runtime role may SELECT only (to resolve the reference at invocation).
 
-### audit_events (Phase 6, migration 0008; access events Phase 9, migration 0012)
+### audit_events (Phase 6, migration 0008; access events Phase 9, migration 0012; enforced by the database Phase 10, migration 0013)
 
 Append-only record of administrative changes: `id, organization_id, created_at
 (clock_timestamp), actor, action, target, before, after, reason (1-500 characters)`. A
@@ -502,13 +533,24 @@ Never a secret, a secret reference or document content.
 | `provider.*`, `credential.*`, `egress.levels_changed` | operator CLI (Phase 6) | provider / purpose | the changed settings |
 | `access.member_changed` | API (`member:<id>`), seed (`operator:seed`) | `membership_id` | access snapshots: status, administrator flag, clearance, account scope, assigned account IDs, department IDs, administrator-defined group IDs (before NULL = provisioned) |
 | `access.grant_created`, `access.grant_revoked` | API, `apply-admin-grants` (`operator:admin-grants`) | `membership_id`, `document_id`, `grant_id`, `source_id`, `reference` (the document's opaque `rec_…`) | `{origin, principal_type}` |
+| `access.member_changed` (Phase 10) | SCIM (`scim:<token id>`: provisioning, suspension, reactivation, removal), `lattice member admin` (`operator:<user>`: the administrator capability) | `membership_id` | access snapshots, as above |
+| `access.identity_changed` | SCIM (`scim:<token id>`) | `membership_id` | `{user_name, email, name}` before and after |
+| `sso.connection_created`, `sso.connection_disabled`, `scim.token_created`, `scim.token_revoked` | operator commands (`operator:<user>`) | `connection_id` / `token_id` | the connection's settings (the client secret only as `reference` or `none`) / state |
 
 IDs, never names: the audit view resolves names at read time (deleted ones show as
 gone) and lists an event that targets a document only while the viewing administrator
 can read that document (D-18; the stored `reference` is for operators and is never
 returned by the API). Index `(organization_id, created_at DESC, id DESC)` for the
 keyset pages of `GET /v1/admin/audit-events`. The runtime role may SELECT and may
-INSERT only `access.*` events by a `member:` actor (restrictive policy, ADR-014).
+INSERT only `access.*` events by a `member:` or `scim:` actor (restrictive policy,
+ADR-014, 0013).
+
+`txid xid8` (0013; default `pg_current_xact_id()`, indexed): the writing transaction.
+Deferred constraint triggers on `memberships`, `account_assignments`,
+`membership_departments`, `access_group_members`, `document_grants` and
+`directory_identities` refuse to commit an INSERT, UPDATE or DELETE by `lattice_app`
+unless an `access.*` event of the same transaction names the same `membership_id`
+(`lattice_require_access_audit`). Operator and worker writes are not affected.
 
 ### model_providers
 
@@ -549,9 +591,9 @@ here (environment / secret store only).
 | Role | Login | Purpose | RLS |
 | ---- | ----- | ------- | --- |
 | `lattice_owner` | yes | Owns the schema; runs migrations and operator tools (seed) | Subject to FORCE RLS on tenant tables; has provisioning policies on the three global/root tables only |
-| `lattice_app` | yes | API. Never owns tables, never BYPASSRLS, never writes documents (the API refuses such a role, Phase 8). Since Phase 9 writes access-management state only: a membership's status/clearance/scope, assignments, departments, administrator-group members, administrator membership grants, access audit events (ADR-014) | Subject to every policy; restrictive policies fence each Phase 9 write; exact privileges: `backend/tests/test_app_role_access.py` |
+| `lattice_app` | yes | API. Never owns tables, never BYPASSRLS, never writes documents (the API refuses such a role, Phase 8). Since Phase 9 writes access-management state only: a membership's status/clearance/scope, assignments, departments, administrator-group members, administrator membership grants, access audit events (ADR-014). Since Phase 10 also SCIM provisioning — organization-owned users (insert; e-mail and name), memberships for them through column privileges that keep the least-access defaults, `removed` only for provisioned members, directory identities — plus sign-in attempts and rate-limit counters (ADR-015); every access write must commit with its audit event | Subject to every policy; restrictive policies fence each Phase 9 and Phase 10 write; exact privileges: `backend/tests/test_app_role_access.py` |
 | `lattice_worker` | yes | Background worker (Phase 8, ADR-013). Never owns tables, never BYPASSRLS | Subject to every tenant policy; role-targeted policies on `jobs` (queue across organizations); restrictive policies limit its grant/group writes to `origin = 'source'` and its `model_providers` inserts to embedding records approved for `internal`. Exact privileges: `backend/tests/test_worker_role.py` |
-| `lattice_auth` | **no** | Owns the two SECURITY DEFINER pre-authentication functions — and nothing else | Role-targeted read policies on the tables those functions need |
+| `lattice_auth` | **no** | Owns the four SECURITY DEFINER pre-authentication functions (`lattice_resolve_session`, `lattice_identity_memberships`; Phase 10: `lattice_oidc_connection`, `lattice_resolve_scim_token`) — and nothing else | Role-targeted read policies on the tables those functions need |
 
 Roles, databases and extensions are created by `infra/postgres/bootstrap.sql` (run as
 superuser; idempotent). Migrations only verify they exist. `lattice_owner` is granted
