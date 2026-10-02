@@ -45,7 +45,8 @@ async def create_member(
             await s.execute(
                 text(
                     "INSERT INTO users (email, display_name) VALUES (:e, :n) "
-                    "ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id"
+                    "ON CONFLICT (email) WHERE home_organization_id IS NULL "
+                    "DO UPDATE SET email = EXCLUDED.email RETURNING id"
                 ),
                 {"e": email, "n": email.split("@")[0]},
             )
@@ -258,3 +259,85 @@ async def add_grant(
                 "origin": origin,
             },
         )
+
+
+# --- Identity providers and provisioning (Phase 10) -------------------------------------
+
+
+async def create_oidc_connection(
+    db: Database,
+    organization_id: uuid.UUID,
+    *,
+    issuer: str = "https://idp.example",
+    client_id: str = "lattice",
+    login_key: str | None = None,
+    status: str = "active",
+    subject_claim: str = "sub",
+    client_secret_ref: str | None = None,
+) -> uuid.UUID:
+    async with db.tenant_transaction(organization_id) as s:
+        value: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO oidc_connections (organization_id, login_key, issuer, "
+                    "client_id, status, subject_claim, client_secret_ref) "
+                    "VALUES (:o, :k, :i, :c, :st, :claim, :ref) RETURNING id"
+                ),
+                {
+                    "o": organization_id,
+                    "k": login_key or uuid.uuid4().hex,
+                    "i": issuer,
+                    "c": client_id,
+                    "st": status,
+                    "claim": subject_claim,
+                    "ref": client_secret_ref,
+                },
+            )
+        ).scalar_one()
+    return value
+
+
+async def create_provisioned_member(
+    db: Database,
+    organization_id: uuid.UUID,
+    connection_id: uuid.UUID,
+    email: str,
+    external_id: str,
+    *,
+    status: str = "active",
+) -> Member:
+    """A member as SCIM provisioning creates one: a user owned by the organization, a
+    least-access membership and its directory identity (written as the owner)."""
+    async with db.tenant_transaction(organization_id) as s:
+        user_id: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO users (email, display_name, home_organization_id) "
+                    "VALUES (:e, :n, :o) RETURNING id"
+                ),
+                {"e": email, "n": email.split("@")[0], "o": organization_id},
+            )
+        ).scalar_one()
+        membership_id: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO memberships (organization_id, user_id, status) "
+                    "VALUES (:o, :u, :st) RETURNING id"
+                ),
+                {"o": organization_id, "u": user_id, "st": status},
+            )
+        ).scalar_one()
+        await s.execute(
+            text(
+                "INSERT INTO directory_identities (organization_id, connection_id, "
+                "membership_id, external_id, user_name) VALUES (:o, :c, :m, :x, :e)"
+            ),
+            {
+                "o": organization_id,
+                "c": connection_id,
+                "m": membership_id,
+                "x": external_id,
+                "e": email,
+            },
+        )
+    return Member(organization_id, user_id, membership_id, email)

@@ -12,7 +12,7 @@ from typing import Final
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-SCHEMA_REVISION: Final = "0012"
+SCHEMA_REVISION: Final = "0013"
 
 _READABLE_SQL = text(
     "SELECT to_regclass('public.alembic_version') IS NOT NULL "

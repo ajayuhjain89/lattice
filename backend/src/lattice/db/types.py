@@ -1,4 +1,5 @@
-"""Column types PostgreSQL provides and SQLAlchemy does not: pgvector's ``vector``.
+"""Column types PostgreSQL provides and SQLAlchemy does not: pgvector's ``vector`` and
+the 64-bit transaction ID ``xid8`` (``audit_events.txid``, migration 0013).
 
 A small ``UserDefinedType`` instead of the ``pgvector`` package, which would pull in
 numpy for one column. Values cross the driver as pgvector's text form
@@ -45,3 +46,15 @@ class Vector(UserDefinedType[list[float]]):
 
 
 ischema_names["vector"] = Vector
+
+
+class Xid8(UserDefinedType[int]):
+    """A transaction ID. Written only by its column default (``pg_current_xact_id()``)."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **kw: Any) -> str:
+        return "XID8"
+
+
+ischema_names["xid8"] = Xid8
