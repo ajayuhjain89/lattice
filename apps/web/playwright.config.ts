@@ -32,6 +32,8 @@ export default defineConfig({
     timeout: 60_000,
     env: {
       LATTICE_WEB_DEV_SIGN_IN: "true",
+      // The design-system specimen (/specimen) is development-only; the tests need it.
+      LATTICE_WEB_SPECIMEN: "true",
       LATTICE_DEV_PERSONA_MANIFESTS: "../../data/synthetic/halden/org.yaml,../../data/synthetic/veridian/org.yaml",
       // Never reached: every /api request is fulfilled by the test's mock.
       LATTICE_API_URL: "http://127.0.0.1:9",

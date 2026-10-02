@@ -10,7 +10,7 @@
 }
 
 .label {
-  composes: t-label from global;
+  composes: t-section from global;
 
   display: flex;
   align-items: center;
@@ -19,11 +19,11 @@
 }
 
 .errorLabel {
-  color: var(--status-error-text);
+  color: var(--signal-fault-text);
 }
 
 .title {
-  composes: t-h2 from global;
+  composes: t-subtitle from global;
 }
 
 .body {

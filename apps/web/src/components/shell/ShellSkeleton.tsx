@@ -1,5 +1,5 @@
 import { SkeletonLines } from "@/components/primitives/Skeleton";
-import { Wordmark } from "@/components/Wordmark";
+import { Wordmark } from "@/components/brand/Wordmark";
 
 import styles from "./ShellSkeleton.module.css";
 

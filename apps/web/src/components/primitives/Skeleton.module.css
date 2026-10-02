@@ -1,7 +1,7 @@
 .block {
   display: block;
   border-radius: var(--radius-xs);
-  background: var(--bg-muted);
+  background: var(--surface-well-strong);
 }
 
 .line {

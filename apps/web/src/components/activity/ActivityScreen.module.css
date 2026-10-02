@@ -19,12 +19,12 @@
 }
 
 .title {
-  composes: t-h1 from global;
+  composes: t-title from global;
 }
 
 .deck {
-  font-size: var(--type-prose-size);
-  line-height: var(--type-prose-line);
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
   color: var(--text-secondary);
 }
 
@@ -44,14 +44,14 @@
   font-size: var(--type-meta-size);
   padding: 0 var(--space-1);
   border-radius: var(--radius-xs);
-  background: var(--bg-sunken);
+  background: var(--surface-well);
   color: var(--text-primary);
   white-space: nowrap;
 }
 
 .tableWrap {
   overflow-x: auto;
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
 }
 
 .table {
@@ -61,16 +61,13 @@
 }
 
 .table thead th {
-  font-family: var(--font-mono);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line);
-  font-weight: 500;
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
+  font-size: var(--type-section-size);
+  line-height: var(--type-section-line);
+  font-weight: 600;
   height: 32px;
   padding: 0 var(--space-4) 0 0;
-  background: var(--bg-muted);
-  border-bottom: var(--border-width) solid var(--border-strong);
+  background: var(--surface-well-strong);
+  border-bottom: var(--border-width) solid var(--rule-ink);
   color: var(--text-primary);
   text-align: left;
   white-space: nowrap;
@@ -84,7 +81,7 @@
 .table td,
 .table .rowHead {
   padding: var(--space-3) var(--space-4) var(--space-3) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
   vertical-align: top;
   text-align: left;
 }
@@ -99,7 +96,7 @@
 }
 
 .table tbody tr:hover {
-  background: var(--bg-sunken);
+  background: var(--surface-well);
 }
 
 .table .num {
@@ -128,7 +125,7 @@
 }
 
 .mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-ledger);
   font-size: var(--type-meta-size);
 }
 
@@ -144,15 +141,15 @@
 }
 
 .ok {
-  color: var(--status-success-text);
+  color: var(--signal-healthy-text);
 }
 
 .warn {
-  color: var(--status-warning-text);
+  color: var(--signal-time-text);
 }
 
 .bad {
-  color: var(--status-error-text);
+  color: var(--signal-fault-text);
 }
 
 .off {
@@ -177,7 +174,7 @@
 
 .list {
   list-style: none;
-  border-top: var(--border-width) solid var(--border-strong);
+  border-top: var(--border-width) solid var(--rule-ink);
 }
 
 .row {
@@ -186,7 +183,7 @@
   gap: var(--space-4);
   align-items: baseline;
   padding: var(--space-3) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
 }
 
 .question {
@@ -221,7 +218,7 @@
   display: grid;
   gap: var(--space-2);
   padding: var(--space-4) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
 }
 
 .card dl {
@@ -231,12 +228,9 @@
 }
 
 .card dt {
-  font-family: var(--font-mono);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line);
-  font-weight: 500;
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
+  font-size: var(--type-section-size);
+  line-height: var(--type-section-line);
+  font-weight: 600;
   color: var(--text-muted);
   padding-top: 2px;
 }
@@ -247,14 +241,14 @@
 
 .empty {
   padding: var(--space-6) 0;
-  border-top: var(--border-width) solid var(--border-strong);
+  border-top: var(--border-width) solid var(--rule-ink);
   color: var(--text-secondary);
   display: grid;
   gap: var(--space-1);
 }
 
 .emptyTitle {
-  composes: t-h3 from global;
+  composes: t-heading from global;
 
   color: var(--text-primary);
 }
@@ -266,7 +260,7 @@
 
   .cards {
     display: block;
-    border-top: var(--border-width) solid var(--border-strong);
+    border-top: var(--border-width) solid var(--rule-ink);
   }
 }
 

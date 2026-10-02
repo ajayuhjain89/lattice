@@ -6,7 +6,7 @@
 }
 
 .label {
-  composes: t-label from global;
+  composes: t-section from global;
 
   color: var(--text-primary);
   flex: 0 1 auto;
@@ -17,7 +17,7 @@
 .rule {
   flex: 1;
   height: 0;
-  border-top: var(--border-width) solid var(--border-default);
+  border-top: var(--border-width) solid var(--rule);
   min-width: var(--space-4);
 }
 

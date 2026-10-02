@@ -3,7 +3,7 @@
 import { Menu } from "lucide-react";
 
 import { Icon } from "@/components/primitives/icons";
-import { Wordmark } from "@/components/Wordmark";
+import { Wordmark } from "@/components/brand/Wordmark";
 
 import styles from "./TopBar.module.css";
 import { useWorkspace } from "./workspace-context";

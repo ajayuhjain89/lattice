@@ -14,9 +14,9 @@
   left: var(--space-2);
   z-index: var(--z-toast);
   padding: var(--space-2) var(--space-3);
-  border: var(--border-width) solid var(--border-strong);
+  border: var(--border-width) solid var(--rule-strong);
   border-radius: var(--radius-sm);
-  background: var(--bg-surface);
+  background: var(--surface-sheet);
   font-weight: 600;
   transform: translateY(-200%);
 }
@@ -31,7 +31,7 @@
   position: sticky;
   top: 0;
   height: 100dvh;
-  border-right: var(--border-width) solid var(--border-strong);
+  border-right: var(--border-width) solid var(--rule-strong);
   z-index: var(--z-rail);
 }
 

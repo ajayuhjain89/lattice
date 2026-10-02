@@ -1,3 +1,4 @@
+@import "./fonts.css";
 @import "./tokens.css";
 
 /* Reset --------------------------------------------------------------------------- */
@@ -67,24 +68,26 @@ svg {
 
 body {
   min-height: 100dvh;
-  background: var(--bg-canvas);
+  background: var(--surface-paper);
   color: var(--text-primary);
-  font-family: var(--font-sans);
+  font-family: var(--font-interface);
   font-size: var(--type-body-size);
   line-height: var(--type-body-line);
   font-synthesis: none;
+  font-optical-sizing: auto;
   text-rendering: optimizelegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Selection is not a passage: it takes the provenance tint, never the marker. */
 ::selection {
-  background: var(--accent-lime);
+  background: var(--signal-provenance-tint);
   color: var(--text-primary);
 }
 
 :focus-visible {
-  outline: var(--focus-width) solid var(--border-focus);
+  outline: var(--focus-width) solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -92,9 +95,11 @@ body {
   outline: none;
 }
 
+/* The verified passage (design-direction §4.2 "Passage"). */
 mark {
-  background: var(--accent-lime);
-  color: var(--text-primary);
+  background: var(--signal-passage-tint);
+  box-shadow: inset 0 -2px 0 var(--signal-passage-fill);
+  color: var(--signal-passage-text);
   border-radius: var(--radius-xs);
   padding: 0 var(--space-0-5);
   box-decoration-break: clone;
@@ -104,42 +109,70 @@ mark {
 code,
 kbd,
 samp {
-  font-family: var(--font-mono);
+  font-family: var(--font-ledger);
 }
 
-/* Type roles (B4). Shared by components through `composes`. ------------------------- */
+/* Type roles (design-direction §4.1). Shared by components through `composes`. ------
+   Record (serif): display, lead, prose. Interface (sans): title, subtitle, heading,
+   body, small, section, caption. Ledger (mono): meta, mark, code. Uppercase exists
+   only in `mark` (the status keyword and exhibit tags). */
 
 .t-display {
+  font-family: var(--font-record);
   font-size: var(--type-display-size);
   line-height: var(--type-display-line);
-  font-weight: 700;
-  letter-spacing: -0.025em;
+  font-weight: var(--type-display-weight);
+  letter-spacing: var(--type-display-tracking);
   text-wrap: balance;
 }
 
-.t-h1 {
-  font-size: var(--type-h1-size);
-  line-height: var(--type-h1-line);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+.t-lead {
+  font-family: var(--font-record);
+  font-size: var(--type-lead-size);
+  line-height: var(--type-lead-line);
+  font-weight: var(--type-lead-weight);
+}
+
+.t-prose {
+  font-family: var(--font-record);
+  font-size: var(--type-prose-size);
+  line-height: var(--type-prose-line);
+  font-weight: 400;
+}
+
+.t-title {
+  font-family: var(--font-interface);
+  font-size: var(--type-title-size);
+  line-height: var(--type-title-line);
+  font-weight: var(--type-title-weight);
+  letter-spacing: var(--type-title-tracking);
   text-wrap: balance;
 }
 
-.t-h2 {
-  font-size: var(--type-h2-size);
-  line-height: var(--type-h2-line);
-  font-weight: 650;
-  letter-spacing: -0.01em;
+.t-subtitle {
+  font-family: var(--font-interface);
+  font-size: var(--type-subtitle-size);
+  line-height: var(--type-subtitle-line);
+  font-weight: var(--type-subtitle-weight);
+  letter-spacing: -0.006em;
 }
 
-.t-h3 {
-  font-size: var(--type-h3-size);
-  line-height: var(--type-h3-line);
+.t-heading {
+  font-family: var(--font-interface);
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
   font-weight: 600;
-  letter-spacing: -0.005em;
+}
+
+.t-body {
+  font-family: var(--font-interface);
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  font-weight: 400;
 }
 
 .t-body-strong {
+  font-family: var(--font-interface);
   font-size: var(--type-body-size);
   line-height: var(--type-body-line);
   font-weight: 600;
@@ -150,20 +183,52 @@ samp {
   line-height: var(--type-small-line);
 }
 
-.t-label {
-  font-family: var(--font-mono);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line);
-  font-weight: 500;
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
+.t-section {
+  font-family: var(--font-interface);
+  font-size: var(--type-section-size);
+  line-height: var(--type-section-line);
+  font-weight: 600;
+}
+
+.t-caption {
+  font-family: var(--font-interface);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
 }
 
 .t-meta {
-  font-family: var(--font-mono);
+  font-family: var(--font-ledger);
   font-size: var(--type-meta-size);
   line-height: var(--type-meta-line);
   font-variant-numeric: tabular-nums;
+}
+
+.t-mark {
+  font-family: var(--font-ledger);
+  font-size: var(--type-mark-size);
+  line-height: var(--type-mark-line);
+  font-weight: 500;
+  letter-spacing: var(--type-mark-tracking);
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+.t-code {
+  font-family: var(--font-ledger);
+  font-size: var(--type-code-size);
+  line-height: var(--type-code-line);
+}
+
+/* Boundary hatching (design-direction §5.4): a texture plus a dashed edge. Forced
+   colours drop the texture and keep the edge. */
+.hatch {
+  background-image: var(--boundary-hatch);
+}
+
+@media (forced-colors: active) {
+  .hatch {
+    background-image: none;
+  }
 }
 
 .visually-hidden {

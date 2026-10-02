@@ -7,39 +7,39 @@
 }
 
 .neutral {
-  --callout-bg: var(--bg-sunken);
-  --callout-border: var(--border-strong);
+  --callout-bg: var(--surface-well);
+  --callout-border: var(--rule-strong);
   --callout-text: var(--text-primary);
 }
 
 .plain {
   --callout-bg: transparent;
-  --callout-border: var(--border-strong);
+  --callout-border: var(--rule-strong);
   --callout-text: var(--text-primary);
 }
 
 .info {
-  --callout-bg: var(--status-info-bg);
-  --callout-border: var(--status-info-border);
-  --callout-text: var(--status-info-text);
+  --callout-bg: var(--surface-well);
+  --callout-border: var(--rule-strong);
+  --callout-text: var(--text-secondary);
 }
 
 .warning {
-  --callout-bg: var(--status-warning-bg);
-  --callout-border: var(--status-warning-border);
-  --callout-text: var(--status-warning-text);
+  --callout-bg: var(--signal-time-tint);
+  --callout-border: var(--signal-time-mark);
+  --callout-text: var(--signal-time-text);
 }
 
 .error {
-  --callout-bg: var(--status-error-bg);
-  --callout-border: var(--status-error-border);
-  --callout-text: var(--status-error-text);
+  --callout-bg: var(--signal-fault-tint);
+  --callout-border: var(--signal-fault-mark);
+  --callout-text: var(--signal-fault-text);
 }
 
 .conflict {
-  --callout-bg: var(--status-conflict-bg);
-  --callout-border: var(--status-conflict-border);
-  --callout-text: var(--status-conflict-text);
+  --callout-bg: var(--signal-disagreement-tint);
+  --callout-border: var(--signal-disagreement-mark);
+  --callout-text: var(--signal-disagreement-text);
 }
 
 .header {
@@ -51,7 +51,7 @@
 }
 
 .label {
-  composes: t-label from global;
+  composes: t-section from global;
 
   margin: 0;
 }

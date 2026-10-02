@@ -8,7 +8,7 @@
 }
 
 .groupHeader {
-  composes: t-label from global;
+  composes: t-section from global;
 
   display: flex;
   justify-content: space-between;
@@ -27,7 +27,7 @@
 }
 
 .list {
-  border-top: var(--border-width) solid var(--border-default);
+  border-top: var(--border-width) solid var(--rule);
 }
 
 .row {
@@ -38,17 +38,17 @@
   align-items: start;
   width: 100%;
   padding: var(--space-3) var(--space-2) var(--space-3) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
   text-align: left;
-  transition: background-color var(--motion-fast) var(--ease);
+  transition: background-color var(--motion-quick) var(--ease);
 }
 
 .row:hover {
-  background: var(--bg-sunken);
+  background: var(--surface-well);
 }
 
 .row[aria-current="true"] {
-  background: var(--bg-sunken);
+  background: var(--surface-well);
 }
 
 .row[aria-current="true"]::before {
@@ -59,7 +59,7 @@
   bottom: var(--space-2);
   width: 2px;
   border-radius: 1px;
-  background: var(--border-strong);
+  background: var(--rule-strong);
 }
 
 .number {
@@ -69,15 +69,15 @@
   place-items: center;
   height: var(--control-xs);
   border-radius: var(--radius-xs);
-  color: var(--accent-lavender-text);
-  background: var(--accent-lavender-subtle);
-  font-size: var(--type-label-size);
+  color: var(--signal-provenance-text);
+  background: var(--signal-provenance-tint);
+  font-size: var(--type-section-size);
 }
 
 .row[aria-current="true"] .number {
-  background: var(--accent-lime);
+  background: var(--signal-passage-fill);
   color: var(--text-primary);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
+  box-shadow: inset 0 0 0 1px var(--rule-strong);
 }
 
 .unnumbered {
@@ -127,7 +127,7 @@
   background: none;
   padding: 0;
   color: var(--text-primary);
-  text-decoration: underline 2px var(--accent-lime);
+  text-decoration: underline 2px var(--signal-passage-fill);
   text-underline-offset: 3px;
   text-decoration-skip-ink: none;
 }
@@ -160,17 +160,17 @@
   min-height: var(--control-lg);
   margin-top: var(--space-2);
   padding: 0 var(--space-2) 0 0;
-  border-top: var(--border-width) solid var(--border-default);
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-top: var(--border-width) solid var(--rule);
+  border-bottom: var(--border-width) solid var(--rule);
   text-align: left;
 }
 
 .disclosure:hover {
-  background: var(--bg-sunken);
+  background: var(--surface-well);
 }
 
 .disclosureLabel {
-  composes: t-label from global;
+  composes: t-section from global;
 
   display: inline-flex;
   align-items: center;
@@ -179,7 +179,7 @@
 }
 
 .chevron {
-  transition: transform var(--motion-fast) var(--ease);
+  transition: transform var(--motion-quick) var(--ease);
 }
 
 .disclosure[aria-expanded="true"] .chevron {

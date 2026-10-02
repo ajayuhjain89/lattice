@@ -16,37 +16,37 @@
   padding: 0 var(--space-1);
   border: var(--border-width) solid transparent;
   border-radius: var(--radius-xs);
-  background: var(--accent-lavender-subtle);
-  color: var(--accent-lavender-text);
-  font-size: var(--type-label-size);
+  background: var(--signal-provenance-tint);
+  color: var(--signal-provenance-text);
+  font-size: var(--type-section-size);
   line-height: 1;
-  font-weight: 500;
+  font-weight: 600;
   vertical-align: 0.1em;
   transition:
-    background-color var(--motion-fast) var(--ease),
-    border-color var(--motion-fast) var(--ease);
+    background-color var(--motion-quick) var(--ease),
+    border-color var(--motion-quick) var(--ease);
 }
 
 .chip:hover {
-  border-color: var(--accent-lavender-text);
+  border-color: var(--signal-provenance-text);
 }
 
 .chip[aria-pressed="true"] {
-  background: var(--accent-lime);
-  border-color: var(--border-strong);
+  background: var(--signal-passage-fill);
+  border-color: var(--rule-strong);
   color: var(--text-primary);
 }
 
 .claim {
   border-radius: var(--radius-xs);
-  transition: background-color var(--motion-fast) var(--ease);
+  transition: background-color var(--motion-quick) var(--ease);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
 
 .claimActive {
-  background: var(--accent-lime-subtle);
-  box-shadow: 0 2px 0 var(--accent-lime);
+  background: var(--signal-passage-tint);
+  box-shadow: 0 2px 0 var(--signal-passage-fill);
 }
 
 .tooltipTitle {

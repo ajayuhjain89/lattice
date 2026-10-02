@@ -16,11 +16,11 @@
 }
 
 .info {
-  --notice-icon: var(--status-info-text);
+  --notice-icon: var(--text-secondary);
 }
 
 .warning {
-  --notice-icon: var(--status-warning-text);
+  --notice-icon: var(--signal-time-text);
 }
 
 .neutral {
@@ -28,7 +28,7 @@
 }
 
 .conflict {
-  --notice-icon: var(--status-conflict-text);
+  --notice-icon: var(--signal-disagreement-text);
 }
 
 .text {
@@ -39,6 +39,6 @@
 .boxed {
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  background: var(--status-warning-bg);
-  color: var(--status-warning-text);
+  background: var(--signal-time-tint);
+  color: var(--signal-time-text);
 }

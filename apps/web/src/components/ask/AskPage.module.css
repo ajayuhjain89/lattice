@@ -17,7 +17,7 @@
   display: grid;
   gap: var(--space-6);
   min-width: 0;
-  animation: arrive var(--motion-result) var(--ease);
+  animation: arrive var(--motion-arrive) var(--ease);
 }
 
 @keyframes arrive {
@@ -49,13 +49,13 @@
 
 .deck {
   max-width: 56ch;
-  font-size: var(--type-lead-size);
-  line-height: var(--type-lead-line);
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
   color: var(--text-secondary);
 }
 
 .scopeLine {
-  font-family: var(--font-mono);
+  font-family: var(--font-ledger);
   font-size: var(--type-meta-size);
   line-height: var(--type-meta-line);
   color: var(--text-secondary);
@@ -68,8 +68,8 @@
   gap: var(--space-1);
   max-width: 56ch;
   padding: var(--space-3) var(--space-4);
-  border-left: 2px solid var(--border-strong);
-  background: var(--bg-sunken);
+  border-left: 2px solid var(--rule-strong);
+  background: var(--surface-well);
   color: var(--text-secondary);
 }
 
@@ -82,7 +82,7 @@
 .principles {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-top: var(--border-width) solid var(--border-strong);
+  border-top: var(--border-width) solid var(--rule-ink);
   margin-top: var(--space-4);
 }
 
@@ -95,11 +95,11 @@
 
 .principle + .principle {
   padding-left: var(--space-4);
-  border-left: var(--border-width) solid var(--border-default);
+  border-left: var(--border-width) solid var(--rule);
 }
 
 .principleLabel {
-  composes: t-label from global;
+  composes: t-section from global;
 
   color: var(--text-primary);
 }
@@ -118,7 +118,7 @@
 }
 
 .progressLine {
-  composes: t-label from global;
+  composes: t-section from global;
 
   display: flex;
   align-items: center;
@@ -126,7 +126,7 @@
   gap: var(--space-3);
   min-height: var(--control-sm);
   padding-bottom: var(--space-3);
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
   color: var(--text-secondary);
 }
 
@@ -139,9 +139,8 @@
 .pulse {
   width: 8px;
   height: 8px;
-  border: var(--border-width) solid var(--border-strong);
-  border-radius: var(--radius-full);
-  background: var(--accent-lime);
+  border-radius: var(--radius-round);
+  background: var(--signal-provenance-mark);
 }
 
 .elapsed {
@@ -152,14 +151,14 @@
 
 .progressNote {
   color: var(--text-muted);
-  max-width: var(--prose-measure);
+  max-width: var(--measure);
 }
 
 .skeletonRows {
   display: grid;
   gap: var(--space-4);
   padding-top: var(--space-2);
-  border-top: var(--border-width) solid var(--border-default);
+  border-top: var(--border-width) solid var(--rule);
 }
 
 @media (width < 1024px) {
@@ -171,7 +170,7 @@
   .principle + .principle {
     padding: var(--space-3) 0;
     border-left: 0;
-    border-bottom: var(--border-width) solid var(--border-default);
+    border-bottom: var(--border-width) solid var(--rule);
   }
 }
 
@@ -187,7 +186,7 @@
   }
 
   .deck {
-    font-size: var(--type-prose-size);
-    line-height: var(--type-prose-line);
+    font-size: var(--type-heading-size);
+    line-height: var(--type-heading-line);
   }
 }

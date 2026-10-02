@@ -1,5 +1,7 @@
 .tag {
-  composes: t-label from global;
+  composes: t-caption from global;
+
+  font-weight: 500;
 
   display: inline-flex;
   align-items: center;
@@ -7,9 +9,9 @@
   height: var(--control-xs);
   max-width: 100%;
   padding: 0 var(--space-2);
-  border: var(--border-width) solid var(--border-strong);
-  border-radius: var(--radius-full);
-  background: var(--bg-canvas);
+  border: var(--border-width) solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-paper);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -19,16 +21,16 @@
 }
 
 .muted {
-  background: var(--bg-muted);
+  background: var(--surface-well-strong);
 }
 
 .inverse {
-  background: var(--bg-inverse);
+  background: var(--surface-inverse);
   color: var(--text-inverse);
 }
 
 .quiet {
-  border-color: var(--border-default);
+  border-color: var(--rule);
   color: var(--text-muted);
 }
 

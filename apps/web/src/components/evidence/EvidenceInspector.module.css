@@ -3,7 +3,7 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--bg-canvas);
+  background: var(--surface-paper);
   outline: none;
 }
 
@@ -14,11 +14,11 @@
   height: var(--header-height);
   flex: none;
   padding: 0 var(--space-3) 0 var(--space-5);
-  border-bottom: var(--border-width) solid var(--border-strong);
+  border-bottom: var(--border-width) solid var(--rule-ink);
 }
 
 .headerLabel {
-  composes: t-label from global;
+  composes: t-section from global;
 
   flex: 1;
   min-width: 0;
@@ -36,10 +36,10 @@
   min-width: 20px;
   height: 20px;
   padding: 0 var(--space-1);
-  border: var(--border-width) solid var(--border-strong);
+  border: var(--border-width) solid var(--rule-strong);
   border-radius: var(--radius-xs);
-  background: var(--accent-lime);
-  font-size: var(--type-label-size);
+  background: var(--signal-passage-fill);
+  font-size: var(--type-section-size);
 }
 
 .tools {
@@ -85,7 +85,7 @@
   min-width: 18px;
   height: 18px;
   padding: 0 var(--space-1);
-  border: var(--border-width) solid var(--border-default);
+  border: var(--border-width) solid var(--rule);
   border-radius: var(--radius-xs);
   font-family: inherit;
   color: var(--text-secondary);

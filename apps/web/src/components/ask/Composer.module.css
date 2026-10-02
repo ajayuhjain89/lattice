@@ -1,12 +1,12 @@
 .composer {
-  border: var(--border-width) solid var(--border-strong);
+  border: var(--border-width) solid var(--rule-strong);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  transition: box-shadow var(--motion-fast) var(--ease);
+  background: var(--surface-sheet);
+  transition: box-shadow var(--motion-quick) var(--ease);
 }
 
 .composer:focus-within {
-  box-shadow: 0 0 0 1px var(--border-strong);
+  box-shadow: 0 0 0 1px var(--rule-strong);
 }
 
 .field {
@@ -17,14 +17,14 @@
 .textarea {
   display: block;
   width: 100%;
-  min-height: calc(var(--type-prose-line) * 2);
-  max-height: calc(var(--type-prose-line) * 8);
+  min-height: calc(var(--type-heading-line) * 2);
+  max-height: calc(var(--type-heading-line) * 8);
   padding: 0;
   border: 0;
   background: transparent;
   resize: none;
-  font-size: var(--type-prose-size);
-  line-height: var(--type-prose-line);
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
   color: var(--text-primary);
   field-sizing: content;
   overflow-y: auto;
@@ -68,7 +68,7 @@
 }
 
 .over {
-  color: var(--status-error-text);
+  color: var(--signal-fault-text);
 }
 
 .problem {
@@ -76,7 +76,7 @@
   align-items: center;
   gap: var(--space-2);
   margin-top: var(--space-2);
-  color: var(--status-error-text);
+  color: var(--signal-fault-text);
   font-size: var(--type-caption-size);
   line-height: var(--type-caption-line);
 }

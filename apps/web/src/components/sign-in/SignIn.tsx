@@ -10,7 +10,7 @@ import { Button } from "@/components/primitives/Button";
 import { Icon } from "@/components/primitives/icons";
 import { SectionLabel } from "@/components/primitives/SectionLabel";
 import { Tag } from "@/components/primitives/Tag";
-import { Wordmark } from "@/components/Wordmark";
+import { Wordmark } from "@/components/brand/Wordmark";
 import type { DevOrganization } from "@/lib/dev-personas.server";
 
 import styles from "./SignIn.module.css";

@@ -3,7 +3,7 @@
   top: 0;
   width: var(--inspector-width);
   height: 100dvh;
-  border-left: var(--border-width) solid var(--border-strong);
+  border-left: var(--border-width) solid var(--rule-strong);
   animation: enter var(--motion-panel) var(--ease);
 }
 

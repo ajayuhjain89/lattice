@@ -639,3 +639,44 @@ Sequencing notes:
 | 5 | **Brand signal**: verdigris is the primary provenance/brand signal. Lime, lavender and pink are retired. The other colours stay strictly semantic, never decorative. |
 
 Implementation runs D1 → D7 in order, each reviewed before the next starts.
+
+---
+
+## 11. Implementation log
+
+### D1 — Foundations (2026-10-02, `phase/design-overhaul`)
+
+**Built.** Self-hosted fonts (`apps/web/scripts/build-fonts.py` → `public/fonts/`,
+`src/styles/fonts.css`, `src/lib/fonts.gen.ts`); the three-layer `tokens.css` (palette
+`--p-*` → semantic → component) with the light map shipped and the dark map under
+`[data-theme="dark"]` only; type roles in `globals.css`; layout primitives
+(`components/layout`: Stack, Cluster, Inline, Split, Page, MarginGrid); the mark, wordmark
+and favicon (`components/brand`, `app/icon.svg`); Lattice glyphs (`primitives/glyphs.tsx`,
+also used by the source-type tag); the development-only `/specimen` route. Every component
+moved off the v1 tokens and type classes; Geist was removed. Surfaces keep their v1 layouts
+on the v2 foundation until D2–D6 rebuild them.
+
+**Type gate (§4.1): passed.** Latin total 161,312 bytes (157.5 KiB), inside the 160 KiB
+budget, by limiting variable axes to the ranges the scale uses (Newsreader wght 400–600 ·
+opsz 12–72, 132 → 89 KB; Schibsted Grotesk wght 400–700). `0/O`, `1/l/I` are distinct in the
+ledger voice at 12 px. In the interface voice, `I` and `l` differ only by height, as in most
+grotesques; identifiers are always set in the ledger voice, which carries that burden. Both
+fallbacks named in §4.1 were not needed.
+
+| Planned | As built | Why |
+| ------- | -------- | --- |
+| `next/font/local` | A generated `@font-face` file: one family per voice, Latin and Latin Extended faces split by `unicode-range`, metric-matched fallback faces (Georgia / Arial / Courier New with `size-adjust` and ascent/descent overrides), content-hashed files with an immutable cache policy, the three Latin files preloaded | `next/font/local` applies one set of declarations to every file of a call and puts its fallback face ahead of any second family, so Latin Extended could not be loaded on demand without being shadowed |
+| Type roles of §4.1 | Adds `subtitle` (18/24, inspector and dialog titles), `body-strong`, `caption` (12/16 help text) and `code` (13/20) | Roles the existing surfaces need; no other sizes exist |
+| Palette of §4.2 | Adds `--surface-well-strong` (`#E6E4DD`, pressed/selected) and a `-mark` token per signal for rules and markers (≥ 3:1); the ochre mark is `#A57A22` | The contrast test failed the first values (`#E3E1DA` gave muted text 4.39:1, the ochre mark 2.82:1) |
+| v1 "info" status colour | None: neutral notices use secondary text on `--surface-well` | §4.2 has five signals; info was a sixth hue with no single job |
+| Mark: 1.5 px lines throughout | Frame 1.5, inner lines 1 | At 16 px the thicker inner lines swallowed the lit cell |
+| Raw-px Stylelint rule everywhere | Enforced for the rebuilt directories (`brand`, `layout`, `specimen`); widened as D2–D6 rebuild each surface | 162 raw px values live in v1 surface modules that are rewritten later |
+| Shell tokens | `--header-height`, `--sidebar-width`, `--rail-width` and friends kept, marked as v1 shell geometry | Still used by the sidebar shell until D3 replaces it |
+
+**Verification.** `tokens.test.ts`: 61 colour pairings × 2 theme maps (4.5:1 text, 3:1
+boundaries), identical semantic keys in both maps, every `var()` resolving, no palette token
+in a component, no v1 name anywhere. `e2e/foundations.spec.ts`: fonts only from `/fonts`
+(no third-party request), preloaded, immutable; Latin Extended requested only by a page that
+uses it; the page holds with every web font blocked; the type scale measured at 1440 and
+390 px; no overflow at the five review widths; axe and the live contrast ledger in both
+maps; the product ships the light map with no theme attribute.

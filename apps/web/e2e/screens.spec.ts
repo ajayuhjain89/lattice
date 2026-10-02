@@ -32,14 +32,26 @@ const widths = process.env.SCREEN_WIDTHS ? process.env.SCREEN_WIDTHS.split(",").
 // Overlays (drawers, sheets) are fixed to the viewport: full-page captures distort them.
 const OVERLAYS = new Set(["ask-inspector", "access-change"]);
 
+// SCREENS_DIR writes elsewhere (e.g. a review folder) without touching the harness output.
+const DIR = process.env.SCREENS_DIR ?? "e2e/screens";
+
 const shot = async (page: Page, name: string, width: number) => {
   await page.waitForTimeout(250);
   await expectNoHorizontalOverflow(page);
   const fullPage = !(OVERLAYS.has(name) && width < 1280);
-  await page.screenshot({ path: `e2e/screens/${name}@${width}.png`, fullPage, animations: "disabled" });
+  await page.screenshot({ path: `${DIR}/${name}@${width}.png`, fullPage, animations: "disabled" });
 };
 
 const SCREENS: Record<string, (page: Page) => Promise<void>> = {
+  specimen: async (page) => {
+    await page.goto("/specimen");
+    await page.evaluate(() => document.fonts.ready);
+  },
+  "specimen-dark": async (page) => {
+    await page.goto("/specimen");
+    await page.getByRole("button", { name: "Dark map" }).click();
+    await page.evaluate(() => document.fonts.ready);
+  },
   "sign-in": async (page) => {
     await mockApi(page);
     await page.goto("/sign-in");

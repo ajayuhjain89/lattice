@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/primitives/Button";
 import { Icon } from "@/components/primitives/icons";
 import { Tooltip } from "@/components/primitives/Tooltip";
-import { Wordmark } from "@/components/Wordmark";
+import { Wordmark } from "@/components/brand/Wordmark";
 import { useStore } from "@/lib/store";
 
 import { NAV } from "./nav";

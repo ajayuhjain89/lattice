@@ -5,13 +5,13 @@
 }
 
 .nav {
-  border-right: var(--border-width) solid var(--border-strong);
+  border-right: var(--border-width) solid var(--rule-strong);
 }
 
 .navHeader,
 .pageHeader {
   height: var(--header-height);
-  border-bottom: var(--border-width) solid var(--border-strong);
+  border-bottom: var(--border-width) solid var(--rule-ink);
   display: flex;
   align-items: center;
   padding: 0 var(--space-4);

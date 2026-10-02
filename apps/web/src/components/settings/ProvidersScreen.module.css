@@ -19,19 +19,19 @@
 }
 
 .title {
-  composes: t-h1 from global;
+  composes: t-title from global;
 }
 
 .deck {
-  font-size: var(--type-prose-size);
-  line-height: var(--type-prose-line);
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
   color: var(--text-secondary);
 }
 
 .readonly {
   margin-top: var(--space-2);
   padding: var(--space-3) var(--space-4);
-  border: var(--border-width) solid var(--border-strong);
+  border: var(--border-width) solid var(--rule-strong);
   border-radius: var(--radius-md);
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
@@ -59,7 +59,7 @@
   font-size: var(--type-meta-size);
   padding: 0 var(--space-1);
   border-radius: var(--radius-xs);
-  background: var(--bg-sunken);
+  background: var(--surface-well);
   color: var(--text-primary);
   white-space: nowrap;
 }
@@ -73,8 +73,8 @@
 .policy {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: var(--border-width) solid var(--border-strong);
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-top: var(--border-width) solid var(--rule-ink);
+  border-bottom: var(--border-width) solid var(--rule);
 }
 
 .policyItem {
@@ -87,21 +87,18 @@
 
 .policyItem + .policyItem {
   padding-left: var(--space-4);
-  border-left: var(--border-width) solid var(--border-default);
+  border-left: var(--border-width) solid var(--rule);
 }
 
 .policyItem dt {
-  font-family: var(--font-mono);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line);
-  font-weight: 500;
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
+  font-size: var(--type-section-size);
+  line-height: var(--type-section-line);
+  font-weight: 600;
   color: var(--text-muted);
 }
 
 .policyValue {
-  composes: t-h3 from global;
+  composes: t-heading from global;
 
   display: block;
 }
@@ -120,7 +117,7 @@
 
 .tableWrap {
   overflow-x: auto;
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
 }
 
 .table {
@@ -134,7 +131,7 @@
   padding-top: var(--space-4);
   padding-bottom: var(--space-2);
   background: transparent;
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
   color: var(--text-muted);
 }
 
@@ -148,16 +145,13 @@
 }
 
 .table th {
-  font-family: var(--font-mono);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line);
-  font-weight: 500;
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
+  font-size: var(--type-section-size);
+  line-height: var(--type-section-line);
+  font-weight: 600;
   height: 32px;
   padding: 0 var(--space-4) 0 0;
-  background: var(--bg-muted);
-  border-bottom: var(--border-width) solid var(--border-strong);
+  background: var(--surface-well-strong);
+  border-bottom: var(--border-width) solid var(--rule-ink);
   color: var(--text-primary);
   text-align: left;
   white-space: nowrap;
@@ -170,7 +164,7 @@
 
 .table td {
   padding: var(--space-3) var(--space-4) var(--space-3) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
   vertical-align: top;
 }
 
@@ -179,7 +173,7 @@
 }
 
 .table tbody tr:hover {
-  background: var(--bg-sunken);
+  background: var(--surface-well);
 }
 
 .primary {
@@ -205,7 +199,7 @@
 }
 
 .ok {
-  color: var(--status-success-text);
+  color: var(--signal-healthy-text);
 }
 
 .off {
@@ -213,7 +207,7 @@
 }
 
 .warn {
-  color: var(--status-warning-text);
+  color: var(--signal-time-text);
 }
 
 .cards {
@@ -224,7 +218,7 @@
   display: grid;
   gap: var(--space-2);
   padding: var(--space-4) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
 }
 
 .card dl {
@@ -234,12 +228,9 @@
 }
 
 .card dt {
-  font-family: var(--font-mono);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line);
-  font-weight: 500;
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
+  font-size: var(--type-section-size);
+  line-height: var(--type-section-line);
+  font-weight: 600;
   color: var(--text-muted);
   padding-top: 2px;
 }
@@ -250,14 +241,14 @@
 
 .empty {
   padding: var(--space-6) 0;
-  border-top: var(--border-width) solid var(--border-strong);
+  border-top: var(--border-width) solid var(--rule-ink);
   color: var(--text-secondary);
   display: grid;
   gap: var(--space-1);
 }
 
 .emptyTitle {
-  composes: t-h3 from global;
+  composes: t-heading from global;
 
   color: var(--text-primary);
 }
@@ -269,7 +260,7 @@
 
   .cards {
     display: block;
-    border-top: var(--border-width) solid var(--border-strong);
+    border-top: var(--border-width) solid var(--rule-ink);
   }
 
   .policy {
@@ -282,7 +273,7 @@
   }
 
   .policyItem:nth-child(n + 3) {
-    border-top: var(--border-width) solid var(--border-default);
+    border-top: var(--border-width) solid var(--rule);
   }
 }
 
@@ -303,7 +294,7 @@
   }
 
   .policyItem + .policyItem {
-    border-top: var(--border-width) solid var(--border-default);
+    border-top: var(--border-width) solid var(--rule);
   }
 
 }

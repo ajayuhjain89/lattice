@@ -29,6 +29,11 @@ const config: NextConfig = {
         source: "/:path*",
         headers: securityHeaders,
       },
+      {
+        // Self-hosted fonts carry a content hash in their names (scripts/build-fonts.py).
+        source: "/fonts/:file*.woff2",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
     ];
   },
 };

@@ -1,7 +1,7 @@
 .block {
   display: grid;
   gap: var(--space-3);
-  max-width: var(--prose-measure);
+  max-width: var(--measure);
 }
 
 .plain {
@@ -9,7 +9,7 @@
 }
 
 .label {
-  composes: t-label from global;
+  composes: t-section from global;
 
   display: flex;
   align-items: center;
@@ -18,14 +18,14 @@
 }
 
 .heading {
-  composes: t-h2 from global;
+  composes: t-subtitle from global;
 
   text-wrap: balance;
 }
 
 .message {
-  font-size: var(--type-prose-size);
-  line-height: var(--type-prose-line);
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
   color: var(--text-secondary);
 }
 
@@ -34,17 +34,14 @@
   grid-template-columns: max-content minmax(0, 1fr);
   gap: var(--space-1) var(--space-4);
   padding: var(--space-3) 0;
-  border-top: var(--border-width) solid var(--border-default);
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-top: var(--border-width) solid var(--rule);
+  border-bottom: var(--border-width) solid var(--rule);
 }
 
 .searched dt {
-  font-family: var(--font-mono);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line);
-  font-weight: 500;
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
+  font-size: var(--type-section-size);
+  line-height: var(--type-section-line);
+  font-weight: 600;
   color: var(--text-muted);
   padding-top: 2px;
 }
@@ -93,7 +90,7 @@
 
 .calloutMessage {
   color: var(--text-primary);
-  max-width: var(--prose-measure);
+  max-width: var(--measure);
 }
 
 .calloutActions {

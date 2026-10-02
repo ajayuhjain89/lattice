@@ -10,7 +10,7 @@
   justify-content: space-between;
   gap: var(--space-12);
   padding: var(--space-10) var(--space-12);
-  border-right: var(--border-width) solid var(--border-strong);
+  border-right: var(--border-width) solid var(--rule-strong);
 }
 
 .headline {
@@ -23,14 +23,13 @@
 
 .headline em {
   font-style: normal;
-  color: var(--accent-lavender-text);
 }
 
 .deck {
   margin-top: var(--space-5);
   max-width: 46ch;
-  font-size: var(--type-lead-size);
-  line-height: var(--type-lead-line);
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
   color: var(--text-secondary);
 }
 
@@ -38,7 +37,7 @@
   display: grid;
   gap: 0;
   max-width: 520px;
-  border-top: var(--border-width) solid var(--border-strong);
+  border-top: var(--border-width) solid var(--rule-ink);
 }
 
 .principle {
@@ -46,7 +45,7 @@
   grid-template-columns: 28px minmax(0, 1fr);
   gap: var(--space-3);
   padding: var(--space-3) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
 }
 
 .principleIndex {
@@ -85,7 +84,7 @@
 }
 
 .title {
-  composes: t-h1 from global;
+  composes: t-title from global;
 }
 
 .lede {
@@ -98,7 +97,7 @@
 }
 
 .personaList {
-  border-top: var(--border-width) solid var(--border-strong);
+  border-top: var(--border-width) solid var(--rule-ink);
 }
 
 .persona {
@@ -109,13 +108,13 @@
   width: 100%;
   min-height: var(--control-lg);
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
   text-align: left;
-  transition: background-color var(--motion-fast) var(--ease);
+  transition: background-color var(--motion-quick) var(--ease);
 }
 
 .persona:hover:not(:disabled) {
-  background: var(--bg-sunken);
+  background: var(--surface-well);
 }
 
 .persona:disabled {
@@ -162,9 +161,9 @@
 .input {
   height: var(--control-md);
   padding: 0 var(--space-3);
-  border: var(--border-width) solid var(--border-strong);
+  border: var(--border-width) solid var(--rule-strong);
   border-radius: var(--radius-sm);
-  background: var(--bg-surface);
+  background: var(--surface-sheet);
   min-width: 0;
   width: 100%;
 }
@@ -189,10 +188,10 @@
   grid-template-columns: 16px minmax(0, 1fr);
   gap: var(--space-2);
   padding: var(--space-3);
-  border: var(--border-width) solid var(--status-error-border);
+  border: var(--border-width) solid var(--signal-fault-mark);
   border-radius: var(--radius-sm);
-  background: var(--status-error-bg);
-  color: var(--status-error-text);
+  background: var(--signal-fault-tint);
+  color: var(--signal-fault-text);
 }
 
 .errorIcon {
@@ -214,7 +213,7 @@
 
   .editorial {
     border-right: 0;
-    border-bottom: var(--border-width) solid var(--border-strong);
+    border-bottom: var(--border-width) solid var(--rule-ink);
     padding: var(--space-8) var(--gutter);
     gap: var(--space-8);
   }
@@ -236,8 +235,8 @@
   }
 
   .deck {
-    font-size: var(--type-prose-size);
-    line-height: var(--type-prose-line);
+    font-size: var(--type-heading-size);
+    line-height: var(--type-heading-line);
   }
 
   .personaEmail {

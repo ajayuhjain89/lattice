@@ -9,12 +9,12 @@
   height: var(--header-height);
   flex: none;
   padding: 0 var(--gutter);
-  border-bottom: var(--border-width) solid var(--border-strong);
-  background: var(--bg-canvas);
+  border-bottom: var(--border-width) solid var(--rule-ink);
+  background: var(--surface-paper);
 }
 
 .trail {
-  composes: t-label from global;
+  composes: t-section from global;
 
   display: flex;
   align-items: center;
@@ -67,6 +67,6 @@
   .header {
     position: static;
     height: 48px;
-    border-bottom-color: var(--border-default);
+    border-bottom-color: var(--rule);
   }
 }

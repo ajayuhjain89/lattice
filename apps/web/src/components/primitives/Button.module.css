@@ -15,9 +15,9 @@
   white-space: nowrap;
   text-decoration: none;
   transition:
-    background-color var(--motion-fast) var(--ease),
-    border-color var(--motion-fast) var(--ease),
-    color var(--motion-fast) var(--ease);
+    background-color var(--motion-quick) var(--ease),
+    border-color var(--motion-quick) var(--ease),
+    color var(--motion-quick) var(--ease);
   user-select: none;
 }
 
@@ -35,31 +35,31 @@
 }
 
 .primary {
-  background: var(--bg-inverse);
+  background: var(--surface-inverse);
   color: var(--text-inverse);
-  border-color: var(--border-strong);
+  border-color: var(--rule-strong);
 }
 
 .primary:hover:not(:disabled, [aria-disabled="true"]) {
-  background: var(--bg-inverse-hover);
+  background: var(--surface-inverse-hover);
 }
 
 .primary:active:not(:disabled, [aria-disabled="true"]) {
-  background: var(--bg-inverse-active);
+  background: var(--surface-inverse-active);
 }
 
 .secondary {
   background: transparent;
   color: var(--text-primary);
-  border-color: var(--border-strong);
+  border-color: var(--rule-strong);
 }
 
 .secondary:hover:not(:disabled, [aria-disabled="true"]) {
-  background: var(--bg-sunken);
+  background: var(--surface-well);
 }
 
 .secondary:active:not(:disabled, [aria-disabled="true"]) {
-  background: var(--bg-muted);
+  background: var(--surface-well-strong);
 }
 
 .ghost {
@@ -68,18 +68,18 @@
 }
 
 .ghost:hover:not(:disabled, [aria-disabled="true"]) {
-  background: var(--bg-muted);
+  background: var(--surface-well-strong);
 }
 
 .ghost:active:not(:disabled, [aria-disabled="true"]) {
-  background: var(--bg-muted-strong);
+  background: var(--surface-well-strong);
 }
 
 .button:disabled,
 .button[aria-disabled="true"] {
-  background: var(--bg-muted);
+  background: var(--surface-well-strong);
   color: var(--text-muted);
-  border-color: var(--border-default);
+  border-color: var(--rule);
 }
 
 .ghost:disabled {
@@ -88,9 +88,9 @@
 }
 
 .primary[aria-busy="true"]:disabled {
-  background: var(--bg-inverse);
+  background: var(--surface-inverse);
   color: var(--text-inverse);
-  border-color: var(--border-strong);
+  border-color: var(--rule-strong);
 }
 
 .icon {
@@ -111,7 +111,7 @@
   height: 14px;
   border: 1.5px solid currentcolor;
   border-right-color: transparent;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-round);
   animation: spin 800ms linear infinite;
 }
 

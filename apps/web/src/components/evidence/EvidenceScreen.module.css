@@ -20,7 +20,7 @@
 }
 
 .eyebrowLabel {
-  composes: t-label from global;
+  composes: t-section from global;
 
   color: var(--text-muted);
 }

@@ -19,13 +19,13 @@
 }
 
 .eyebrow {
-  composes: t-label from global;
+  composes: t-section from global;
 
   color: var(--text-muted);
 }
 
 .title {
-  composes: t-h1 from global;
+  composes: t-title from global;
 }
 
 .id {
@@ -38,8 +38,8 @@
 .facts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-top: var(--border-width) solid var(--border-strong);
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-top: var(--border-width) solid var(--rule-ink);
+  border-bottom: var(--border-width) solid var(--rule);
   overflow: hidden;
 }
 
@@ -48,23 +48,20 @@
   gap: var(--space-1);
   align-content: start;
   padding: var(--space-3) var(--space-4) var(--space-3) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
   margin-bottom: -1px;
   min-width: 0;
 }
 
 .fact dt {
-  font-family: var(--font-mono);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line);
-  font-weight: 500;
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
+  font-size: var(--type-section-size);
+  line-height: var(--type-section-line);
+  font-weight: 600;
   color: var(--text-muted);
 }
 
 .fact dd {
-  font-family: var(--font-mono);
+  font-family: var(--font-ledger);
   font-size: var(--type-meta-size);
   line-height: var(--type-meta-line);
   font-variant-numeric: tabular-nums;
@@ -84,11 +81,11 @@
 }
 
 .question {
-  font-size: var(--type-lead-size);
-  line-height: var(--type-lead-line);
+  font-size: var(--type-subtitle-size);
+  line-height: var(--type-subtitle-line);
   font-weight: 500;
   overflow-wrap: anywhere;
-  max-width: var(--prose-measure);
+  max-width: var(--measure);
 }
 
 .scope {
@@ -109,7 +106,7 @@
   grid-template-columns: var(--control-xs) minmax(0, 1fr) auto;
   gap: var(--space-3);
   padding: var(--space-3) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
   position: relative;
 }
 
@@ -119,7 +116,7 @@
   left: 9.5px;
   top: calc(var(--space-3) + var(--control-xs));
   bottom: calc(-1 * var(--space-3));
-  border-left: var(--border-width) solid var(--border-default);
+  border-left: var(--border-width) solid var(--rule);
 }
 
 .stageBody {
@@ -179,7 +176,7 @@
 }
 
 .refs {
-  border-top: var(--border-width) solid var(--border-default);
+  border-top: var(--border-width) solid var(--rule);
 }
 
 .ref {
@@ -189,7 +186,7 @@
   align-items: center;
   min-height: 44px;
   padding: var(--space-1) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-bottom: var(--border-width) solid var(--rule);
 }
 
 .refNumber {
@@ -199,9 +196,9 @@
   place-items: center;
   height: var(--control-xs);
   border-radius: var(--radius-xs);
-  background: var(--accent-lavender-subtle);
-  color: var(--accent-lavender-text);
-  font-size: var(--type-label-size);
+  background: var(--signal-provenance-tint);
+  color: var(--signal-provenance-text);
+  font-size: var(--type-section-size);
 }
 
 .refNumberNone {
@@ -226,7 +223,7 @@
 
 .message {
   color: var(--text-secondary);
-  max-width: var(--prose-measure);
+  max-width: var(--measure);
 }
 
 .raw {
@@ -235,7 +232,7 @@
 }
 
 .rawToggle {
-  composes: t-label from global;
+  composes: t-section from global;
 
   display: inline-flex;
   align-items: center;
@@ -246,7 +243,7 @@
 }
 
 .rawToggle svg {
-  transition: transform var(--motion-fast) var(--ease);
+  transition: transform var(--motion-quick) var(--ease);
 }
 
 .rawToggle[aria-expanded="true"] svg {
@@ -257,9 +254,9 @@
   margin: 0;
   padding: var(--space-4);
   border-radius: var(--radius-md);
-  background: var(--bg-inverse);
+  background: var(--surface-inverse);
   color: var(--text-inverse);
-  font-family: var(--font-mono);
+  font-family: var(--font-ledger);
   font-size: var(--type-code-size);
   line-height: var(--type-code-line);
   overflow: auto;
@@ -268,7 +265,7 @@
 }
 
 .operational {
-  max-width: var(--prose-measure);
+  max-width: var(--measure);
 }
 
 @media (width < 1024px) {
