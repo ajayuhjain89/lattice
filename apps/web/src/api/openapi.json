@@ -1,6 +1,138 @@
 {
   "components": {
     "schemas": {
+      "AccessEffect": {
+        "description": "One effect of a change, as a rule (\"loses Kestrel Bank\"); never a document.",
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "kind": {
+            "enum": [
+              "provisioned",
+              "suspended",
+              "reactivated",
+              "administrator",
+              "clearance",
+              "account_scope",
+              "account_added",
+              "account_removed",
+              "department_added",
+              "department_removed",
+              "group_added",
+              "group_removed"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamedRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The account, department or group added or removed."
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "AccessEffect",
+        "type": "object"
+      },
+      "AccessPreview": {
+        "properties": {
+          "documents_gained": {
+            "description": "Among documents you can read.",
+            "title": "Documents Gained",
+            "type": "integer"
+          },
+          "documents_lost": {
+            "description": "Among documents you can read.",
+            "title": "Documents Lost",
+            "type": "integer"
+          },
+          "effects": {
+            "items": {
+              "$ref": "#/components/schemas/AccessEffect"
+            },
+            "title": "Effects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "effects",
+          "documents_gained",
+          "documents_lost"
+        ],
+        "title": "AccessPreview",
+        "type": "object"
+      },
+      "Actor": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "member",
+              "operator"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The member's name; null if no longer a member.",
+            "title": "Name"
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The operator tool (seed, admin-grants, cli).",
+            "title": "Operator"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "operator"
+        ],
+        "title": "Actor",
+        "type": "object"
+      },
       "AdminSourceOut": {
         "properties": {
           "account_scoped": {
@@ -657,6 +789,160 @@
         "title": "AskerTrace",
         "type": "object"
       },
+      "AuditDetail": {
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "before",
+          "after"
+        ],
+        "title": "AuditDetail",
+        "type": "object"
+      },
+      "AuditEventOut": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/Actor"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "details": {
+            "description": "Provider and egress settings events.",
+            "items": {
+              "$ref": "#/components/schemas/AuditDetail"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only if you can read the document now."
+          },
+          "document_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque reference of a document you cannot read.",
+            "title": "Document Reference"
+          },
+          "effects": {
+            "items": {
+              "$ref": "#/components/schemas/AccessEffect"
+            },
+            "title": "Effects",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "member": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamedRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The member whose access changed."
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "action",
+          "actor",
+          "reason",
+          "member",
+          "document",
+          "document_reference",
+          "effects",
+          "details"
+        ],
+        "title": "AuditEventOut",
+        "type": "object"
+      },
+      "AuditPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEventOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before"
+          }
+        },
+        "required": [
+          "items",
+          "next_before"
+        ],
+        "title": "AuditPage",
+        "type": "object"
+      },
       "Citation": {
         "additionalProperties": false,
         "properties": {
@@ -951,6 +1237,228 @@
         "title": "DevLoginRequest",
         "type": "object"
       },
+      "Directory": {
+        "description": "What an administrator may assign: every account and department, and the\nadministrator-defined groups (source-synced groups are owned by their source).",
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryAccount"
+            },
+            "title": "Accounts",
+            "type": "array"
+          },
+          "departments": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryDepartment"
+            },
+            "title": "Departments",
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          }
+        },
+        "required": [
+          "accounts",
+          "departments",
+          "groups"
+        ],
+        "title": "Directory",
+        "type": "object"
+      },
+      "DirectoryAccount": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "status"
+        ],
+        "title": "DirectoryAccount",
+        "type": "object"
+      },
+      "DirectoryDepartment": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name"
+        ],
+        "title": "DirectoryDepartment",
+        "type": "object"
+      },
+      "DirectoryGroup": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "members": {
+            "title": "Members",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "members"
+        ],
+        "title": "DirectoryGroup",
+        "type": "object"
+      },
+      "DocumentExplanation": {
+        "description": "Why the member can or cannot read a document you can read (``explain_for_reviewer``).",
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/DocumentRef"
+          },
+          "path": {
+            "enum": [
+              "grant",
+              "policy",
+              "none"
+            ],
+            "title": "Path",
+            "type": "string"
+          },
+          "readable": {
+            "title": "Readable",
+            "type": "boolean"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "via": {
+            "items": {
+              "$ref": "#/components/schemas/GrantVia"
+            },
+            "title": "Via",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document",
+          "readable",
+          "path",
+          "reasons",
+          "via"
+        ],
+        "title": "DocumentExplanation",
+        "type": "object"
+      },
+      "DocumentRef": {
+        "description": "A document the viewing administrator can read.",
+        "properties": {
+          "classification": {
+            "title": "Classification",
+            "type": "string"
+          },
+          "connector_type": {
+            "title": "Connector Type",
+            "type": "string"
+          },
+          "display_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Ref"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "display_ref",
+          "source_name",
+          "connector_type",
+          "classification"
+        ],
+        "title": "DocumentRef",
+        "type": "object"
+      },
+      "DocumentsPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentRef"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "DocumentsPage",
+        "type": "object"
+      },
       "EgressOut": {
         "properties": {
           "data_origin": {
@@ -1029,6 +1537,7 @@
           "permission_denied",
           "csrf_rejected",
           "not_found",
+          "conflict",
           "method_not_allowed",
           "validation_failed",
           "request_too_large",
@@ -1613,6 +2122,211 @@
         "title": "Freshness",
         "type": "object"
       },
+      "GrantOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "document": {
+            "$ref": "#/components/schemas/DocumentRef"
+          },
+          "granted_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The administrator who granted it, if recorded.",
+            "title": "Granted By"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "admin",
+              "source"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "revocable": {
+            "description": "Administrator grants only; source grants follow the source.",
+            "title": "Revocable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "origin",
+          "document",
+          "created_at",
+          "granted_by",
+          "reason",
+          "revocable"
+        ],
+        "title": "GrantOut",
+        "type": "object"
+      },
+      "GrantRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "reason"
+        ],
+        "title": "GrantRequest",
+        "type": "object"
+      },
+      "GrantVia": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for a source-synced group you are not in.",
+            "title": "Name"
+          },
+          "principal_type": {
+            "enum": [
+              "membership",
+              "department",
+              "group"
+            ],
+            "title": "Principal Type",
+            "type": "string"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          }
+        },
+        "required": [
+          "principal_type",
+          "name",
+          "reference"
+        ],
+        "title": "GrantVia",
+        "type": "object"
+      },
+      "GroupAccess": {
+        "properties": {
+          "connector_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The source's connector (source groups).",
+            "title": "Connector Type"
+          },
+          "editable": {
+            "description": "Administrator-defined groups only.",
+            "title": "Editable",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for a source-synced group the viewer is not a member of.",
+            "title": "Name"
+          },
+          "origin": {
+            "enum": [
+              "admin",
+              "source"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque reference of an unnamed source group.",
+            "title": "Reference"
+          }
+        },
+        "required": [
+          "id",
+          "origin",
+          "name",
+          "connector_type",
+          "reference",
+          "members",
+          "editable"
+        ],
+        "title": "GroupAccess",
+        "type": "object"
+      },
       "HealthResponse": {
         "properties": {
           "database": {
@@ -1775,6 +2489,312 @@
         "title": "MeResponse",
         "type": "object"
       },
+      "MemberAccess": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            },
+            "title": "Accounts",
+            "type": "array"
+          },
+          "departments": {
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            },
+            "title": "Departments",
+            "type": "array"
+          },
+          "grants": {
+            "description": "Grants on documents you can read.",
+            "items": {
+              "$ref": "#/components/schemas/GrantOut"
+            },
+            "title": "Grants",
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupAccess"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "has_other_grants": {
+            "description": "The member has grants on documents you cannot read (not listed or counted).",
+            "title": "Has Other Grants",
+            "type": "boolean"
+          },
+          "is_self": {
+            "description": "Your own membership: it cannot be changed here.",
+            "title": "Is Self",
+            "type": "boolean"
+          },
+          "member": {
+            "$ref": "#/components/schemas/MemberSummary"
+          },
+          "version": {
+            "description": "Send back as `version` with a change; a stale value is refused (409).",
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member",
+          "version",
+          "is_self",
+          "accounts",
+          "departments",
+          "groups",
+          "grants",
+          "has_other_grants"
+        ],
+        "title": "MemberAccess",
+        "type": "object"
+      },
+      "MemberAccounts": {
+        "description": "The accounts you may know exist -- the only ones an Ask scope may name.",
+        "properties": {
+          "account_scope": {
+            "enum": [
+              "all",
+              "assigned"
+            ],
+            "title": "Account Scope",
+            "type": "string"
+          },
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/VisibleAccount"
+            },
+            "title": "Accounts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "account_scope",
+          "accounts"
+        ],
+        "title": "MemberAccounts",
+        "type": "object"
+      },
+      "MemberChange": {
+        "additionalProperties": false,
+        "description": "A proposed change. Omitted fields stay as they are; ``accounts``,\n``departments`` and ``groups`` are complete sets (groups: the\nadministrator-defined groups only; source-group membership is untouched).",
+        "properties": {
+          "account_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "all",
+                  "assigned"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Scope"
+          },
+          "accounts": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 1000,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accounts"
+          },
+          "clearance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "internal",
+                  "confidential"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clearance"
+          },
+          "departments": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departments"
+          },
+          "groups": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groups"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "suspended"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "MemberChange",
+        "type": "object"
+      },
+      "MemberChangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "all",
+                  "assigned"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Scope"
+          },
+          "accounts": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 1000,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accounts"
+          },
+          "clearance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "internal",
+                  "confidential"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clearance"
+          },
+          "departments": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departments"
+          },
+          "groups": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groups"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "suspended"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "version": {
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "reason"
+        ],
+        "title": "MemberChangeRequest",
+        "type": "object"
+      },
       "MemberSourceOut": {
         "properties": {
           "connector_type": {
@@ -1859,6 +2879,120 @@
         "title": "MemberSourcesResponse",
         "type": "object"
       },
+      "MemberSummary": {
+        "properties": {
+          "account_scope": {
+            "enum": [
+              "all",
+              "assigned"
+            ],
+            "title": "Account Scope",
+            "type": "string"
+          },
+          "assigned_accounts": {
+            "title": "Assigned Accounts",
+            "type": "integer"
+          },
+          "clearance": {
+            "enum": [
+              "internal",
+              "confidential"
+            ],
+            "title": "Clearance",
+            "type": "string"
+          },
+          "departments": {
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            },
+            "title": "Departments",
+            "type": "array"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_admin": {
+            "description": "Administrative capability; grants no content access.",
+            "title": "Is Admin",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Display only; never an access input.",
+            "title": "Role Label"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "suspended",
+              "removed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "role_label",
+          "status",
+          "is_admin",
+          "clearance",
+          "account_scope",
+          "assigned_accounts",
+          "departments"
+        ],
+        "title": "MemberSummary",
+        "type": "object"
+      },
+      "MembersPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MemberSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_after": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `after` for the next page; null on the last page.",
+            "title": "Next After"
+          }
+        },
+        "required": [
+          "items",
+          "next_after"
+        ],
+        "title": "MembersPage",
+        "type": "object"
+      },
       "MembershipOut": {
         "properties": {
           "id": {
@@ -1884,6 +3018,52 @@
           "role_label"
         ],
         "title": "MembershipOut",
+        "type": "object"
+      },
+      "Named": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Named",
+        "type": "object"
+      },
+      "NamedRef": {
+        "description": "An entity named in an audit event; ``name`` is ``None`` when it no longer exists.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "NamedRef",
         "type": "object"
       },
       "Notice": {
@@ -2298,6 +3478,22 @@
         "title": "RetrievalScope",
         "type": "object"
       },
+      "RevokeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RevokeRequest",
+        "type": "object"
+      },
       "RunOut": {
         "properties": {
           "counts": {
@@ -2439,6 +3635,25 @@
         ],
         "title": "UserOut",
         "type": "object"
+      },
+      "VisibleAccount": {
+        "properties": {
+          "key": {
+            "description": "What an Ask scope names (`scope.account`).",
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "VisibleAccount",
+        "type": "object"
       }
     }
   },
@@ -2448,6 +3663,68 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/accounts": {
+      "get": {
+        "operationId": "get_accounts_v1_accounts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberAccounts"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "The accounts you may know exist: the only ones an Ask scope may name",
+        "tags": [
+          "access",
+          "accounts"
+        ]
+      }
+    },
     "/v1/activity": {
       "get": {
         "operationId": "get_own_activity_v1_activity_get",
@@ -2530,6 +3807,765 @@
         ]
       }
     },
+    "/v1/admin/access/directory": {
+      "get": {
+        "operationId": "get_directory_v1_admin_access_directory_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Directory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Accounts, departments and administrator-defined groups that can be assigned (administrators)",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/v1/admin/access/documents": {
+      "get": {
+        "operationId": "get_documents_v1_admin_access_documents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 2,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Documents you can read whose title or reference contains `q` (administrators)",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/v1/admin/access/grants/{grant_id}/revoke": {
+      "post": {
+        "description": "Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_revoke_v1_admin_access_grants__grant_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Grant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Revoke an administrator grant on a document you can read, with a reason (administrators; audited)",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/v1/admin/access/members": {
+      "get": {
+        "operationId": "get_members_v1_admin_access_members_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembersPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "The organization's members by name (administrators)",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/v1/admin/access/members/{membership_id}": {
+      "get": {
+        "operationId": "get_member_v1_admin_access_members__membership_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Membership Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberAccess"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "A member's access: scope, groups and grants on documents you can read (administrators)",
+        "tags": [
+          "access"
+        ]
+      },
+      "patch": {
+        "description": "`version` must be the member's current version (409 otherwise). You cannot change your own access (403). Requires the X-Lattice-Request: 1 header.",
+        "operationId": "patch_member_v1_admin_access_members__membership_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Membership Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberAccess"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Change a member's access, with a reason (administrators; audited)",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/v1/admin/access/members/{membership_id}/documents/{document_id}": {
+      "get": {
+        "operationId": "get_member_document_v1_admin_access_members__membership_id__documents__document_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Membership Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentExplanation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Why a member can or cannot read a document you can read (administrators)",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/v1/admin/access/members/{membership_id}/grants": {
+      "post": {
+        "description": "Idempotent: an existing administrator grant is returned with 200. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_grant_v1_admin_access_members__membership_id__grants_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Membership Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrantOut"
+                }
+              }
+            },
+            "description": "The grant already exists"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrantOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Grant a member one document you can read, with a reason (administrators; audited)",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/v1/admin/access/members/{membership_id}/preview": {
+      "post": {
+        "description": "Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_member_preview_v1_admin_access_members__membership_id__preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Membership Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "What a change would do: effects as rules, counts only over documents you can read (administrators; nothing is changed)",
+        "tags": [
+          "access"
+        ]
+      }
+    },
     "/v1/admin/activity": {
       "get": {
         "operationId": "get_organization_activity_v1_admin_activity_get",
@@ -2609,6 +4645,98 @@
         "summary": "The organization's Asks as operational rows: no questions, answers, evidence, counts or scope (administrators)",
         "tags": [
           "activity"
+        ]
+      }
+    },
+    "/v1/admin/audit-events": {
+      "get": {
+        "operationId": "get_audit_events_v1_admin_audit_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Access and provider changes, newest first (administrators)",
+        "tags": [
+          "access"
         ]
       }
     },

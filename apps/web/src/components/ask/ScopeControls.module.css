@@ -146,6 +146,26 @@
   line-height: var(--type-caption-line);
 }
 
+.filter {
+  display: block;
+}
+
+.filterInput {
+  width: 100%;
+  height: var(--control-sm);
+  padding: 0 var(--space-2);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  font-size: var(--type-small-size);
+}
+
+.accountList {
+  display: grid;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
 .dates {
   display: grid;
   grid-template-columns: 1fr 1fr;

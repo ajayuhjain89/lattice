@@ -19,6 +19,8 @@ export interface ComposerProps {
   onChange: (form: AskForm) => void;
   onSubmit: () => void;
   pending: boolean;
+  /** Nothing the person can read is indexed (B13 "Empty knowledge base"). */
+  disabled?: boolean;
 }
 
 const PROBLEM: Record<FormProblem, string> = {
@@ -32,7 +34,7 @@ const PROBLEM: Record<FormProblem, string> = {
  * Shift+Enter adds a line. The scope controls only narrow what may be searched; the API
  * decides what the person can read.
  */
-export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer({ form, onChange, onSubmit, pending }, ref) {
+export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer({ form, onChange, onSubmit, pending, disabled = false }, ref) {
   const textarea = useRef<HTMLTextAreaElement>(null);
   const [problem, setProblem] = useState<FormProblem | null>(null);
   const problemId = useId();
@@ -45,7 +47,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
-    if (pending) return;
+    if (pending || disabled) return;
     const found = validate(form);
     setProblem(found);
     if (found) {
@@ -82,6 +84,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           aria-describedby={[problem ? problemId : null, hintId].filter(Boolean).join(" ")}
           aria-keyshortcuts="/"
           maxLength={MAX_QUESTION + 500}
+          disabled={disabled}
           spellCheck
         />
         {problem && (
@@ -116,6 +119,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             className={styles.submit}
             icon={<Icon as={ArrowUp} />}
             loading={pending}
+            disabled={disabled}
             aria-label={pending ? "Asking" : "Ask"}
           >
             <span className={styles.submitLabel}>{pending ? "Asking" : "Ask"}</span>

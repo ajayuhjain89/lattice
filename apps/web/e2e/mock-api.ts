@@ -2,11 +2,19 @@ import type { Page, Route } from "@playwright/test";
 
 import type { components } from "../src/api/schema.gen";
 import {
+  ACCOUNTS_MAYA,
   ACTIVITY_ADMIN,
   ACTIVITY_OWN,
+  AUDIT,
   DETAILS,
+  DIRECTORY,
+  DOCUMENTS,
+  EXPLANATION_DENIED,
   FAILURES,
   ME_MAYA,
+  MEMBER_MAYA,
+  MEMBERS_PAGE,
+  PREVIEW_ADD_KESTREL,
   NOT_FOUND,
   PROVIDERS,
   SOURCES_ADMIN,
@@ -32,9 +40,21 @@ export interface MockOptions {
   failures?: S["FailuresResponse"];
   activity?: S["OwnActivityResponse"];
   adminActivity?: S["OperationalActivityResponse"] | "forbidden";
+  accounts?: S["MemberAccounts"];
+  /** Access management (administrators); "forbidden" answers every /v1/admin/access call 403. */
+  access?: "forbidden";
+  members?: S["MembersPage"];
+  member?: Record<string, S["MemberAccess"]>;
+  preview?: S["AccessPreview"];
+  /** Answer for PATCH /v1/admin/access/members/{id}. */
+  change?: (body: S["MemberChangeRequest"]) => S["MemberAccess"] | { status: number; body: unknown };
+  audit?: S["AuditPage"];
 }
 
 export interface MockLog {
+  changes: S["MemberChangeRequest"][];
+  grants: unknown[];
+  revokes: string[];
   syncs: string[];
   asks: S["AskRequest"][];
   evidence: string[];
@@ -47,7 +67,7 @@ const json = (route: Route, status: number, body: unknown) =>
 
 /** Fulfil every /api/* request from typed fixtures; anything unknown is a 404 envelope. */
 export async function mockApi(page: Page, options: MockOptions = {}): Promise<MockLog> {
-  const log: MockLog = { syncs: [], asks: [], evidence: [], traces: [], headers: [] };
+  const log: MockLog = { changes: [], grants: [], revokes: [], syncs: [], asks: [], evidence: [], traces: [], headers: [] };
   const forbidden = (route: Route) =>
     json(route, 403, { error: { code: "permission_denied", message: "You don't have permission to do this.", request_id: "req-403" } });
   const evidence = options.evidence ?? DETAILS;
@@ -127,6 +147,42 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     if (path === "/v1/admin/activity" && method === "GET") {
       const a = options.adminActivity ?? ACTIVITY_ADMIN;
       return a === "forbidden" ? forbidden(route) : json(route, 200, a);
+    }
+    if (path === "/v1/accounts" && method === "GET") return json(route, 200, options.accounts ?? ACCOUNTS_MAYA);
+    if (path.startsWith("/v1/admin/access") || path === "/v1/admin/audit-events") {
+      if (options.access === "forbidden") return forbidden(route);
+      if (path === "/v1/admin/access/members" && method === "GET") return json(route, 200, options.members ?? MEMBERS_PAGE);
+      if (path === "/v1/admin/access/directory" && method === "GET") return json(route, 200, DIRECTORY);
+      if (path === "/v1/admin/access/documents" && method === "GET") return json(route, 200, DOCUMENTS);
+      if (path === "/v1/admin/audit-events" && method === "GET") return json(route, 200, options.audit ?? AUDIT);
+      const members = options.member ?? { [MEMBER_MAYA.member.id]: MEMBER_MAYA };
+      const explain = /^\/v1\/admin\/access\/members\/([^/]+)\/documents\/([^/]+)$/.exec(path);
+      if (explain && method === "GET") return json(route, 200, EXPLANATION_DENIED);
+      const preview = /^\/v1\/admin\/access\/members\/([^/]+)\/preview$/.exec(path);
+      if (preview && method === "POST") return json(route, 200, options.preview ?? PREVIEW_ADD_KESTREL);
+      const grants = /^\/v1\/admin\/access\/members\/([^/]+)\/grants$/.exec(path);
+      if (grants && method === "POST") {
+        log.grants.push(request.postDataJSON());
+        return json(route, 201, members[grants[1]!]?.grants[0] ?? NOT_FOUND);
+      }
+      const revoke = /^\/v1\/admin\/access\/grants\/([^/]+)\/revoke$/.exec(path);
+      if (revoke && method === "POST") {
+        log.revokes.push(revoke[1]!);
+        return route.fulfill({ status: 204 });
+      }
+      const member = /^\/v1\/admin\/access\/members\/([^/]+)$/.exec(path);
+      if (member && method === "GET") {
+        const found = members[member[1]!];
+        return found ? json(route, 200, found) : json(route, 404, NOT_FOUND);
+      }
+      if (member && method === "PATCH") {
+        const body = request.postDataJSON() as S["MemberChangeRequest"];
+        log.changes.push(body);
+        const result = options.change?.(body) ?? members[member[1]!];
+        if (!result) return json(route, 404, NOT_FOUND);
+        if ("status" in result && "body" in result && typeof result.status === "number") return json(route, result.status, result.body);
+        return json(route, 200, result);
+      }
     }
     return json(route, 404, NOT_FOUND);
   });

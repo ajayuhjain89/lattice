@@ -2,11 +2,13 @@
 
 import { ChevronDown, X } from "lucide-react";
 import { Popover } from "radix-ui";
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 
+import { useAccounts, useSources } from "@/api/queries";
 import { SOURCE_TYPES, type SourceType } from "@/api/types";
 import { Button } from "@/components/primitives/Button";
 import { formatDay } from "@/lib/format";
+import { readableSourceTypes } from "@/lib/scope";
 
 import type { AskForm } from "./form";
 import styles from "./ScopeControls.module.css";
@@ -16,27 +18,30 @@ const LONG: Record<SourceType, string> = { doc: "Documents", ticket: "Tickets", 
 
 /**
  * Scope chips. Each one can only narrow the search; none of them can widen what the API
- * lets the person read. Accounts are never listed here: an account scope is set only from
- * a clarification the API offered.
+ * lets the person read. The accounts offered are exactly the ones GET /v1/accounts lists
+ * (the only ones a scope may name), and the source types those with a source the person
+ * can read from (GET /v1/sources); the API enforces both regardless.
  */
 export function ScopeControls({ form, onChange, datesInvalid }: { form: AskForm; onChange: (f: AskForm) => void; datesInvalid: boolean }) {
   const sources = form.sourceTypes.length ? form.sourceTypes.map((s) => PLURAL[s]).join(", ") : null;
   const dates = dateSummary(form.since, form.until);
+  const readable = useSources();
+  // Until the list arrives (or if it fails) every type is offered: narrowing is a convenience.
+  const offered = readable.data
+    ? SOURCE_TYPES.filter((t) => readableSourceTypes(readable.data.sources).includes(t) || form.sourceTypes.includes(t))
+    : SOURCE_TYPES;
 
   return (
     <div className={styles.scope} role="group" aria-label="Search scope">
-      {form.account && (
-        <Chip
-          label="Account"
-          value={form.account.name}
-          onClear={() => onChange({ ...form, account: null })}
-        />
-      )}
+      <Chip label="Account" value={form.account?.name ?? null} onClear={() => onChange({ ...form, account: null })}>
+        <AccountOptions form={form} onChange={onChange} />
+      </Chip>
 
       <Chip label="Sources" value={sources} onClear={() => onChange({ ...form, sourceTypes: [] })}>
         <fieldset className={styles.fieldset}>
           <legend className={styles.legend}>Search only</legend>
-          {SOURCE_TYPES.map((t) => (
+          {offered.length === 0 && <p className={styles.help}>No source you can read from is indexed yet.</p>}
+          {offered.map((t) => (
             <label key={t} className={styles.option}>
               <input
                 type="checkbox"
@@ -69,6 +74,61 @@ export function ScopeControls({ form, onChange, datesInvalid }: { form: AskForm;
         <SensitivityOptions form={form} onChange={onChange} />
       </Chip>
     </div>
+  );
+}
+
+const FILTER_FROM = 7;
+
+/** The member's accounts as the API lists them; choosing one narrows the search to it. */
+function AccountOptions({ form, onChange }: { form: AskForm; onChange: (f: AskForm) => void }) {
+  const query = useAccounts();
+  const id = useId();
+  const [filter, setFilter] = useState("");
+  if (query.isError) return <p className={styles.help}>Couldn&apos;t load your accounts. Close this and try again.</p>;
+  if (!query.data) {
+    return (
+      <p className={styles.help} role="status">
+        Loading your accounts…
+      </p>
+    );
+  }
+  const accounts = query.data.accounts;
+  if (accounts.length === 0) {
+    return (
+      <p className={styles.help}>
+        You aren&apos;t assigned to any accounts, so Lattice searches only content that isn&apos;t tied to an account.
+      </p>
+    );
+  }
+  const wanted = filter.trim().toLowerCase();
+  const shown = wanted ? accounts.filter((a) => a.name.toLowerCase().includes(wanted)) : accounts;
+  return (
+    <fieldset className={styles.fieldset}>
+      <legend className={styles.legend}>Search only</legend>
+      {accounts.length >= FILTER_FROM && (
+        <label className={styles.filter}>
+          <span className="visually-hidden">Filter accounts</span>
+          <input className={styles.filterInput} type="search" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter accounts" />
+        </label>
+      )}
+      <div className={styles.accountList}>
+        {shown.map((a) => (
+          <label key={a.key} className={styles.option}>
+            <input
+              type="radio"
+              name={`${id}-account`}
+              checked={form.account?.key === a.key}
+              onChange={() => onChange({ ...form, account: { key: a.key, name: a.name } })}
+            />
+            <span>{a.name}</span>
+          </label>
+        ))}
+        {shown.length === 0 && <p className={styles.help}>No account matches.</p>}
+      </div>
+      <p className={styles.help}>
+        {query.data.account_scope === "all" ? "Every account is in your scope." : "Only the accounts assigned to you are listed."}
+      </p>
+    </fieldset>
   );
 }
 

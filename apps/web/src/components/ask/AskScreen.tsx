@@ -4,7 +4,7 @@ import { Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { useAsk } from "@/api/queries";
+import { useAccounts, useAsk, useSources } from "@/api/queries";
 import { isApiError, unexpectedError } from "@/api/errors";
 import type { AskRequest } from "@/api/types";
 import { Button } from "@/components/primitives/Button";
@@ -15,6 +15,7 @@ import { useWorkspace } from "@/components/shell/workspace-context";
 import { presentStatus } from "@/lib/answer-status";
 import { useStore } from "@/lib/store";
 import { BREAKPOINTS, useMinWidth } from "@/lib/use-media";
+import { scopeLine } from "@/lib/scope";
 import { HISTORY_LIMIT, takeDraft } from "@/lib/workspace-state";
 
 import { AnswerView } from "./AnswerView";
@@ -26,7 +27,11 @@ import { EMPTY_FORM, fromRequest, toRequest, type AskForm } from "./form";
 import { RequestError } from "./RequestError";
 
 export function AskScreen() {
-  const { me, state } = useWorkspace();
+  const { me, state, isAdmin } = useWorkspace();
+  const sources = useSources();
+  const accounts = useAccounts();
+  // Only an answer from the API can make the knowledge base "empty"; a failed listing doesn't.
+  const empty = sources.data?.sources.length === 0;
   const ask = useStore(state.ask, (s) => s);
   const mutation = useAsk();
   const composer = useRef<ComposerHandle>(null);
@@ -91,9 +96,16 @@ export function AskScreen() {
       <NewQuestionButton target={composerBox} onFocus={() => composer.current?.focus()} />
       <main id="main" className={styles.main} tabIndex={-1}>
         <div className={styles.column}>
-          {!hasResult && <AskIntro organization={me.organization.name} />}
+          {!hasResult && (
+            <AskIntro
+              organization={me.organization.name}
+              scope={sources.data ? scopeLine(sources.data.sources, accounts.data) : null}
+              empty={empty}
+              isAdmin={isAdmin}
+            />
+          )}
           <div ref={composerBox}>
-            <Composer ref={composer} form={form} onChange={setForm} onSubmit={submit} pending={ask.pending} />
+            <Composer ref={composer} form={form} onChange={setForm} onSubmit={submit} pending={ask.pending} disabled={empty} />
           </div>
           <p className="visually-hidden" role="status" aria-live="polite">
             {announce(ask)}
