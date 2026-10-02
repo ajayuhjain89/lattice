@@ -17,6 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lattice.access.audit import GRANT_CREATED, GRANT_REVOKED, record_event
+from lattice.access.directory import document_references
 from lattice.db.engine import Database
 
 
@@ -127,7 +129,9 @@ async def apply_admin_grants(
     memberships -- and any unknown, ambiguous or duplicate entry fails the whole
     application with nothing written. Idempotent: unchanged input changes nothing.
     Source-origin grants are never read or written here. With ``prune``, admin grants
-    not in the file are removed (a revocation); without it they are left alone.
+    not in the file are removed (a revocation); without it they are left alone. Every
+    grant added or removed gets an ``access.grant_created`` / ``access.grant_revoked``
+    audit event (actor ``operator:admin-grants``; the file entry's reason).
     """
     report = ApplyReport(organization=organization_slug, dry_run=dry_run)
     async with db.unscoped_transaction() as s:
@@ -190,14 +194,45 @@ async def apply_admin_grants(
         if dry_run:
             return report
 
-        for document_id, membership_id in missing:
-            await s.execute(
-                text(
-                    "INSERT INTO document_grants (organization_id, document_id, principal_type, "
-                    "membership_id, origin) VALUES (:o, :d, 'membership', :m, 'admin')"
-                ),
-                {"o": org, "d": document_id, "m": membership_id},
+        references = await document_references(s, org, {d for d, _ in (*missing, *extra)})
+
+        async def audit(
+            action: str, document_id: uuid.UUID, membership_id: uuid.UUID, grant_id: object
+        ) -> None:
+            source_id, reference = references[document_id]
+            granted = {"origin": "admin", "principal_type": "membership"}
+            created = action == GRANT_CREATED
+            await record_event(
+                s,
+                org,
+                actor="operator:admin-grants",
+                action=action,
+                target={
+                    "membership_id": str(membership_id),
+                    "document_id": str(document_id),
+                    "grant_id": str(grant_id),
+                    "source_id": str(source_id),
+                    "reference": reference,
+                },
+                before=None if created else granted,
+                after=granted if created else None,
+                reason=grants.grants[wanted[(document_id, membership_id)]].reason
+                if created
+                else "Removed from admin-grants.yaml (--prune)",
             )
+
+        for document_id, membership_id in missing:
+            grant_id = (
+                await s.execute(
+                    text(
+                        "INSERT INTO document_grants (organization_id, document_id, "
+                        "principal_type, membership_id, origin) "
+                        "VALUES (:o, :d, 'membership', :m, 'admin') RETURNING id"
+                    ),
+                    {"o": org, "d": document_id, "m": membership_id},
+                )
+            ).scalar_one()
+            await audit(GRANT_CREATED, document_id, membership_id, grant_id)
         if extra:
             await s.execute(
                 text(
@@ -206,6 +241,10 @@ async def apply_admin_grants(
                 ),
                 {"o": org, "ids": [current[key] for key in extra]},
             )
+            for document_id, membership_id in extra:
+                await audit(
+                    GRANT_REVOKED, document_id, membership_id, current[(document_id, membership_id)]
+                )
         touched = sorted({doc for doc, _ in (*missing, *extra)}, key=str)
         if touched:
             await s.execute(

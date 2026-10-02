@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+  "/v1/accounts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** The accounts you may know exist: the only ones an Ask scope may name */
+    get: operations["get_accounts_v1_accounts_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/activity": {
     parameters: {
       query?: never;
@@ -21,6 +38,155 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/admin/access/directory": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Accounts, departments and administrator-defined groups that can be assigned (administrators) */
+    get: operations["get_directory_v1_admin_access_directory_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/documents": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Documents you can read whose title or reference contains `q` (administrators) */
+    get: operations["get_documents_v1_admin_access_documents_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/grants/{grant_id}/revoke": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Revoke an administrator grant on a document you can read, with a reason (administrators; audited)
+     * @description Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_revoke_v1_admin_access_grants__grant_id__revoke_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/members": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** The organization's members by name (administrators) */
+    get: operations["get_members_v1_admin_access_members_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/members/{membership_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** A member's access: scope, groups and grants on documents you can read (administrators) */
+    get: operations["get_member_v1_admin_access_members__membership_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Change a member's access, with a reason (administrators; audited)
+     * @description `version` must be the member's current version (409 otherwise). You cannot change your own access (403). Requires the X-Lattice-Request: 1 header.
+     */
+    patch: operations["patch_member_v1_admin_access_members__membership_id__patch"];
+    trace?: never;
+  };
+  "/v1/admin/access/members/{membership_id}/documents/{document_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Why a member can or cannot read a document you can read (administrators) */
+    get: operations["get_member_document_v1_admin_access_members__membership_id__documents__document_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/members/{membership_id}/grants": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Grant a member one document you can read, with a reason (administrators; audited)
+     * @description Idempotent: an existing administrator grant is returned with 200. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_grant_v1_admin_access_members__membership_id__grants_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/members/{membership_id}/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * What a change would do: effects as rules, counts only over documents you can read (administrators; nothing is changed)
+     * @description Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_member_preview_v1_admin_access_members__membership_id__preview_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/admin/activity": {
     parameters: {
       query?: never;
@@ -30,6 +196,23 @@ export interface paths {
     };
     /** The organization's Asks as operational rows: no questions, answers, evidence, counts or scope (administrators) */
     get: operations["get_organization_activity_v1_admin_activity_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/audit-events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Access and provider changes, newest first (administrators) */
+    get: operations["get_audit_events_v1_admin_audit_events_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -289,6 +472,68 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /**
+     * AccessEffect
+     * @description One effect of a change, as a rule ("loses Kestrel Bank"); never a document.
+     */
+    AccessEffect: {
+      /** After */
+      after?: string | null;
+      /** Before */
+      before?: string | null;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind:
+        | "provisioned"
+        | "suspended"
+        | "reactivated"
+        | "administrator"
+        | "clearance"
+        | "account_scope"
+        | "account_added"
+        | "account_removed"
+        | "department_added"
+        | "department_removed"
+        | "group_added"
+        | "group_removed";
+      /** @description The account, department or group added or removed. */
+      subject?: components["schemas"]["NamedRef"] | null;
+    };
+    /** AccessPreview */
+    AccessPreview: {
+      /**
+       * Documents Gained
+       * @description Among documents you can read.
+       */
+      documents_gained: number;
+      /**
+       * Documents Lost
+       * @description Among documents you can read.
+       */
+      documents_lost: number;
+      /** Effects */
+      effects: components["schemas"]["AccessEffect"][];
+    };
+    /** Actor */
+    Actor: {
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "member" | "operator";
+      /**
+       * Name
+       * @description The member's name; null if no longer a member.
+       */
+      name: string | null;
+      /**
+       * Operator
+       * @description The operator tool (seed, admin-grants, cli).
+       */
+      operator: string | null;
+    };
     /** AdminSourceOut */
     AdminSourceOut: {
       /** Account Scoped */
@@ -514,6 +759,51 @@ export interface components {
        */
       view?: "asker";
     };
+    /** AuditDetail */
+    AuditDetail: {
+      /** After */
+      after: string | null;
+      /** Before */
+      before: string | null;
+      /** Field */
+      field: string;
+    };
+    /** AuditEventOut */
+    AuditEventOut: {
+      /** Action */
+      action: string;
+      actor: components["schemas"]["Actor"];
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Details
+       * @description Provider and egress settings events.
+       */
+      details: components["schemas"]["AuditDetail"][];
+      /** @description The target document. Events about documents you cannot read now are not listed. */
+      document: components["schemas"]["DocumentRef"] | null;
+      /** Effects */
+      effects: components["schemas"]["AccessEffect"][];
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** @description The member whose access changed. */
+      member: components["schemas"]["NamedRef"] | null;
+      /** Reason */
+      reason: string;
+    };
+    /** AuditPage */
+    AuditPage: {
+      /** Items */
+      items: components["schemas"]["AuditEventOut"][];
+      /** Next Before */
+      next_before: string | null;
+    };
     /** Citation */
     Citation: {
       /**
@@ -630,6 +920,103 @@ export interface components {
        */
       subject: string;
     };
+    /**
+     * Directory
+     * @description What an administrator may assign: every account and department, and the
+     *     administrator-defined groups (source-synced groups are owned by their source).
+     */
+    Directory: {
+      /** Accounts */
+      accounts: components["schemas"]["DirectoryAccount"][];
+      /** Departments */
+      departments: components["schemas"]["DirectoryDepartment"][];
+      /** Groups */
+      groups: components["schemas"]["DirectoryGroup"][];
+    };
+    /** DirectoryAccount */
+    DirectoryAccount: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Key */
+      key: string;
+      /** Name */
+      name: string;
+      /** Status */
+      status: string;
+    };
+    /** DirectoryDepartment */
+    DirectoryDepartment: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Key */
+      key: string;
+      /** Name */
+      name: string;
+    };
+    /** DirectoryGroup */
+    DirectoryGroup: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Key */
+      key: string;
+      /** Members */
+      members: number;
+      /** Name */
+      name: string;
+    };
+    /**
+     * DocumentExplanation
+     * @description Why the member can or cannot read a document you can read (``explain_for_reviewer``).
+     */
+    DocumentExplanation: {
+      document: components["schemas"]["DocumentRef"];
+      /**
+       * Path
+       * @enum {string}
+       */
+      path: "grant" | "policy" | "none";
+      /** Readable */
+      readable: boolean;
+      /** Reasons */
+      reasons: string[];
+      /** Via */
+      via: components["schemas"]["GrantVia"][];
+    };
+    /**
+     * DocumentRef
+     * @description A document the viewing administrator can read.
+     */
+    DocumentRef: {
+      /** Classification */
+      classification: string;
+      /** Connector Type */
+      connector_type: string;
+      /** Display Ref */
+      display_ref: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Source Name */
+      source_name: string;
+      /** Title */
+      title: string;
+    };
+    /** DocumentsPage */
+    DocumentsPage: {
+      /** Items */
+      items: components["schemas"]["DocumentRef"][];
+    };
     /** EgressOut */
     EgressOut: {
       /** Data Origin */
@@ -661,6 +1048,7 @@ export interface components {
       | "permission_denied"
       | "csrf_rejected"
       | "not_found"
+      | "conflict"
       | "method_not_allowed"
       | "validation_failed"
       | "request_too_large"
@@ -866,6 +1254,87 @@ export interface components {
       /** Threshold Days */
       threshold_days: number | null;
     };
+    /** GrantOut */
+    GrantOut: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      document: components["schemas"]["DocumentRef"];
+      /**
+       * Granted By
+       * @description The administrator who granted it, if recorded.
+       */
+      granted_by: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Origin
+       * @enum {string}
+       */
+      origin: "admin" | "source";
+      /** Reason */
+      reason: string | null;
+      /**
+       * Revocable
+       * @description Administrator grants only; source grants follow the source.
+       */
+      revocable: boolean;
+    };
+    /** GrantRequest */
+    GrantRequest: {
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Reason */
+      reason: string;
+    };
+    /** GrantVia */
+    GrantVia: {
+      /**
+       * Name
+       * @description Null for a private group you are not in (nothing else is given).
+       */
+      name: string | null;
+      /**
+       * Principal Type
+       * @enum {string}
+       */
+      principal_type: "membership" | "department" | "group";
+    };
+    /** GroupAccess */
+    GroupAccess: {
+      /**
+       * Connector Type
+       * @description The source's connector (source groups).
+       */
+      connector_type: string | null;
+      /**
+       * Editable
+       * @description Administrator-defined groups only.
+       */
+      editable: boolean;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Members */
+      members: components["schemas"]["Named"][];
+      /** Name */
+      name: string;
+      /**
+       * Origin
+       * @enum {string}
+       */
+      origin: "admin" | "source";
+    };
     /** HealthResponse */
     HealthResponse: {
       /**
@@ -933,6 +1402,100 @@ export interface components {
       organization: components["schemas"]["OrganizationOut"];
       user: components["schemas"]["UserOut"];
     };
+    /** MemberAccess */
+    MemberAccess: {
+      /** Accounts */
+      accounts: components["schemas"]["Named"][];
+      /** Departments */
+      departments: components["schemas"]["Named"][];
+      /**
+       * Grants
+       * @description Grants on documents you can read.
+       */
+      grants: components["schemas"]["GrantOut"][];
+      /**
+       * Groups
+       * @description Administrator-defined groups, and synced groups you are a member of.
+       */
+      groups: components["schemas"]["GroupAccess"][];
+      /**
+       * Has Hidden Groups
+       * @description The member is in private groups you are not in (not named, listed, counted or identified).
+       */
+      has_hidden_groups: boolean;
+      /**
+       * Has Other Grants
+       * @description The member has grants on documents you cannot read (not listed or counted).
+       */
+      has_other_grants: boolean;
+      /**
+       * Is Self
+       * @description Your own membership: it cannot be changed here.
+       */
+      is_self: boolean;
+      member: components["schemas"]["MemberSummary"];
+      /**
+       * Version
+       * Format: date-time
+       * @description Send back as `version` with a change; a stale value is refused (409).
+       */
+      version: string;
+    };
+    /**
+     * MemberAccounts
+     * @description The accounts you may know exist -- the only ones an Ask scope may name.
+     */
+    MemberAccounts: {
+      /**
+       * Account Scope
+       * @enum {string}
+       */
+      account_scope: "all" | "assigned";
+      /** Accounts */
+      accounts: components["schemas"]["VisibleAccount"][];
+    };
+    /**
+     * MemberChange
+     * @description A proposed change. Omitted fields stay as they are; ``accounts``,
+     *     ``departments`` and ``groups`` are complete sets (groups: the
+     *     administrator-defined groups only; source-group membership is untouched).
+     */
+    MemberChange: {
+      /** Account Scope */
+      account_scope?: ("all" | "assigned") | null;
+      /** Accounts */
+      accounts?: string[] | null;
+      /** Clearance */
+      clearance?: ("internal" | "confidential") | null;
+      /** Departments */
+      departments?: string[] | null;
+      /** Groups */
+      groups?: string[] | null;
+      /** Status */
+      status?: ("active" | "suspended") | null;
+    };
+    /** MemberChangeRequest */
+    MemberChangeRequest: {
+      /** Account Scope */
+      account_scope?: ("all" | "assigned") | null;
+      /** Accounts */
+      accounts?: string[] | null;
+      /** Clearance */
+      clearance?: ("internal" | "confidential") | null;
+      /** Departments */
+      departments?: string[] | null;
+      /** Groups */
+      groups?: string[] | null;
+      /** Reason */
+      reason: string;
+      /** Status */
+      status?: ("active" | "suspended") | null;
+      /**
+       * Version
+       * Format: date-time
+       */
+      version: string;
+    };
     /** MemberSourceOut */
     MemberSourceOut: {
       /** Connector Type */
@@ -961,6 +1524,57 @@ export interface components {
       /** Sources */
       sources: components["schemas"]["MemberSourceOut"][];
     };
+    /** MemberSummary */
+    MemberSummary: {
+      /**
+       * Account Scope
+       * @enum {string}
+       */
+      account_scope: "all" | "assigned";
+      /** Assigned Accounts */
+      assigned_accounts: number;
+      /**
+       * Clearance
+       * @enum {string}
+       */
+      clearance: "internal" | "confidential";
+      /** Departments */
+      departments: components["schemas"]["Named"][];
+      /** Email */
+      email: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Is Admin
+       * @description Administrative capability; grants no content access.
+       */
+      is_admin: boolean;
+      /** Name */
+      name: string;
+      /**
+       * Role Label
+       * @description Display only; never an access input.
+       */
+      role_label: string | null;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "active" | "suspended" | "removed";
+    };
+    /** MembersPage */
+    MembersPage: {
+      /** Items */
+      items: components["schemas"]["MemberSummary"][];
+      /**
+       * Next After
+       * @description Pass as `after` for the next page; null on the last page.
+       */
+      next_after: string | null;
+    };
     /** MembershipOut */
     MembershipOut: {
       /**
@@ -973,6 +1587,29 @@ export interface components {
        * @description Display label only; not a permission.
        */
       role_label: string | null;
+    };
+    /** Named */
+    Named: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+    };
+    /**
+     * NamedRef
+     * @description An entity named in an audit event; ``name`` is ``None`` when it no longer exists.
+     */
+    NamedRef: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string | null;
     };
     /** Notice */
     Notice: {
@@ -1138,6 +1775,11 @@ export interface components {
       /** Until */
       until?: string | null;
     };
+    /** RevokeRequest */
+    RevokeRequest: {
+      /** Reason */
+      reason: string;
+    };
     /** RunOut */
     RunOut: {
       /** Counts */
@@ -1201,6 +1843,16 @@ export interface components {
        */
       id: string;
     };
+    /** VisibleAccount */
+    VisibleAccount: {
+      /**
+       * Key
+       * @description What an Ask scope names (`scope.account`).
+       */
+      key: string;
+      /** Name */
+      name: string;
+    };
   };
   responses: never;
   parameters: never;
@@ -1210,6 +1862,62 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  get_accounts_v1_accounts_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MemberAccounts"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   get_own_activity_v1_activity_get: {
     parameters: {
       query?: {
@@ -1260,6 +1968,562 @@ export interface operations {
       };
     };
   };
+  get_directory_v1_admin_access_directory_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Directory"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_documents_v1_admin_access_documents_get: {
+    parameters: {
+      query: {
+        q: string;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DocumentsPage"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_revoke_v1_admin_access_grants__grant_id__revoke_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        grant_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RevokeRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_members_v1_admin_access_members_get: {
+    parameters: {
+      query?: {
+        q?: string | null;
+        limit?: number;
+        after?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MembersPage"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_member_v1_admin_access_members__membership_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        membership_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MemberAccess"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  patch_member_v1_admin_access_members__membership_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        membership_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MemberChangeRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MemberAccess"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_member_document_v1_admin_access_members__membership_id__documents__document_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        membership_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DocumentExplanation"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_grant_v1_admin_access_members__membership_id__grants_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        membership_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GrantRequest"];
+      };
+    };
+    responses: {
+      /** @description The grant already exists */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GrantOut"];
+        };
+      };
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GrantOut"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_member_preview_v1_admin_access_members__membership_id__preview_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        membership_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MemberChange"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AccessPreview"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   get_organization_activity_v1_admin_activity_get: {
     parameters: {
       query?: {
@@ -1292,6 +2556,65 @@ export interface operations {
       };
       /** @description Forbidden */
       403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_audit_events_v1_admin_audit_events_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+        before?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AuditPage"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

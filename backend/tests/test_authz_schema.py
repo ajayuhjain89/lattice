@@ -324,8 +324,19 @@ async def test_deleted_department_leaves_a_dangling_id_that_matches_no_one(
 PHASE_2_TABLES = ("access_groups", "access_group_members", "documents", "document_grants")
 
 
+# Phase 9 (migration 0012): access management inserts and deletes group members and
+# grants, limited by restrictive policies to administrator-defined groups and
+# administrator membership grants (tests/test_app_role_access.py). Never UPDATE.
+RUNTIME_PRIVILEGES = {
+    "access_groups": {"SELECT"},
+    "access_group_members": {"SELECT", "INSERT", "DELETE"},
+    "documents": {"SELECT"},
+    "document_grants": {"SELECT", "INSERT", "DELETE"},
+}
+
+
 @pytest.mark.parametrize("table", PHASE_2_TABLES)
-async def test_runtime_role_can_only_read_authorization_tables(
+async def test_runtime_role_privileges_on_authorization_tables(
     superuser_engine: AsyncEngine, table: str
 ) -> None:
     async with superuser_engine.connect() as conn:
@@ -339,7 +350,7 @@ async def test_runtime_role_can_only_read_authorization_tables(
                 )
             ).scalar_one()
         }
-    assert held == {"SELECT"}
+    assert held == RUNTIME_PRIVILEGES[table]
 
 
 @pytest.mark.parametrize("table", PHASE_2_TABLES)

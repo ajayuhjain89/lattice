@@ -255,3 +255,56 @@ async def test_seed_never_takes_over_a_source_synced_group(owner_db: Database) -
     base["groups"].append({"key": "acct-acme", "name": "Acme team", "members": []})
     with pytest.raises(ValueError, match="not admin-defined"):
         await seed_manifest(owner_db, Manifest.model_validate(base))
+
+
+# --- Audit (Phase 9) -------------------------------------------------------------------
+
+
+async def _seed_events(db: Database, org: object) -> list[tuple[object, ...]]:
+    async with db.tenant_transaction(org) as s:  # type: ignore[arg-type]
+        return [
+            tuple(r)
+            for r in await s.execute(
+                text(
+                    "SELECT actor, action, target ->> 'membership_id', before IS NULL, reason "
+                    "FROM audit_events ORDER BY created_at"
+                )
+            )
+        ]
+
+
+async def test_the_seed_audits_provisioning_and_changes_but_not_reruns(
+    owner_db: Database,
+) -> None:
+    base = load_manifest(HALDEN).model_dump()
+    await seed_manifest(owner_db, Manifest.model_validate(base))
+    org = await _org_id(owner_db, "halden")
+    provisioned = await _seed_events(owner_db, org)
+    assert len(provisioned) == 8
+    assert {(e[0], e[1], e[3], e[4]) for e in provisioned} == {
+        (
+            "operator:seed",
+            "access.member_changed",
+            True,
+            "Provisioned from the organization manifest",
+        )
+    }
+    await seed_manifest(owner_db, Manifest.model_validate(base))
+    assert len(await _seed_events(owner_db, org)) == 8  # unchanged: nothing written
+    base["members"][0]["role_label"] = "Senior Account Manager"  # display only
+    await seed_manifest(owner_db, Manifest.model_validate(base))
+    assert len(await _seed_events(owner_db, org)) == 8
+    base["members"][0]["accounts"] = ["acme-corp"]
+    await seed_manifest(owner_db, Manifest.model_validate(base))
+    events = await _seed_events(owner_db, org)
+    assert len(events) == 9
+    assert events[-1][3:] == (False, "Updated from the organization manifest")
+    async with owner_db.tenant_transaction(org) as s:  # type: ignore[arg-type]
+        before, after = (
+            await s.execute(
+                text("SELECT before, after FROM audit_events ORDER BY created_at DESC LIMIT 1")
+            )
+        ).one()
+    assert len(before["accounts"]) == 2
+    assert len(after["accounts"]) == 1
+    assert after["is_admin"] is False

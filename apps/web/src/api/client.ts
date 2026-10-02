@@ -9,12 +9,23 @@ import createClient, { type Middleware } from "openapi-fetch";
 import { fromResponse, networkError } from "./errors";
 import type { paths } from "./schema.gen";
 import type {
+  AccessPreview,
   AdminSourcesResponse,
   Answer,
   AskRequest,
+  AuditPage,
+  Directory,
+  DocumentExplanation,
+  DocumentsPage,
   EvidenceDetail,
   FailuresResponse,
+  GrantOut,
   Me,
+  MemberAccess,
+  MemberAccounts,
+  MemberChange,
+  MemberChangeRequest,
+  MembersPage,
   MemberSourcesResponse,
   OperationalActivityResponse,
   OwnActivityResponse,
@@ -109,4 +120,52 @@ export const api = {
     call<OperationalActivityResponse>(() =>
       http.GET("/v1/admin/activity", { params: { query: before ? { before } : {} }, signal }),
     ),
+  accounts: (signal?: AbortSignal) => call<MemberAccounts>(() => http.GET("/v1/accounts", { signal })),
+  accessMembers: (q: string, after?: string, signal?: AbortSignal) =>
+    call<MembersPage>(() =>
+      http.GET("/v1/admin/access/members", {
+        params: { query: { ...(q ? { q } : {}), ...(after ? { after } : {}), limit: MEMBERS_PAGE } },
+        signal,
+      }),
+    ),
+  accessDirectory: (signal?: AbortSignal) => call<Directory>(() => http.GET("/v1/admin/access/directory", { signal })),
+  accessMember: (id: string, signal?: AbortSignal) =>
+    call<MemberAccess>(() =>
+      http.GET("/v1/admin/access/members/{membership_id}", { params: { path: { membership_id: id } }, signal }),
+    ),
+  previewMember: (id: string, body: MemberChange) =>
+    call<AccessPreview>(() =>
+      http.POST("/v1/admin/access/members/{membership_id}/preview", { params: { path: { membership_id: id } }, body }),
+    ),
+  changeMember: (id: string, body: MemberChangeRequest) =>
+    call<MemberAccess>(() =>
+      http.PATCH("/v1/admin/access/members/{membership_id}", { params: { path: { membership_id: id } }, body }),
+    ),
+  accessDocuments: (q: string, signal?: AbortSignal) =>
+    call<DocumentsPage>(() => http.GET("/v1/admin/access/documents", { params: { query: { q } }, signal })),
+  explainDocument: (memberId: string, documentId: string, signal?: AbortSignal) =>
+    call<DocumentExplanation>(() =>
+      http.GET("/v1/admin/access/members/{membership_id}/documents/{document_id}", {
+        params: { path: { membership_id: memberId, document_id: documentId } },
+        signal,
+      }),
+    ),
+  grant: (memberId: string, documentId: string, reason: string) =>
+    call<GrantOut>(() =>
+      http.POST("/v1/admin/access/members/{membership_id}/grants", {
+        params: { path: { membership_id: memberId } },
+        body: { document_id: documentId, reason },
+      }),
+    ),
+  revokeGrant: async (grantId: string, reason: string) => {
+    await call<unknown>(() =>
+      http.POST("/v1/admin/access/grants/{grant_id}/revoke", { params: { path: { grant_id: grantId } }, body: { reason } }),
+    );
+  },
+  auditEvents: (before?: string, signal?: AbortSignal) =>
+    call<AuditPage>(() =>
+      http.GET("/v1/admin/audit-events", { params: { query: before ? { before } : {} }, signal }),
+    ),
 };
+
+export const MEMBERS_PAGE = 50;

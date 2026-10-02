@@ -10,6 +10,8 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: ErrorCode | null;
   readonly requestId: string | null;
+  /** The envelope's detail issue codes (fixed identifiers, never submitted values). */
+  readonly issues: readonly string[];
 
   constructor(init: {
     kind: "http" | "network";
@@ -17,6 +19,7 @@ export class ApiError extends Error {
     code: ErrorCode | null;
     message: string;
     requestId: string | null;
+    issues?: readonly string[];
   }) {
     super(init.message);
     this.name = "ApiError";
@@ -24,6 +27,7 @@ export class ApiError extends Error {
     this.status = init.status;
     this.code = init.code;
     this.requestId = init.requestId;
+    this.issues = init.issues ?? [];
   }
 
   get isUnauthenticated(): boolean {
@@ -62,6 +66,7 @@ export function fromResponse(response: Response, body: unknown): ApiError {
       code: body.error.code,
       message: body.error.message,
       requestId: body.error.request_id ?? response.headers.get("x-request-id"),
+      issues: (body.error.details ?? []).map((d) => d.issue),
     });
   }
   return new ApiError({

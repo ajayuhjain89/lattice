@@ -145,4 +145,15 @@ async def test_openapi_documents_the_error_envelope(client: httpx.AsyncClient) -
         "/v1/admin/sources/{source_id}/sync",
         "/v1/activity",
         "/v1/admin/activity",
+        # Phase 9
+        "/v1/accounts",
+        "/v1/admin/access/members",
+        "/v1/admin/access/directory",
+        "/v1/admin/access/members/{membership_id}",
+        "/v1/admin/access/members/{membership_id}/preview",
+        "/v1/admin/access/documents",
+        "/v1/admin/access/members/{membership_id}/documents/{document_id}",
+        "/v1/admin/access/members/{membership_id}/grants",
+        "/v1/admin/access/grants/{grant_id}/revoke",
+        "/v1/admin/audit-events",
     }

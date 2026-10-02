@@ -7,7 +7,11 @@ exist as library functions that retrieval (Phase 5) and answering (Phase 6) will
 Phase 3 added decision D-8 (structured account metadata, §6 and §9, policy version
 `authz-2`) and D-9 (a stable key for access groups, migration 0004). **Phase 5** wired
 E3 into every retrieval statement, E4 around retrieval, and E5 into the evidence lookup
-(`lattice.retrieval`); the policy itself is unchanged (`authz-2`).
+(`lattice.retrieval`); the policy itself is unchanged (`authz-2`). **Phase 9** used
+`explain_for_reviewer` for the Access page, added review contexts
+(`resolve_member_context`, `proposed_context`: another member's context as it is or as
+a proposed change would make it, never a request's own) and built the administrator
+account directory; the policy is still `authz-2` (no fingerprinted module changed).
 Related: `data-model.md` §2–5, `security-model.md`, ADR-003, ADR-005.
 
 ---
@@ -229,14 +233,17 @@ reasons (SEC-8). Alerting on that event is Phase 11.
   - `explain_for_reviewer(reviewer, subject, doc | None)` — for the Phase 9 access
     UI: `None` unless the reviewer can read the document and both are in the same
     organization, so it is not an oracle over documents the reviewer cannot see.
-    The administrator-capability check stays in the route (E7).
+    The administrator-capability check stays in the route (E7). *Used since Phase 9* by
+    `GET /v1/admin/access/members/{id}/documents/{document_id}`: 404 for anything else,
+    identical to a missing document.
 - **Account visibility** (§9, `security-model.md` §10): `account_visible(ctx,
   account)` and `visible_accounts_predicate(ctx)` — the account's organization, an
   active membership, and scope `all` or an assignment. Deliberately independent of
   `readable`: a grant on one document of an out-of-scope account does not put that
   account in the member's lists, filters, mention detection or autocomplete. Proven
   equivalent in the same property test. The admin account directory is a separate,
-  capability-gated view (Phase 9).
+  capability-gated view (`GET /v1/admin/access/directory`, Phase 9); a member's own list
+  is `GET /v1/accounts`, exactly `visible_accounts_predicate`.
 - **Structured account metadata (decision D-8)**:
   `visible_document_account(ctx, doc)` returns a document's account only when the
   document is readable **and** `account_visible` holds; otherwise `None`. Evidence

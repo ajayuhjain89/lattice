@@ -54,6 +54,31 @@
   color: var(--text-secondary);
 }
 
+.scopeLine {
+  font-family: var(--font-mono);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line);
+  color: var(--text-secondary);
+  min-height: var(--type-meta-line);
+  overflow-wrap: anywhere;
+}
+
+.emptyScope {
+  display: grid;
+  gap: var(--space-1);
+  max-width: 56ch;
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--border-strong);
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+}
+
+.emptyTitle {
+  composes: t-body-strong from global;
+
+  color: var(--text-primary);
+}
+
 .principles {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

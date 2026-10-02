@@ -807,3 +807,193 @@ export const ACTIVITY_ADMIN: S["OperationalActivityResponse"] = {
     },
   ],
 };
+
+// --- accounts and access management (Phase 9) --------------------------------------------------
+
+export const ACCOUNTS_MAYA: S["MemberAccounts"] = {
+  account_scope: "assigned",
+  accounts: [
+    { key: "acme-corp", name: "Acme Corp" },
+    { key: "northpeak-logistics", name: "Northpeak Logistics" },
+  ],
+};
+
+export const ID = {
+  maya: ME_MAYA.membership.id,
+  lena: ME_LENA.membership.id,
+  grace: "9e8d7c6b-5a49-4382-9170-6f5e4d3c2b55",
+  acme: "ac000000-0000-4000-8000-000000000001",
+  northpeak: "ac000000-0000-4000-8000-000000000002",
+  kestrel: "ac000000-0000-4000-8000-000000000003",
+  sales: "de000000-0000-4000-8000-000000000001",
+  leadership: "de000000-0000-4000-8000-000000000002",
+  exec: "60000000-0000-4000-8000-000000000001",
+  channel: "60000000-0000-4000-8000-000000000002",
+  grant: "9a000000-0000-4000-8000-000000000001",
+  doc: "d0c00000-0000-4000-8000-000000000001",
+};
+
+const SALES = { id: ID.sales, name: "Sales" };
+
+export const MEMBERS_PAGE: S["MembersPage"] = {
+  items: [
+    {
+      id: ID.grace,
+      name: "Grace Whitfield",
+      email: "grace.whitfield@halden.example",
+      role_label: "VP Customer Success",
+      status: "active",
+      is_admin: false,
+      clearance: "confidential",
+      account_scope: "all",
+      assigned_accounts: 0,
+      departments: [{ id: ID.leadership, name: "Leadership" }],
+    },
+    {
+      id: ID.lena,
+      name: "Lena Brandt",
+      email: "lena.brandt@halden.example",
+      role_label: "IT Administrator",
+      status: "active",
+      is_admin: true,
+      clearance: "internal",
+      account_scope: "assigned",
+      assigned_accounts: 0,
+      departments: [],
+    },
+    {
+      id: ID.maya,
+      name: "Maya Okafor",
+      email: "maya.okafor@halden.example",
+      role_label: "Account Manager",
+      status: "active",
+      is_admin: false,
+      clearance: "internal",
+      account_scope: "assigned",
+      assigned_accounts: 2,
+      departments: [SALES],
+    },
+  ],
+  next_after: null,
+};
+
+export const DIRECTORY: S["Directory"] = {
+  accounts: [
+    { id: ID.acme, key: "acme-corp", name: "Acme Corp", status: "active" },
+    { id: ID.kestrel, key: "kestrel-bank", name: "Kestrel Bank", status: "active" },
+    { id: ID.northpeak, key: "northpeak-logistics", name: "Northpeak Logistics", status: "active" },
+  ],
+  departments: [
+    { id: ID.leadership, key: "leadership", name: "Leadership" },
+    { id: ID.sales, key: "sales", name: "Sales" },
+  ],
+  groups: [{ id: ID.exec, key: "exec-staff", name: "Exec staff", members: 2 }],
+};
+
+const HANDBOOK: S["DocumentRef"] = {
+  id: ID.doc,
+  title: "Employee handbook",
+  display_ref: null,
+  source_name: "Halden Drive",
+  connector_type: "document_repository",
+  classification: "internal",
+};
+
+export const MEMBER_MAYA: S["MemberAccess"] = {
+  member: MEMBERS_PAGE.items[2]!,
+  version: "2026-09-29T08:00:00.123456Z",
+  is_self: false,
+  accounts: [
+    { id: ID.acme, name: "Acme Corp" },
+    { id: ID.northpeak, name: "Northpeak Logistics" },
+  ],
+  departments: [SALES],
+  groups: [
+    {
+      id: ID.exec,
+      origin: "admin",
+      name: "Exec staff",
+      connector_type: null,
+      members: [
+        { id: ID.grace, name: "Grace Whitfield" },
+        { id: ID.maya, name: "Maya Okafor" },
+      ],
+      editable: true,
+    },
+  ],
+  has_hidden_groups: true,
+  grants: [
+    {
+      id: ID.grant,
+      origin: "admin",
+      document: HANDBOOK,
+      created_at: "2026-09-16T10:00:00Z",
+      granted_by: "Lena Brandt",
+      reason: "Onboarding cover",
+      revocable: true,
+    },
+  ],
+  has_other_grants: true,
+};
+
+export const MEMBER_LENA_SELF: S["MemberAccess"] = {
+  member: MEMBERS_PAGE.items[1]!,
+  version: "2026-09-29T08:00:00Z",
+  is_self: true,
+  accounts: [],
+  departments: [],
+  groups: [],
+  has_hidden_groups: false,
+  grants: [],
+  has_other_grants: false,
+};
+
+export const PREVIEW_ADD_KESTREL: S["AccessPreview"] = {
+  effects: [{ kind: "account_added", before: null, after: null, subject: { id: ID.kestrel, name: "Kestrel Bank" } }],
+  documents_gained: 1,
+  documents_lost: 0,
+};
+
+export const PREVIEW_SUSPEND: S["AccessPreview"] = {
+  effects: [{ kind: "suspended", before: null, after: null, subject: null }],
+  documents_gained: 0,
+  documents_lost: 2,
+};
+
+export const DOCUMENTS: S["DocumentsPage"] = { items: [HANDBOOK] };
+
+export const EXPLANATION_DENIED: S["DocumentExplanation"] = {
+  document: HANDBOOK,
+  readable: false,
+  path: "none",
+  reasons: ["clearance_covers_sensitivity", "not_account_specific", "department_not_matched"],
+  via: [],
+};
+
+export const AUDIT: S["AuditPage"] = {
+  items: [
+    {
+      id: "a0d10000-0000-4000-8000-000000000002",
+      created_at: "2026-10-02T05:31:14Z",
+      action: "access.member_changed",
+      actor: { kind: "member", name: "Lena Brandt", operator: null },
+      reason: "Covering Kestrel during the renewal",
+      member: { id: ID.maya, name: "Maya Okafor" },
+      document: null,
+      effects: [{ kind: "account_added", before: null, after: null, subject: { id: ID.kestrel, name: "Kestrel Bank" } }],
+      details: [],
+    },
+    {
+      id: "a0d10000-0000-4000-8000-000000000001",
+      created_at: "2026-09-29T09:13:03Z",
+      action: "access.grant_created",
+      actor: { kind: "operator", name: null, operator: "admin-grants" },
+      reason: "Onboarding cover",
+      member: { id: ID.maya, name: "Maya Okafor" },
+      document: HANDBOOK,
+      effects: [],
+      details: [],
+    },
+  ],
+  next_before: null,
+};

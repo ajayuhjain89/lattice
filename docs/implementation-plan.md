@@ -6,8 +6,9 @@ of Phase 3). Phase 3 approved and merged to `main`. Phase 4 approved and merged 
 `main` (5e12616), with decisions D-10 and D-12 applied and D-11 recorded for Phase 6.
 **Phase 5 approved and merged to `main`** (78e5640, 2026-09-29; branch
 `phase/5-retrieval` kept for reference). **Phase 6** (dc0973c) and **Phase 7** (5fe873f)
-are merged. **Phase 8 is implemented on `phase/8-operational-polish` and awaits review**
-(not merged); its as-built notes follow the Phase 8 plan below. The Phase 5 closure added a local model, Gemini and the provider invocation
+are merged, and **Phase 8** (9fed350) is merged. **Phase 9 (access management and audit
+events) is implemented on `phase/9-access-management` and awaits review** (not merged);
+its plan and as-built notes follow Phase 8 below. The Phase 5 closure added a local model, Gemini and the provider invocation
 rule, and decided and implemented D-13 and D-14. The final closure (2026-09-29)
 removed the rejected cross-encoder experiment, resolved D-15 (deployment trust
 classes, migration 0007) and decided D-16's timing, and it froze retrieval.
@@ -887,11 +888,106 @@ objectives remain open.
 
 ---
 
+### Phase 9 — Access management and audit events
+
+The first phase after the slice (§4 "Later phases" row 9), plus the gap Phase 7 left
+for it: the Ask account picker and first-run scope line (Phase 7 contract observation
+3, design-system Part C).
+
+**Deliverables.**
+1. *Member scope (Ask).* `GET /v1/accounts`: the accounts the member may know exist
+   (`authz.visible_accounts_predicate`, the same set a scope may name) and their scope
+   kind. Ask gets the `Account` chip (only those accounts), the `Sources` chip narrowed
+   to source types with readable documents (`GET /v1/sources`), and the first-run scope
+   line ("You can search 3 sources · Acme Corp, Northpeak Logistics"); with no readable
+   source the composer is disabled (B13 "Empty knowledge base").
+2. *Access page (administrators).* Member directory (keyset pages, name/e-mail
+   filter); a member's access as plain sentences built from typed data (clearance,
+   account scope and assignments, departments, groups, explicit grants); a
+   source-synced (private) group exists for the administrator only if they are a member
+   of it, otherwise the member's access only acknowledges "private channels you aren't
+   in" (closure, below); grants on documents the administrator cannot read
+   acknowledged only as a yes/no; "check a document" (`authz.explain_for_reviewer`) over a search of
+   documents the administrator can read.
+3. *Changes with previews.* Clearance, account scope, account assignments,
+   departments, membership of administrator-defined groups, suspension/reactivation,
+   and administrator grants of one readable document to one member (and their
+   revocation). Every change: a preview first (effects as rules; document counts only
+   over documents the administrator can read), a stated reason, optimistic concurrency
+   (409 on a stale view), one transaction with its audit event. An administrator cannot
+   change their own access through the API. Source-synced groups and source grants stay
+   owned by the source (read-only).
+4. *Full `audit_events`.* `access.member_changed`, `access.grant_created`,
+   `access.grant_revoked`, written by the API, the seed (`operator:seed`) and
+   `lattice apply-admin-grants` (`operator:admin-grants`), next to the Phase 6 provider
+   events. `GET /v1/admin/audit-events` (keyset pages, newest first, no totals); targets
+   re-authorized for the viewing administrator at read time.
+5. *Database.* Migration 0012: the API role gets exactly the writes above (memberships'
+   status/clearance/scope columns, assignments, departments, admin-group members,
+   admin-origin membership grants, audit inserts), each limited by restrictive RLS
+   policies; `is_admin` stays unwritable by the API; an audit index.
+
+**Tests.** Persona sweep: `/v1/accounts` equals the reference `account_visible` for every
+persona of both organizations; scope with a hidden account refused like an unknown one.
+Access API: 403 for non-administrators whether or not the target exists; another
+organization's members, grants and events are 404 and never listed; previews count only
+administrator-readable documents (checked against the reference policy); unreadable
+granted documents and unnamed private channels never leak a title, name or count;
+every change writes exactly one audit event in the same transaction (and none when it
+fails); self-changes refused; stale versions refused; the database refuses source
+grants, source-group edits, `is_admin` and `removed` from the API role. Web: typed
+client, every state (loading, empty, error, 403, 404, 409, revoked capability),
+Playwright desktop and phone, axe.
+
+**Non-goals (later phases).** Creating, renaming or deleting groups, departments or
+accounts; changing `is_admin`; removing members or provisioning (SCIM, Phase 10 with
+OIDC); grants to departments or groups from the UI; time-bound grants; an end-user
+"why can I see this?" UI; the Accounts workspace (Phase 12); rate limits (Phase 10);
+audit retention and alerting (Phase 11).
+
+**Phase 9 as built.** Scope exactly as planned above; nothing from Phases 10–11 pulled
+forward.
+
+| Planned | As built | Why |
+| ------- | -------- | --- |
+| Member scope for Ask | `GET /v1/accounts` (`{account_scope, accounts: [{key, name}]}`, exactly `visible_accounts_predicate`); Ask's `Account` chip lists it, `Sources` offers only source types with a readable source, the intro shows "You can search N sources · …", the composer is disabled when nothing readable is indexed | Phase 7 contract observation 3, B13 |
+| Access page | `GET /v1/admin/access/members` (keyset by name, `q` filter, LIKE wildcards literal), `/directory` (accounts, departments, administrator-defined groups), `/members/{id}` (summary, version, groups with the §10 naming rule, grants on readable documents, `has_other_grants`), `/documents?q=` (documents the caller can read), `/members/{id}/documents/{doc}` (`explain_for_reviewer`); `/access`, `/access/members/{id}`, `/access/audit` pages | security-model §10 |
+| Changes with previews | `POST …/members/{id}/preview` (effects as rules; `documents_gained/lost` in one statement with the caller's predicate), `PATCH …/members/{id}` (version, reason; 409 stale, 403 own access, 422 `no_change` / `unknown` / `source_group` / `member_removed`), `POST …/members/{id}/grants` (201, 200 if it exists), `POST …/grants/{id}/revoke` (204; 422 `source_grant`). New error code `conflict` (409) | D-17, D-18 |
+| Full `audit_events` | `access.member_changed`, `access.grant_created`, `access.grant_revoked` from the API, the seed (`operator:seed`, provisioning and changes) and `apply-admin-grants` (`operator:admin-grants`); snapshots include the administrator flag; empty state is SQL NULL; `GET /v1/admin/audit-events` (keyset, no totals, documents named only while readable) | T3; D-19 |
+| Database | Migration 0012 (ADR-014): the API role's fenced writes; audit index. `authz` gains `resolve_member_context` and `proposed_context` in a new, unfingerprinted module: `POLICY_VERSION` stays `authz-2` | Least privilege in the database, not only in code |
+| `document_grants.granted_by` | Not built: the grant's audit event is the record (data-model §5) | It must outlive the grant and the granting membership |
+| — | Found and fixed during verification: duplicate fields and Python booleans in settings audit details; Radix returned focus only to its own trigger (dialogs now restore focus to their opener); the reason field's accessible name included its help text; a "can't read" explanation listed passing clauses too | Live API check, Playwright, component tests |
+| — (review closure, 2026-10-02) | Private groups an administrator isn't in are no longer returned anywhere (filtered in SQL: no name, member list, count or reference; `has_hidden_groups`; explanations say "a private channel you aren't in"); any non-administrator-defined group ID is refused as `unknown` (was `source_group`, which told a private group's ID from a missing one); the audit view omits events about documents the viewer can't read (`document_reference` removed from the contract). `tests/security/test_access_private_objects.py` | D-18 revised: existence, timing and count side channels |
+| Not built (later phases) | Group/department/account creation, `is_admin` changes, member removal and provisioning (Phase 10 with OIDC/SCIM), department or group grants from the UI, time-bound grants, trigger-enforced audit (Phase 10 review candidate, ADR-014), audit retention and alerting (Phase 11) | Phase boundaries |
+
+**Final Phase 9 verification (2026-10-02).** Clean clone of
+`phase/9-access-management` (d5275e8) with no external API key in the environment, in an
+isolated Compose project (`lattice-clean9`) on its own port with the development
+database stopped: `make setup`, `db-up`, `migrate` (0001–0012), `seed`,
+`check-db-role`, `lattice worker --once`, `dataset-lint`, `sync` twice (the second wrote
+nothing), `eval` (fake; R@10 0.512, unchanged; every security count 0), `eval-answer`
+(fake; every security count 0), `lint`, `typecheck` (mypy strict, 246 files),
+**1,884 backend tests**; `web-setup`, `web-check` (ESLint, Stylelint, TypeScript,
+**69 unit and component tests**), `web-build`, `web-e2e` (**84 Playwright tests**,
+desktop and phone, axe audits of every Access screen, five-width overflow checks).
+Secret scan of every commit on the branch: no key patterns; the real `.env` key appears
+nowhere. Against the real API (development database migrated to 0012, as Lena): member
+list, Maya's page (grants she holds on documents Lena can't read acknowledged only;
+the private channel then shown by `rec_…`, since withdrawn by the review closure), change preview (0 / 0 counted: Lena reads no
+Kestrel content) → apply → revert, grant → explanation → revoke, audit log; as Maya:
+the scope line, the account picker, a scoped Ask, and the administrator-only page with
+no admin request made. Those verification changes remain in the development database's
+audit log; Maya's access ended as the manifest defines it. Mutation check: not run (the
+policy is unchanged, `authz-2`); the new controls are pinned by the privilege, persona
+and side-channel tests.
+
+---
+
 ### Later phases (order to be revisited after the slice)
 
 | Phase | Theme | Notes |
 | ----- | ----- | ----- |
-| 9 | Access management UX + audit events | Explanations, change previews (counts only over admin-readable documents), admin grants, full `audit_events` (the provider and AI egress settings UI is Phase 7, D-16) |
+| 9 | Access management UX + audit events | **Built** (Phase 9 section above; awaiting review). Explanations, change previews (counts only over admin-readable documents), admin grants, full `audit_events` (the provider and AI egress settings UI is Phase 7, D-16) |
 | 10 | OIDC SSO + hardening | OIDC (D-1), rate limits, security headers review, dependency audit, threat-model review, pen-test style review of isolation |
 | 11 | Deployment + operations | Container images, single-region deploy, backups/PITR, migrations in CI/CD, retention jobs, alerting on `security_invariant_violated` |
 | 12 | Accounts workspace | Account timeline + scoped Ask (AM workflow) |
@@ -920,7 +1016,8 @@ make eval           # retrieval metrics + security checks as each persona (Phase
 Phase 7 added the web app (Node 22+, pnpm): `make web-setup`, `make web` (on :3000,
 proxying `/api` to `make api`), `make web-build`, `make web-check`, `make web-e2e`,
 `make api-contract`. Phase 8 added `make worker` (requested syncs, as `lattice_worker`;
-a database created earlier needs `make db-up db-bootstrap migrate` once).
+a database created earlier needs `make db-up db-bootstrap migrate` once). Phase 9 needs
+`make migrate` (0012) on an existing database.
 
 ## 6. Phase 1 traceability check
 
@@ -964,6 +1061,9 @@ a database created earlier needs `make db-up db-bootstrap migrate` once).
 | D-14 | Notice for a document superseded by one the reader cannot read | Phase 5 closure | **Decided and implemented:** drop any notice derived solely from an unreadable successor: no "newer document exists", no "may be outdated", no successor ID, count, title, timestamp, source or relationship. Readable ↔ readable explicit supersession is exposed; never inferred from age. Tests `test_successor_visibility.py` (the reader's whole result is identical with and without a hidden successor; losing access removes the link on the next request) | Product owner — decided |
 | D-15 | Deployment trust classes: how is inference outside the Lattice deployment governed, and what does "private" mean? | Final Phase 5 closure | **Decided (2026-09-29, ADR-011):** "private" has no security meaning. The classes are `local` (inside the deployment; own approval), `organization_controlled` (outside Lattice, on organization-controlled infrastructure: not allowed until the organization sets a ceiling, and needs an explicit record approval), `external_api` (third party: external level, approval, data use) and `unknown` (fail closed). A credential satisfies only the credential requirement. Implemented in migration 0007 and `providers.egress` | Product owner — decided |
 | D-16 | Organization-owned provider credentials (BYOK): when are the secret store, encryption at rest, rotation, revocation, masked admin UI and approval audit events built? | Final Phase 5 closure | **Decided (2026-09-29, timing only, ADR-011):** the Phase 6 backend builds the minimum organization-scoped provider configuration and secret abstraction (organization → provider configuration → trust class → provider/model → secret reference → invocation; secrets never in API responses, logs, traces, prompts or errors; rotation, replacement, revocation, disablement; environment variables stay as the development fallback). The Phase 7 frontend builds the admin UX (masked state, connection test, enable/disable, egress communication). Nothing in Phase 5 | Product owner + Engineering — decided |
+| D-17 | May an administrator change their own access through the Access page? | Phase 9 | **Decided (engineering default, Phase 9; for review): no.** Every change to the caller's own membership — including a grant to themselves — is refused (403 `own_access`); another administrator, the manifest or (Phase 10) the identity provider must do it. T3 stays detectable either way (audit log) | Product owner (review) |
+| D-18 | What does an administrator see of a member's grants on documents — and of private groups — the administrator cannot see? | Phase 9 | **Decided (Phase 9 review closure, 2026-10-02):** on the member page, one yes/no sentence for each (`has_other_grants`, `has_hidden_groups`) — never a list, count, title, name, member list or identifier, and nothing about them can be edited from there. The audit view (`GET /v1/admin/audit-events`) does **not list** an event whose target document the viewer cannot read now (filtered in SQL with the viewer's predicate, also for the keyset anchor), so such events change neither its result set nor its paging; the events stay in the database for operators. *(The first version listed them one by one by opaque `rec_…`; withdrawn as an existence, timing and count side channel.)* | Product owner — decided |
+| D-19 | Who is authoritative for a member's access when the manifest (later the IdP) and the Access page disagree? | Phase 9 | **Decided (Phase 9; for review):** provisioning. Re-running `make seed` makes members match the manifest and records `operator:seed` events, so a reverted UI change is visible, never silent. Revisit with SCIM/OIDC (Phase 10): which attributes the IdP owns and which Lattice owns | Product owner (review) |
 
 ## 8. Self-review log (Phase 0)
 

@@ -16,6 +16,9 @@ without any model involvement. Its public contract:
 * ``readable_document_classifications`` -- the classification of readable evidence
   documents, for the AI egress decision (Phase 6; aborts on anything unreadable).
 * ``summarize_context`` -- counts-only summary of a context for query traces.
+* ``resolve_member_context`` / ``proposed_context`` -- another member's context, as it
+  is or as a proposed change would make it, for access review (Phase 9). Never a
+  request's own context.
 * ``POLICY_VERSION``.
 
 Other modules import from ``lattice.authz`` only (never its submodules) and never
@@ -47,6 +50,7 @@ from lattice.authz.policy import (
     visible_document_account,
 )
 from lattice.authz.resolve import AuthorizationContextUnavailable, resolve_authorization_context
+from lattice.authz.review import proposed_context, resolve_member_context
 from lattice.authz.sql import readable_documents_predicate, visible_accounts_predicate
 from lattice.authz.summary import summarize_context
 
@@ -70,10 +74,12 @@ __all__ = [
     "explain_for_reviewer",
     "explain_own_access",
     "load_document_access",
+    "proposed_context",
     "readable",
     "readable_document_classifications",
     "readable_documents_predicate",
     "resolve_authorization_context",
+    "resolve_member_context",
     "summarize_context",
     "visible_accounts_predicate",
     "visible_document_account",

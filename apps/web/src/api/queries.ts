@@ -14,9 +14,9 @@ import {
   type QueryClientConfig,
 } from "@tanstack/react-query";
 
-import { api } from "./client";
+import { api, MEMBERS_PAGE } from "./client";
 import { isApiError } from "./errors";
-import type { AdminSourcesResponse, AskRequest } from "./types";
+import type { AdminSourcesResponse, AskRequest, MemberChange, MemberChangeRequest } from "./types";
 
 export const queryKeys = {
   me: ["me"] as const,
@@ -28,6 +28,13 @@ export const queryKeys = {
   sourceFailures: (id: string) => ["admin", "sources", id, "failures"] as const,
   activity: ["activity"] as const,
   adminActivity: ["admin", "activity"] as const,
+  accounts: ["accounts"] as const,
+  accessMembers: (q: string) => ["admin", "access", "members", q] as const,
+  accessDirectory: ["admin", "access", "directory"] as const,
+  accessMember: (id: string) => ["admin", "access", "member", id] as const,
+  accessDocuments: (q: string) => ["admin", "access", "documents", q] as const,
+  explanation: (member: string, doc: string) => ["admin", "access", "explanation", member, doc] as const,
+  audit: ["admin", "audit"] as const,
 };
 
 export const queryClientConfig: QueryClientConfig = {
@@ -141,6 +148,115 @@ export function useAdminActivity(enabled: boolean) {
     ...REAUTHORIZED,
   });
 }
+
+/** The accounts an Ask scope may name (GET /v1/accounts): the picker's only source. */
+export function useAccounts() {
+  return useQuery({ queryKey: queryKeys.accounts, queryFn: ({ signal }) => api.accounts(signal), ...REAUTHORIZED });
+}
+
+/* --- access management (administrators) ---------------------------------------------- */
+
+export function useAccessMembers(q: string, enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.accessMembers(q),
+    queryFn: ({ pageParam, signal }) => api.accessMembers(q, pageParam, signal),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next_after ?? undefined,
+    enabled,
+    ...REAUTHORIZED,
+  });
+}
+
+export function useAccessDirectory(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.accessDirectory,
+    queryFn: ({ signal }) => api.accessDirectory(signal),
+    enabled,
+    ...REAUTHORIZED,
+  });
+}
+
+export function useAccessMember(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.accessMember(id),
+    queryFn: ({ signal }) => api.accessMember(id, signal),
+    enabled,
+    ...REAUTHORIZED,
+  });
+}
+
+export function useAccessDocuments(q: string) {
+  return useQuery({
+    queryKey: queryKeys.accessDocuments(q),
+    queryFn: ({ signal }) => api.accessDocuments(q, signal),
+    enabled: q.trim().length >= 2,
+    ...REAUTHORIZED,
+  });
+}
+
+export function useExplanation(memberId: string, documentId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.explanation(memberId, documentId ?? ""),
+    queryFn: ({ signal }) => api.explainDocument(memberId, documentId as string, signal),
+    enabled: documentId !== null,
+    ...REAUTHORIZED,
+  });
+}
+
+export function usePreviewMember(id: string) {
+  return useMutation({ mutationFn: (change: MemberChange) => api.previewMember(id, change) });
+}
+
+/** Every access change refreshes the member, the directory listing and the audit trail. */
+function useAccessChanged(id: string) {
+  const client = useQueryClient();
+  return () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: queryKeys.accessMember(id) }),
+      client.invalidateQueries({ queryKey: ["admin", "access", "members"] }),
+      client.invalidateQueries({ queryKey: ["admin", "access", "explanation", id] }),
+      client.invalidateQueries({ queryKey: queryKeys.audit }),
+    ]);
+}
+
+export function useChangeMember(id: string) {
+  const client = useQueryClient();
+  const changed = useAccessChanged(id);
+  return useMutation({
+    mutationFn: (body: MemberChangeRequest) => api.changeMember(id, body),
+    onSuccess: (member) => client.setQueryData(queryKeys.accessMember(id), member),
+    onSettled: changed,
+  });
+}
+
+export function useGrant(memberId: string) {
+  const changed = useAccessChanged(memberId);
+  return useMutation({
+    mutationFn: ({ documentId, reason }: { documentId: string; reason: string }) => api.grant(memberId, documentId, reason),
+    onSettled: changed,
+  });
+}
+
+export function useRevokeGrant(memberId: string) {
+  const changed = useAccessChanged(memberId);
+  return useMutation({
+    mutationFn: ({ grantId, reason }: { grantId: string; reason: string }) => api.revokeGrant(grantId, reason),
+    onSettled: changed,
+  });
+}
+
+export function useAuditEvents(enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.audit,
+    queryFn: ({ pageParam, signal }) => api.auditEvents(pageParam, signal),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next_before ?? undefined,
+    enabled,
+    ...REAUTHORIZED,
+  });
+}
+
+export { MEMBERS_PAGE };
 
 export function useAsk() {
   return useMutation({ mutationFn: (body: AskRequest) => api.ask(body) });
