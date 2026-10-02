@@ -112,7 +112,10 @@ async def test_database_outage_reports_service_unavailable(app_client: AppFactor
 
 async def test_production_hides_api_docs_and_sets_hsts(app_client: AppFactory) -> None:
     async with app_client(
-        env=Environment.PRODUCTION, dev_auth_enabled=False, session_cookie_secure=True
+        env=Environment.PRODUCTION,
+        dev_auth_enabled=False,
+        session_cookie_secure=True,
+        public_url="https://lattice.example.com",
     ) as prod:
         for path in ("/docs", "/openapi.json", "/redoc"):
             assert (await prod.get(path)).status_code == 404

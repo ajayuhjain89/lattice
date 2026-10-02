@@ -65,6 +65,43 @@ def test_production_requires_secure_cookies() -> None:
         load_settings(env="production", database_url=APP_URL, session_cookie_secure=False)
 
 
+@pytest.mark.parametrize("public_url", [None, "http://lattice.example.com"])
+def test_production_requires_an_https_public_url(public_url: str | None) -> None:
+    with pytest.raises(ConfigurationError, match="LATTICE_PUBLIC_URL"):
+        load_settings(env="production", database_url=APP_URL, public_url=public_url)
+    assert (
+        load_settings(
+            env="production", database_url=APP_URL, public_url="https://lattice.example.com/"
+        ).web_origin
+        == "https://lattice.example.com"
+    )
+
+
+@pytest.mark.parametrize(
+    "public_url",
+    ["lattice.example.com", "https://lattice.example.com/app", "https://u:p@lattice.example.com"],
+)
+def test_public_url_must_be_an_origin(public_url: str) -> None:
+    with pytest.raises(ConfigurationError, match="LATTICE_PUBLIC_URL"):
+        load_settings(**VALID, public_url=public_url)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "rate_limit_ask_per_minute",
+        "rate_limit_ask_per_day",
+        "rate_limit_ask_concurrent",
+        "rate_limit_access_writes_per_minute",
+        "rate_limit_scim_per_minute",
+        "rate_limit_sign_in_per_minute",
+    ],
+)
+def test_no_rate_limit_can_be_turned_off(name: str) -> None:
+    with pytest.raises(ConfigurationError, match=f"LATTICE_{name.upper()}"):
+        load_settings(**VALID, **{name: 0})
+
+
 def test_idle_timeout_cannot_exceed_absolute_timeout() -> None:
     with pytest.raises(ConfigurationError, match="IDLE_TIMEOUT"):
         load_settings(

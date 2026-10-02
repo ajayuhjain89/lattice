@@ -27,6 +27,7 @@ from lattice.log import configure_logging
 from lattice.providers.factory import build_embedding_provider
 from lattice.providers.generation_factory import DefaultGenerationFactory
 from lattice.providers.secrets import EnvironmentSecretStore
+from lattice.ratelimit import ApiLimits
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -69,6 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.db = db
+    app.state.limits = ApiLimits.from_settings(db, settings)
     app.state.session_service = SessionService(
         db,
         SessionPolicy(

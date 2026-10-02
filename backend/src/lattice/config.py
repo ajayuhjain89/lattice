@@ -93,7 +93,39 @@ class Settings(BaseSettings):
     # the web app). Unset = no listener. Bind it to an internal interface only.
     metrics_address: str | None = None
 
+    # --- Rate limits (Phase 10; lattice.ratelimit) -----------------------------------------
+    # Every limit applies to every role (administrators included) and must be at least 1:
+    # none can be turned off. Asks per membership per minute / per day and in flight;
+    # access-management writes (and previews) per administrator per minute; SCIM requests
+    # per token per minute; pre-authentication requests (development sign-in, OIDC start
+    # and callback, failed SCIM authentication) per client address per minute, per process.
+    rate_limit_ask_per_minute: int = Field(default=10, ge=1, le=10_000)
+    rate_limit_ask_per_day: int = Field(default=500, ge=1, le=1_000_000)
+    rate_limit_ask_concurrent: int = Field(default=2, ge=1, le=100)
+    rate_limit_access_writes_per_minute: int = Field(default=60, ge=1, le=10_000)
+    rate_limit_scim_per_minute: int = Field(default=600, ge=1, le=100_000)
+    rate_limit_sign_in_per_minute: int = Field(default=30, ge=1, le=10_000)
+
+    # --- OIDC sign-in (Phase 10; ADR-015) ----------------------------------------------------
+    # The origin users reach Lattice at (the web app), e.g. https://lattice.example.com.
+    # OIDC redirect URIs are built from it: <public_url>/api/v1/auth/oidc/<key>/callback.
+    # Required (https) in production; defaults to the development web origin otherwise.
+    public_url: str | None = None
+    # Network bounds for identity provider calls (discovery, keys, token exchange).
+    oidc_http_timeout_seconds: float = Field(default=5.0, ge=0.5, le=30.0)
+
     _check_url = field_validator("database_url")(_require_asyncpg_url)
+
+    @field_validator("public_url")
+    @classmethod
+    def _check_public_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.rstrip("/")
+        scheme, sep, rest = value.partition("://")
+        if scheme not in ("http", "https") or not sep or not rest or "/" in rest or "@" in rest:
+            raise ValueError("must be an origin such as https://lattice.example.com (no path)")
+        return value
 
     @field_validator("metrics_address")
     @classmethod
@@ -118,6 +150,13 @@ class Settings(BaseSettings):
                 "LATTICE_QUERY_EMBEDDING=fake is a test double and is refused when "
                 "LATTICE_ENV=production"
             )
+        if self.env is Environment.PRODUCTION and not (
+            self.public_url and self.public_url.startswith("https://")
+        ):
+            raise ValueError(
+                "LATTICE_PUBLIC_URL must be set to the https:// origin of the web app when "
+                "LATTICE_ENV=production"
+            )
         if self.session_idle_timeout_minutes > self.session_absolute_timeout_minutes:
             raise ValueError(
                 "LATTICE_SESSION_IDLE_TIMEOUT_MINUTES must not exceed "
@@ -129,6 +168,10 @@ class Settings(BaseSettings):
     def dev_auth_active(self) -> bool:
         """Dev login is served only when enabled *and* outside production."""
         return self.dev_auth_enabled and self.env is not Environment.PRODUCTION
+
+    @property
+    def web_origin(self) -> str:
+        return self.public_url or "http://127.0.0.1:3000"
 
     @property
     def session_cookie_name(self) -> str:

@@ -64,6 +64,12 @@ def make_settings(**overrides: Any) -> Settings:
         "database_url": APP_URL,
         "dev_auth_enabled": True,
         "session_cookie_secure": False,
+        # Tests sign in and ask many times per test; the limits have their own tests
+        # (tests/test_rate_limits.py), which set them low.
+        "rate_limit_ask_per_minute": 1_000,
+        "rate_limit_ask_concurrent": 20,
+        "rate_limit_access_writes_per_minute": 1_000,
+        "rate_limit_sign_in_per_minute": 1_000,
     }
     values.update(overrides)
     return Settings(**values)

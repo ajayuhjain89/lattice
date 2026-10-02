@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request, Response, status
 
-from lattice.api.deps import AppSettings, CurrentPrincipal, Sessions
+from lattice.api.deps import AppSettings, CurrentPrincipal, Limits, Sessions, client_address
 from lattice.api.schemas import DevLoginRequest, MeResponse
 from lattice.config import Settings
 from lattice.errors import ErrorResponse
@@ -16,6 +16,7 @@ _ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorResponse},
     403: {"model": ErrorResponse},
     422: {"model": ErrorResponse},
+    429: {"model": ErrorResponse},
 }
 
 
@@ -55,7 +56,10 @@ async def dev_login(
     response: Response,
     settings: AppSettings,
     sessions: Sessions,
+    limits: Limits,
 ) -> MeResponse:
+    # Per client, before the identity is looked up: the same for any subject.
+    await limits.sign_in.hit(client_address(request))
     provider: DevIdentityProvider = request.app.state.dev_identity_provider
     identity = await provider.resolve(body.subject, body.organization)
     # Session rotation: never keep using a session that existed before sign-in.

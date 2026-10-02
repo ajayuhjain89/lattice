@@ -9,6 +9,7 @@ from lattice import metrics
 from lattice.config import Settings
 from lattice.errors import ErrorCode, LatticeError
 from lattice.identity.sessions import Principal, SessionService
+from lattice.ratelimit import ApiLimits
 
 
 def get_settings(request: Request) -> Settings:
@@ -39,6 +40,19 @@ async def get_principal(
     return principal
 
 
+def get_limits(request: Request) -> ApiLimits:
+    limits: ApiLimits = request.app.state.limits
+    return limits
+
+
+def client_address(request: Request) -> str | None:
+    """The peer address as the server sees it. Behind a reverse proxy, run uvicorn with
+    ``--proxy-headers --forwarded-allow-ips=<proxy>`` so this is the client's address
+    (runbook §7); a forwarded header from anyone else is ignored."""
+    return request.client.host if request.client else None
+
+
 CurrentPrincipal = Annotated[Principal, Depends(get_principal)]
 AppSettings = Annotated[Settings, Depends(get_settings)]
 Sessions = Annotated[SessionService, Depends(get_session_service)]
+Limits = Annotated[ApiLimits, Depends(get_limits)]

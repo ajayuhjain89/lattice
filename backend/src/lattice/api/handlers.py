@@ -7,6 +7,8 @@ Beyond ``LatticeError`` and validation errors:
   ``service_unavailable`` with ``Retry-After``, logged as ``db.unavailable`` with the
   exception type only. A SQL *bug* (a missing table, a constraint) stays a 500
   ``internal_error``: it is not transient, and retrying would not help.
+* **A rate limit is exhausted** (``lattice.ratelimit``): 429 ``rate_limited`` with
+  ``Retry-After`` in whole seconds.
 * **An authorization invariant tripped** (E4, or the classification re-check of the
   egress decision): 500 ``security_invariant_violated``. The ``authz`` module has
   already logged ``security.invariant_violated`` with the details; the response says
@@ -30,6 +32,7 @@ from lattice.authz import AuthorizationContextUnavailable, AuthorizationInvarian
 from lattice.config import Settings
 from lattice.errors import DEFAULT_MESSAGE, ErrorCode, ErrorDetail, LatticeError
 from lattice.log import log_event
+from lattice.ratelimit import RateLimited
 
 logger = logging.getLogger("lattice.http")
 
@@ -65,7 +68,8 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
         assert isinstance(exc, LatticeError)  # noqa: S101 - registered for this type only
         if isinstance(exc, AuthorizationContextUnavailable):
             metrics.AUTH_REJECTED.labels(reason="context_unavailable").inc()
-        response = error_response(exc, _request_id(request))
+        headers = {"Retry-After": str(exc.retry_after)} if isinstance(exc, RateLimited) else None
+        response = error_response(exc, _request_id(request), headers)
         if exc.code is ErrorCode.AUTHENTICATION_REQUIRED and (
             settings.session_cookie_name in request.cookies
         ):
