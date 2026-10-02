@@ -222,40 +222,17 @@ async def test_nothing_is_granted_or_revoked_beyond_what_the_administrator_can_r
     assert await _event_count(owner_db, org) == 0
 
 
-async def test_private_channels_are_named_only_for_their_members(
+async def test_a_private_channel_is_shown_only_to_its_members(
     client: httpx.AsyncClient, org: Org
 ) -> None:
     await sign_in(client, org, "lena")
     body = json.dumps((await client.get(f"/v1/admin/access/members/{org.members['maya']}")).json())
     assert CANARY not in body
     assert "acct-acme-private" not in body
+    assert str(org.groups["acct-acme-private"]) not in body
     await add_to_group(org, "acct-acme-private", "lena")
     named = json.dumps((await client.get(f"/v1/admin/access/members/{org.members['maya']}")).json())
     assert "acct-acme-private" in named
-
-
-async def test_explanations_name_a_private_channel_only_for_its_members(
-    client: httpx.AsyncClient, org: Org
-) -> None:
-    # The handbook, readable by Lena, granted to the private channel.
-    await org.execute(
-        "INSERT INTO document_grants (organization_id, document_id, principal_type, group_id, "
-        "origin) VALUES (:o, :d, 'group', :g, 'source')",
-        o=org.id,
-        d=org.documents["handbook"],
-        g=org.groups["acct-acme-private"],
-    )
-    await sign_in(client, org, "lena")
-    explained = (
-        await client.get(
-            f"/v1/admin/access/members/{org.members['maya']}/documents/{org.documents['handbook']}"
-        )
-    ).json()
-    [via] = explained["via"]
-    assert via["principal_type"] == "group"
-    assert via["name"] is None
-    assert via["reference"].startswith("rec_")
-    assert CANARY not in json.dumps(explained)
 
 
 # --- previews ----------------------------------------------------------------------------
@@ -326,8 +303,8 @@ async def test_preview_counts_only_changes_among_readable_documents(
 # --- audit -------------------------------------------------------------------------------
 
 
-async def test_audit_names_documents_only_while_the_viewer_can_read_them(
-    client: httpx.AsyncClient, org: Org
+async def test_an_event_leaves_the_audit_view_when_its_document_becomes_unreadable(
+    client: httpx.AsyncClient, org: Org, owner_db: Database
 ) -> None:
     await sign_in(client, org, "lena")
     created = await client.post(
@@ -338,19 +315,17 @@ async def test_audit_names_documents_only_while_the_viewer_can_read_them(
     assert created.status_code == 201
     [event] = (await client.get("/v1/admin/audit-events")).json()["items"]
     assert event["document"]["title"] == "Kestrel renewal notes"
-    assert event["document_reference"] is None
     # The document becomes confidential: Lena can no longer read it.
     await org.execute(
         "UPDATE documents SET sensitivity = 'confidential', title = :t WHERE id = :d",
         t=f"Kestrel renewal notes {CANARY}",
         d=org.documents["kestrel-notes"],
     )
-    [event] = (await client.get("/v1/admin/audit-events")).json()["items"]
-    assert event["document"] is None
-    assert event["document_reference"].startswith("rec_")
-    page = json.dumps((await client.get("/v1/admin/audit-events")).json())
-    assert CANARY not in page
-    assert str(org.documents["kestrel-notes"]) not in page
+    assert (await client.get("/v1/admin/audit-events")).json() == {
+        "items": [],
+        "next_before": None,
+    }
+    assert await _event_count(owner_db, org) == 1  # kept in the database
 
 
 async def test_every_change_writes_one_event_and_a_refused_one_writes_none(

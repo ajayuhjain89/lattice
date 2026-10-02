@@ -5,8 +5,9 @@ organization; the caller checks the administrator capability (E7).
 What an administrator may see here, and nothing more:
 
 * the member directory, accounts, departments and administrator-defined groups;
-* a source-synced group's name only when the viewer is a member of it, otherwise its
-  connector, an opaque reference and its members (needed to explain access);
+* a source-synced (private) group only when the viewer is a member of it; otherwise
+  nothing about it -- not its name, members, member count or any identifier -- only
+  that the member belongs to groups the viewer can't see;
 * a document only when the viewer can read it now (``authz.readable_documents_predicate``
   in the same statement); a member's grants on other documents are a yes/no, never a
   list or a count.
@@ -304,58 +305,51 @@ async def entity_names(
 async def group_views(
     session: AsyncSession, viewer: AuthorizationContext, wanted: Iterable[uuid.UUID]
 ) -> dict[uuid.UUID, GroupAccess]:
-    """Display of groups for ``viewer`` (security-model §10 "Access groups")."""
+    """The groups of ``wanted`` that ``viewer`` may know exist (security-model §10 "Access
+    groups"): administrator-defined groups, and source-synced groups the viewer is a
+    member of. Others are absent -- filtered in SQL, so nothing of them is read."""
     ids = sorted(set(wanted))
     if not ids:
         return {}
     org = viewer.organization_id
-    groups = await session.execute(
-        text(
-            "SELECT g.id, g.origin, g.name, g.external_ref, s.connector_type, s.opaque_ref_key "
-            "FROM access_groups g LEFT JOIN sources s ON s.organization_id = g.organization_id "
-            "AND s.id = g.source_id WHERE g.organization_id = :o AND g.id = ANY(:ids)"
-        ),
-        {"o": org, "ids": ids},
-    )
-    members: dict[uuid.UUID, list[Named]] = {}
-    for group_id, membership_id, name in await session.execute(
-        text(
-            "SELECT gm.group_id, m.id, u.display_name FROM access_group_members gm "
-            "JOIN memberships m ON m.organization_id = gm.organization_id "
-            "AND m.id = gm.membership_id JOIN users u ON u.id = m.user_id "
-            "WHERE gm.organization_id = :o AND gm.group_id = ANY(:ids) "
-            "ORDER BY lower(u.display_name), m.id"
-        ),
-        {"o": org, "ids": ids},
-    ):
-        members.setdefault(group_id, []).append(Named(id=membership_id, name=name))
-    views: dict[uuid.UUID, GroupAccess] = {}
-    for g in groups:
-        listed = members.get(g.id, [])
-        if g.origin == "admin":
-            views[g.id] = GroupAccess(
-                id=g.id,
-                origin="admin",
-                name=g.name,
-                connector_type=None,
-                reference=None,
-                members=listed,
-                editable=True,
-            )
-            continue
-        named = viewer.membership_id in {m.id for m in listed}
-        views[g.id] = GroupAccess(
-            id=g.id,
-            origin="source",
-            name=g.name if named else None,
-            connector_type=g.connector_type,
-            reference=None
-            if named or g.opaque_ref_key is None
-            else opaque_ref(bytes(g.opaque_ref_key), f"group:{g.external_ref}"),
-            members=listed,
-            editable=False,
+    groups = (
+        await session.execute(
+            text(
+                "SELECT g.id, g.origin, g.name, s.connector_type FROM access_groups g "
+                "LEFT JOIN sources s ON s.organization_id = g.organization_id "
+                "AND s.id = g.source_id WHERE g.organization_id = :o AND g.id = ANY(:ids) "
+                "AND (g.origin = 'admin' OR EXISTS (SELECT 1 FROM access_group_members v "
+                "WHERE v.organization_id = g.organization_id AND v.group_id = g.id "
+                "AND v.membership_id = :viewer))"
+            ),
+            {"o": org, "ids": ids, "viewer": viewer.membership_id},
         )
-    return views
+    ).all()
+    visible = [g.id for g in groups]
+    members: dict[uuid.UUID, list[Named]] = {}
+    if visible:
+        for group_id, membership_id, name in await session.execute(
+            text(
+                "SELECT gm.group_id, m.id, u.display_name FROM access_group_members gm "
+                "JOIN memberships m ON m.organization_id = gm.organization_id "
+                "AND m.id = gm.membership_id JOIN users u ON u.id = m.user_id "
+                "WHERE gm.organization_id = :o AND gm.group_id = ANY(:ids) "
+                "ORDER BY lower(u.display_name), m.id"
+            ),
+            {"o": org, "ids": visible},
+        ):
+            members.setdefault(group_id, []).append(Named(id=membership_id, name=name))
+    return {
+        g.id: GroupAccess(
+            id=g.id,
+            origin=g.origin,
+            name=g.name,
+            connector_type=g.connector_type if g.origin == "source" else None,
+            members=members.get(g.id, []),
+            editable=g.origin == "admin",
+        )
+        for g in groups
+    }
 
 
 # --- documents -------------------------------------------------------------------------
@@ -538,19 +532,19 @@ async def member_access(
             {"o": org, "m": membership_id},
         )
     ]
-    member_groups: Iterable[uuid.UUID] = (
-        await session.execute(
-            text(
-                "SELECT group_id FROM access_group_members "
-                "WHERE organization_id = :o AND membership_id = :m"
-            ),
-            {"o": org, "m": membership_id},
-        )
-    ).scalars()
-    groups = sorted(
-        (await group_views(session, viewer, member_groups)).values(),
-        key=lambda g: (g.origin != "admin", g.name is None, (g.name or "").lower(), g.id),
+    member_groups: list[uuid.UUID] = list(
+        (
+            await session.execute(
+                text(
+                    "SELECT group_id FROM access_group_members "
+                    "WHERE organization_id = :o AND membership_id = :m"
+                ),
+                {"o": org, "m": membership_id},
+            )
+        ).scalars()
     )
+    views = await group_views(session, viewer, member_groups)
+    groups = sorted(views.values(), key=lambda g: (g.origin != "admin", g.name.lower(), g.id))
     grant_rows = (await session.execute(_GRANTS_SQL, {"o": org, "m": membership_id})).all()
     refs = await readable_document_refs(session, viewer, [g.document_id for g in grant_rows])
     names = await actor_names(session, org, [g.actor for g in grant_rows if g.actor])
@@ -574,6 +568,7 @@ async def member_access(
         accounts=accounts,
         departments=departments,
         groups=groups,
+        has_hidden_groups=any(g not in views for g in member_groups),
         grants=grants,
         has_other_grants=any(g.document_id not in refs for g in grant_rows),
     )

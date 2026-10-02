@@ -12,8 +12,10 @@ Rules, checked in this order so that a refusal reveals nothing the caller may no
    deprovisioning, not an access change.
 5. A change carries the ``version`` the caller reviewed; a membership changed since is
    refused (409), so a preview is never applied to a different starting point.
-6. Referenced accounts, departments and groups must exist in the organization; a
-   source-synced group is refused (422 ``source_group``): its members follow the source.
+6. Referenced accounts, departments and administrator-defined groups must exist in the
+   organization (422 ``unknown``). A source-synced group is refused the same way, as
+   unknown: its members follow the source, and the answer must not tell a private
+   group's ID from a missing one.
 7. A grant names a document the *caller* can read (404 otherwise, identical to a missing
    document): administrators cannot grant -- or learn about -- what they cannot read.
 
@@ -117,21 +119,21 @@ async def _validate_references(
         if found != set(ids):
             raise _invalid(field, "unknown")
     if change.groups:
-        origins: dict[uuid.UUID, str] = dict(
+        # Administrator-defined groups only. Any other ID -- including a private group
+        # the caller may not know exists -- is refused identically, as unknown.
+        found_groups: set[uuid.UUID] = set(
             (
                 await session.execute(
                     text(
-                        "SELECT id, origin FROM access_groups "
-                        "WHERE organization_id = :o AND id = ANY(:ids)"
+                        "SELECT id FROM access_groups WHERE organization_id = :o "
+                        "AND origin = 'admin' AND id = ANY(:ids)"
                     ),
                     {"o": organization_id, "ids": list(set(change.groups))},
                 )
-            ).all()
+            ).scalars()
         )
-        if set(origins) != set(change.groups):
+        if found_groups != set(change.groups):
             raise _invalid("groups", "unknown")
-        if any(origin != "admin" for origin in origins.values()):
-            raise _invalid("groups", "source_group")
 
 
 async def _viewer(

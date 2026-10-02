@@ -60,7 +60,6 @@ async def explain_member_document(
                 GrantVia(
                     principal_type="membership",
                     name=members.get(f"member:{g.principal_id}"),
-                    reference=None,
                 )
             )
         elif g.principal_type == "department":
@@ -68,11 +67,12 @@ async def explain_member_document(
                 GrantVia(
                     principal_type="department",
                     name=departments.get(g.principal_id),
-                    reference=None,
                 )
             )
-        elif (group := groups.get(g.principal_id)) is not None:
-            via.append(GrantVia(principal_type="group", name=group.name, reference=group.reference))
+        else:
+            # A private group the viewer is not in: acknowledged, never identified.
+            group = groups.get(g.principal_id)
+            via.append(GrantVia(principal_type="group", name=group.name if group else None))
     return DocumentExplanation(
         document=ref,
         readable=explanation.readable,

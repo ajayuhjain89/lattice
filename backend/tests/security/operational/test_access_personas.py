@@ -113,6 +113,14 @@ async def test_administrators_see_access_only_through_what_they_can_read(
             m: await resolve_authorization_context(s, organization_id=org.id, membership_id=m)
             for m in members
         }
+        source_groups: dict[uuid.UUID, str] = dict(
+            (
+                await s.execute(text("SELECT id, name FROM access_groups WHERE origin = 'source'"))
+            ).all()
+        )
+        group_members = (
+            await s.execute(text("SELECT membership_id, group_id FROM access_group_members"))
+        ).all()
         my_groups: set[uuid.UUID] = set(
             (
                 await s.execute(
@@ -148,9 +156,13 @@ async def test_administrators_see_access_only_through_what_they_can_read(
         assert body["has_other_grants"] == any(
             m == member and not readable(viewer, access[d]) for m, d in membership_grants
         )
-        for group in body["groups"]:
-            if group["origin"] == "source":
-                assert (group["name"] is not None) == (uuid.UUID(group["id"]) in my_groups)
+        theirs = {g for m, g in group_members if m == member}
+        hidden = {g for g in theirs if g in source_groups and g not in my_groups}
+        assert {uuid.UUID(g["id"]) for g in body["groups"]} == theirs - hidden
+        assert body["has_hidden_groups"] == bool(hidden)
+        for group_id in hidden:
+            assert str(group_id) not in page.text
+            assert source_groups[group_id] not in page.text
         if member == admin:
             continue
         preview = await client.post(

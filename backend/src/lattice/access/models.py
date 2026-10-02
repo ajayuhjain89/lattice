@@ -5,11 +5,13 @@ rules behind the fields are security-model §10:
 
 * members, accounts, departments and administrator-defined groups are the
   administrator's directory (operational, not content);
-* a source-synced group is named only when the viewing administrator is a member of
-  it; otherwise ``name`` is ``None`` and ``reference`` is an opaque ``rec_…``;
+* a source-synced (private) group exists for the viewing administrator only if they are
+  a member of it. Otherwise nothing about it is returned -- no name, members, count or
+  identifier -- and a member's access says only that such membership exists
+  (``has_hidden_groups``);
 * a document appears (title, reference, source) only when the viewing administrator
   can read it now; a member's grants on other documents are not listed or counted
-  (``has_other_grants``);
+  (``has_other_grants``), and audit events about them are not listed at all;
 * document counts are computed only over documents the viewing administrator can read.
 """
 
@@ -100,11 +102,8 @@ class Directory(_Out):
 class GroupAccess(_Out):
     id: uuid.UUID
     origin: Origin
-    name: str | None = Field(
-        description="Null for a source-synced group the viewer is not a member of."
-    )
+    name: str
     connector_type: str | None = Field(description="The source's connector (source groups).")
-    reference: str | None = Field(description="Opaque reference of an unnamed source group.")
     members: list[Named]
     editable: bool = Field(description="Administrator-defined groups only.")
 
@@ -140,7 +139,13 @@ class MemberAccess(_Out):
     is_self: bool = Field(description="Your own membership: it cannot be changed here.")
     accounts: list[Named]
     departments: list[Named]
-    groups: list[GroupAccess]
+    groups: list[GroupAccess] = Field(
+        description="Administrator-defined groups, and synced groups you are a member of."
+    )
+    has_hidden_groups: bool = Field(
+        description="The member is in private groups you are not in (not named, listed, "
+        "counted or identified)."
+    )
     grants: list[GrantOut] = Field(description="Grants on documents you can read.")
     has_other_grants: bool = Field(
         description="The member has grants on documents you cannot read (not listed or counted)."
@@ -231,8 +236,9 @@ class DocumentsPage(_Out):
 
 class GrantVia(_Out):
     principal_type: Literal["membership", "department", "group"]
-    name: str | None = Field(description="Null for a source-synced group you are not in.")
-    reference: str | None
+    name: str | None = Field(
+        description="Null for a private group you are not in (nothing else is given)."
+    )
 
 
 class DocumentExplanation(_Out):
@@ -264,9 +270,9 @@ class AuditEventOut(_Out):
     actor: Actor
     reason: str
     member: NamedRef | None = Field(description="The member whose access changed.")
-    document: DocumentRef | None = Field(description="Only if you can read the document now.")
-    document_reference: str | None = Field(
-        description="Opaque reference of a document you cannot read."
+    document: DocumentRef | None = Field(
+        description="The target document. Events about documents you cannot read now are "
+        "not listed."
     )
     effects: list[AccessEffect]
     details: list[AuditDetail] = Field(description="Provider and egress settings events.")

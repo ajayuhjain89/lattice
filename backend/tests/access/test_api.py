@@ -118,14 +118,9 @@ async def test_member_access_describes_scope_groups_and_grants(
     assert maya["is_self"] is False
     assert [a["name"] for a in maya["accounts"]] == ["Acme Corp"]
     assert [d["name"] for d in maya["departments"]] == ["Sales"]
-    [channel] = maya["groups"]
-    # Lena is not in the private channel: no name, an opaque reference, its members.
-    assert channel["origin"] == "source"
-    assert channel["name"] is None
-    assert channel["reference"].startswith("rec_")
-    assert channel["connector_type"] == "document_repository"
-    assert [m["name"] for m in channel["members"]] == ["maya"]
-    assert channel["editable"] is False
+    # Lena is not in the private channel: it is only acknowledged.
+    assert maya["groups"] == []
+    assert maya["has_hidden_groups"] is True
     assert maya["grants"] == []
     assert maya["has_other_grants"] is False
     assert (await _member(client, org, "lena"))["is_self"] is True
@@ -136,9 +131,14 @@ async def test_a_synced_group_is_named_for_an_administrator_in_it(
 ) -> None:
     await add_to_group(org, "acct-acme-private", "lena")
     await sign_in(client, org, "lena")
-    [channel] = (await _member(client, org, "maya"))["groups"]
+    maya = await _member(client, org, "maya")
+    [channel] = maya["groups"]
     assert channel["name"].startswith("#acct-acme-private")
-    assert channel["reference"] is None
+    assert channel["origin"] == "source"
+    assert channel["connector_type"] == "document_repository"
+    assert [m["name"] for m in channel["members"]] == ["lena", "maya"]
+    assert channel["editable"] is False
+    assert maya["has_hidden_groups"] is False
 
 
 async def test_unknown_member_is_not_found(client: httpx.AsyncClient, org: Org) -> None:
@@ -221,8 +221,9 @@ async def test_a_change_is_applied_audited_and_versioned(
     assert after["version"] != before["version"]
     assert after["member"]["clearance"] == "confidential"
     assert [a["name"] for a in after["accounts"]] == ["Acme Corp", "Kestrel Bank"]
-    # Administrator group added; the synced channel kept as it was.
-    assert sorted(g["origin"] for g in after["groups"]) == ["admin", "source"]
+    # Administrator group added; the private channel (hidden from Lena) kept as it was.
+    assert [g["origin"] for g in after["groups"]] == ["admin"]
+    assert after["has_hidden_groups"] is True
     [event] = await _events(owner_db, org)
     assert event["actor"] == f"member:{org.members['lena']}"
     assert event["action"] == "access.member_changed"
@@ -256,9 +257,7 @@ async def test_change_refusals(client: httpx.AsyncClient, org: Org, owner_db: Da
 
     assert issue(await patch("maya", clearance="internal")) == "no_change"
     assert issue(await patch("maya", accounts=[str(uuid.uuid4())])) == "unknown"
-    assert (
-        issue(await patch("maya", groups=[str(org.groups["acct-acme-private"])])) == "source_group"
-    )
+    assert issue(await patch("maya", groups=[str(org.groups["acct-acme-private"])])) == "unknown"
     own = await patch("lena", clearance="confidential")
     assert own.status_code == 403
     assert own.json()["error"]["details"] == [{"field": "membership", "issue": "own_access"}]
@@ -326,7 +325,7 @@ async def test_grant_and_revoke_a_readable_document(
     assert again.json()["id"] == grant["id"]
     explained = (await _explain(client, org, "maya", "kestrel-notes")).json()
     assert (explained["readable"], explained["path"]) == (True, "grant")
-    assert explained["via"] == [{"principal_type": "membership", "name": "maya", "reference": None}]
+    assert explained["via"] == [{"principal_type": "membership", "name": "maya"}]
     assert [g["id"] for g in (await _member(client, org, "maya"))["grants"]] == [grant["id"]]
 
     revoked = await client.post(

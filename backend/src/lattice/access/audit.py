@@ -10,20 +10,24 @@ The Phase 6 provider and egress events (``provider.*``, ``credential.*``,
 Actors: ``member:<membership id>`` (the API), ``operator:seed``,
 ``operator:admin-grants`` and the CLI's own operator actors.
 
-Reading (``audit_page``): newest first, keyset pages, no totals. Each event is shown to
-the viewing administrator as it is *now* allowed: a document by title only if they can
-read it now, otherwise its opaque reference; names of members, accounts, departments
-and administrator-defined groups (their directory), or ``None`` once deleted.
+Reading (``audit_page``): newest first, keyset pages, no totals. An event that targets a
+document is listed only while the viewing administrator can read that document --
+decided in SQL with their own predicate, for the page and for the keyset anchor alike,
+so events about other documents change neither the result set nor its paging (no
+count, timing or existence signal). The events stay in the database. Names of members,
+accounts, departments and administrator-defined groups (the directory) are resolved at
+read time, ``None`` once deleted.
 """
 
 import json
 import uuid
 from typing import Any, Final
 
-from sqlalchemy import null, select, tuple_
+from sqlalchemy import ColumnElement, Text, cast, exists, null, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lattice.access.directory import (
+    DOCUMENTS,
     AccessSnapshot,
     actor_names,
     entity_names,
@@ -37,7 +41,7 @@ from lattice.access.models import (
     NamedRef,
 )
 from lattice.access.preview import effects
-from lattice.authz import AuthorizationContext
+from lattice.authz import AuthorizationContext, readable_documents_predicate
 from lattice.tracing.models import AuditEvent
 
 MAX_AUDIT_PAGE: Final = 100
@@ -122,16 +126,31 @@ def _details(target: dict[str, Any], before: Any, after: Any) -> list[AuditDetai
     return found
 
 
+def _visible_to(viewer: AuthorizationContext) -> ColumnElement[bool]:
+    """Events without a target document, or whose document ``viewer`` can read now."""
+    document_id = AuditEvent.target["document_id"].astext
+    readable = exists(
+        select(1).where(
+            DOCUMENTS.c.organization_id == viewer.organization_id,
+            cast(DOCUMENTS.c.id, Text) == document_id,
+            readable_documents_predicate(viewer, DOCUMENTS),
+        )
+    )
+    return or_(document_id.is_(None), readable)
+
+
 async def audit_page(
     session: AsyncSession, viewer: AuthorizationContext, *, limit: int, before: uuid.UUID | None
 ) -> AuditPage:
     org = viewer.organization_id
-    query = select(AuditEvent).where(AuditEvent.organization_id == org)
+    visible = _visible_to(viewer)
+    query = select(AuditEvent).where(AuditEvent.organization_id == org, visible)
     if before is not None:
+        # An anchor the viewer may not see is treated as absent, like a missing one.
         anchor = (
             await session.execute(
                 select(AuditEvent.created_at, AuditEvent.id).where(
-                    AuditEvent.organization_id == org, AuditEvent.id == before
+                    AuditEvent.organization_id == org, AuditEvent.id == before, visible
                 )
             )
         ).one_or_none()
@@ -177,16 +196,13 @@ async def audit_page(
         )
         member = None
         document = None
-        reference = None
         found_effects = []
         details: list[AuditDetail] = []
         if e.action.startswith("access."):
             if (m := _uuid(e.target.get("membership_id"))) is not None:
                 member = NamedRef(id=m, name=member_names.get(f"member:{m}"))
             if (d := _uuid(e.target.get("document_id"))) is not None:
-                document = refs.get(d)
-                if document is None:
-                    reference = str(e.target.get("reference") or "") or None
+                document = refs.get(d)  # readable: the query listed only such events
             if e.action == MEMBER_CHANGED:
                 after = _snapshot(e.after)
                 if after is not None:
@@ -202,7 +218,6 @@ async def audit_page(
                 reason=e.reason,
                 member=member,
                 document=document,
-                document_reference=reference,
                 effects=found_effects,
                 details=details,
             )
