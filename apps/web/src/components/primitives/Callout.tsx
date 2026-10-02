@@ -2,7 +2,12 @@ import type { ReactNode } from "react";
 
 import styles from "./Callout.module.css";
 
-export type CalloutTone = "neutral" | "plain" | "info" | "warning" | "error" | "conflict";
+/**
+ * neutral: a well-tinted region with an ink margin bar · plain: a margin bar only ·
+ * time / fault / disagreement: the signal's tint and margin bar · boundary: hatched.
+ * A tinted callout exists only for a real state, and at most one is above the fold.
+ */
+export type CalloutTone = "neutral" | "plain" | "time" | "fault" | "disagreement" | "boundary";
 
 export interface CalloutProps {
   tone: CalloutTone;
@@ -16,7 +21,7 @@ export interface CalloutProps {
   id?: string;
 }
 
-/** A tinted container that exists only for a real state (design-system §A3). */
+/** A region that exists only for a real state (design-direction §6.10). */
 export function Callout({ tone, label, icon, children, labelAs: Label = "p", role, id, ...rest }: CalloutProps) {
   const labelId = id ? `${id}-label` : undefined;
   return (

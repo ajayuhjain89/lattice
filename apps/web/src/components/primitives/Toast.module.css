@@ -1,0 +1,96 @@
+.viewport {
+  position: fixed;
+  z-index: var(--z-toast);
+  inset: auto auto var(--space-4) 50%;
+  transform: translateX(-50%);
+  display: grid;
+  gap: var(--space-2);
+  width: min(26rem, calc(100vw - 2 * var(--space-4)));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  outline: none;
+}
+
+.toast {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-inverse);
+  color: var(--text-inverse);
+  box-shadow: var(--elevation-overlay);
+  animation: arrive var(--motion-arrive) var(--ease);
+}
+
+.toast[data-state="closed"] {
+  animation: leave var(--motion-base) var(--ease) forwards;
+}
+
+.toast[data-swipe="move"] {
+  transform: translateY(var(--radix-toast-swipe-move-y));
+}
+
+.body {
+  display: grid;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.title {
+  font-weight: 600;
+}
+
+.description {
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+  opacity: 0.86;
+}
+
+.close {
+  display: grid;
+  place-items: center;
+  width: var(--control-sm);
+  height: var(--control-sm);
+  border-radius: var(--radius-sm);
+  color: inherit;
+}
+
+.close:hover {
+  background: var(--surface-inverse-hover);
+}
+
+.close:focus-visible,
+.toast:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes leave {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .toast[data-state="closed"] {
+    animation: none;
+  }
+}
+
+/* Phones: clear of the bottom navigation and the home indicator. */
+@media (width < 768px) {
+  .viewport {
+    bottom: calc(var(--space-16) + env(safe-area-inset-bottom));
+  }
+}

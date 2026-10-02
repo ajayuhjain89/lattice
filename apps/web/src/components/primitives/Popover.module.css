@@ -1,0 +1,35 @@
+.content {
+  z-index: var(--z-popover);
+  display: grid;
+  gap: var(--space-3);
+  max-width: min(24rem, calc(100vw - 2 * var(--space-4)));
+  max-height: min(70dvh, 32rem);
+  overflow-y: auto;
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface-sheet);
+  box-shadow: var(--elevation-overlay);
+  animation: appear var(--motion-base) var(--ease);
+}
+
+.content[data-width="sm"] {
+  width: 16rem;
+}
+
+.content[data-width="md"] {
+  width: 22rem;
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content {
+    animation: none;
+  }
+}

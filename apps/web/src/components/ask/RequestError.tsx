@@ -30,7 +30,7 @@ export function RequestError({
   const limited = error.isRateLimited;
   return (
     <Callout
-      tone="error"
+      tone="fault"
       label={network ? "Connection" : limited ? "Limit" : "Error"}
       icon={<Icon as={network ? WifiOff : limited ? Hourglass : AlertTriangle} />}
       role="alert"

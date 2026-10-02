@@ -1,0 +1,35 @@
+.trail {
+  composes: t-meta from global;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-0-5) 0;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.segment {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The chevron is drawn, not written, so it isn't read out between segments. */
+.segment + .segment::before {
+  content: "›" / "";
+  padding: 0 var(--space-2);
+  color: var(--text-muted);
+}
+
+.verified {
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--signal-provenance-text);
+  font-weight: 500;
+}
+
+.verified svg {
+  flex: none;
+}

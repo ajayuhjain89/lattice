@@ -3,6 +3,7 @@
 import { memo } from "react";
 
 import { useWorkspace } from "@/components/shell/workspace-context";
+import { ExhibitButton } from "@/components/primitives/ExhibitMarker";
 import { Tooltip } from "@/components/primitives/Tooltip";
 import type { NumberedCitation, RenderClaim } from "@/lib/answer-model";
 import { documentKindLabel, formatDay } from "@/lib/format";
@@ -50,16 +51,7 @@ export const CitationChip = memo(function CitationChip({ evidenceId, number }: {
   const label = item ? `Citation ${number}: ${item.display_ref ?? item.title}${date ? `, ${date}` : ""}` : `Citation ${number}`;
 
   const chip = (
-    <button
-      type="button"
-      className={styles.chip}
-      aria-label={label}
-      aria-pressed={selected}
-      data-citation={number}
-      onClick={(e) => open(evidenceId, e.currentTarget)}
-    >
-      {number}
-    </button>
+    <ExhibitButton n={number} selected={selected} aria-label={label} data-citation={number} onClick={(e) => open(evidenceId, e.currentTarget)} />
   );
   if (!item) return chip;
   return (

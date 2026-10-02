@@ -109,7 +109,7 @@ export const AnswerView = memo(function AnswerView(props: AnswerViewProps) {
         (hasProse ? (
           <Prose />
         ) : (
-          <Callout tone="info" label="Answer withheld" icon={<Icon as={Info} />}>
+          <Callout tone="neutral" label="Answer withheld" icon={<Icon as={Info} />}>
             <p>
               Lattice couldn&apos;t match this answer&apos;s statements to the evidence it returned, so none are shown.
               Review the evidence below.

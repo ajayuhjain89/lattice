@@ -7,7 +7,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { CONTRAST_PAIRS } from "../src/styles/contrast-pairs";
 
-import { expectNoHorizontalOverflow, openAsk, WIDTHS } from "./helpers";
+import { WIDTHS, expectNoHorizontalOverflow, openAsk, settled } from "./helpers";
 import { mockApi } from "./mock-api";
 
 const FAMILIES = ["Lattice Record", "Lattice Interface", "Lattice Ledger"];
@@ -102,7 +102,8 @@ for (const theme of ["Light (shipped)", "Dark map"]) {
     const ledger = page.getByTestId("contrast-ledger");
     await expect(ledger.getByText("Fail", { exact: true })).toHaveCount(0);
     await expect(ledger.getByText("Pass", { exact: true })).toHaveCount(CONTRAST_PAIRS.length);
-    const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
+    await settled(page);
+  const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
     expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
   });
 }

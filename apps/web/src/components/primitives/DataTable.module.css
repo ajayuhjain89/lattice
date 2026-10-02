@@ -1,0 +1,249 @@
+.wrap {
+  --row-min: var(--row-height);
+  --cell-pad-y: var(--space-3);
+
+  min-width: 0;
+}
+
+.wrap[data-density="dense"] {
+  --row-min: var(--row-height-dense);
+  --cell-pad-y: var(--space-2);
+}
+
+.scroll {
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.caption {
+  composes: t-section from global;
+
+  padding-bottom: var(--space-2);
+  text-align: left;
+}
+
+.th {
+  composes: t-caption from global;
+
+  height: var(--row-height-dense);
+  padding: 0 var(--space-4) 0 0;
+  border-bottom: var(--border-width) solid var(--rule-ink);
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-align: left;
+  vertical-align: bottom;
+  padding-bottom: var(--space-2);
+  white-space: nowrap;
+}
+
+.row {
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.interactive {
+  transition: background-color var(--motion-quick) var(--ease);
+}
+
+.interactive:hover {
+  background: var(--surface-well);
+}
+
+.open {
+  border-bottom-color: transparent;
+}
+
+.cell {
+  height: var(--row-min);
+  padding: var(--cell-pad-y) var(--space-4) var(--cell-pad-y) 0;
+  vertical-align: top;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.th:last-child,
+.cell:last-child {
+  padding-right: 0;
+}
+
+.end {
+  text-align: right;
+}
+
+.mono .value {
+  font-family: var(--font-ledger);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-body-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.primary .value {
+  font-weight: 600;
+}
+
+.stackLabel {
+  display: none;
+}
+
+.value {
+  display: block;
+  min-width: 0;
+}
+
+.placeholder {
+  display: block;
+  height: 8px;
+  margin-top: var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--surface-well-strong);
+}
+
+.expansion {
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.expansionCell {
+  padding: 0 0 var(--space-4);
+}
+
+.empty {
+  padding: var(--space-2) 0;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+}
+
+/* Sticky name column while the table scrolls inside itself. */
+.primary {
+  position: sticky;
+  left: 0;
+  z-index: var(--z-sticky);
+  background: var(--surface-paper);
+}
+
+.interactive:hover .primary {
+  background: var(--surface-well);
+}
+
+/* Stacked: each row is a block of label/value pairs; the name is its heading. Semantics
+   come from the explicit roles, and the column headers stay for assistive tech. */
+@media (width < 1024px) {
+  .wrap[data-stack="1024"] .head {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .wrap[data-stack="1024"] .table,
+  .wrap[data-stack="1024"] .caption,
+  .wrap[data-stack="1024"] tbody,
+  .wrap[data-stack="1024"] .row,
+  .wrap[data-stack="1024"] .expansion {
+    display: block;
+  }
+
+  .wrap[data-stack="1024"] .row {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-3) 0;
+  }
+
+  .wrap[data-stack="1024"] .cell {
+    display: grid;
+    grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+    gap: var(--space-3);
+    height: auto;
+    padding: 0;
+    text-align: left;
+  }
+
+  .wrap[data-stack="1024"] .primary {
+    position: static;
+    display: block;
+    background: none;
+  }
+
+  .wrap[data-stack="1024"] .stackLabel {
+    display: block;
+    color: var(--text-muted);
+    font-size: var(--type-caption-size);
+    line-height: var(--type-body-line);
+  }
+
+  .wrap[data-stack="1024"] .empty,
+  .wrap[data-stack="1024"] .expansionCell {
+    display: block;
+  }
+}
+
+@media (width < 768px) {
+  .wrap[data-stack="768"] .head {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .wrap[data-stack="768"] .table,
+  .wrap[data-stack="768"] .caption,
+  .wrap[data-stack="768"] tbody,
+  .wrap[data-stack="768"] .expansion {
+    display: block;
+  }
+
+  .wrap[data-stack="768"] .row {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-3) 0;
+  }
+
+  .wrap[data-stack="768"] .cell {
+    display: grid;
+    grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
+    gap: var(--space-3);
+    height: auto;
+    padding: 0;
+    text-align: left;
+  }
+
+  .wrap[data-stack="768"] .primary {
+    position: static;
+    display: block;
+    background: none;
+  }
+
+  .wrap[data-stack="768"] .stackLabel {
+    display: block;
+    color: var(--text-muted);
+    font-size: var(--type-caption-size);
+    line-height: var(--type-body-line);
+  }
+
+  .wrap[data-stack="768"] .empty,
+  .wrap[data-stack="768"] .expansionCell {
+    display: block;
+  }
+}
+
+/* Narrow phones: labels sit above their values. */
+@media (width < 480px) {
+  .wrap:not([data-stack="never"]) .cell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}

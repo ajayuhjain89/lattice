@@ -3,10 +3,11 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { AMBIGUOUS, ANSWERED, EV, EVIDENCE_ONLY, FAILED, ID, INSUFFICIENT, ME_LENA, PARTIAL, SUPERSEDED, TRACE, UNSUPPORTED } from "../src/test/fixtures";
 
-import { askFor, openAsk } from "./helpers";
+import { askFor, openAsk, settled } from "./helpers";
 import { mockApi } from "./mock-api";
 
 async function audit(page: Page) {
+  await settled(page);
   const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
   const summary = result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`);
   expect(summary).toEqual([]);

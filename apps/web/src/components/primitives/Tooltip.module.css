@@ -1,6 +1,6 @@
 .content {
   z-index: var(--z-popover);
-  max-width: 280px;
+  max-width: 18rem;
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   background: var(--surface-inverse);

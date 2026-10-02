@@ -36,3 +36,8 @@ export async function expectNoHorizontalOverflow(page: Page) {
   });
   expect(overflow, `horizontal page overflow (px): ${culprits.join(" | ")}`).toBeLessThanOrEqual(0);
 }
+
+/** Wait for running CSS animations to settle, so contrast is measured on final colours. */
+export async function settled(page: Page) {
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity));
+}

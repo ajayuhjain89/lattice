@@ -1,0 +1,96 @@
+.state {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  max-width: calc(var(--measure) + var(--space-8));
+  padding: var(--space-6) 0;
+  min-width: 0;
+}
+
+.compact {
+  padding: 0;
+}
+
+.label {
+  composes: t-section from global;
+
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  flex: none;
+}
+
+.heading {
+  composes: t-subtitle from global;
+
+  overflow-wrap: break-word;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-3);
+  color: var(--text-secondary);
+  max-width: var(--measure);
+}
+
+.reference {
+  composes: t-meta from global;
+
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* Boundary: the hatched square glyph; the block stays on paper. */
+.boundary .icon {
+  color: var(--text-primary);
+}
+
+/* Fault and wait: a margin bar in the signal, the label in its text colour. */
+.fault,
+.wait {
+  padding-left: var(--space-4);
+  border-left: 3px solid var(--state-mark);
+}
+
+.fault {
+  --state-mark: var(--signal-fault-mark);
+}
+
+.wait {
+  --state-mark: var(--signal-time-mark);
+}
+
+.fault .label {
+  color: var(--signal-fault-text);
+}
+
+.wait .label {
+  color: var(--signal-time-text);
+}
+
+.fault.compact,
+.wait.compact {
+  padding-left: var(--space-3);
+}
+
+@media (forced-colors: active) {
+  .fault,
+  .wait {
+    border-left-color: CanvasText;
+  }
+}

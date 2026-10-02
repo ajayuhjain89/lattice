@@ -167,7 +167,7 @@ function NewQuestionButton({ target, onFocus }: { target: React.RefObject<HTMLDi
   return createPortal(
     <Button
       size="lg"
-      variant="ghost"
+      variant="quiet"
       icon={<Icon as={Plus} />}
       onClick={() => {
         target.current?.scrollIntoView({ block: "start" });

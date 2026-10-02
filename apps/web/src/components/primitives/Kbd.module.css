@@ -1,0 +1,15 @@
+.kbd {
+  composes: t-meta from global;
+
+  display: inline-grid;
+  place-items: center;
+  min-width: var(--control-xs);
+  height: var(--control-xs);
+  padding: 0 var(--space-1);
+  border: var(--border-width) solid var(--rule-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sheet);
+  color: var(--text-secondary);
+  font-size: var(--type-mark-size);
+}

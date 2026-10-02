@@ -1,6 +1,6 @@
 .line {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
+  grid-template-columns: var(--icon-size) minmax(0, 1fr);
   gap: var(--space-2);
   align-items: start;
   font-size: var(--type-body-size);
@@ -15,30 +15,49 @@
   color: var(--notice-icon);
 }
 
-.info {
-  --notice-icon: var(--text-secondary);
-}
-
-.warning {
-  --notice-icon: var(--signal-time-text);
+.text {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .neutral {
   --notice-icon: var(--text-primary);
 }
 
-.conflict {
+.disagreement {
   --notice-icon: var(--signal-disagreement-text);
 }
 
-.text {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
+/* Stale evidence: the one tinted notice. */
+.time {
+  --notice-icon: var(--signal-time-text);
 
-.boxed {
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--signal-time-mark);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   background: var(--signal-time-tint);
   color: var(--signal-time-text);
+}
+
+/* Kept on the other side of a boundary: a hatched leading edge. */
+.boundary {
+  --notice-icon: var(--text-primary);
+
+  position: relative;
+  padding-left: calc(var(--space-2) + var(--space-3));
+}
+
+.boundary::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--space-2);
+  border-right: var(--border-width) dashed var(--boundary-edge);
+  background-image: var(--boundary-hatch);
+}
+
+@media (forced-colors: active) {
+  .boundary::before {
+    background-image: none;
+  }
 }

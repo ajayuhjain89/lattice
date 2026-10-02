@@ -1,0 +1,34 @@
+.meter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.steps {
+  display: inline-flex;
+  gap: var(--space-0-5);
+}
+
+.on,
+.off {
+  width: 8px;
+  height: 10px;
+  border: var(--border-width) solid var(--text-secondary);
+  border-radius: 1px;
+}
+
+.on {
+  background: var(--text-secondary);
+}
+
+@media (forced-colors: active) {
+  .on {
+    background: CanvasText;
+  }
+
+  .on,
+  .off {
+    border-color: CanvasText;
+  }
+}

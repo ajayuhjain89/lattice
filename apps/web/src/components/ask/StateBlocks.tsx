@@ -70,7 +70,7 @@ export function NoEvidenceState({ answer, request, accountName }: { answer: Answ
 export function EvidenceFirstState({ answer }: { answer: Answer }) {
   const p = presentStatus(answer.status, answer.status_reason);
   return (
-    <Callout tone="info" label={p.reasonLabel ?? p.label} icon={<Icon as={Info} />} labelAs="p" aria-labelledby="state-heading">
+    <Callout tone="neutral" label={p.reasonLabel ?? p.label} icon={<Icon as={Info} />} labelAs="p" aria-labelledby="state-heading">
       <h2 className={styles.heading} id="state-heading">
         {p.heading}
       </h2>
@@ -139,7 +139,7 @@ export function UnsupportedState({ answer }: { answer: Answer }) {
 export function FailedState({ answer, onRetry, pending }: { answer: Answer; onRetry: () => void; pending: boolean }) {
   const p = presentStatus(answer.status, answer.status_reason);
   return (
-    <Callout tone="error" label={p.reasonLabel ?? p.label} icon={<Icon as={XCircle} />} role="alert" aria-labelledby="state-heading">
+    <Callout tone="fault" label={p.reasonLabel ?? p.label} icon={<Icon as={XCircle} />} role="alert" aria-labelledby="state-heading">
       <h2 className={styles.heading} id="state-heading">
         {p.heading}
       </h2>

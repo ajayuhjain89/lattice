@@ -335,7 +335,7 @@ function SourceFailures({ s, open, onToggle }: { s: AdminSource; open: boolean; 
             ))}
           </span>
         </span>
-        <Button size="sm" variant="ghost" aria-expanded={open} aria-controls={panel} onClick={onToggle}>
+        <Button size="sm" variant="quiet" aria-expanded={open} aria-controls={panel} onClick={onToggle}>
           {open ? "Hide records" : "Show records"}
         </Button>
       </div>

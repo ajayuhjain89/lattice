@@ -1,0 +1,111 @@
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.rowLabel {
+  composes: t-caption from global;
+
+  padding-top: var(--space-2);
+  color: var(--text-muted);
+}
+
+.rowBody {
+  min-width: 0;
+}
+
+@media (width < 768px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .rowLabel {
+    padding-top: 0;
+  }
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  gap: var(--space-5) var(--space-6);
+  align-items: start;
+}
+
+.narrow {
+  display: inline-flex;
+  max-width: 10rem;
+}
+
+.chips {
+  display: inline-flex;
+  gap: calc(var(--space-1) + var(--space-0-5));
+  white-space: nowrap;
+}
+
+.caption {
+  composes: t-caption from global;
+
+  color: var(--text-secondary);
+}
+
+.latticeDemo {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-8);
+  align-items: start;
+}
+
+@media (width < 768px) {
+  .latticeDemo {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+}
+
+.claims {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.claims li {
+  display: grid;
+  grid-template-columns: var(--margin-col) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  border-radius: var(--radius-xs);
+  transition: background-color var(--motion-quick) var(--ease);
+}
+
+.claimLit {
+  background: var(--signal-provenance-tint);
+}
+
+.claimMarkers {
+  display: flex;
+  justify-content: flex-end;
+  gap: calc(var(--space-1) + var(--space-0-5));
+  padding-top: var(--space-1);
+}
+
+.edgeTitle {
+  composes: t-body-strong from global;
+}
+
+.stateGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  gap: var(--space-4) var(--space-8);
+}
+
+.popoverText {
+  max-width: 18rem;
+}
+
+.sheetBody {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6);
+}

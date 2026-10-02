@@ -70,7 +70,7 @@ function Member({ access }: { access: MemberAccess }) {
         <p className={styles.meta}>
           <span className={styles.fact}>{m.email}</span>
           {m.role_label && <span className={styles.fact}>{m.role_label}</span>}
-          {m.status !== "active" && <Tag tone="muted">{humanize(m.status)}</Tag>}
+          {m.status !== "active" && <Tag tone="quiet">{humanize(m.status)}</Tag>}
           {m.is_admin && <Tag tone="quiet">Admin</Tag>}
           {managed && <Tag tone="quiet">Identity provider</Tag>}
         </p>

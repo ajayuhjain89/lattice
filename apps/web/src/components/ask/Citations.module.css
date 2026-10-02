@@ -1,40 +1,10 @@
+/* 6 px apart: neighbouring 18 px markers keep 24 px between centres (WCAG 2.5.8). */
 .chips {
   display: inline-flex;
-  gap: var(--space-0-5);
+  gap: calc(var(--space-1) + var(--space-0-5));
   margin-left: var(--space-1);
   vertical-align: baseline;
   white-space: nowrap;
-}
-
-.chip {
-  composes: t-meta from global;
-
-  display: inline-grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 var(--space-1);
-  border: var(--border-width) solid transparent;
-  border-radius: var(--radius-xs);
-  background: var(--signal-provenance-tint);
-  color: var(--signal-provenance-text);
-  font-size: var(--type-section-size);
-  line-height: 1;
-  font-weight: 600;
-  vertical-align: 0.1em;
-  transition:
-    background-color var(--motion-quick) var(--ease),
-    border-color var(--motion-quick) var(--ease);
-}
-
-.chip:hover {
-  border-color: var(--signal-provenance-text);
-}
-
-.chip[aria-pressed="true"] {
-  background: var(--signal-passage-fill);
-  border-color: var(--rule-strong);
-  color: var(--text-primary);
 }
 
 .claim {
@@ -59,16 +29,4 @@
 
   display: block;
   opacity: 0.8;
-}
-
-@media (pointer: coarse) {
-  .chip {
-    position: relative;
-  }
-
-  .chip::after {
-    content: "";
-    position: absolute;
-    inset: -13px -6px;
-  }
 }

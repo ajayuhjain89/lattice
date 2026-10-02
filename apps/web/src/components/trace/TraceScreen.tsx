@@ -14,7 +14,7 @@ import { Icon } from "@/components/primitives/icons";
 import { NoticeLine } from "@/components/primitives/NoticeLine";
 import { SectionLabel } from "@/components/primitives/SectionLabel";
 import { SkeletonLines } from "@/components/primitives/Skeleton";
-import { StageMarker, type StageState } from "@/components/primitives/StageMarker";
+import { ExhibitMarker } from "@/components/primitives/ExhibitMarker";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { shortStatus } from "@/components/shell/status-labels";
 import { useWorkspace } from "@/components/shell/workspace-context";
@@ -132,7 +132,7 @@ interface Stage {
   name: string;
   summary: string | null;
   ms: number | null;
-  state: StageState;
+  state: "done" | "skipped" | "failed";
   details?: [string, number][];
 }
 
@@ -145,7 +145,7 @@ function Stages({ stages, total }: { stages: Stage[]; total: number | null }) {
       <ol className={styles.stages}>
         {stages.map((s, i) => (
           <li key={s.name} className={`${styles.stage} ${s.state === "skipped" ? styles.stageSkipped : ""}`}>
-            <StageMarker n={i + 1} state={s.state} />
+            <ExhibitMarker n={i + 1} size="lg" state={s.state === "done" ? "rest" : s.state} />
             <div className={styles.stageBody}>
               <span className={styles.stageName}>
                 {s.name}
@@ -273,7 +273,7 @@ function StoredAnswerSection({ trace }: { trace: AskerTrace }) {
     <section className={styles.section} aria-labelledby="stored-answer-label">
       <SectionLabel id="stored-answer-label">Answer as recorded</SectionLabel>
       {trace.answer_hidden ? (
-        <Callout tone="info" label="Answer hidden" icon={<Icon as={EyeOff} />}>
+        <Callout tone="neutral" label="Answer hidden" icon={<Icon as={EyeOff} />}>
           <p>
             This answer used sources or accounts you no longer have access to, so it isn&apos;t shown. The trace&apos;s
             structure is still available.
@@ -323,7 +323,7 @@ function EvidenceRefs({ trace }: { trace: AskerTrace }) {
               </span>
               <Button
                 size="sm"
-                variant="ghost"
+                variant="quiet"
                 icon={<Icon as={Search} />}
                 onClick={(e) =>
                   state.inspector.set({

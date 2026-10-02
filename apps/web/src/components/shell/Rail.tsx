@@ -20,7 +20,7 @@ export function Rail({ onOpenMenu, onSignOut, signingOut }: { onOpenMenu: () => 
     <div className={styles.rail}>
       <div className={styles.header}>
         <Tooltip content="Open navigation" side="right">
-          <Button variant="ghost" icon={<Icon as={PanelLeftOpen} />} aria-label="Open navigation" onClick={onOpenMenu} />
+          <Button variant="quiet" icon={<Icon as={PanelLeftOpen} />} aria-label="Open navigation" onClick={onOpenMenu} />
         </Tooltip>
       </div>
       <nav aria-label="Primary" className={styles.nav}>
@@ -34,7 +34,7 @@ export function Rail({ onOpenMenu, onSignOut, signingOut }: { onOpenMenu: () => 
       </nav>
       <div className={styles.footer}>
         <Tooltip content="Sign out" side="right">
-          <Button variant="ghost" icon={<Icon as={LogOut} />} aria-label="Sign out" onClick={onSignOut} loading={signingOut} />
+          <Button variant="quiet" icon={<Icon as={LogOut} />} aria-label="Sign out" onClick={onSignOut} loading={signingOut} />
         </Tooltip>
       </div>
     </div>

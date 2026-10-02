@@ -82,6 +82,8 @@ describe("token usage", () => {
       return [...text.matchAll(/var\((--[a-z0-9-]+)(?![-a-z0-9]*\$)/g)]
         .map((m) => m[1]!)
         .filter((v) => !v.endsWith("-"))
+        // Radix sets --radix-* on its own elements at runtime (toast swipe, popover origin).
+        .filter((v) => !v.startsWith("--radix-"))
         .filter((v) => !defined.has(v) && !local.has(v))
         .map((v) => `${relative(SRC, file)}: ${v}`);
     });

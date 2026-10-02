@@ -227,7 +227,7 @@ function Chip({
             <Popover.Content className={styles.popover} align="start" sideOffset={6} collisionPadding={16}>
               {children}
               <div className={styles.popoverActions}>
-                <Button size="sm" variant="ghost" onClick={onClear} disabled={!set}>
+                <Button size="sm" variant="quiet" onClick={onClear} disabled={!set}>
                   Clear
                 </Button>
                 <Popover.Close asChild>

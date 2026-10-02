@@ -12,6 +12,8 @@ import { Icon } from "@/components/primitives/icons";
 import { Tag } from "@/components/primitives/Tag";
 import { CONTRAST_PAIRS, contrast } from "@/styles/contrast-pairs";
 
+import { PrimitiveSections } from "./PrimitiveSections";
+import { Section } from "./Section";
 import styles from "./Specimen.module.css";
 
 type Theme = "light" | "dark";
@@ -254,7 +256,7 @@ export function SpecimenScreen() {
             <Cluster space="3">
               <Button variant="primary">Apply change</Button>
               <Button>Back</Button>
-              <Button variant="ghost" icon={<Icon as={X} />} aria-label="Close" />
+              <Button variant="quiet" icon={<Icon as={X} />} aria-label="Close" />
               <Button loading>Syncing</Button>
               <Button disabled>Disabled</Button>
               <span className={styles.caption}>Tab through these to see the focus ring.</span>
@@ -315,24 +317,11 @@ export function SpecimenScreen() {
           <Section n="08" title="Responsive type" note="Measured from this page as rendered at the current viewport width.">
             <ResponsiveReadout />
           </Section>
+
+          <PrimitiveSections />
         </Page>
       </main>
     </div>
-  );
-}
-
-function Section({ n, title, note, children }: { n: string; title: string; note: string; children: ReactNode }) {
-  return (
-    <section className={styles.section} aria-labelledby={`specimen-${n}`}>
-      <div className={styles.sectionHead}>
-        <span className={styles.sectionNumber}>{n}</span>
-        <h2 id={`specimen-${n}`} className={styles.sectionTitle}>
-          {title}
-        </h2>
-        <p className={styles.sectionNote}>{note}</p>
-      </div>
-      <div className={styles.sectionBody}>{children}</div>
-    </section>
   );
 }
 

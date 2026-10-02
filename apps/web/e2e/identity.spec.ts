@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { ME_LENA, MEMBER_PAT_MANAGED } from "../src/test/fixtures";
 
-import { openAsk } from "./helpers";
+import { openAsk, settled } from "./helpers";
 import { mockApi } from "./mock-api";
 
 const RATE_LIMITED = {
@@ -13,6 +13,7 @@ const RATE_LIMITED = {
 };
 
 async function audit(page: Page) {
+  await settled(page);
   const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
   expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => `${n.target.join(" ")} ${n.failureSummary ?? ""}`).join(" | ")}`)).toEqual([]);
 }

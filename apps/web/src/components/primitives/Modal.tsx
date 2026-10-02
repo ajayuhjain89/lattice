@@ -47,7 +47,7 @@ export function Modal({ open, onOpenChange, title, description, children, footer
           <header className={styles.header}>
             <Dialog.Title className={styles.title}>{title}</Dialog.Title>
             <Dialog.Close asChild>
-              <Button variant="ghost" size="sm" icon={<Icon as={X} />} aria-label="Close" />
+              <Button variant="quiet" size="sm" icon={<Icon as={X} />} aria-label="Close" />
             </Dialog.Close>
           </header>
           {description && <Dialog.Description className={styles.description}>{description}</Dialog.Description>}

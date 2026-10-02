@@ -680,3 +680,62 @@ in a component, no v1 name anywhere. `e2e/foundations.spec.ts`: fonts only from 
 uses it; the page holds with every web font blocked; the type scale measured at 1440 and
 390 px; no overflow at the five review widths; axe and the live contrast ledger in both
 maps; the product ships the light map with no theme attribute.
+
+### D2 — Shared primitives (2026-10-02, `phase/design-overhaul`)
+
+**Built** (`apps/web/src/components/primitives`), each shown in its states on `/specimen`
+§09–§18:
+- **Field family:** Field, TextInput, TextArea, Select (native), SearchInput (clear button,
+  Escape clears), DateInput, Checkbox, Radio, ChoiceGroup.
+- **Marks:** Tag, LevelMeter, StatusMark, Kbd.
+- **Provenance:** ExhibitMarker and ExhibitButton, ProvenanceTrail, Lattice and
+  LatticeLegend with the `latticeAddsInformation` gate.
+- **Boundaries and states:** BoundaryBand, BoundaryEdge, BoundaryInline, DisagreementAxis,
+  StateBlock (quiet, boundary, fault, wait).
+- **Interaction:** FilterLine and FilterToken, Popover, Menu, Toast (provider mounted), Jump
+  with `useJumpShortcut`, DataTable, and `useOverflow` (a table or lattice that scrolls
+  becomes a focusable, named region).
+- **Rebuilt in place:** Button (ink primary, `danger`, a pressed state, `ghost` → `quiet`),
+  Callout and NoticeLine (margin bars; tones are now the signals: `neutral`, `time`,
+  `fault`, `disagreement`, `boundary`), Modal, Drawer and Tooltip.
+
+**v1 forks removed now:**
+- The trace stage marker, the citation chip, and the evidence-row and inspector numbers →
+  ExhibitMarker. Accessible names, `aria-pressed` and `data-citation` are unchanged.
+- `ErrorState` and `NotAvailable` render through StateBlock; their stylesheet is deleted.
+- The AI-policy notice uses the `boundary` tone; supersession uses `disagreement`.
+
+**Still to migrate, by step:** the sidebar shell (D3); Ask's scope chips → FilterLine (D4);
+the four page tables → DataTable, and the Access and sign-in inputs → Field (D5 / D6).
+
+| Planned | As built | Why |
+| ------- | -------- | --- |
+| Inline exhibit markers with a 44 px hit area on touch | Real 24 px markers on coarse pointers; neighbouring markers 6 px apart (24 px between centres) | Overlapping invisible hit areas let neighbours steal taps, and 18 px markers 2 px apart fail WCAG 2.5.8 |
+| DataTable "sortable where the API sorts" | No sorting | No list endpoint sorts; reordering one loaded page would mislead |
+| Proportional disagreement axis | Positions evenly spaced, interval written ("35 days later", "Same day") | A distance scale turns dates into weight; equal weight is the rule |
+| Menus modal (Radix default) | Non-modal | A modal menu hides the page from assistive tech while it stays focusable (axe `aria-hidden-focus`); a menu isn't a dialog |
+| One table style for every lattice | `headers="interface"` for word axes (data levels, providers) | Ledger figures suit numbered axes only |
+
+**Defects the new tests found and fixed:**
+- Drawer didn't return focus to whatever opened it (only to a Radix trigger), which
+  affected the phone navigation sheet.
+- Jump group ids contained spaces, which left its groups nameless.
+- Option and axis-heading names ran together ("…Acme?Answered", "Potential
+  conflictSCIM").
+- Lattice arrow keys skipped rows.
+- The egress lattice overflowed (and so was an unfocusable scroll region) because of a
+  negative margin.
+- An axe audit raced the inspector's fade-in. Audits now wait for animations to settle.
+
+**Verification.**
+- `primitives.test.tsx`: 26 tests (wiring, names, keyboard, states).
+- `e2e/primitives.spec.ts`: 7 browser flows, axe with overlays open:
+  - Jump by ⌘K and focus return;
+  - lattice roving focus that lights the related claim;
+  - filter tokens;
+  - the menu, dialog and sheet focus trap and return;
+  - toast;
+  - DataTable stacking at the five widths;
+  - the phone axis and 24 px targets.
+- Full gate: lint, typecheck, 115 unit tests, production build, 117 Playwright tests
+  (desktop and phone).

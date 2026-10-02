@@ -9,6 +9,7 @@
   padding: 0 var(--space-3);
   border: var(--border-width) solid transparent;
   border-radius: var(--radius-sm);
+  font-family: var(--font-interface);
   font-size: var(--type-body-size);
   line-height: var(--type-body-line);
   font-weight: 600;
@@ -26,6 +27,7 @@
 
   padding: 0 var(--space-2);
   gap: var(--space-1);
+  font-size: var(--type-small-size);
 }
 
 .lg {
@@ -34,71 +36,102 @@
   padding: 0 var(--space-4);
 }
 
+/* Primary: ink. */
 .primary {
   background: var(--surface-inverse);
+  border-color: var(--surface-inverse);
   color: var(--text-inverse);
-  border-color: var(--rule-strong);
 }
 
 .primary:hover:not(:disabled, [aria-disabled="true"]) {
   background: var(--surface-inverse-hover);
+  border-color: var(--surface-inverse-hover);
 }
 
 .primary:active:not(:disabled, [aria-disabled="true"]) {
   background: var(--surface-inverse-active);
 }
 
+/* Secondary: the control boundary; the edge turns ink on hover. */
 .secondary {
-  background: transparent;
-  color: var(--text-primary);
+  background: var(--surface-sheet);
   border-color: var(--rule-strong);
+  color: var(--text-primary);
 }
 
 .secondary:hover:not(:disabled, [aria-disabled="true"]) {
-  background: var(--surface-well);
+  border-color: var(--rule-ink);
 }
 
 .secondary:active:not(:disabled, [aria-disabled="true"]) {
-  background: var(--surface-well-strong);
+  background: var(--surface-well);
 }
 
-.ghost {
+/* Quiet: no edge until hovered. */
+.quiet {
   background: transparent;
   color: var(--text-primary);
 }
 
-.ghost:hover:not(:disabled, [aria-disabled="true"]) {
+.quiet:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--surface-well);
+}
+
+.quiet:active:not(:disabled, [aria-disabled="true"]) {
   background: var(--surface-well-strong);
 }
 
-.ghost:active:not(:disabled, [aria-disabled="true"]) {
+/* Danger: fault text on the sheet; the tint only on hover. */
+.danger {
+  background: var(--surface-sheet);
+  border-color: var(--signal-fault-mark);
+  color: var(--signal-fault-text);
+}
+
+.danger:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--signal-fault-tint);
+}
+
+/* Toggles: pressed is a fill plus an ink edge, never colour alone (the label says what). */
+.secondary[aria-pressed="true"],
+.quiet[aria-pressed="true"] {
   background: var(--surface-well-strong);
+  border-color: var(--rule-ink);
 }
 
 .button:disabled,
 .button[aria-disabled="true"] {
+  cursor: default;
   background: var(--surface-well-strong);
-  color: var(--text-muted);
   border-color: var(--rule);
+  color: var(--text-muted);
 }
 
-.ghost:disabled {
+.quiet:disabled,
+.quiet[aria-disabled="true"] {
   background: transparent;
   border-color: transparent;
 }
 
+/* Busy keeps the variant's look: it is working, not unavailable. */
 .primary[aria-busy="true"]:disabled {
   background: var(--surface-inverse);
+  border-color: var(--surface-inverse);
   color: var(--text-inverse);
+}
+
+.secondary[aria-busy="true"]:disabled {
+  background: var(--surface-sheet);
   border-color: var(--rule-strong);
+  color: var(--text-primary);
 }
 
 .icon {
   display: inline-grid;
   place-items: center;
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size);
+  height: var(--icon-size);
 }
 
 .iconOnly {
@@ -126,6 +159,17 @@
     animation: none;
     border-right-color: currentcolor;
     opacity: 0.6;
+  }
+}
+
+@media (forced-colors: active) {
+  .button {
+    border-color: ButtonText;
+  }
+
+  .button:disabled {
+    border-color: GrayText;
+    color: GrayText;
   }
 }
 

@@ -3,7 +3,15 @@ import { forwardRef, type ButtonHTMLAttributes, type ComponentProps, type ReactN
 
 import styles from "./Button.module.css";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost";
+/**
+ * primary   ink fill -- one per view region
+ * secondary control-boundary edge
+ * quiet     no edge; toolbars, row tools, dismissals
+ * danger    an action that removes access or data (always confirmed elsewhere)
+ *
+ * `aria-pressed` turns any variant into a toggle with a visible pressed state.
+ */
+export type ButtonVariant = "primary" | "secondary" | "quiet" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
 interface Common {
@@ -20,24 +28,9 @@ function classes(variant: ButtonVariant, size: ButtonSize, iconOnly: boolean, ex
     .join(" ");
 }
 
-export interface ButtonProps extends Common, ButtonHTMLAttributes<HTMLButtonElement> {
-  loading?: boolean;
-}
-
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = "secondary", size = "md", icon, iconEnd, loading = false, className, children, disabled, type, ...rest },
-  ref,
-) {
-  const iconOnly = !children;
+function Content({ icon, iconEnd, loading, children }: { icon?: ReactNode; iconEnd?: ReactNode; loading?: boolean; children?: ReactNode }) {
   return (
-    <button
-      ref={ref}
-      type={type ?? "button"}
-      className={classes(variant, size, iconOnly, className)}
-      disabled={disabled || loading}
-      aria-busy={loading || undefined}
-      {...rest}
-    >
+    <>
       {(icon || loading) && (
         <span className={styles.icon} aria-hidden="true">
           {loading ? <span className={styles.spinner} /> : icon}
@@ -49,6 +42,31 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
           {iconEnd}
         </span>
       )}
+    </>
+  );
+}
+
+export interface ButtonProps extends Common, ButtonHTMLAttributes<HTMLButtonElement> {
+  /** Busy: the label stays (width doesn't change), the icon becomes a spinner, clicks stop. */
+  loading?: boolean;
+}
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant = "secondary", size = "md", icon, iconEnd, loading = false, className, children, disabled, type, ...rest },
+  ref,
+) {
+  return (
+    <button
+      ref={ref}
+      type={type ?? "button"}
+      className={classes(variant, size, !children, className)}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      {...rest}
+    >
+      <Content icon={icon} iconEnd={iconEnd} loading={loading}>
+        {children}
+      </Content>
     </button>
   );
 });
@@ -60,17 +78,9 @@ export interface ButtonLinkProps extends Common, Omit<ComponentProps<typeof Link
 export function ButtonLink({ variant = "secondary", size = "md", icon, iconEnd, className, children, ...rest }: ButtonLinkProps) {
   return (
     <Link className={classes(variant, size, !children, className)} {...rest}>
-      {icon && (
-        <span className={styles.icon} aria-hidden="true">
-          {icon}
-        </span>
-      )}
-      {children}
-      {iconEnd && (
-        <span className={styles.icon} aria-hidden="true">
-          {iconEnd}
-        </span>
-      )}
+      <Content icon={icon} iconEnd={iconEnd}>
+        {children}
+      </Content>
     </Link>
   );
 }
@@ -83,18 +93,10 @@ export interface ExternalLinkButtonProps extends Common {
 export function ExternalLinkButton({ variant = "secondary", size = "md", icon, iconEnd, href, children }: ExternalLinkButtonProps) {
   return (
     <a className={classes(variant, size, false)} href={href} target="_blank" rel="noopener noreferrer">
-      {icon && (
-        <span className={styles.icon} aria-hidden="true">
-          {icon}
-        </span>
-      )}
-      {children}
-      {iconEnd && (
-        <span className={styles.icon} aria-hidden="true">
-          {iconEnd}
-        </span>
-      )}
-      <span className="visually-hidden"> (opens in a new tab)</span>
+      <Content icon={icon} iconEnd={iconEnd}>
+        {children}
+        <span className="visually-hidden"> (opens in a new tab)</span>
+      </Content>
     </a>
   );
 }

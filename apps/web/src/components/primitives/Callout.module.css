@@ -1,45 +1,61 @@
+/* A margin bar in the state's mark plus, for signals, its tint -- never a full box. */
 .callout {
-  border: var(--border-width) solid var(--callout-border);
-  border-radius: var(--radius-md);
+  border-left: 3px solid var(--callout-mark);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   background: var(--callout-bg);
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-4);
   min-width: 0;
 }
 
 .neutral {
   --callout-bg: var(--surface-well);
-  --callout-border: var(--rule-strong);
+  --callout-mark: var(--rule-ink);
   --callout-text: var(--text-primary);
 }
 
 .plain {
   --callout-bg: transparent;
-  --callout-border: var(--rule-strong);
+  --callout-mark: var(--rule-strong);
   --callout-text: var(--text-primary);
 }
 
-.info {
-  --callout-bg: var(--surface-well);
-  --callout-border: var(--rule-strong);
-  --callout-text: var(--text-secondary);
-}
-
-.warning {
+.time {
   --callout-bg: var(--signal-time-tint);
-  --callout-border: var(--signal-time-mark);
+  --callout-mark: var(--signal-time-mark);
   --callout-text: var(--signal-time-text);
 }
 
-.error {
+.fault {
   --callout-bg: var(--signal-fault-tint);
-  --callout-border: var(--signal-fault-mark);
+  --callout-mark: var(--signal-fault-mark);
   --callout-text: var(--signal-fault-text);
 }
 
-.conflict {
+.disagreement {
   --callout-bg: var(--signal-disagreement-tint);
-  --callout-border: var(--signal-disagreement-mark);
+  --callout-mark: var(--signal-disagreement-mark);
   --callout-text: var(--signal-disagreement-text);
+}
+
+/* Boundary: a dashed edge and a hatched leading band, like the boundary notice. */
+.boundary {
+  --callout-bg: var(--surface-sheet);
+  --callout-mark: transparent;
+  --callout-text: var(--text-primary);
+
+  position: relative;
+  border: var(--border-width) dashed var(--boundary-edge);
+  border-radius: var(--radius-sm);
+  padding-left: calc(var(--space-2) + var(--space-4));
+}
+
+.boundary::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--space-2);
+  border-right: var(--border-width) dashed var(--boundary-edge);
+  background-image: var(--boundary-hatch);
 }
 
 .header {
@@ -47,7 +63,7 @@
   align-items: center;
   gap: var(--space-2);
   color: var(--callout-text);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 
 .label {
@@ -59,8 +75,8 @@
 .icon {
   display: grid;
   place-items: center;
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size);
+  height: var(--icon-size);
   flex: none;
 }
 
@@ -69,4 +85,14 @@
   gap: var(--space-3);
   color: var(--text-primary);
   min-width: 0;
+}
+
+@media (forced-colors: active) {
+  .callout {
+    border-left-color: CanvasText;
+  }
+
+  .boundary::before {
+    background-image: none;
+  }
 }

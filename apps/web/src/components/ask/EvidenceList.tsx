@@ -6,6 +6,7 @@ import { memo, useId, useState } from "react";
 import type { EvidenceItem } from "@/api/types";
 import { SensitivityTag } from "@/components/evidence/SensitivityTag";
 import { SourceTypeTag } from "@/components/evidence/SourceTypeTag";
+import { ExhibitMarker } from "@/components/primitives/ExhibitMarker";
 import { Icon } from "@/components/primitives/icons";
 import { SectionLabel } from "@/components/primitives/SectionLabel";
 import { useWorkspace } from "@/components/shell/workspace-context";
@@ -128,8 +129,8 @@ const EvidenceRow = memo(function EvidenceRow({ item }: { item: EvidenceItem }) 
       aria-label={`${number ? `Evidence ${number}: ` : ""}${item.title}. Open in inspector`}
       data-evidence={item.evidence_id}
     >
-      <span className={`${styles.number} ${number ? "" : styles.unnumbered}`} aria-hidden="true">
-        {number ?? "–"}
+      <span className={styles.number}>
+        <ExhibitMarker n={number ?? null} state={selected ? "selected" : "rest"} size="lg" />
       </span>
       <span className={styles.tagCell}>
         <SourceTypeTag sourceType={item.source_type} />

@@ -44,7 +44,7 @@ export function StatusLine({ answer, elapsedMs, traceHref }: { answer: Answer; e
       </p>
       {traceHref && (
         <div className={styles.statusActions}>
-          <ButtonLink href={traceHref} size="sm" variant="ghost" icon={<Icon as={Route} />}>
+          <ButtonLink href={traceHref} size="sm" variant="quiet" icon={<Icon as={Route} />}>
             Trace
           </ButtonLink>
         </div>
@@ -69,11 +69,11 @@ export function Notices({ notices, cited }: { notices: readonly Notice[]; cited:
     <div className={styles.notices} data-testid="notices">
       {notices.map((n, i) =>
         n.code === "stale_evidence" ? (
-          <NoticeLine key={i} icon={<Icon as={Clock} />} tone="warning" boxed>
+          <NoticeLine key={i} icon={<Icon as={Clock} />} tone="time">
             {n.message}
           </NoticeLine>
         ) : (
-          <NoticeLine key={i} icon={<Icon as={NOTICE_ICON[n.code] ?? Info} />} tone={n.code === "cites_superseded" ? "neutral" : "info"}>
+          <NoticeLine key={i} icon={<Icon as={NOTICE_ICON[n.code] ?? Info} />} tone={n.code === "egress_excluded" ? "boundary" : n.code === "cites_superseded" ? "disagreement" : "neutral"}>
             {n.message}
           </NoticeLine>
         ),
@@ -143,7 +143,7 @@ export const Conflicts = memo(function Conflicts() {
 
 function PotentialConflict({ conflict }: { conflict: RenderConflict }) {
   return (
-    <Callout tone="conflict" label="Potential conflict" icon={<Icon as={GitCompare} />} labelAs="h3" id={conflict.key}>
+    <Callout tone="disagreement" label="Potential conflict" icon={<Icon as={GitCompare} />} labelAs="h3" id={conflict.key}>
       {conflict.topic && <p className={styles.topic}>{conflict.topic}</p>}
       <Positions positions={conflict.positions} />
       <p className={styles.summary}>{conflict.summary}</p>

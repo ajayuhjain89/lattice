@@ -109,7 +109,7 @@ function SignInInner({ devEnabled, organizations }: { devEnabled: boolean; organ
           <header className={styles.panelHeader}>
             {devEnabled && (
               <div>
-                <Tag tone="muted">Development sign-in</Tag>
+                <Tag tone="quiet">Development sign-in</Tag>
               </div>
             )}
             <h2 className={styles.title}>Sign in</h2>

@@ -1,9 +1,5 @@
-import { EyeOff } from "lucide-react";
-
 import { ButtonLink } from "@/components/primitives/Button";
-import { Icon } from "@/components/primitives/icons";
-
-import styles from "./States.module.css";
+import { StateBlock } from "@/components/primitives/StateBlock";
 
 export interface NotAvailableProps {
   label: string;
@@ -15,24 +11,19 @@ export interface NotAvailableProps {
 
 /**
  * The one "not available" state. A resource that does not exist and one the viewer may
- * not read render identically (SEC-5): same copy, same layout, same timing path.
+ * not read render identically (SEC-5): same copy, same layout, same timing path. The
+ * boundary family of StateBlock.
  */
-export function NotAvailable({ label, title, body, action, headingLevel: H = "h1" }: NotAvailableProps) {
+export function NotAvailable({ label, title, body, action, headingLevel = "h1" }: NotAvailableProps) {
   return (
-    <div className={styles.state}>
-      <p className={styles.label}>
-        <span className={styles.icon}>
-          <Icon as={EyeOff} />
-        </span>
-        {label}
-      </p>
-      <H className={styles.title}>{title}</H>
-      <p className={styles.body}>{body}</p>
-      {action && (
-        <div className={styles.actions}>
-          <ButtonLink href={action.href}>{action.label}</ButtonLink>
-        </div>
-      )}
-    </div>
+    <StateBlock
+      family="boundary"
+      label={label}
+      heading={title}
+      headingLevel={headingLevel}
+      actions={action && <ButtonLink href={action.href}>{action.label}</ButtonLink>}
+    >
+      <p>{body}</p>
+    </StateBlock>
   );
 }

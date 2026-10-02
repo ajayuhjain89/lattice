@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, type KeyboardEvent } from "react";
 import { useEvidence } from "@/api/queries";
 import { isApiError } from "@/api/errors";
 import { Button } from "@/components/primitives/Button";
+import { ExhibitMarker } from "@/components/primitives/ExhibitMarker";
 import { Icon } from "@/components/primitives/icons";
 import { SkeletonBlock, SkeletonLines } from "@/components/primitives/Skeleton";
 import { ErrorState } from "@/components/states/ErrorState";
@@ -82,20 +83,18 @@ export function EvidenceInspector({ evidenceId, context, onClose, onNavigate, fo
       <div className={styles.header}>
         <p className={styles.headerLabel} id={`${headingId}-label`}>
           {number !== undefined && (
-            <span className={styles.number} aria-label={`Citation ${number}`}>
-              {number}
-            </span>
+            <ExhibitMarker n={number} size="lg" state="selected" label={`Citation ${number}`} />
           )}
           {query.data ? <SourceTypeTag sourceType={query.data.source_type} /> : <span>Evidence</span>}
         </p>
         <div className={styles.tools}>
           {order.length > 1 && (
             <>
-              <Button variant="ghost" size="sm" icon={<Icon as={ChevronLeft} />} aria-label="Previous evidence" aria-keyshortcuts="[" disabled={!prev} onClick={() => prev && onNavigate(prev)} />
-              <Button variant="ghost" size="sm" icon={<Icon as={ChevronRight} />} aria-label="Next evidence" aria-keyshortcuts="]" disabled={!next} onClick={() => next && onNavigate(next)} />
+              <Button variant="quiet" size="sm" icon={<Icon as={ChevronLeft} />} aria-label="Previous evidence" aria-keyshortcuts="[" disabled={!prev} onClick={() => prev && onNavigate(prev)} />
+              <Button variant="quiet" size="sm" icon={<Icon as={ChevronRight} />} aria-label="Next evidence" aria-keyshortcuts="]" disabled={!next} onClick={() => next && onNavigate(next)} />
             </>
           )}
-          <Button variant="ghost" size="sm" icon={<Icon as={X} />} aria-label="Close evidence" aria-keyshortcuts="Escape" onClick={onClose} />
+          <Button variant="quiet" size="sm" icon={<Icon as={X} />} aria-label="Close evidence" aria-keyshortcuts="Escape" onClick={onClose} />
         </div>
       </div>
 

@@ -100,7 +100,7 @@ export function Sidebar({ onNavigate, onSignOut, signingOut }: { onNavigate?: ()
           <span className={styles.userRole}>{me.membership.role_label ?? me.user.email}</span>
         </div>
         <Tooltip content="Sign out">
-          <Button variant="ghost" size="sm" icon={<Icon as={LogOut} />} aria-label="Sign out" onClick={onSignOut} loading={signingOut} />
+          <Button variant="quiet" size="sm" icon={<Icon as={LogOut} />} aria-label="Sign out" onClick={onSignOut} loading={signingOut} />
         </Tooltip>
       </div>
     </div>

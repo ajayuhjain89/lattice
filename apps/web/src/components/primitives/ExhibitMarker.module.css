@@ -1,0 +1,88 @@
+.marker {
+  composes: t-mark from global;
+
+  display: inline-grid;
+  place-items: center;
+  min-width: var(--citation-size);
+  height: var(--citation-size);
+  padding: 0 var(--space-1);
+  border: var(--border-width) solid var(--rule-strong);
+  border-radius: var(--radius-xs);
+  background: var(--surface-sheet);
+  color: var(--text-primary);
+  vertical-align: 0.125em;
+  flex: none;
+  transition:
+    background-color var(--motion-quick) var(--ease),
+    border-color var(--motion-quick) var(--ease),
+    color var(--motion-quick) var(--ease);
+}
+
+.lg {
+  min-width: var(--control-xs);
+  height: var(--control-xs);
+  font-size: var(--type-caption-size);
+}
+
+.interactive {
+  cursor: pointer;
+}
+
+/* Hover and "linked" mean the same thing: this can be followed. */
+.interactive:hover,
+.linked {
+  border-color: var(--signal-provenance-mark);
+  background: var(--signal-provenance-tint);
+  color: var(--signal-provenance-text);
+}
+
+.selected,
+.selected.interactive:hover {
+  border-color: var(--rule-ink);
+  background: var(--signal-passage-fill);
+  color: var(--signal-passage-text);
+}
+
+.withheld {
+  color: var(--text-muted);
+  border-color: var(--rule);
+}
+
+.skipped {
+  border-style: dashed;
+  border-color: var(--boundary-edge);
+  background-color: var(--surface-sheet);
+  background-image: var(--boundary-hatch);
+  color: var(--text-secondary);
+}
+
+.failed {
+  border-color: var(--signal-fault-mark);
+  background: var(--signal-fault-tint);
+  color: var(--signal-fault-text);
+}
+
+@media (forced-colors: active) {
+  .marker {
+    border-color: CanvasText;
+  }
+
+  .selected {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .skipped {
+    background-image: none;
+  }
+}
+
+/* Touch layouts: interactive markers are a real 24 px target (WCAG 2.5.8), not an
+   invisible hit area -- neighbouring markers would otherwise overlap and steal taps. */
+@media (pointer: coarse) {
+  .interactive {
+    min-width: 24px;
+    height: 24px;
+  }
+}

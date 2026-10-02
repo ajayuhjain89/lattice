@@ -16,8 +16,8 @@
   max-height: min(88dvh, 880px);
   display: flex;
   flex-direction: column;
-  background: var(--surface-paper);
-  border: var(--border-width) solid var(--rule-strong);
+  background: var(--surface-sheet);
+  border: var(--border-width) solid var(--rule);
   border-radius: var(--radius-md);
   box-shadow: var(--elevation-overlay);
   outline: none;
@@ -34,15 +34,16 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-4) var(--space-2) var(--space-6);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-6);
+  border-bottom: var(--border-width) solid var(--rule-ink);
 }
 
 .title {
-  composes: t-heading from global;
+  composes: t-subtitle from global;
 }
 
 .description {
-  padding: 0 var(--space-6);
+  padding: var(--space-3) var(--space-6) 0;
   color: var(--text-secondary);
 }
 
