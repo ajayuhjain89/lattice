@@ -12,7 +12,7 @@ from sqlalchemy import text
 from lattice.db.engine import Database
 
 from ..conftest import AppFactory
-from ..factories import create_member, create_scim_token, login
+from ..factories import create_member, create_oidc_connection, create_scim_token, login
 from .conftest import World, patch, user
 
 BASE = "/scim/v2"
@@ -598,6 +598,31 @@ async def test_delete_removes_for_good_and_is_idempotent(
         f"{BASE}/Users", json=user("okta-1", "pat@halden.example"), headers=world.halden.auth
     )
     assert again.status_code == 409
+
+
+async def test_a_token_sees_only_its_own_connections_people(
+    scim: httpx.AsyncClient, world: World, owner_db: Database
+) -> None:
+    """After a switch of identity provider, the new connection's token neither lists,
+    reads, changes nor collides with people the old connection provisioned."""
+    old = await _create(scim, world, user("okta-1", "pat@halden.example"))
+    async with owner_db.tenant_transaction(world.halden.org) as s:
+        await s.execute(text("UPDATE oidc_connections SET status = 'disabled'"))
+    new_connection = await create_oidc_connection(
+        owner_db, world.halden.org, issuer="https://login.halden.example"
+    )
+    token = await create_scim_token(owner_db, world.halden.org, new_connection)
+    auth = {"Authorization": f"Bearer {token}"}
+    assert (await scim.get(f"{BASE}/Users", headers=auth)).json()["totalResults"] == 0
+    assert (await scim.get(f"{BASE}/Users/{old['id']}", headers=auth)).status_code == 404
+    gone = await scim.delete(f"{BASE}/Users/{old['id']}", headers=auth)
+    assert gone.status_code == 404
+    # The same externalId is free in the new provider's namespace (the e-mail is not).
+    fresh = await scim.post(
+        f"{BASE}/Users", json=user("okta-1", "pat.new@halden.example"), headers=auth
+    )
+    assert fresh.status_code == 201
+    assert fresh.json()["id"] != old["id"]
 
 
 async def test_scim_never_touches_members_it_did_not_provision(

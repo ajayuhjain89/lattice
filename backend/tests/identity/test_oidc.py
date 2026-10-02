@@ -395,6 +395,25 @@ async def test_the_same_subject_in_two_organizations_signs_in_to_the_connections
     assert (me["organization"]["slug"], me["user"]["email"]) == ("halden", "pat@halden.example")
 
 
+async def test_a_subject_of_a_previous_connection_never_matches(
+    client: httpx.AsyncClient, idp: FakeIdp, owner_db: Database, world: World
+) -> None:
+    """The organization switched identity providers: the old connection is disabled and
+    a new one active. The new provider's 'sub-pat' is a different person in its own
+    namespace -- it must not sign in as the member the old provider called 'sub-pat'."""
+    async with owner_db.tenant_transaction(world.org) as s:
+        await s.execute(text("UPDATE oidc_connections SET status = 'disabled'"))
+    await create_oidc_connection(
+        owner_db,
+        world.org,
+        issuer="https://idp.halden.example",
+        login_key="halden-new-login-key-00000",
+    )
+    done = await _sign_in(client, idp, "sub-pat", key="halden-new-login-key-00000")
+    assert done.headers["location"] == FAILED
+    assert await _me(client) is None
+
+
 async def test_a_custom_identifying_claim(
     app_client: AppFactory, owner_db: Database, world: World
 ) -> None:
