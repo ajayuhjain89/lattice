@@ -373,15 +373,17 @@ are separate permission origins, so a sync replacing its own grants never collid
 with, or touches, an administrator's grant. Duplicates are harmless to the policy. Indexes (organization_id,
 membership_id | department_id | group_id). Deleting a principal deletes its grants.
 
-`granted_by` (the granting admin) is **deferred to Phase 9**: it is audit data, not a
-policy input, and what happens to it when that admin's membership is deleted belongs
-with the `audit_events` design.
+`granted_by` (the granting admin) was deferred to Phase 9 as audit data. **Decided in
+Phase 9: no column.** The grant's `access.grant_created` audit event (target
+`grant_id`) records who granted it, when and why, and outlives both the grant and the
+granting administrator's membership; the Access page reads it from there.
 
 Source-origin grants are replaced wholesale on each ACL sync; admin-origin grants are
-never touched by sync (so an admin grant is not silently wiped by a connector). Until
-the Phase 9 access UI, admin grants come from `admin-grants.yaml` through `lattice
+never touched by sync (so an admin grant is not silently wiped by a connector). Admin
+grants come from the Access page (Phase 9; one document the administrator can read, to
+one member, with a reason) or from `admin-grants.yaml` through `lattice
 apply-admin-grants` (all-or-nothing, idempotent; `--prune` revokes grants no longer in
-the file). They are membership grants only.
+the file). Both are membership grants only, and both write audit events.
 
 ## 6. Chunks
 
@@ -488,14 +490,24 @@ Organization-owned provider credentials **by reference only** (D-16, ADR-011):
 provider (partial unique index); rotation revokes and inserts, history is kept. Forced
 RLS; the runtime role may SELECT only (to resolve the reference at invocation).
 
-### audit_events (Phase 6, migration 0008; minimal)
+### audit_events (Phase 6, migration 0008; access events Phase 9, migration 0012)
 
 Append-only record of administrative changes: `id, organization_id, created_at
-(clock_timestamp), actor, action (provider.configured, provider.approval_changed,
-provider.enabled/disabled, credential.set/rotated/revoked, egress.levels_changed), target,
-before, after, reason (1-500 characters)`. A trigger rejects UPDATE; the runtime role
-has no privilege at all. Never a secret or a secret reference. The full access-change
-audit (grants, clearance, assignments) is Phase 9.
+(clock_timestamp), actor, action, target, before, after, reason (1-500 characters)`. A
+trigger rejects UPDATE; nothing may DELETE (rows go only with their organization).
+Never a secret, a secret reference or document content.
+
+| Action | Written by | Target | before / after |
+| ------ | ---------- | ------ | -------------- |
+| `provider.*`, `credential.*`, `egress.levels_changed` | operator CLI (Phase 6) | provider / purpose | the changed settings |
+| `access.member_changed` | API (`member:<id>`), seed (`operator:seed`) | `membership_id` | access snapshots: status, administrator flag, clearance, account scope, assigned account IDs, department IDs, administrator-defined group IDs (before NULL = provisioned) |
+| `access.grant_created`, `access.grant_revoked` | API, `apply-admin-grants` (`operator:admin-grants`) | `membership_id`, `document_id`, `grant_id`, `source_id`, `reference` (the document's opaque `rec_…`) | `{origin, principal_type}` |
+
+IDs, never names: the audit view resolves names at read time (deleted ones show as
+gone) and names a document only if the viewing administrator can read it now,
+otherwise its `reference`. Index `(organization_id, created_at DESC, id DESC)` for the
+keyset pages of `GET /v1/admin/audit-events`. The runtime role may SELECT and may
+INSERT only `access.*` events by a `member:` actor (restrictive policy, ADR-014).
 
 ### model_providers
 
@@ -536,7 +548,7 @@ here (environment / secret store only).
 | Role | Login | Purpose | RLS |
 | ---- | ----- | ------- | --- |
 | `lattice_owner` | yes | Owns the schema; runs migrations and operator tools (seed) | Subject to FORCE RLS on tenant tables; has provisioning policies on the three global/root tables only |
-| `lattice_app` | yes | API. Never owns tables, never BYPASSRLS, never writes documents or grants (the API refuses such a role, Phase 8) | Subject to every policy; least-privilege grants (below) |
+| `lattice_app` | yes | API. Never owns tables, never BYPASSRLS, never writes documents (the API refuses such a role, Phase 8). Since Phase 9 writes access-management state only: a membership's status/clearance/scope, assignments, departments, administrator-group members, administrator membership grants, access audit events (ADR-014) | Subject to every policy; restrictive policies fence each Phase 9 write; exact privileges: `backend/tests/test_app_role_access.py` |
 | `lattice_worker` | yes | Background worker (Phase 8, ADR-013). Never owns tables, never BYPASSRLS | Subject to every tenant policy; role-targeted policies on `jobs` (queue across organizations); restrictive policies limit its grant/group writes to `origin = 'source'` and its `model_providers` inserts to embedding records approved for `internal`. Exact privileges: `backend/tests/test_worker_role.py` |
 | `lattice_auth` | **no** | Owns the two SECURITY DEFINER pre-authentication functions — and nothing else | Role-targeted read policies on the tables those functions need |
 
@@ -615,9 +627,13 @@ the runtime role.
 membership_departments, accounts, account_assignments; `SELECT, INSERT` on sessions;
 `UPDATE (last_seen_at, revoked_at)` on sessions; `EXECUTE` on the two lookup
 functions. Phase 2: `SELECT` only on access_groups, access_group_members, documents
-and document_grants — nothing writes them at runtime yet (ingestion, Phase 4; access
-management, Phase 9). No `DELETE` anywhere. Later phases add grants as their features
-need them.
+and document_grants. Later phases add grants as their features need them: Phase 6
+traces (SELECT, INSERT), Phase 8 jobs. **Phase 9 (migration 0012, ADR-014):**
+`UPDATE (status, clearance, account_scope, authz_updated_at, updated_at)` on
+memberships; `INSERT, DELETE` on account_assignments, membership_departments,
+access_group_members (administrator-defined groups only) and document_grants
+(administrator membership grants only); `SELECT, INSERT` on audit_events (`access.*`
+by a member only). Each limit is a restrictive policy targeted at `lattice_app`.
 
 ### Pre-authentication lookups
 

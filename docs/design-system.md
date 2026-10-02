@@ -650,7 +650,7 @@ above are implemented as written. Departures, each for a reason:
 | B12 conflict callout | Rules inside the callout are the conflict border at 40 % | Full-strength pink rules competed with the content |
 | B12 tables (provider settings) | Rows grouped by purpose under quiet group labels; stacked label/value blocks below 1024 px | Seven columns did not fit the 1024 px content width without breaking model identifiers |
 | B13 loading | No stage names: one progress line and the elapsed time over a static skeleton | No streaming progress exists (D-6); no shimmer, per B10 |
-| B13 first-time user | Heading, deck and three principles; no scope line | No endpoint lists the member's accessible sources or accounts |
+| B13 first-time user | Heading, deck and three principles; no scope line | No endpoint lists the member's accessible sources or accounts (*built in Phase 9*, Part E) |
 | B14 phones | The one-crumb page header is hidden under the 52 px top bar; wrapped status facts drop their separators | The top bar already names the place; a line must not start with "·" |
 
 ## Part D — Phase 8 as built
@@ -667,3 +667,25 @@ stacked label/value rows below 1024 px). Departures:
 | B12 "Trace view — admin" / Activity | Organization activity table: member (links to the operational trace), time, status (and error code or reason), provider · model (or "No model call"), duration, tokens; a one-line explanation of why no content is shown | The admin's view never carries question, answer, evidence, counts or scope (D-5) |
 | B13 "Empty knowledge base" | Sources page: "Lattice hasn't indexed any sources you can access yet" | The Ask first-run scope line still needs an account list endpoint (Phase 9) |
 | Tables below 768 px | Stacked row blocks from 1024 px down, as in provider settings | Six columns plus an action do not fit 1024 px |
+
+## Part E — Phase 9 as built
+
+The Access pages use the admin-width column, the table anatomy of B12 and the stacked
+rows below 1024 px of Sources and Activity. Departures and additions:
+
+| Section | As built | Why |
+| ------- | -------- | --- |
+| B11 navigation | Admin → **Access** (members and the audit log as two tabs), AI providers | The audit log is about access and AI-policy changes, so it sits with Access instead of taking a nav entry |
+| B12 "Access explanation" | A lead sentence built from the typed API: "**Maya Okafor** can see **Acme Corp** and **Northpeak Logistics** content (assigned accounts), up to **Internal** sensitivity, including content restricted to **Sales**, plus 1 private channel synced from a source and 1 document granted directly." Then the facts (definition rows), groups and channels, direct grants, *Check a document* | Sentences first, facts behind them; a channel the administrator isn't in is "Private channel (synced from Chat)" with its `rec_…` and members; grants on documents the administrator can't read are one sentence, never a list or a count |
+| B12 change previews | Dialog: edit (radio and checklist groups) → review: effects as sentences ("Maya Okafor will lose access to all Kestrel Bank content, except documents granted directly."), then *Gains / Loses* counts with "Counted only among documents you can read", a required reason, *Apply change* | Rules carry what counts can't (security-model §10); the reason is recorded with the administrator's name |
+| B12 dialogs | `Modal` primitive: 560 px (440 confirm), ink border, overlay shadow; a bottom sheet below 768 px; returns focus to whatever opened it | Radix returns focus only to its own trigger |
+| B12 scope chips | `Account` chip always present, listing `GET /v1/accounts` (a filter field from 7 accounts); `Sources` offers only types with a readable source | Phase 7 could only set an account from a clarification |
+| B13 first-time user | The mono scope line under the deck: "You can search 3 sources · Acme Corp, Northpeak Logistics" ("· All accounts", "and N more" after three) | As specified; previously not buildable |
+| B13 "Empty knowledge base" | On Ask: the scope line is replaced by "Lattice hasn't indexed any sources you can access yet." (administrators get a link to Sources); the composer is disabled | As specified |
+| Not available | Non-administrators, and administrators whose capability is revoked mid-session, get one "You need administrator access" page on every Access URL; a member who doesn't exist and a malformed link are one "This member isn't available" | SEC-5; the page never asks the API for a non-administrator |
+
+Visual QA: the screenshot harness renders the four Access screens and the Ask intro at
+the five review widths; one finding fixed (the member header's facts lacked a
+separator), plus two from the live API (a provider event repeated its fields; booleans
+read as Python's `True`).
+

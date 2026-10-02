@@ -5,9 +5,9 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–7 are implemented and merged; Phase 8 (operability: Sources,
-Activity, the background worker, health, metrics and operational limits) is implemented
-on `phase/8-operational-polish`, awaiting review.** What runs today: a FastAPI backend with typed
+**Status: Phases 1–8 are implemented and merged; Phase 9 (access management and audit
+events, plus the Ask account picker and scope line) is implemented on
+`phase/9-access-management`, awaiting review.** What runs today: a FastAPI backend with typed
 fail-fast configuration, PostgreSQL 16 + pgvector with forced row-level security for
 organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -33,8 +33,13 @@ settings — and (Phase 8) operability: a Sources page (members see only what th
 read; administrators see aggregates, failures by opaque reference, and can request a
 sync), Activity (your own questions; an operational view for administrators), a
 background worker with its own least-privilege database role, liveness and readiness
-checks, Prometheus metrics, and fail-closed limits and kill switches. See the
-[implementation plan](docs/implementation-plan.md).
+checks, Prometheus metrics, and fail-closed limits and kill switches — and (Phase 9)
+access management: an Access page where administrators see each member's access
+explained in sentences, preview every change (counted only over documents they can
+read themselves), give a reason, and apply it; grants of single documents; an
+append-only audit log of every access and AI-policy change; and on Ask, an account
+picker and a first-run line listing only the person's own sources and accounts. See
+the [implementation plan](docs/implementation-plan.md).
 
 ## Local setup
 
@@ -284,6 +289,24 @@ are served on a separate port the web app never proxies. The API and worker refu
 start against a schema of another revision; a database outage returns 503 in seconds;
 one Ask's model calls share a deadline; `LATTICE_GENERATION_ENABLED=false` stops every
 model call. Operating it: [runbook §7](docs/runbook.md).
+
+## How access management works (Phase 9)
+
+Administrators open **Access** (sign in as `lena.brandt@halden.example`). Each member's
+page explains their access in a sentence, lists the facts behind it and their groups —
+a private channel the administrator isn't in stays unnamed, shown by an opaque
+reference and its members — and their direct grants on documents the administrator can
+read; grants on anything else are acknowledged, never listed or counted. Every change
+(clearance, account scope, accounts, departments, administrator-defined groups,
+suspension, single-document grants) is previewed first — effects as rules, document
+counts only among documents the administrator can read — needs a reason, is applied
+against the version reviewed (409 if someone changed it meanwhile) and is written to
+the append-only **audit log** in the same transaction. Nobody changes their own access
+here. The API's database role can write exactly these changes and nothing else,
+enforced by restrictive row-level policies ([ADR-014](docs/decisions/014-access-management-writes.md)).
+`make seed` remains the provisioning source: re-running it makes members match the
+manifest again, recorded as `operator:seed` events. A database created before Phase 9
+needs `make migrate` (0012).
 
 ## Repository layout
 
