@@ -1108,6 +1108,36 @@ alerting, backups, container images and deployment (Phase 11); the Accounts work
 | — (found on the way) | httpx logged outbound URLs at INFO (now WARNING); `SELECT … FOR UPDATE` cannot see a removed membership (the 0013 policy) so idempotent SCIM delete re-reads without the lock; the request reference on tinted callouts failed contrast (fixed); FastAPI now includes routers lazily (the inventory test walks them) | Tests, axe |
 | Not built (later phases) | SAML; SCIM `Groups`; just-in-time provisioning; IdP-initiated and back-channel logout; several connections per organization; organization creation and a self-service SSO UI; alerting on provisioning bursts, retention, backups, images (Phase 11) | Phase boundaries |
 
+**Final Phase 10 verification (2026-10-02).** Clean clone of
+`phase/10-oidc-sso-hardening` (3a954bb) from GitHub with no external API key in the
+environment, in an isolated Compose project (`lattice-clean10`, port 5440) with the
+development database stopped: `make setup`, `db-up`, `migrate` (0001–0013), `seed`,
+`check-db-role`, `lattice worker --once`, `dataset-lint`, `sync` twice (the second wrote
+nothing), `eval` (fake; R@10 0.512, unchanged; every security count 0), `eval-answer`
+(fake; every security count 0), `lint`, `typecheck` (mypy strict, 269 files),
+**2,173 backend tests**; `web-setup`, `web-check` (ESLint, Stylelint, TypeScript,
+**80 unit and component tests**), `web-build` (every route dynamic, the CSP proxy
+active), `web-e2e` (**102 Playwright tests**, desktop and phone, axe), `make audit`
+(no known vulnerabilities). Live drills against a real API process on that database:
+security headers; Maya's eleventh Ask in a minute → 429 with `Retry-After`, identical
+for a scope naming a hidden account; `lattice sso add` and `lattice scim token create`;
+SCIM bad token 401, create 201 (with `roles: admin` in the request, the member has least
+access and no capability), duplicate 409, filter, deactivate twice (one event), Lena's
+Access view (suspended, managed by the identity provider), her reactivation refused
+(`managed_by_identity_provider`) while a clearance change succeeds, the audit log
+(provider, SCIM and operator events), OIDC start against an unreachable provider →
+`sso_unavailable`, an unknown key → `sso_failed`, delete twice (204, 204) then 404,
+`lattice member admin --grant` for a provisioned person, token revocation → 401,
+`lattice sso disable`; the clean project was then removed. **Mutation check (by hand,
+not committed):** seven defects — nonce check removed, browser binding not compared,
+sign-in mapping without the connection filter, SCIM queries without it, the limiter
+counting past its limit, the audit trigger never checking, the limit taken before the
+capability check. Two survived at first (the connection filters: row-level security
+still confined them to the organization); a90f505 adds the tests that catch them, and
+all seven are caught. GitHub CI green (backend, dependency-audit, web; no annotations).
+Secret scan of every commit on the branch: no key patterns; the real `.env` key appears
+nowhere. The development database was migrated to 0013 (no data change).
+
 ---
 
 ### Later phases (order to be revisited after the slice)
@@ -1115,7 +1145,7 @@ alerting, backups, container images and deployment (Phase 11); the Accounts work
 | Phase | Theme | Notes |
 | ----- | ----- | ----- |
 | 9 | Access management UX + audit events | **Built and merged** (8d3af3b; Phase 9 section above). Explanations, change previews (counts only over admin-readable documents), admin grants, full `audit_events` (the provider and AI egress settings UI is Phase 7, D-16) |
-| 10 | OIDC SSO + hardening | **Built** (Phase 10 section above; awaiting review): OIDC (D-1), SCIM provisioning (D-20), rate limits (D-21), database-enforced access audit, security headers review, dependency audit, threat-model review, pen-test style review of isolation |
+| 10 | OIDC SSO + hardening | **Built and verified** (Phase 10 section above; awaiting review): OIDC (D-1), SCIM provisioning (D-20), rate limits (D-21), database-enforced access audit, security headers review, dependency audit, threat-model review, pen-test style review of isolation |
 | 11 | Deployment + operations | Container images, single-region deploy, backups/PITR, migrations in CI/CD, retention jobs, alerting on `security_invariant_violated` |
 | 12 | Accounts workspace | Account timeline + scoped Ask (AM workflow) |
 | 13 | Next connectors | Call transcripts, CRM notes, GitHub issues, release notes |
