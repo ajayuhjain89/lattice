@@ -4,14 +4,13 @@ import { AMBIGUOUS, ANSWERED, EV, EVIDENCE_ONLY, FAILED, INSUFFICIENT, UNSUPPORT
 
 import { askFor, openAsk } from "./helpers";
 
-test("Ask → answer: prose, chips, status line, trace link, session history", async ({ page }) => {
+test("Ask → answer: prose, chips, status line, trace link", async ({ page }) => {
   const log = await askFor(page, ANSWERED);
   expect(log.asks).toEqual([{ question: "When will SCIM ship for Acme, and what did we tell them?", scope: {} }]);
   expect(log.headers.find((h) => h["x-lattice-request"])?.["x-lattice-request"]).toBe("1");
   await expect(page.getByTestId("answer-prose")).toContainText("SCIM general availability to December");
   await expect(page.getByText("3 sources cited")).toBeVisible();
   await expect(page.getByRole("link", { name: "Trace", exact: true })).toHaveAttribute("href", `/traces/${ANSWERED.trace_id}`);
-  await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: /When will SCIM ship/ })).toBeVisible();
 });
 
 test("citation → evidence: fetched on open, never kept after close", async ({ page }) => {

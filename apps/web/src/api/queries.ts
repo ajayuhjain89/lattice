@@ -128,12 +128,14 @@ export function useRequestSync() {
 
 const PAGE = 25;
 
-export function useActivity() {
+/** The viewer's own questions, newest first (Activity, and recent questions in Jump). */
+export function useActivity(enabled = true) {
   return useInfiniteQuery({
     queryKey: queryKeys.activity,
     queryFn: ({ pageParam, signal }) => api.activity(pageParam, signal),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => (last.items.length >= PAGE ? last.items.at(-1)?.trace_id : undefined),
+    enabled,
     ...REAUTHORIZED,
   });
 }

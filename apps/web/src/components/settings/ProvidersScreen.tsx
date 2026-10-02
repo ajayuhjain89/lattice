@@ -8,7 +8,6 @@ import type { EgressOut, ProviderOut } from "@/api/types";
 import { Icon } from "@/components/primitives/icons";
 import { SectionLabel } from "@/components/primitives/SectionLabel";
 import { SkeletonLines } from "@/components/primitives/Skeleton";
-import { PageHeader } from "@/components/shell/PageHeader";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { ErrorState } from "@/components/states/ErrorState";
 import { NotAvailable } from "@/components/states/NotAvailable";
@@ -30,8 +29,7 @@ export function ProvidersScreen() {
 
   return (
     <>
-      <PageHeader trail={[{ label: "Admin" }, { label: "AI providers" }]} />
-      <main id="main" className={styles.main} tabIndex={-1}>
+      <div className={styles.main}>
         <div className={styles.column}>
           {forbidden ? (
             <NotAvailable
@@ -80,7 +78,7 @@ export function ProvidersScreen() {
             </>
           )}
         </div>
-      </main>
+      </div>
     </>
   );
 }

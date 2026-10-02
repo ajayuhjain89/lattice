@@ -1,6 +1,6 @@
 import type { AnswerStatus } from "@/api/types";
 
-/** Short status words for dense lists (session history, trace summaries). */
+/** Short status words for dense lists (Activity, Jump, trace summaries). */
 export const SHORT_STATUS: Record<AnswerStatus, string> = {
   answered: "Answered",
   partial: "Partial",

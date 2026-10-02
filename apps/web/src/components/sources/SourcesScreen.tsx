@@ -10,7 +10,6 @@ import { Button } from "@/components/primitives/Button";
 import { Icon } from "@/components/primitives/icons";
 import { SectionLabel } from "@/components/primitives/SectionLabel";
 import { SkeletonLines } from "@/components/primitives/Skeleton";
-import { PageHeader } from "@/components/shell/PageHeader";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { ErrorState } from "@/components/states/ErrorState";
 import { connectorLabel, formatDay, formatDayTime, humanize, levelLabel, syncStatusLabel } from "@/lib/format";
@@ -27,8 +26,7 @@ export function SourcesScreen() {
   const { isAdmin, me } = useWorkspace();
   return (
     <>
-      <PageHeader trail={[{ label: "Sources" }]} />
-      <main id="main" className={styles.main} tabIndex={-1}>
+      <div className={styles.main}>
         <div className={styles.column}>
           <header className={styles.head}>
             <h1 className={styles.title}>Sources</h1>
@@ -40,7 +38,7 @@ export function SourcesScreen() {
           </header>
           {isAdmin ? <AdminSources /> : <MemberSources />}
         </div>
-      </main>
+      </div>
     </>
   );
 }

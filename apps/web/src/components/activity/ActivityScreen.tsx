@@ -9,7 +9,6 @@ import { Button } from "@/components/primitives/Button";
 import { Icon } from "@/components/primitives/icons";
 import { SectionLabel } from "@/components/primitives/SectionLabel";
 import { SkeletonLines } from "@/components/primitives/Skeleton";
-import { PageHeader } from "@/components/shell/PageHeader";
 import { shortStatus } from "@/components/shell/status-labels";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { ErrorState } from "@/components/states/ErrorState";
@@ -27,8 +26,7 @@ export function ActivityScreen() {
   const { isAdmin } = useWorkspace();
   return (
     <>
-      <PageHeader trail={[{ label: "Activity" }]} />
-      <main id="main" className={styles.main} tabIndex={-1}>
+      <div className={styles.main}>
         <div className={styles.column}>
           <header className={styles.head}>
             <h1 className={styles.title}>Activity</h1>
@@ -40,7 +38,7 @@ export function ActivityScreen() {
           <OwnQuestions />
           {isAdmin && <OrganizationActivity />}
         </div>
-      </main>
+      </div>
     </>
   );
 }

@@ -1,8 +1,10 @@
+/* The application canvas (design-direction §6.3): the masthead (or the phone bars) and,
+   under it, the page at full width with the inspector docked beside it at ≥1280 px.
+   Pages set their own measure inside the canvas (Page: reading or admin width). */
 .shell {
-  display: grid;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) auto;
-  grid-template-areas: "nav page inspector";
-  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
 
   /* Panels slide in from the edge; the slide must never create page scroll. */
   overflow-x: clip;
@@ -21,71 +23,40 @@
   transform: translateY(-200%);
 }
 
+.skip:not(:focus) {
+  clip-path: inset(50%);
+}
+
 .skip:focus {
   transform: none;
 }
 
-.sidebar,
-.rail {
-  grid-area: nav;
-  position: sticky;
-  top: 0;
-  height: 100dvh;
-  border-right: var(--border-width) solid var(--rule-strong);
-  z-index: var(--z-rail);
+.canvas {
+  display: grid;
+  flex: 1 0 auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "page inspector";
 }
 
-.rail,
-.topbar {
-  display: none;
-}
-
-.page {
+.main {
   grid-area: page;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  outline: none;
 }
 
 .inspector {
   grid-area: inspector;
 }
 
-@media (width < 1280px) {
-  .shell {
-    grid-template-columns: var(--rail-width) minmax(0, 1fr);
-    grid-template-areas: "nav page";
-  }
-
-  .sidebar {
-    display: none;
-  }
-
-  .rail {
-    display: block;
-  }
-}
-
-@media (width < 768px) {
-  .shell {
-    grid-template: "top" auto "page" 1fr / minmax(0, 1fr);
-  }
-
-  .rail {
-    display: none;
-  }
-
-  .topbar {
-    display: block;
-    grid-area: top;
-    position: sticky;
-    top: 0;
-    z-index: var(--z-sticky);
-  }
+/* Phones: the page ends above the fixed tab bar (its measured height once known). */
+.shell[data-layout="phone"] .canvas {
+  padding-bottom: var(--shell-bottom-inset, calc(var(--bottom-bar-height) + env(safe-area-inset-bottom)));
 }
 
 .fatal {
-  min-height: 100dvh;
+  min-height: 100svh;
   display: grid;
   place-items: center;
   padding: var(--gutter);

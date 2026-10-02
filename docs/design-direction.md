@@ -739,3 +739,125 @@ the four page tables → DataTable, and the Access and sign-in inputs → Field 
   - the phone axis and 24 px targets.
 - Full gate: lint, typecheck, 115 unit tests, production build, 117 Playwright tests
   (desktop and phone).
+
+### D3 — Application shell and navigation (2026-10-02, `phase/design-overhaul`)
+
+**Built** (`apps/web/src/components/shell`):
+- **One navigation model** (`nav.ts`): sections (*Workspace*; *Administration*, shown only
+  with the `admin` capability from `/v1/me`) and destinations, each with the paths it owns
+  (`/traces/*` → Activity, `/evidence/*` → Ask, `/access/*` → Access) and a phone priority
+  (tab or More). The masthead, the phone bars, the More sheet and Jump all render from it,
+  so a future destination is added once.
+- **Masthead** (≥768 px, 52 px including its ink rule, sticky): mark + wordmark (home), the
+  organization after a hairline, the sections as two lists separated by a hairline, Jump,
+  and the account menu. The current page is ink, weight 600 and a 2 px verdigris border
+  on the masthead rule (a border, so forced colours keep it), with `aria-current="page"`.
+  Text only: no icons in the bar.
+- **Measured fit instead of a breakpoint menu.** The masthead shows everything inline
+  whenever it fits and gives space back in a fixed order, measured before paint: (1) Jump
+  drops its word, keeping the icon and key hint; (2) later sections fold into one menu each,
+  named for the section ("Admin"), whose trigger carries the active mark and "current page:
+  …" in its name; (3) the organization name leaves the bar (it is always in the account
+  menu); (4) everything folds into "Menu". It re-fits on width, font and content changes.
+  With today's English labels every destination stays inline down to 768 px (only step 1
+  happens); the steps exist for long organization names, translations, 200 % zoom at
+  tablet widths and future destinations.
+- **Account menu** (initials, squared like an exhibit marker): name, e-mail, role label,
+  organization, *Sign out* — all from `/v1/me`; sign out is the only account action the
+  product has.
+- **Phone** (<768 px): a 52 px top bar (mark → Ask, the current destination's name over the
+  organization, a page-action slot for Ask's *New question*, Jump) and a fixed bottom tab
+  bar (Ask · Activity · Sources · More, at most four tabs; extra destinations move to More).
+  Labels wrap to a second line rather than truncate; the page reserves the bar's measured
+  height, so nothing is ever under it. Safe areas: `viewport-fit=cover`, insets on both bars
+  and on `--gutter` (now `max(--gutter-base, safe-area insets)`), `100svh` minimums so
+  browser chrome never moves the layout. **More** is a bottom sheet with the
+  administration links (when capable) and the account with *Sign out*; when the current
+  page lives there the More tab carries the mark and "More, current page: Access".
+- **Jump wired** (`ShellJump.tsx`), only from endpoints the viewer already uses:
+  destinations from the model (plus the audit log for administrators); **your recent
+  questions** from `GET /v1/activity` (fetched only while Jump is open; five before typing,
+  all loaded ones when searching; each opens its trace, which the API re-authorizes); and,
+  for administrators only, **members** from `GET /v1/admin/access/members?q=` once two
+  characters are typed (debounced) — the Access page's own search. *Ask “…”* puts the
+  question in the composer, focused and unsent (`state.prefill`). Members never trigger an
+  administrator request.
+- **Shortcut:** ⌘K on Apple platforms, Ctrl K elsewhere; never the other platform's chord
+  (Ctrl K on a Mac keeps its delete-to-end-of-line meaning in fields). Ignored during IME
+  composition, on key repeat, and while a modal dialog (Modal, Drawer — marked
+  `data-modal`) is open; menus and popovers don't block it. Toggles closed.
+- **Focus after navigation:** the shell now owns `<main id="main" tabindex="-1">` (pages
+  render inside it). After a route change, or a link to the page already open, focus moves
+  to the page if it was left on the shell's navigation or nowhere; a page that placed focus
+  itself (the composer after *Ask “…”*) keeps it. Jump and the More sheet don't restore
+  focus to their opener after a choice; they do on dismissal.
+- **Canvas:** the page spans the full width under the masthead; the inspector docks beside
+  it under the masthead rule (≥1280 px). `scroll-padding` keeps focused content clear of the
+  sticky masthead and the tab bar (WCAG 2.4.11). Pages keep their own measure (reading or
+  admin width) until D4–D6.
+- **Page anatomy, shell part only:** the 56 px page-header bar is gone. Deep pages (trace,
+  evidence, member) show an inline back trail (`PageTrail`, `nav "Breadcrumb"`) above their
+  content; top-level pages have none. Titles stay page-owned until D4–D6.
+- **Skeleton:** the masthead rule (and on phones the tab-bar band) without destinations,
+  which depend on capabilities not yet loaded.
+
+**Removed:** `Sidebar`, `Rail`, `TopBar`, `PageHeader` (and their styles); the in-tab
+"This session" history (`state.history`, `HistoryEntry`, `HISTORY_LIMIT`) — Activity and
+Jump read the persisted `/v1/activity` instead; the Drawer's `left` side (only the
+navigation sheet used it); tokens `--header-height`, `--topbar-height`, `--sidebar-width`,
+`--rail-width`, `--nav-row`, `--z-rail`. New: `--masthead-height`, `--bottom-bar-height`,
+`--panel-header-height` (the inspector's header row), `--z-shell`, `--gutter-base`. One
+presentation renders at a time (chosen by width), not two hidden behind breakpoints.
+
+**Primitive changes:** Jump gains `onQueryChange`, a `title` on truncated labels and the
+platform chord (`jumpChord`); Menu's `MenuLink` gains `current` (weight + leading bar) and
+`onClick`; Drawer gains `fit` (a bottom sheet as tall as its content) and loses `left`;
+Modal and Drawer mark their content `data-modal`.
+
+| Planned (§6.3) | As built | Why |
+| -------------- | -------- | --- |
+| 768–1023: destinations collapse into a Menu sheet | Measured fit (four steps above); all destinations inline at 768 with English labels | A fixed breakpoint either hides routes that fit or overflows with long names and translations; folding only what doesn't fit keeps the everyday pages one click away |
+| Phone top bar: mark, page name, Jump | Adds the organization under the page name, and the existing page-action slot | The v1 phone bar showed the organization; context is kept |
+| User menu: name, role label, organization, sign out | Adds the e-mail (ledger voice) | It is the identity the person signed in with |
+| Jump: members **and sources** for administrators | Members only, after two typed characters; plus the audit log as a destination | There is no per-source page to go to (only `/sources`), and listing members before a search would be enumeration for its own sake |
+| Recent questions on the Ask desk | Jump only | The desk is D4 |
+| `?` keyboard overlay, `g a / g s / g y` | Not built | Not part of the D3 brief; D7 decides with the full keyboard map |
+
+**Defects found by the new tests and fixed:**
+- The More tab's and folded menu's names read "More , current page…" (a hidden span adds a
+  space); they now use one `aria-label` that starts with the visible word.
+- The docked inspector overlapped the masthead's rule by 1 px; `--masthead-height` now
+  includes the rule everywhere.
+- Ctrl K would have replaced a Mac text field's delete-to-end-of-line.
+- The back trail echoed the requested id ("Evidence e0000000…", "Evidence" for a malformed
+  one), so not-available pages differed inside `main`; the trail now says only "Evidence" /
+  "Trace" (the existing SEC-5 identical-page tests caught it once the trail moved into
+  `main`).
+- The skip link could appear in full-page captures; it is now clipped until focused.
+
+**Verification.**
+- `shell.test.tsx` (9): the nav model by capability, deep-page ownership, the phone split
+  and its growth rule, initials; the platform chord and every case the shortcut ignores;
+  ShellJump for a member (no administrator request whatever is typed), an administrator
+  (members only after typing, from the Access endpoint) and a failed activity load.
+- `e2e/shell.spec.ts` (28 desktop, 10 phone), replacing the sidebar suite: landmarks and
+  no v1 shell; `aria-current` on exactly one destination for seven paths, with weight and
+  a 2 px rule; sections by capability; a long organization name at 1440 / 1024 / 768 and
+  in the account menu; the fold to a named section menu; keyboard order and focus after
+  navigation (including the page already open) and the skip link; the account menu and
+  sign out; axe on Ask, Sources, Access and with Jump open; Jump by shortcut and control
+  with focus return, the other platform's chord ignored, keyboard selection, *Ask “…”*,
+  recent questions, no results, members' and administrators' results with the admin
+  request log, the shortcut blocked under a modal, reduced motion; the docked inspector
+  under the masthead, the reading column, no overflow at the five widths on five screens,
+  and 200 % zoom (640 CSS px); on phones: bars, 44 px targets, no overlap at the end of the
+  page, tab navigation and focus, More for administrators and members with focus return,
+  a long organization name, 320 px reflow, Jump, the evidence sheet and *New question*.
+- Visually reviewed (harness and targeted captures): Ask, Sources, Access and the member
+  page in the shell at 1440, 1280, 1024, 768 and 390; Jump idle and with a member search;
+  the account menu; the folded Admin menu at 768; the More sheet. Page content is still
+  v1 layout on v2 foundations until D4–D6.
+- Full gate: lint, typecheck, 124 unit tests, production build, 307 Playwright tests
+  (desktop, phone and the screen harness) run with one worker.
+- Harness note for D7: full-page captures of a scrolled page stitch the sticky masthead
+  mid-image; D7's captures should scroll to the top or capture the viewport.

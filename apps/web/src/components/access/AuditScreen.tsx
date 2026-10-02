@@ -26,7 +26,7 @@ export function AuditScreen() {
   const forbidden = query.isError && isApiError(query.error) && query.error.status === 403;
   const events = query.data?.pages.flatMap((p) => p.items) ?? [];
   return (
-    <AccessFrame trail={[{ label: "Audit log" }]} forbidden={forbidden}>
+    <AccessFrame trail={[]} forbidden={forbidden}>
       <header className={styles.head}>
         <h1 className={styles.title}>Audit log</h1>
         <p className={styles.deck}>

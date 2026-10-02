@@ -19,6 +19,9 @@ export const viewport: Viewport = {
   themeColor: "#f4f3ef",
   width: "device-width",
   initialScale: 1,
+  // Draw edge to edge so env(safe-area-inset-*) is real: the shell's bars and the page
+  // gutters keep content clear of notches and the home indicator themselves.
+  viewportFit: "cover",
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {

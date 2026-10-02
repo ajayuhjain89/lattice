@@ -5,10 +5,10 @@ import { useId } from "react";
 import { useEvidence } from "@/api/queries";
 import { isApiError } from "@/api/errors";
 import { SkeletonBlock, SkeletonLines } from "@/components/primitives/Skeleton";
-import { PageHeader } from "@/components/shell/PageHeader";
+import { PageTrail } from "@/components/shell/PageTrail";
 import { ErrorState } from "@/components/states/ErrorState";
 import { NotAvailable } from "@/components/states/NotAvailable";
-import { isUuid, shortId } from "@/lib/format";
+import { isUuid } from "@/lib/format";
 
 import { EvidenceBody } from "./EvidenceBody";
 import styles from "./EvidenceScreen.module.css";
@@ -26,9 +26,9 @@ export function EvidenceScreen({ id }: { id: string }) {
 
   return (
     <>
-      <PageHeader trail={[{ label: "Ask", href: "/ask" }, { label: `Evidence ${valid ? shortId(id) : ""}`.trim() }]} />
-      <main id="main" className={styles.main} tabIndex={-1}>
+      <div className={styles.main}>
         <div className={styles.column}>
+          <PageTrail trail={[{ label: "Ask", href: "/ask" }, { label: "Evidence" }]} />
           {notFound ? (
             <NotAvailable
               label="Not available"
@@ -57,7 +57,7 @@ export function EvidenceScreen({ id }: { id: string }) {
             </div>
           )}
         </div>
-      </main>
+      </div>
     </>
   );
 }

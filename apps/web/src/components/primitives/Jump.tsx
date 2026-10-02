@@ -57,6 +57,8 @@ export interface JumpProps {
   statuses?: readonly JumpGroupStatus[];
   /** With text typed, the first option asks it ("Ask “…”"). */
   onAsk?: (question: string) => void;
+  /** The typed text, for a caller whose items come from a search (cleared on close). */
+  onQueryChange?: (query: string) => void;
   placeholder?: string;
 }
 
@@ -79,10 +81,15 @@ export function Jump({
   groups,
   statuses = [],
   onAsk,
+  onQueryChange,
   placeholder = "Jump to a page, a recent question, or ask…",
 }: JumpProps) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
+  const [query, setQueryState] = useState("");
+  const setQuery = (next: string) => {
+    setQueryState(next);
+    onQueryChange?.(next);
+  };
   const [active, setActive] = useState(0);
   const listId = useId();
   const list = useRef<HTMLDivElement>(null);
@@ -163,6 +170,7 @@ export function Jump({
         <Dialog.Content
           className={styles.panel}
           aria-describedby={undefined}
+          data-jump=""
           onOpenAutoFocus={() => {
             opener.current =
               document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -232,7 +240,9 @@ export function Jump({
                             <Icon as={item.icon} />
                           </span>
                         )}
-                        <span className={styles.optionLabel}>{item.label}</span>
+                        <span className={styles.optionLabel} title={item.label}>
+                          {item.label}
+                        </span>
                         {item.detail && (
                           <>
                             <span className="visually-hidden">,</span>{" "}
@@ -288,19 +298,37 @@ function Footer({
   );
 }
 
-/** ⌘K / Ctrl K toggles Jump from anywhere in the workspace. */
+/**
+ * The platform's Jump chord: ⌘K on Apple platforms, Ctrl K elsewhere. Only the platform's
+ * own modifier is taken, so Ctrl K on a Mac keeps its text-editing meaning (delete to the
+ * end of the line) in the composer and every other field.
+ */
+export function jumpChord(): { apple: boolean; label: string; aria: string } {
+  const nav = typeof navigator === "undefined" ? null : navigator;
+  const platform =
+    (nav as (Navigator & { userAgentData?: { platform?: string } }) | null)?.userAgentData?.platform ||
+    nav?.platform ||
+    "";
+  const apple = /mac|iphone|ipad|ipod/i.test(platform);
+  return apple ? { apple, label: "⌘K", aria: "Meta+K" } : { apple, label: "Ctrl K", aria: "Control+K" };
+}
+
+/**
+ * ⌘K / Ctrl K toggles Jump from anywhere in the workspace -- including inside a text
+ * field -- except while another modal dialog owns the page (a confirmation must be
+ * finished or dismissed first), during IME composition, and on key repeat.
+ */
 export function useJumpShortcut(onToggle: () => void) {
   useEffect(() => {
+    const { apple } = jumpChord();
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if (
-        event.key.toLowerCase() === "k" &&
-        (event.metaKey || event.ctrlKey) &&
-        !event.altKey &&
-        !event.shiftKey
-      ) {
-        event.preventDefault();
-        onToggle();
-      }
+      if (event.key.toLowerCase() !== "k" || event.altKey || event.shiftKey) return;
+      if (apple ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey) return;
+      if (event.isComposing || event.repeat) return;
+      // Modal and Drawer mark their content with data-modal; popovers and menus don't block.
+      if (document.querySelector('[data-modal][data-state="open"]')) return;
+      event.preventDefault();
+      onToggle();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

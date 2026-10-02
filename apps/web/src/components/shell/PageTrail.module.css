@@ -1,0 +1,50 @@
+.nav {
+  min-width: 0;
+}
+
+.trail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+  color: var(--text-secondary);
+}
+
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* A separator drawn, not typed, so it is never read out. */
+.crumb::after {
+  content: "/" / "";
+  color: var(--text-muted);
+}
+
+.crumb a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-xs);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-decoration-color: var(--rule-strong);
+  text-underline-offset: 3px;
+}
+
+.crumb a:hover {
+  color: var(--text-primary);
+  text-decoration-color: currentcolor;
+}
+
+.current {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}

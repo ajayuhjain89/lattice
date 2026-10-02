@@ -33,6 +33,12 @@
   outline-offset: -2px;
 }
 
+/* The current page: weight and a leading bar, not colour alone. */
+.item[aria-current="page"] {
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--signal-provenance-mark);
+}
+
 .item[data-disabled] {
   color: var(--text-muted);
   cursor: default;
@@ -92,6 +98,12 @@
 @media (prefers-reduced-motion: reduce) {
   .content {
     animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .item[aria-current="page"] {
+    border-left: 2px solid CanvasText;
   }
 }
 

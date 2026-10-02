@@ -1,0 +1,58 @@
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--control-md);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  transition: background-color var(--motion-quick) var(--ease);
+}
+
+.trigger:hover,
+.trigger[data-state="open"] {
+  background: var(--surface-well);
+  color: var(--text-primary);
+}
+
+/* Initials in the exhibit-marker geometry: squared, ruled, interface type. */
+.initials {
+  display: inline-grid;
+  place-items: center;
+  min-width: var(--control-sm);
+  height: var(--control-sm);
+  padding: 0 var(--space-1);
+  border: var(--border-width) solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sheet);
+  color: var(--text-primary);
+  font-size: var(--type-small-size);
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.summary {
+  display: grid;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.name {
+  composes: t-body-strong from global;
+
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.email {
+  composes: t-meta from global;
+
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}

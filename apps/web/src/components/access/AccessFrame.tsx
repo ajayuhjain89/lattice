@@ -5,14 +5,14 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { SkeletonLines } from "@/components/primitives/Skeleton";
-import { PageHeader, type Crumb } from "@/components/shell/PageHeader";
+import { PageTrail, type Crumb } from "@/components/shell/PageTrail";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { NotAvailable } from "@/components/states/NotAvailable";
 
 import styles from "./Access.module.css";
 
 /**
- * The Access pages' frame: breadcrumb, the administrator-only state, and the two views
+ * The Access pages' frame: the back trail of a deep page, the administrator-only state, and the two views
  * (members, audit log). The API enforces the capability on every call; a person without
  * it sees the same page whether or not what they asked for exists.
  */
@@ -20,9 +20,9 @@ export function AccessFrame({ trail, forbidden, children }: { trail: readonly Cr
   const { isAdmin } = useWorkspace();
   return (
     <>
-      <PageHeader trail={[{ label: "Admin" }, { label: "Access", href: "/access" }, ...trail]} />
-      <main id="main" className={styles.main} tabIndex={-1}>
+      <div className={styles.main}>
         <div className={styles.column}>
+          {trail.length > 0 && <PageTrail trail={[{ label: "Access", href: "/access" }, ...trail]} />}
           {!isAdmin || forbidden ? (
             <NotAvailable
               label="Administrators only"
@@ -34,7 +34,7 @@ export function AccessFrame({ trail, forbidden, children }: { trail: readonly Cr
             children
           )}
         </div>
-      </main>
+      </div>
     </>
   );
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { DropdownMenu as M } from "radix-ui";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 
 import styles from "./Menu.module.css";
 
@@ -57,10 +57,15 @@ export function MenuItem({ onSelect, danger = false, disabled, ...rest }: ItemPr
   );
 }
 
-export function MenuLink({ href, ...rest }: ItemProps & { href: string }) {
+export function MenuLink({
+  href,
+  current = false,
+  onClick,
+  ...rest
+}: ItemProps & { href: string; /** The page this link opens is the one on screen. */ current?: boolean; onClick?: (event: MouseEvent<HTMLAnchorElement>) => void }) {
   return (
     <M.Item asChild className={styles.item} disabled={rest.disabled}>
-      <Link href={href}>
+      <Link href={href} aria-current={current ? "page" : undefined} onClick={onClick}>
         <Inner {...rest} />
       </Link>
     </M.Item>

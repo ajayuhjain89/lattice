@@ -9,14 +9,13 @@ import { isApiError, unexpectedError } from "@/api/errors";
 import type { AskRequest } from "@/api/types";
 import { Button } from "@/components/primitives/Button";
 import { Icon } from "@/components/primitives/icons";
-import { PageHeader } from "@/components/shell/PageHeader";
-import { TOPBAR_ACTION_ID } from "@/components/shell/TopBar";
+import { TOPBAR_ACTION_ID } from "@/components/shell/PhoneBars";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { presentStatus } from "@/lib/answer-status";
 import { useStore } from "@/lib/store";
 import { BREAKPOINTS, useMinWidth } from "@/lib/use-media";
 import { scopeLine } from "@/lib/scope";
-import { HISTORY_LIMIT, takeDraft } from "@/lib/workspace-state";
+import { takeDraft } from "@/lib/workspace-state";
 
 import { AnswerView } from "./AnswerView";
 import { AskIntro } from "./AskIntro";
@@ -39,12 +38,35 @@ export function AskScreen() {
   const [form, setForm] = useState<AskForm>(() => {
     const last = state.ask.get();
     const draft = takeDraft();
+    const prefilled = state.prefill.get();
     const base = last.request ? fromRequest(last.request, last.accountName) : EMPTY_FORM;
+    if (prefilled !== null) return { ...base, question: prefilled };
     return draft ? { ...base, question: draft } : base;
   });
 
   // Keep the draft where a sign-in redirect can find it.
   useEffect(() => state.draft.set(form.question), [form.question, state.draft]);
+
+  // "Ask “…”" chosen in Jump: the question goes into the composer (not sent), with focus.
+  // Arriving from another page it was read by the initializer above; on this page it
+  // arrives through the store.
+  useEffect(() => {
+    let frame = 0;
+    const take = (arriving: boolean) => {
+      const question = state.prefill.get();
+      if (question === null) return;
+      state.prefill.set(null);
+      if (!arriving) setForm((f) => ({ ...f, question }));
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => composer.current?.focus());
+    };
+    take(true);
+    const off = state.prefill.subscribe(() => take(false));
+    return () => {
+      off();
+      cancelAnimationFrame(frame);
+    };
+  }, [state.prefill]);
 
   const run = useCallback(
     (request: AskRequest, accountName: string | null) => {
@@ -54,9 +76,6 @@ export function AskScreen() {
       mutation.mutate(request, {
         onSuccess: (answer) => {
           state.ask.set({ request, accountName, answer, error: null, pending: false, startedAt, elapsedMs: Date.now() - startedAt });
-          state.history.set((h) =>
-            [{ traceId: answer.trace_id, question: request.question, status: answer.status }, ...h.filter((x) => x.traceId !== answer.trace_id)].slice(0, HISTORY_LIMIT),
-          );
         },
         onError: (error) => {
           state.ask.set({ request, accountName, answer: null, error: isApiError(error) ? error : unexpectedError(), pending: false, startedAt });
@@ -92,9 +111,8 @@ export function AskScreen() {
 
   return (
     <>
-      <PageHeader trail={[{ label: "Ask" }]} />
       <NewQuestionButton target={composerBox} onFocus={() => composer.current?.focus()} />
-      <main id="main" className={styles.main} tabIndex={-1}>
+      <div className={styles.main}>
         <div className={styles.column}>
           {!hasResult && (
             <AskIntro
@@ -135,7 +153,7 @@ export function AskScreen() {
             ) : null}
           </div>
         </div>
-      </main>
+      </div>
     </>
   );
 }

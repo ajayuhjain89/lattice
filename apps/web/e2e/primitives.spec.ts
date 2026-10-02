@@ -5,7 +5,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-import { WIDTHS, expectNoHorizontalOverflow, settled } from "./helpers";
+import { WIDTHS, expectNoHorizontalOverflow, jumpChord, settled } from "./helpers";
 
 async function openSpecimen(page: Page) {
   await page.goto("/specimen");
@@ -22,7 +22,7 @@ test("Jump: ⌘K / Ctrl K opens it, arrows and Enter choose, Escape returns focu
   await openSpecimen(page);
   const opener = page.getByRole("button", { name: "Open Jump" });
   await opener.focus();
-  await page.keyboard.press("ControlOrMeta+k");
+  await page.keyboard.press(await jumpChord(page));
   const input = page.getByRole("combobox", { name: "Jump to" });
   await expect(input).toBeFocused();
   await audit(page);

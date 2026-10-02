@@ -33,6 +33,7 @@ export function Modal({ open, onOpenChange, title, description, children, footer
       <Dialog.Portal>
         <Dialog.Overlay className={styles.overlay} />
         <Dialog.Content
+          data-modal=""
           className={`${styles.dialog} ${size === "confirm" ? styles.confirm : ""}`}
           onOpenAutoFocus={() => {
             opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;

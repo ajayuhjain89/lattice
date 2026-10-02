@@ -25,13 +25,6 @@
   animation: slide-right var(--motion-panel) var(--ease);
 }
 
-.left {
-  inset: 0 auto 0 0;
-  width: min(var(--sidebar-width), 86vw);
-  border-width: 0 var(--border-width) 0 0;
-  animation: slide-left var(--motion-panel) var(--ease);
-}
-
 .bottom {
   inset: auto 0 0;
   max-height: 92dvh;
@@ -39,6 +32,11 @@
   border-width: var(--border-width) 0 0;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
   animation: slide-up var(--motion-panel) var(--ease);
+}
+
+.bottom.fit {
+  height: auto;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .handle {
@@ -60,13 +58,6 @@
   from {
     opacity: 0;
     transform: translateX(16px);
-  }
-}
-
-@keyframes slide-left {
-  from {
-    opacity: 0;
-    transform: translateX(-16px);
   }
 }
 

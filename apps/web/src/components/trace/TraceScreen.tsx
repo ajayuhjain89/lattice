@@ -15,7 +15,7 @@ import { NoticeLine } from "@/components/primitives/NoticeLine";
 import { SectionLabel } from "@/components/primitives/SectionLabel";
 import { SkeletonLines } from "@/components/primitives/Skeleton";
 import { ExhibitMarker } from "@/components/primitives/ExhibitMarker";
-import { PageHeader } from "@/components/shell/PageHeader";
+import { PageTrail } from "@/components/shell/PageTrail";
 import { shortStatus } from "@/components/shell/status-labels";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { ErrorState } from "@/components/states/ErrorState";
@@ -45,10 +45,12 @@ export function TraceScreen({ id }: { id: string }) {
   const valid = isUuid(id);
   return (
     <>
-      <PageHeader trail={[{ label: "Ask", href: "/ask" }, { label: `Trace ${valid ? shortId(id) : ""}`.trim() }]} />
-      <main id="main" className={styles.main} tabIndex={-1}>
-        <div className={styles.column}>{valid ? <TraceLoader id={id} /> : <TraceNotAvailable />}</div>
-      </main>
+      <div className={styles.main}>
+        <div className={styles.column}>
+          <PageTrail trail={[{ label: "Activity", href: "/activity" }, { label: "Trace" }]} />
+          {valid ? <TraceLoader id={id} /> : <TraceNotAvailable />}
+        </div>
+      </div>
     </>
   );
 }
