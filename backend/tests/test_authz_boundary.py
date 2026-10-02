@@ -91,6 +91,24 @@ ALLOWED: dict[str, frozenset[str]] = {
     # D-12: applies admin-grants.yaml as admin-origin membership grants, all or nothing.
     # Never reads or writes source-origin grants.
     "admin_grants": frozenset({"document_grants", "principal_type"}),
+    # --- Phase 9: access management reads and writes access *state*; who may read what
+    # is still asked of lattice.authz (readable_documents_predicate, explain_for_reviewer,
+    # resolve_member_context). ---
+    # Read models: a member's administrator-defined groups (snapshot), group display
+    # (source groups unnamed unless the viewer is a member), a member's membership
+    # grants. Every document shown is filtered by the viewer's predicate.
+    "access.directory": frozenset(
+        {"access_groups", "access_group_members", "document_grants", "principal_type"}
+    ),
+    # Writes: assignments, departments, administrator-defined group members and
+    # administrator membership grants, each with its audit event (the database limits
+    # the API role to exactly these, migration 0012).
+    "access.changes": frozenset(
+        {"access_groups", "access_group_members", "document_grants", "principal_type"}
+    ),
+    # Names the principals of the grants ``authz.explain_for_reviewer`` matched (member,
+    # department, group display rule). No SQL of its own.
+    "access.explain": frozenset({"principal_type"}),
 }
 
 

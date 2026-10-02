@@ -21,6 +21,7 @@ class ErrorCode(StrEnum):
     PERMISSION_DENIED = "permission_denied"
     CSRF_REJECTED = "csrf_rejected"
     NOT_FOUND = "not_found"
+    CONFLICT = "conflict"
     METHOD_NOT_ALLOWED = "method_not_allowed"
     VALIDATION_FAILED = "validation_failed"
     REQUEST_TOO_LARGE = "request_too_large"
@@ -40,6 +41,7 @@ HTTP_STATUS: dict[ErrorCode, HTTPStatus] = {
     ErrorCode.PERMISSION_DENIED: HTTPStatus.FORBIDDEN,
     ErrorCode.CSRF_REJECTED: HTTPStatus.FORBIDDEN,
     ErrorCode.NOT_FOUND: HTTPStatus.NOT_FOUND,
+    ErrorCode.CONFLICT: HTTPStatus.CONFLICT,
     ErrorCode.METHOD_NOT_ALLOWED: HTTPStatus.METHOD_NOT_ALLOWED,
     ErrorCode.VALIDATION_FAILED: HTTPStatus.UNPROCESSABLE_ENTITY,
     ErrorCode.REQUEST_TOO_LARGE: HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
@@ -58,6 +60,7 @@ DEFAULT_MESSAGE: dict[ErrorCode, str] = {
     ErrorCode.PERMISSION_DENIED: "You don't have permission to do this.",
     ErrorCode.CSRF_REJECTED: "The request was rejected because it did not come from Lattice.",
     ErrorCode.NOT_FOUND: "Not found.",
+    ErrorCode.CONFLICT: "This changed since you opened it. Review the latest and try again.",
     ErrorCode.METHOD_NOT_ALLOWED: "This method is not allowed here.",
     ErrorCode.VALIDATION_FAILED: "The request is invalid.",
     ErrorCode.REQUEST_TOO_LARGE: "The request is too large.",

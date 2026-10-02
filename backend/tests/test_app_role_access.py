@@ -86,7 +86,7 @@ async def test_app_table_privileges_are_exact(
 
 async def test_every_table_is_in_the_app_inventory(superuser_engine: AsyncEngine) -> None:
     async with superuser_engine.connect() as conn:
-        tables = set(
+        tables: set[str] = set(
             (
                 await conn.execute(
                     text(
@@ -104,7 +104,7 @@ async def test_app_updates_only_the_access_columns_of_memberships(
     superuser_engine: AsyncEngine,
 ) -> None:
     async with superuser_engine.connect() as conn:
-        columns = set(
+        columns: set[str] = set(
             (
                 await conn.execute(
                     text(
