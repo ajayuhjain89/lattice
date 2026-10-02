@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -96,6 +96,14 @@ format: ## Apply ruff formatting and safe fixes
 
 typecheck: ## mypy --strict
 	$(UV) mypy
+
+# pip-audit reads the exact locked set (all extras, with hashes); pnpm audit the web lockfile.
+PIP_AUDIT := pip-audit==2.9.0
+audit: ## Known-vulnerability audit of the locked backend and web dependencies (network)
+	cd backend && uv export --frozen --all-extras --no-emit-project --format requirements-txt -o .audit-requirements.txt >/dev/null \
+	  && uvx --from $(PIP_AUDIT) pip-audit --strict --disable-pip --require-hashes -r .audit-requirements.txt; \
+	  status=$$?; rm -f .audit-requirements.txt; exit $$status
+	$(WEB) pnpm audit --audit-level=low
 
 # --- Web app (Phase 7; Node 22+, pnpm) ---------------------------------------------------
 # Development sign-in lists the seeded personas; the API refuses it outside development/test.
