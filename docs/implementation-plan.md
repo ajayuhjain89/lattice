@@ -887,11 +887,70 @@ objectives remain open.
 
 ---
 
+### Phase 9 — Access management and audit events
+
+The first phase after the slice (§4 "Later phases" row 9), plus the gap Phase 7 left
+for it: the Ask account picker and first-run scope line (Phase 7 contract observation
+3, design-system Part C).
+
+**Deliverables.**
+1. *Member scope (Ask).* `GET /v1/accounts`: the accounts the member may know exist
+   (`authz.visible_accounts_predicate`, the same set a scope may name) and their scope
+   kind. Ask gets the `Account` chip (only those accounts), the `Sources` chip narrowed
+   to source types with readable documents (`GET /v1/sources`), and the first-run scope
+   line ("You can search 3 sources · Acme Corp, Northpeak Logistics"); with no readable
+   source the composer is disabled (B13 "Empty knowledge base").
+2. *Access page (administrators).* Member directory (keyset pages, name/e-mail
+   filter); a member's access as plain sentences built from typed data (clearance,
+   account scope and assignments, departments, groups, explicit grants); the
+   source-synced group rule of security-model §10 (named only when the administrator
+   is a member, otherwise "Private channel (synced from Slack)" + opaque reference +
+   member list); grants on documents the administrator cannot read shown only as an
+   opaque reference; "check a document" (`authz.explain_for_reviewer`) over a search of
+   documents the administrator can read.
+3. *Changes with previews.* Clearance, account scope, account assignments,
+   departments, membership of administrator-defined groups, suspension/reactivation,
+   and administrator grants of one readable document to one member (and their
+   revocation). Every change: a preview first (effects as rules; document counts only
+   over documents the administrator can read), a stated reason, optimistic concurrency
+   (409 on a stale view), one transaction with its audit event. An administrator cannot
+   change their own access through the API. Source-synced groups and source grants stay
+   owned by the source (read-only).
+4. *Full `audit_events`.* `access.member_changed`, `access.grant_created`,
+   `access.grant_revoked`, written by the API, the seed (`operator:seed`) and
+   `lattice apply-admin-grants` (`operator:admin-grants`), next to the Phase 6 provider
+   events. `GET /v1/admin/audit-events` (keyset pages, newest first, no totals); targets
+   re-authorized for the viewing administrator at read time.
+5. *Database.* Migration 0012: the API role gets exactly the writes above (memberships'
+   status/clearance/scope columns, assignments, departments, admin-group members,
+   admin-origin membership grants, audit inserts), each limited by restrictive RLS
+   policies; `is_admin` stays unwritable by the API; an audit index.
+
+**Tests.** Persona sweep: `/v1/accounts` equals the reference `account_visible` for every
+persona of both organizations; scope with a hidden account refused like an unknown one.
+Access API: 403 for non-administrators whether or not the target exists; another
+organization's members, grants and events are 404 and never listed; previews count only
+administrator-readable documents (checked against the reference policy); unreadable
+granted documents and unnamed private channels never leak a title, name or count;
+every change writes exactly one audit event in the same transaction (and none when it
+fails); self-changes refused; stale versions refused; the database refuses source
+grants, source-group edits, `is_admin` and `removed` from the API role. Web: typed
+client, every state (loading, empty, error, 403, 404, 409, revoked capability),
+Playwright desktop and phone, axe.
+
+**Non-goals (later phases).** Creating, renaming or deleting groups, departments or
+accounts; changing `is_admin`; removing members or provisioning (SCIM, Phase 10 with
+OIDC); grants to departments or groups from the UI; time-bound grants; an end-user
+"why can I see this?" UI; the Accounts workspace (Phase 12); rate limits (Phase 10);
+audit retention and alerting (Phase 11).
+
+---
+
 ### Later phases (order to be revisited after the slice)
 
 | Phase | Theme | Notes |
 | ----- | ----- | ----- |
-| 9 | Access management UX + audit events | Explanations, change previews (counts only over admin-readable documents), admin grants, full `audit_events` (the provider and AI egress settings UI is Phase 7, D-16) |
+| 9 | Access management UX + audit events | **Planned above** (Phase 9 section). Explanations, change previews (counts only over admin-readable documents), admin grants, full `audit_events` (the provider and AI egress settings UI is Phase 7, D-16) |
 | 10 | OIDC SSO + hardening | OIDC (D-1), rate limits, security headers review, dependency audit, threat-model review, pen-test style review of isolation |
 | 11 | Deployment + operations | Container images, single-region deploy, backups/PITR, migrations in CI/CD, retention jobs, alerting on `security_invariant_violated` |
 | 12 | Accounts workspace | Account timeline + scoped Ask (AM workflow) |
