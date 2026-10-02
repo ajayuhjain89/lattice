@@ -1146,6 +1146,7 @@ nowhere. The development database was migrated to 0013 (no data change).
 | ----- | ----- | ----- |
 | 9 | Access management UX + audit events | **Built and merged** (8d3af3b; Phase 9 section above). Explanations, change previews (counts only over admin-readable documents), admin grants, full `audit_events` (the provider and AI egress settings UI is Phase 7, D-16) |
 | 10 | OIDC SSO + hardening | **Built, verified and approved** (Phase 10 section above; decisions D-1, D-19 revised, D-20 and D-21 accepted 2026-10-02): OIDC (D-1), SCIM provisioning (D-20), rate limits (D-21), database-enforced access audit, security headers review, dependency audit, threat-model review, pen-test style review of isolation |
+| — | Product-design overhaul (frontend only) | **Direction accepted 2026-10-02 (D0)**: `design-direction.md` is the locked source of truth; steps D1–D7 run in order on `phase/design-overhaul`, each reviewed before the next. Inserted before Phase 11 |
 | 11 | Deployment + operations | Container images, single-region deploy, backups/PITR, migrations in CI/CD, retention jobs, alerting on `security_invariant_violated` |
 | 12 | Accounts workspace | Account timeline + scoped Ask (AM workflow) |
 | 13 | Next connectors | Call transcripts, CRM notes, GitHub issues, release notes |
