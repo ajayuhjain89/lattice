@@ -22,6 +22,7 @@ from lattice.config import Environment, Settings, load_provider_settings, load_s
 from lattice.db.engine import Database, create_engine
 from lattice.db.role_check import verify_runtime_role
 from lattice.identity.dev_provider import DevIdentityProvider
+from lattice.identity.oidc import OidcClient, OidcSignIn
 from lattice.identity.sessions import SessionPolicy, SessionService
 from lattice.log import configure_logging
 from lattice.providers.factory import build_embedding_provider
@@ -73,6 +74,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.db = db
     app.state.limits = ApiLimits.from_settings(db, settings)
     app.state.provisioning = Provisioning(db)
+    app.state.oidc = OidcSignIn(
+        db,
+        OidcClient(timeout_seconds=settings.oidc_http_timeout_seconds, require_https=production),
+        web_origin=settings.web_origin,
+    )
     app.state.session_service = SessionService(
         db,
         SessionPolicy(

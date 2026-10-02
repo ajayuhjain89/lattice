@@ -129,8 +129,10 @@ def configure_logging(*, level: str, include_exception_text: bool) -> None:
     access.handlers = []
     access.propagate = False
     access.disabled = True
-    # SQLAlchemy statement logging would print SQL parameters.
-    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    # SQLAlchemy statement logging would print SQL parameters; httpx logs every request
+    # URL at INFO (identity provider and model provider endpoints, Phase 10 review, T12).
+    for name in ("sqlalchemy.engine", "httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def log_event(logger: logging.Logger, level: int, event: str, **fields: Any) -> None:
