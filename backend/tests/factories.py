@@ -9,6 +9,7 @@ import httpx
 from sqlalchemy import text
 
 from lattice.db.engine import Database, bind_organization
+from lattice.provisioning.tokens import hash_token, new_token
 from tests.conftest import CSRF
 
 
@@ -341,3 +342,19 @@ async def create_provisioned_member(
             },
         )
     return Member(organization_id, user_id, membership_id, email)
+
+
+async def create_scim_token(
+    db: Database, organization_id: uuid.UUID, connection_id: uuid.UUID, *, revoked: bool = False
+) -> str:
+    """A SCIM bearer token for the connection; returns the raw token."""
+    token = new_token()
+    async with db.tenant_transaction(organization_id) as s:
+        await s.execute(
+            text(
+                "INSERT INTO scim_tokens (organization_id, connection_id, token_hash, revoked_at) "
+                "VALUES (:o, :c, :h, CASE WHEN :r THEN now() END)"
+            ),
+            {"o": organization_id, "c": connection_id, "h": hash_token(token), "r": revoked},
+        )
+    return token

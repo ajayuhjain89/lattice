@@ -200,6 +200,18 @@ class ClientLimiter:
     def _client(self, address: str | None) -> bytes:
         return hmac.new(self._key, (address or "unknown").encode(), hashlib.sha256).digest()[:16]
 
+    async def check(self, address: str | None) -> None:
+        """Raise :class:`RateLimited` if ``address`` is over the limit, counting nothing:
+        callers that count failures only refuse an exhausted client *before* checking
+        its credentials, so guessing cannot continue behind the 429."""
+        key = self._client(address)
+        now = self._clock()
+        started = math.floor(now / self._window) * self._window
+        async with self._lock:
+            found = self._counts.get(key)
+            if found is not None and found[0] >= started and found[1] >= self._limit:
+                raise RateLimited(Bucket.SIGN_IN, max(1, math.ceil(found[0] + self._window - now)))
+
     async def hit(self, address: str | None) -> None:
         """Count one request from ``address`` or raise :class:`RateLimited`."""
         key = self._client(address)

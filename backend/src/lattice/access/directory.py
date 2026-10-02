@@ -41,7 +41,7 @@ from lattice.authz import (
     readable_document_classifications,
     readable_documents_predicate,
 )
-from lattice.identity.models import User
+from lattice.identity.models import DirectoryIdentity, User
 from lattice.ingestion.store import opaque_ref
 from lattice.orgs.models import Account, AccountAssignment, Department, Membership
 from lattice.sources.models import Source
@@ -64,6 +64,7 @@ USERS = _table(User)
 ACCOUNTS = _table(Account)
 DEPARTMENTS = _table(Department)
 ASSIGNMENTS = _table(AccountAssignment)
+DIRECTORY = _table(DirectoryIdentity)
 
 
 def _ids(values: Collection[uuid.UUID]) -> Any:
@@ -167,6 +168,13 @@ def _member_columns() -> list[Any]:
         MEMBERSHIPS.c.clearance,
         MEMBERSHIPS.c.account_scope,
         assigned.label("assigned"),
+        select(1)
+        .where(
+            DIRECTORY.c.organization_id == MEMBERSHIPS.c.organization_id,
+            DIRECTORY.c.membership_id == MEMBERSHIPS.c.id,
+        )
+        .exists()
+        .label("provisioned"),
     ]
 
 
@@ -202,6 +210,7 @@ def _summary(row: Any, departments: list[Named]) -> MemberSummary:
         account_scope=row.account_scope,
         assigned_accounts=int(row.assigned),
         departments=departments,
+        managed_by="identity_provider" if row.provisioned else None,
     )
 
 

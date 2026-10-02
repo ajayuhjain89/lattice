@@ -7,8 +7,10 @@ are ``AccessSnapshot``s), ``access.grant_created`` and ``access.grant_revoked`` 
 The Phase 6 provider and egress events (``provider.*``, ``credential.*``,
 ``egress.levels_changed``) are written by ``lattice.providers.configuration``.
 
-Actors: ``member:<membership id>`` (the API), ``operator:seed``,
-``operator:admin-grants`` and the CLI's own operator actors.
+Actors: ``member:<membership id>`` (the API), ``scim:<token id>`` (the identity
+provider's provisioning, Phase 10: ``access.member_changed`` and
+``access.identity_changed``), ``operator:seed``, ``operator:admin-grants`` and the CLI's
+own operator actors.
 
 Reading (``audit_page``): newest first, keyset pages, no totals. An event that targets a
 document is listed only while the viewing administrator can read that document --
@@ -46,6 +48,8 @@ from lattice.tracing.models import AuditEvent
 
 MAX_AUDIT_PAGE: Final = 100
 MEMBER_CHANGED: Final = "access.member_changed"
+# SCIM (Phase 10): the identity provider changed a member's user name, e-mail or name.
+IDENTITY_CHANGED: Final = "access.identity_changed"
 GRANT_CREATED: Final = "access.grant_created"
 GRANT_REVOKED: Final = "access.grant_revoked"
 
@@ -189,11 +193,12 @@ async def audit_page(
     items: list[AuditEventOut] = []
     for e in events:
         kind, _, tool = e.actor.partition(":")
-        actor = (
-            Actor(kind="member", name=member_names.get(e.actor), operator=None)
-            if kind == "member"
-            else Actor(kind="operator", name=None, operator=tool or kind)
-        )
+        if kind == "member":
+            actor = Actor(kind="member", name=member_names.get(e.actor), operator=None)
+        elif kind == "scim":
+            actor = Actor(kind="identity_provider", name=None, operator=None)
+        else:
+            actor = Actor(kind="operator", name=None, operator=tool or kind)
         member = None
         document = None
         found_effects = []
@@ -207,6 +212,8 @@ async def audit_page(
                 after = _snapshot(e.after)
                 if after is not None:
                     found_effects = effects(_snapshot(e.before), after, names)
+            elif e.action == IDENTITY_CHANGED:
+                details = _details({}, e.before, e.after)
         else:
             details = _details(e.target, e.before, e.after)
         items.append(

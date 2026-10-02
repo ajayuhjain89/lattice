@@ -61,6 +61,10 @@ class MemberSummary(_Out):
     account_scope: AccountScope
     assigned_accounts: int
     departments: list[Named]
+    managed_by: Literal["identity_provider"] | None = Field(
+        description="Provisioned by the organization's identity provider (SCIM): it owns "
+        "the member's name, e-mail and whether they are active; access stays editable here."
+    )
 
 
 class MembersPage(_Out):
@@ -252,7 +256,7 @@ class DocumentExplanation(_Out):
 
 
 class Actor(_Out):
-    kind: Literal["member", "operator"]
+    kind: Literal["member", "operator", "identity_provider"]
     name: str | None = Field(description="The member's name; null if no longer a member.")
     operator: str | None = Field(description="The operator tool (seed, admin-grants, cli).")
 
@@ -275,7 +279,10 @@ class AuditEventOut(_Out):
         "not listed."
     )
     effects: list[AccessEffect]
-    details: list[AuditDetail] = Field(description="Provider and egress settings events.")
+    details: list[AuditDetail] = Field(
+        description="Provider and egress settings events, and identity changes from the "
+        "identity provider (user name, e-mail, name)."
+    )
 
 
 class AuditPage(_Out):
