@@ -27,6 +27,7 @@ def apply_change(snapshot: AccessSnapshot, change: MemberChange) -> AccessSnapsh
         if change.departments is None
         else frozenset(change.departments),
         groups=snapshot.groups if change.groups is None else frozenset(change.groups),
+        is_admin=snapshot.is_admin,
     )
 
 
@@ -46,10 +47,19 @@ def effects(
             frozenset(),
             frozenset(),
             frozenset(),
+            is_admin=False,
         )
     if before.status != after.status:
         found.append(
             AccessEffect(kind="suspended" if after.status == "suspended" else "reactivated")
+        )
+    if before.is_admin != after.is_admin:
+        found.append(
+            AccessEffect(
+                kind="administrator",
+                before=str(before.is_admin).lower(),
+                after=str(after.is_admin).lower(),
+            )
         )
     if before.clearance != after.clearance:
         found.append(AccessEffect(kind="clearance", before=before.clearance, after=after.clearance))

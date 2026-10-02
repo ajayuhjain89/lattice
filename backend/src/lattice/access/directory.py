@@ -88,10 +88,14 @@ class AccessSnapshot:
     departments: frozenset[uuid.UUID]
     # Administrator-defined groups only: source-group membership follows the source.
     groups: frozenset[uuid.UUID]
+    # The administrator capability: no access to content, but audited with access
+    # (threat model T3). Only operator tools change it; the API cannot (0012).
+    is_admin: bool = False
 
     def as_json(self) -> dict[str, Any]:
         return {
             "status": self.status,
+            "is_admin": self.is_admin,
             "clearance": self.clearance,
             "account_scope": self.account_scope,
             "accounts": sorted(str(i) for i in self.accounts),
@@ -102,7 +106,7 @@ class AccessSnapshot:
 
 _SNAPSHOT_SQL = text(
     """
-    SELECT m.status, m.clearance, m.account_scope, m.authz_updated_at,
+    SELECT m.status, m.clearance, m.account_scope, m.is_admin, m.authz_updated_at,
            ARRAY(SELECT aa.account_id FROM account_assignments aa
                  WHERE aa.organization_id = m.organization_id AND aa.membership_id = m.id)
              AS accounts,
@@ -137,6 +141,7 @@ async def access_snapshot(
             accounts=frozenset(row.accounts),
             departments=frozenset(row.departments),
             groups=frozenset(row.groups),
+            is_admin=row.is_admin,
         ),
         row.authz_updated_at,
     )
@@ -438,6 +443,30 @@ async def search_documents(
     ).all()
     refs = await _refs(session, viewer, rows)
     return [refs[r.id] for r in rows]
+
+
+async def document_references(
+    session: AsyncSession, organization_id: uuid.UUID, document_ids: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, tuple[uuid.UUID, str]]:
+    """(source ID, opaque reference) of documents, for audit targets. The reference is
+    the same keyed ``rec_…`` the Sources page shows for the record."""
+    ids = sorted(set(document_ids))
+    if not ids:
+        return {}
+    rows = await session.execute(
+        select(
+            DOCUMENTS.c.id, DOCUMENTS.c.source_id, DOCUMENTS.c.external_id, SOURCES.c.opaque_ref_key
+        )
+        .join(
+            SOURCES,
+            and_(
+                SOURCES.c.organization_id == DOCUMENTS.c.organization_id,
+                SOURCES.c.id == DOCUMENTS.c.source_id,
+            ),
+        )
+        .where(DOCUMENTS.c.organization_id == organization_id, DOCUMENTS.c.id == any_(_ids(ids)))
+    )
+    return {r.id: (r.source_id, opaque_ref(bytes(r.opaque_ref_key), r.external_id)) for r in rows}
 
 
 # --- a member's access -----------------------------------------------------------------

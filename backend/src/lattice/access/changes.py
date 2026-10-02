@@ -29,7 +29,13 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lattice.access.audit import GRANT_CREATED, GRANT_REVOKED, MEMBER_CHANGED, record_event
-from lattice.access.directory import DOCUMENTS, AccessSnapshot, access_snapshot, entity_names
+from lattice.access.directory import (
+    DOCUMENTS,
+    AccessSnapshot,
+    access_snapshot,
+    document_references,
+    entity_names,
+)
 from lattice.access.models import (
     AccessPreview,
     GrantRequest,
@@ -46,7 +52,6 @@ from lattice.authz import (
 )
 from lattice.db.engine import Database
 from lattice.errors import ErrorCode, ErrorDetail, LatticeError
-from lattice.ingestion.store import opaque_ref
 
 
 def _invalid(field: str, issue: str) -> LatticeError:
@@ -309,27 +314,21 @@ async def _bump(
 
 async def _readable_document(
     session: AsyncSession, viewer: AuthorizationContext, document_id: uuid.UUID
-) -> tuple[uuid.UUID, str, bytes] | None:
-    """(source ID, external ID, the source's reference key) of a document the viewer can
-    read; None for anything else, identically."""
-    row = (
+) -> tuple[uuid.UUID, str] | None:
+    """(source ID, opaque reference) of a document the viewer can read; None for
+    anything else, identically."""
+    found = (
         await session.execute(
-            select(DOCUMENTS.c.source_id, DOCUMENTS.c.external_id).where(
+            select(DOCUMENTS.c.id).where(
                 DOCUMENTS.c.organization_id == viewer.organization_id,
                 DOCUMENTS.c.id == document_id,
                 readable_documents_predicate(viewer, DOCUMENTS),
             )
         )
-    ).one_or_none()
-    if row is None:
+    ).scalar_one_or_none()
+    if found is None:
         return None
-    key: bytes = (
-        await session.execute(
-            text("SELECT opaque_ref_key FROM sources WHERE organization_id = :o AND id = :s"),
-            {"o": viewer.organization_id, "s": row.source_id},
-        )
-    ).scalar_one()
-    return row.source_id, row.external_id, bytes(key)
+    return (await document_references(session, viewer.organization_id, [document_id]))[document_id]
 
 
 async def create_grant(
@@ -371,7 +370,7 @@ async def create_grant(
             )
         ).scalar_one()
         await _bump(session, organization_id, membership_id)
-        source_id, external_id, key = document
+        source_id, reference = document
         await record_event(
             session,
             organization_id,
@@ -382,7 +381,7 @@ async def create_grant(
                 "document_id": str(request.document_id),
                 "grant_id": str(grant_id),
                 "source_id": str(source_id),
-                "reference": opaque_ref(key, external_id),
+                "reference": reference,
             },
             before=None,
             after={"origin": "admin", "principal_type": "membership"},
@@ -425,7 +424,7 @@ async def revoke_grant(
             {"o": organization_id, "g": grant_id},
         )
         await _bump(session, organization_id, grant.membership_id)
-        source_id, external_id, key = document
+        source_id, reference = document
         await record_event(
             session,
             organization_id,
@@ -436,7 +435,7 @@ async def revoke_grant(
                 "document_id": str(grant.document_id),
                 "grant_id": str(grant_id),
                 "source_id": str(source_id),
-                "reference": opaque_ref(key, external_id),
+                "reference": reference,
             },
             before={"origin": "admin", "principal_type": "membership"},
             after=None,

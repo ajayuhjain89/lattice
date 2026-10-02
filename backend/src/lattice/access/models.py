@@ -175,6 +175,7 @@ EffectKind = Literal[
     "provisioned",
     "suspended",
     "reactivated",
+    "administrator",
     "clearance",
     "account_scope",
     "account_added",

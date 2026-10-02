@@ -20,7 +20,7 @@ import json
 import uuid
 from typing import Any, Final
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import null, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lattice.access.directory import (
@@ -66,8 +66,9 @@ async def record_event(
             actor=actor,
             action=action,
             target=target,
-            before=before,
-            after=after,
+            # SQL NULL, not a JSON null, for "no state" (as the provider events store it).
+            before=null() if before is None else before,
+            after=null() if after is None else after,
             reason=reason,
         )
     )
@@ -85,6 +86,7 @@ def _snapshot(value: dict[str, Any] | None) -> AccessSnapshot | None:
             accounts=frozenset(uuid.UUID(i) for i in value["accounts"]),
             departments=frozenset(uuid.UUID(i) for i in value["departments"]),
             groups=frozenset(uuid.UUID(i) for i in value["groups"]),
+            is_admin=bool(value.get("is_admin", False)),
         )
     except (KeyError, TypeError, ValueError):
         return None

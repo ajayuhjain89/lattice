@@ -146,3 +146,24 @@ async def test_dry_run_and_problems_write_nothing(owner_db: Database, halden: Or
     assert await _admin_grants(owner_db, halden) == []
     unknown = await apply_admin_grants(owner_db, "nowhere", _grants((RCA, MAYA)))
     assert [(p.index, p.code) for p in unknown.problems] == [(-1, "unknown_organization")]
+
+
+async def test_applied_and_pruned_grants_are_audited(owner_db: Database, halden: Org) -> None:
+    await sync_all(owner_db, halden, None)
+    grants = load_admin_grants(halden.root / "admin-grants.yaml")
+    await apply_admin_grants(owner_db, "halden", grants)
+    await apply_admin_grants(owner_db, "halden", grants)  # idempotent: no second event
+    await apply_admin_grants(owner_db, "halden", AdminGrantsFile(), prune=True)
+    events = await rows(
+        owner_db,
+        halden.id,
+        "SELECT actor, action, target ->> 'reference', reason FROM audit_events "
+        "WHERE action LIKE 'access.grant_%' ORDER BY created_at",
+    )
+    assert [(e[0], e[1]) for e in events] == [
+        ("operator:admin-grants", "access.grant_created"),
+        ("operator:admin-grants", "access.grant_revoked"),
+    ]
+    assert all(str(e[2]).startswith("rec_") for e in events)
+    assert events[0][3] == grants.grants[0].reason
+    assert events[1][3] == "Removed from admin-grants.yaml (--prune)"

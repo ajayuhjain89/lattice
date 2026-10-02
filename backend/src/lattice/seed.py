@@ -13,6 +13,11 @@ admin-defined access groups from a YAML manifest (e.g. data/synthetic/halden/org
   different group, and the group under the old key is left untouched with its members
   and grants -- removing it is a deliberate operator action, not a side effect.
   Documents and grants are not seeded: they arrive through ingestion (Phase 4).
+* Every member whose administrable access (status, administrator flag, clearance,
+  account scope, assignments, departments, administrator-defined groups) this run
+  creates or changes gets an ``access.member_changed`` audit event (actor
+  ``operator:seed``). Re-running the seed reverts changes made in the Access page to
+  the manifest -- audited, never silently.
 * Creates development identities (issuer ``dev``, subject = email) so the personas can
   use the development login. Refuses to run when LATTICE_ENV=production.
 """
@@ -31,6 +36,8 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
+from lattice.access.audit import MEMBER_CHANGED, record_event
+from lattice.access.directory import AccessSnapshot, access_snapshot
 from lattice.authz import AccessGroup, AccessGroupMember
 from lattice.db.engine import Database, bind_organization
 from lattice.identity.dev_provider import DEV_ISSUER, normalize_subject
@@ -335,6 +342,9 @@ async def seed_manifest(db: Database, manifest: Manifest) -> SeedReport:
             )
 
         membership_ids: dict[str, uuid.UUID] = {}
+        # Each member's administrable access before this run (None: new), audited at
+        # the end once groups are applied too (Phase 9, threat model T3).
+        access_before: dict[uuid.UUID, AccessSnapshot | None] = {}
         for member in manifest.members:
             report.note(
                 "user",
@@ -356,6 +366,19 @@ async def seed_manifest(db: Database, manifest: Manifest) -> SeedReport:
                     ["issuer", "subject"],
                     [],
                 ),
+            )
+            existing_membership = (
+                await session.execute(
+                    select(memberships.c.id).where(
+                        memberships.c.organization_id == organization_id,
+                        memberships.c.user_id == user_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            previous = (
+                await access_snapshot(session, organization_id, existing_membership)
+                if existing_membership is not None
+                else None
             )
             access_columns = ("status", "is_admin", "clearance", "account_scope")
             wanted_access = tuple(getattr(member, c) for c in access_columns)
@@ -383,6 +406,7 @@ async def seed_manifest(db: Database, manifest: Manifest) -> SeedReport:
                 session, memberships, organization_id=organization_id, user_id=user_id
             )
             membership_ids[member.email] = membership_id
+            access_before[membership_id] = previous[0] if previous is not None else None
             links_changed = await _sync_links(
                 session,
                 member_departments,
@@ -448,6 +472,24 @@ async def seed_manifest(db: Database, manifest: Manifest) -> SeedReport:
                     .values(authz_updated_at=func.now())
                 )
             report.note("group", group_changed or bool(affected))
+
+        for membership_id, before_access in access_before.items():
+            current = await access_snapshot(session, organization_id, membership_id)
+            assert current is not None  # noqa: S101 - upserted above
+            if before_access == current[0]:
+                continue
+            await record_event(
+                session,
+                organization_id,
+                actor="operator:seed",
+                action=MEMBER_CHANGED,
+                target={"membership_id": str(membership_id)},
+                before=None if before_access is None else before_access.as_json(),
+                after=current[0].as_json(),
+                reason="Provisioned from the organization manifest"
+                if before_access is None
+                else "Updated from the organization manifest",
+            )
     return report
 
 
