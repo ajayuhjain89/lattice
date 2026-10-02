@@ -12,6 +12,7 @@ import {
   EV,
   EVIDENCE_ONLY,
   FAILED,
+  ID,
   INSUFFICIENT,
   ME_LENA,
   PARTIAL,
@@ -29,7 +30,7 @@ const only = process.env.SCREENS?.split(",");
 const widths = process.env.SCREEN_WIDTHS ? process.env.SCREEN_WIDTHS.split(",").map(Number) : [...WIDTHS];
 
 // Overlays (drawers, sheets) are fixed to the viewport: full-page captures distort them.
-const OVERLAYS = new Set(["ask-inspector"]);
+const OVERLAYS = new Set(["ask-inspector", "access-change"]);
 
 const shot = async (page: Page, name: string, width: number) => {
   await page.waitForTimeout(250);
@@ -148,6 +149,29 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
     await mockApi(page, { me: ME_LENA });
     await page.goto("/activity");
     await page.getByRole("heading", { name: "Organization activity" }).waitFor();
+  },
+  "access-members": async (page) => {
+    await mockApi(page, { me: ME_LENA });
+    await page.goto("/access");
+    await page.getByRole("heading", { name: "Members", exact: true }).waitFor();
+  },
+  "access-member": async (page) => {
+    await mockApi(page, { me: ME_LENA });
+    await page.goto(`/access/members/${ID.maya}`);
+    await page.getByTestId("access-summary").waitFor();
+  },
+  "access-change": async (page) => {
+    await mockApi(page, { me: ME_LENA });
+    await page.goto(`/access/members/${ID.maya}`);
+    await page.getByRole("button", { name: "Change access" }).click();
+    await page.getByRole("checkbox", { name: "Kestrel Bank" }).check();
+    await page.getByRole("button", { name: "Review change" }).click();
+    await page.getByText("Maya Okafor will gain access to Kestrel Bank content.").waitFor();
+  },
+  "access-audit": async (page) => {
+    await mockApi(page, { me: ME_LENA });
+    await page.goto("/access/audit");
+    await page.getByText("Assigned Kestrel Bank").waitFor();
   },
   "providers-forbidden": async (page) => {
     await mockApi(page, { providers: "forbidden" });

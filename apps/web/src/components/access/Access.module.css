@@ -50,6 +50,12 @@
   overflow-wrap: anywhere;
 }
 
+.meta > .fact + .fact::before {
+  content: "·";
+  margin-right: var(--space-3);
+  color: var(--text-muted);
+}
+
 /* Tabs: members / audit log ------------------------------------------------------- */
 
 .tabs {

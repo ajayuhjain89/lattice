@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-import { AMBIGUOUS, ANSWERED, EV, EVIDENCE_ONLY, FAILED, INSUFFICIENT, ME_LENA, PARTIAL, SUPERSEDED, TRACE, UNSUPPORTED } from "../src/test/fixtures";
+import { AMBIGUOUS, ANSWERED, EV, EVIDENCE_ONLY, FAILED, ID, INSUFFICIENT, ME_LENA, PARTIAL, SUPERSEDED, TRACE, UNSUPPORTED } from "../src/test/fixtures";
 
 import { askFor, openAsk } from "./helpers";
 import { mockApi } from "./mock-api";
@@ -87,5 +87,35 @@ test("sources and activity (administrator)", async ({ page }) => {
   await expect(page.getByRole("table", { name: "Organization activity (operational view)" })).toBeVisible();
   await expect(page.getByRole("link", { name: /When will SCIM ship for Acme/ })).toBeVisible();
   await expect(page.locator("[aria-busy='true']")).toHaveCount(0);
+  await audit(page);
+});
+
+test("access: members, a member, the change dialog and the audit log", async ({ page }) => {
+  // Audited at rest, not mid-fade (the dialog's entrance animation lowers contrast briefly).
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await mockApi(page, { me: ME_LENA });
+  await page.goto("/access");
+  await expect(page.getByRole("table", { name: "Members and their access" })).toBeVisible();
+  await audit(page);
+  await page.goto(`/access/members/${ID.maya}`);
+  await expect(page.getByTestId("access-summary")).toBeVisible();
+  await audit(page);
+  await page.getByRole("button", { name: "Change access" }).click();
+  await expect(page.getByRole("checkbox", { name: "Kestrel Bank" })).toBeVisible();
+  await audit(page);
+  await page.getByRole("checkbox", { name: "Kestrel Bank" }).check();
+  await page.getByRole("button", { name: "Review change" }).click();
+  await expect(page.getByText("Maya Okafor will gain access to Kestrel Bank content.")).toBeVisible();
+  await audit(page);
+  await page.keyboard.press("Escape");
+  await page.goto("/access/audit");
+  await expect(page.getByText("Assigned Kestrel Bank")).toBeVisible();
+  await audit(page);
+});
+
+test("access (not an administrator)", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/access");
+  await expect(page.getByRole("heading", { name: "You need administrator access to view this page" })).toBeVisible();
   await audit(page);
 });

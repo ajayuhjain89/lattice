@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { Dialog } from "radix-ui";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
 import { Button } from "./Button";
 import { Icon } from "./icons";
@@ -25,12 +25,22 @@ export interface ModalProps {
  * control that opened it. Below 768 px it is a full-width sheet anchored to the bottom.
  */
 export function Modal({ open, onOpenChange, title, description, children, footer, size = "md" }: ModalProps) {
+  // Radix returns focus only to a Dialog.Trigger; these dialogs open from ordinary
+  // buttons, so the opener is remembered when focus moves in and restored on close.
+  const opener = useRef<HTMLElement | null>(null);
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.overlay} />
         <Dialog.Content
           className={`${styles.dialog} ${size === "confirm" ? styles.confirm : ""}`}
+          onOpenAutoFocus={() => {
+            opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            opener.current?.focus();
+          }}
           // Without a description the title alone names the dialog (no duplicate reading).
           {...(description ? {} : { "aria-describedby": undefined })}
         >

@@ -66,8 +66,8 @@ function Member({ access }: { access: MemberAccess }) {
       <header className={styles.head}>
         <h1 className={styles.title}>{m.name}</h1>
         <p className={styles.meta}>
-          <span>{m.email}</span>
-          {m.role_label && <span>{m.role_label}</span>}
+          <span className={styles.fact}>{m.email}</span>
+          {m.role_label && <span className={styles.fact}>{m.role_label}</span>}
           {m.status !== "active" && <Tag tone="muted">{humanize(m.status)}</Tag>}
           {m.is_admin && <Tag tone="quiet">Admin</Tag>}
         </p>
