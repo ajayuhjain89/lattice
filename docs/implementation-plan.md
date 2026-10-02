@@ -983,12 +983,120 @@ and side-channel tests.
 
 ---
 
+### Phase 10 — OIDC SSO, provisioning and hardening
+
+§4 "Later phases" row 10 (OIDC (D-1), rate limits, security headers review, dependency
+audit, threat-model review, pen-test style review of isolation), plus what Phase 9
+assigned here: member provisioning and removal (SCIM, "Phase 10 with OIDC"), revisiting
+D-19 (which attributes the identity provider owns) and the ADR-014 residual risk
+(trigger-enforced audit is a "Phase 10 review candidate").
+
+**Deliverables.**
+1. *OIDC sign-in (D-1, ADR-015).* One OIDC connection per organization
+   (`oidc_connections`, managed by the operator command `lattice sso`, audited):
+   issuer, client ID, an optional client-secret *reference* (`env:` scheme only, as
+   provider credentials), the claim that identifies a person (`sub` by default) and an
+   opaque, unguessable login key. Authorization-code flow with PKCE (S256), `state`,
+   `nonce` and a browser-binding cookie; the attempt is stored server-side, single use,
+   ten minutes. Discovery and JWKS fetched with bounded time and size; the discovery
+   document's issuer must equal the configured one; ID token signature (asymmetric
+   algorithms only, never `none` or HMAC), `iss`, `aud`/`azp`, `exp`/`iat`, `nonce`
+   checked. **Identity mapping is deterministic and organization-scoped:** (connection,
+   claim value) → a provisioned directory identity of *that* organization → its
+   membership. No just-in-time creation, no linking by e-mail, no lookup in any other
+   organization; anything else (unknown, suspended, removed, disabled connection,
+   suspended organization) fails with one generic result. Sign-in creates a normal
+   server-side session (ADR-005): revocation, idle and absolute timeouts unchanged.
+2. *SCIM 2.0 provisioning (D-20).* `/scim/v2` with a per-organization bearer token
+   (`scim_tokens`: SHA-256 stored, shown once, revocable; `lattice scim token`).
+   `Users` only: create, read, list with `userName eq` / `externalId eq` filters,
+   replace, patch, delete; `ServiceProviderConfig`, `ResourceTypes`, `Schemas`.
+   `externalId` is required and immutable: it is the value the OIDC claim must carry.
+   The identity provider owns `userName`/e-mail, the name and `active`; Lattice owns all
+   access attributes. A provisioned person is a user row *owned by the organization*
+   (`users.home_organization_id`), never an existing user of another organization, so
+   provisioning cannot read, link or modify anything outside the tenant and e-mail
+   uniqueness is per organization for such users. New members get the least access the
+   policy models (clearance `internal`, account scope `assigned` with no accounts, no
+   departments, groups or grants, not an administrator). `active=false` → `suspended`,
+   `active=true` → `active`, `DELETE` → `removed` (terminal); each revokes or restores
+   on the next request and suspension/removal revokes the member's sessions in the same
+   transaction. Create, replace, patch and delete are idempotent (an identical request
+   writes nothing and records nothing); `meta.version` / `If-Match` (412).
+   Every change is audited in its transaction (`access.member_changed`,
+   `access.identity_changed`, actor `scim:<token id>`). The Access page shows
+   provisioned members as managed by the identity provider and refuses lifecycle
+   changes for them (`managed_by_identity_provider`); access attributes stay editable.
+3. *Rate limits and resource protection (T19).* Server-side fixed-window limits:
+   per-membership Asks per minute and per day and concurrent Asks, per-administrator
+   access writes per minute, per-SCIM-token requests per minute (counters in PostgreSQL
+   under row-level security, atomic upserts, one row per subject and bucket), and
+   per-client limits on the pre-authentication endpoints (development sign-in, OIDC
+   start and callback, failed SCIM authentication) in process memory with keyed-hash
+   keys and a bounded table. 429 `rate_limited` with `Retry-After` (browser sign-in
+   redirects to the sign-in page with a fixed error instead). Checked after
+   authentication and the capability check and before anything that depends on a
+   target, so a 429 reveals nothing about documents, accounts or other organizations.
+   No exemption for administrators or any role; limits cannot be configured to zero.
+   Metric labels are the bucket name only.
+4. *Access-audit enforcement in the database (ADR-014 residual).* Deferred constraint
+   triggers refuse to commit an access write by the API role unless the same
+   transaction recorded an `access.*` audit event for that membership.
+5. *Hardening reviews.* Security headers (API and web: a nonce-based script policy
+   instead of `'unsafe-inline'`, cross-origin isolation headers, HSTS on the web origin
+   in production); dependency audit (`make audit`, a CI job); operator command
+   `lattice member admin` (the only way to change `is_admin`, audited, reason
+   required) so an SSO organization can get its first administrator; threat-model
+   review (new T22–T25, T3/T15/T19 revised) and a pen-test style isolation review backed
+   by a route inventory test: every route classified, every non-public route refuses an
+   anonymous caller, every administrator route refuses a member, and every route that
+   takes an identifier answers another organization's identifier exactly as a missing
+   one.
+6. *Web.* Sign-in: SSO entry (`/sso/<key>`), fixed error states, no list of
+   organizations or connections; 429 handling (Ask and generic); Access: "Managed by
+   your identity provider", lifecycle controls withheld for such members, SCIM actors
+   and identity changes in the audit view. Typed client regenerated.
+7. *Database.* Migration 0013: the tables above; `users.home_organization_id` and
+   per-organization e-mail uniqueness for organization-owned users; the API role's new
+   writes, each fenced by restrictive policies; two pre-authentication lookups owned by
+   `lattice_auth` (connection by login key, SCIM token by hash); `audit_events.txid` and
+   the audit triggers.
+
+**Tests.** OIDC against an in-process identity provider (real RSA/EC keys, real JWS):
+happy path; every ID-token defect (issuer, audience, `azp`, expiry, future `iat`,
+nonce, signature, unknown key, `alg: none`, HMAC with the public key, wrong claim type);
+discovery issuer mismatch; replayed and expired `state`; missing or foreign
+browser-binding cookie; attempt of another connection; unprovisioned, suspended and
+removed members; disabled connection and suspended organization; the same external ID
+provisioned in two organizations signs in only to the connection's organization; open
+redirect refused. SCIM: contract (schemas, errors, filters, paging), idempotency of
+every operation, `If-Match`, suspension/removal immediately ending sessions,
+retrieval, traces and Access views, the least-access default, attribute ownership (no
+access attribute writable), another organization's identifiers 404, a user of another
+organization with the same e-mail neither found, linked nor revealed, token
+revocation, the database refusing over-privileged inserts. Rate limits: each bucket,
+`Retry-After`, concurrency (parallel requests never exceed the limit), no bypass by
+role, 429 identical for existing and missing targets, organizations independent,
+metric labels closed. Audit triggers: a write without an event, with an event for
+another membership, or with an event of an earlier transaction is refused; owner and
+worker unaffected. Route inventory and isolation sweep. Web: unit, Playwright desktop
+and phone, axe.
+
+**Non-goals (later phases).** SAML; SCIM `Groups` (groups and departments stay
+administrator-defined); just-in-time provisioning; identity-provider-initiated logout
+and back-channel logout; multiple connections per organization; organization
+creation and self-service SSO configuration UI; time-bound grants; retention jobs,
+alerting, backups, container images and deployment (Phase 11); the Accounts workspace
+(Phase 12).
+
+---
+
 ### Later phases (order to be revisited after the slice)
 
 | Phase | Theme | Notes |
 | ----- | ----- | ----- |
-| 9 | Access management UX + audit events | **Built** (Phase 9 section above; awaiting review). Explanations, change previews (counts only over admin-readable documents), admin grants, full `audit_events` (the provider and AI egress settings UI is Phase 7, D-16) |
-| 10 | OIDC SSO + hardening | OIDC (D-1), rate limits, security headers review, dependency audit, threat-model review, pen-test style review of isolation |
+| 9 | Access management UX + audit events | **Built and merged** (8d3af3b; Phase 9 section above). Explanations, change previews (counts only over admin-readable documents), admin grants, full `audit_events` (the provider and AI egress settings UI is Phase 7, D-16) |
+| 10 | OIDC SSO + hardening | **In progress** (Phase 10 section above): OIDC (D-1), SCIM provisioning, rate limits, security headers review, dependency audit, threat-model review, pen-test style review of isolation |
 | 11 | Deployment + operations | Container images, single-region deploy, backups/PITR, migrations in CI/CD, retention jobs, alerting on `security_invariant_violated` |
 | 12 | Accounts workspace | Account timeline + scoped Ask (AM workflow) |
 | 13 | Next connectors | Call transcripts, CRM notes, GitHub issues, release notes |
