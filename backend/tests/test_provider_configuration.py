@@ -134,9 +134,20 @@ async def test_audit_events_are_append_only(owner_db: Database, app_db: Database
     with pytest.raises(DBAPIError, match="append-only"):
         async with owner_db.tenant_transaction(org) as s:
             await s.execute(text("UPDATE audit_events SET reason = 'rewritten'"))
+    # Phase 9: the runtime role reads events (the audit view) but never rewrites them
+    # and may record only access events (tests/test_app_role_access.py).
     with pytest.raises(DBAPIError, match="permission denied"):
         async with app_db.tenant_transaction(org) as s:
-            await s.execute(text("SELECT 1 FROM audit_events"))
+            await s.execute(text("UPDATE audit_events SET reason = 'rewritten'"))
+    with pytest.raises(DBAPIError, match="row-level security"):
+        async with app_db.tenant_transaction(org) as s:
+            await s.execute(
+                text(
+                    "INSERT INTO audit_events (organization_id, actor, action, target, reason) "
+                    "VALUES (:o, 'member:x', 'egress.levels_changed', '{}', 'forged')"
+                ),
+                {"o": org},
+            )
 
 
 @pytest.mark.parametrize(
