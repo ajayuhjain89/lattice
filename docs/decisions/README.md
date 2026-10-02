@@ -19,4 +19,4 @@ not recorded here. Status values: Proposed · Accepted · Superseded.
 | [012](012-generation-providers.md) | Generation providers: local Ollama (`qwen3.5:4b`), Gemini BYOK (`gemini-3.5-flash-lite`), fake for CI; real-model evaluation not run (M1 8 GB) | Accepted (Phase 6; D-4 open) |
 | [013](013-background-worker-role.md) | A Postgres job queue and a dedicated `lattice_worker` runtime role for requested syncs | Accepted (Phase 8) |
 | [014](014-access-management-writes.md) | Access management writes by the API role, each fenced by a restrictive row-level policy and audited in the same transaction | Accepted (Phase 9) |
-| [015](015-oidc-sign-in-and-scim-provisioning.md) | OIDC sign-in and SCIM provisioning, organization-scoped (owned users, directory identities); database-enforced access audit | Accepted (Phase 10; D-1 and D-20 for review) |
+| [015](015-oidc-sign-in-and-scim-provisioning.md) | OIDC sign-in and SCIM provisioning, organization-scoped (owned users, directory identities); database-enforced access audit | Accepted (Phase 10; D-1, D-19 revised, D-20, D-21 accepted) |

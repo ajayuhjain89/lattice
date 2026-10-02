@@ -1,7 +1,7 @@
 # ADR-015: OIDC sign-in and SCIM provisioning, organization-scoped; database-enforced access audit
 
-Status: Accepted for Phase 10 (2026-10-02; D-1 and D-20 are engineering defaults for
-review). Implemented: migration 0013, `lattice.identity.oidc`, `lattice.provisioning`,
+Status: Accepted (Phase 10, 2026-10-02; D-1, D-20, D-21 and the revised D-19 accepted
+by the product owner). Implemented: migration 0013, `lattice.identity.oidc`, `lattice.provisioning`,
 `lattice.identity.admin`, `/v1/auth/oidc/*`, `/scim/v2/*`.
 
 ## Context
