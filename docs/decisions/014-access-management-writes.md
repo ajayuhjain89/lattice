@@ -56,10 +56,12 @@ administrator can read (`authz.readable_documents_predicate`, 404 otherwise); on
 - A compromised API process can change who reads what (as a compromised administrator
   session can). It cannot make anyone an administrator, touch source permissions or
   content, or rewrite the audit trail.
-- **Residual risk:** that every access write has an audit row is enforced by the code
-  path, not by the database: a compromised API could write an assignment without its
-  event. Trigger-enforced auditing (writes refused unless the transaction records an
-  actor and reason) is a candidate for the Phase 10 threat-model review. Alerting on
+- **Residual risk (closed in Phase 10):** that every access write has an audit row was
+  enforced by the code path only. Migration 0013 (ADR-015, decision 5) adds deferred
+  constraint triggers: an access write by `lattice_app` cannot commit unless its
+  transaction recorded an `access.*` event for that membership
+  (`tests/test_access_audit_enforcement.py`). What remains: the event's actor and
+  reason are written by the API and not authenticated by the database. Alerting on
   access events is Phase 11.
 - `lattice_owner` tools stay authoritative for provisioning: re-running `make seed`
   makes members match the manifest again, recording `operator:seed` events, so a

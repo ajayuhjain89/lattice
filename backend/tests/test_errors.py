@@ -112,7 +112,10 @@ async def test_database_outage_reports_service_unavailable(app_client: AppFactor
 
 async def test_production_hides_api_docs_and_sets_hsts(app_client: AppFactory) -> None:
     async with app_client(
-        env=Environment.PRODUCTION, dev_auth_enabled=False, session_cookie_secure=True
+        env=Environment.PRODUCTION,
+        dev_auth_enabled=False,
+        session_cookie_secure=True,
+        public_url="https://lattice.example.com",
     ) as prod:
         for path in ("/docs", "/openapi.json", "/redoc"):
             assert (await prod.get(path)).status_code == 404
@@ -120,6 +123,27 @@ async def test_production_hides_api_docs_and_sets_hsts(app_client: AppFactory) -
     assert health.status_code == 200
     assert "max-age" in health.headers["strict-transport-security"]
     assert health.headers["content-security-policy"] == "default-src 'none'; frame-ancestors 'none'"
+
+
+@pytest.mark.parametrize("path", ["/v1/health", "/v1/me", "/v1/no-such-route", "/scim/v2/Users"])
+async def test_every_response_carries_the_security_headers(
+    client: httpx.AsyncClient, path: str
+) -> None:
+    response = await client.get(path)
+    expected = {
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "same-origin",
+        "cache-control": "no-store",
+        "cross-origin-opener-policy": "same-origin",
+        "cross-origin-resource-policy": "same-origin",
+        "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+    }
+    for name, value in expected.items():
+        assert response.headers[name] == value, name
+    assert "camera=()" in response.headers["permissions-policy"]
+    # Lattice grants no cross-origin access.
+    assert "access-control-allow-origin" not in response.headers
 
 
 async def test_openapi_documents_the_error_envelope(client: httpx.AsyncClient) -> None:
@@ -156,4 +180,7 @@ async def test_openapi_documents_the_error_envelope(client: httpx.AsyncClient) -
         "/v1/admin/access/members/{membership_id}/grants",
         "/v1/admin/access/grants/{grant_id}/revoke",
         "/v1/admin/audit-events",
+        # Phase 10 (SCIM is outside the OpenAPI document: SCIM discovers itself)
+        "/v1/auth/oidc/{login_key}/start",
+        "/v1/auth/oidc/{login_key}/callback",
     }

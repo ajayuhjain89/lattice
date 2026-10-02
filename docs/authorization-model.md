@@ -12,6 +12,9 @@ E3 into every retrieval statement, E4 around retrieval, and E5 into the evidence
 (`resolve_member_context`, `proposed_context`: another member's context as it is or as
 a proposed change would make it, never a request's own) and built the administrator
 account directory; the policy is still `authz-2` (no fingerprinted module changed).
+**Phase 10** implemented OIDC sign-in and SCIM provisioning (§2, ADR-015); the policy is
+unchanged (`authz-2`): provisioning only creates memberships with the least-access
+defaults the policy already models.
 Related: `data-model.md` §2–5, `security-model.md`, ADR-003, ADR-005.
 
 ---
@@ -46,14 +49,23 @@ well-run Drive or Slack workspace.
     several memberships; it is a selector validated against the identity's own active
     memberships (via `lattice_identity_memberships`), not tenant authority. Every
     failure is one generic `authentication_failed`.
-  - `OidcIdentityProvider` — generic OIDC authorization-code flow with PKCE (Okta,
-    Entra ID, Google Workspace, Keycloak). Required before any non-local deployment.
+  - OIDC (implemented, Phase 10; `lattice.identity.oidc`) — generic authorization-code
+    flow with PKCE, one connection per organization (Okta, Entra ID, Keycloak, Google
+    Workspace). The verified claim (default `sub`) is matched to a *directory identity*
+    of that connection in that organization only (`directory_identities`), never to a
+    global identity and never by e-mail; no just-in-time membership. Required before
+    any non-local deployment.
 - No passwords are stored by Lattice.
 - CSRF: `SameSite=Lax` plus a required custom header (`X-Lattice-Request: 1`) on all
   state-changing requests, and rejection of `Sec-Fetch-Site: cross-site`; the API
   rejects cross-site form posts (`security-model.md` §4).
-- Membership provisioning in the slice comes from the seed manifest. SCIM /
-  just-in-time provisioning is a later phase.
+- Membership provisioning: the seed manifest (development, synthetic organizations)
+  and, since Phase 10, SCIM 2.0 from the organization's identity provider (D-20). The
+  provider owns a provisioned member's identity attributes and lifecycle (active,
+  suspended, removed); Lattice owns their access (clearance, scope, assignments,
+  departments, groups, grants) and the administrator capability (operator command
+  only). A provisioned person is a user owned by the organization: they cannot be a
+  member anywhere else. New members start with the least access the policy models.
 
 ## 3. Authorization concepts (only what is needed)
 

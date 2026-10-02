@@ -18,6 +18,9 @@ Rules, checked in this order so that a refusal reveals nothing the caller may no
    group's ID from a missing one.
 7. A grant names a document the *caller* can read (404 otherwise, identical to a missing
    document): administrators cannot grant -- or learn about -- what they cannot read.
+8. A member provisioned by the identity provider (SCIM, Phase 10) is suspended,
+   reactivated and removed only by the identity provider (422
+   ``managed_by_identity_provider``, D-20); their access stays editable here.
 
 The database enforces the same limits for the API role (migration 0012): no
 ``is_admin``, no ``removed``, administrator membership grants and
@@ -98,6 +101,28 @@ async def _checked_member(
         raise _invalid("membership", "member_removed")
 
 
+async def _refuse_managed_lifecycle(
+    session: AsyncSession,
+    organization_id: uuid.UUID,
+    membership_id: uuid.UUID,
+    before: AccessSnapshot,
+    after: AccessSnapshot,
+) -> None:
+    if after.status == before.status:
+        return
+    provisioned: bool = (
+        await session.execute(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM directory_identities "
+                "WHERE organization_id = :o AND membership_id = :m)"
+            ),
+            {"o": organization_id, "m": membership_id},
+        )
+    ).scalar_one()
+    if provisioned:
+        raise _invalid("status", "managed_by_identity_provider")
+
+
 async def _validate_references(
     session: AsyncSession, organization_id: uuid.UUID, change: MemberChange
 ) -> None:
@@ -165,6 +190,7 @@ async def preview_member_change(
         raise _not_found()
     before, _ = found
     after = apply_change(before, change)
+    await _refuse_managed_lifecycle(session, org, membership_id, before, after)
     names = await entity_names(
         session,
         org,
@@ -286,6 +312,7 @@ async def change_member(
         after = apply_change(before, request)
         if after == before:
             raise _invalid("change", "no_change")
+        await _refuse_managed_lifecycle(session, organization_id, membership_id, before, after)
         await write_snapshot(session, organization_id, membership_id, before, after)
         await record_event(
             session,

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Request
 from lattice.answering.evidence import get_evidence
 from lattice.answering.models import Answer, AskRequest, EvidenceDetail
 from lattice.answering.service import AskDependencies, ask
-from lattice.api.deps import CurrentPrincipal
+from lattice.api.deps import CurrentPrincipal, Limits
 from lattice.db.engine import Database
 from lattice.errors import ErrorCode, ErrorResponse, LatticeError
 from lattice.tracing.recorder import AdminTrace, AskerTrace, read_trace
@@ -23,6 +23,7 @@ _ERRORS: dict[int | str, dict[str, Any]] = {
     422: {"model": ErrorResponse},
     500: {"model": ErrorResponse},
 }
+_ASK_ERRORS: dict[int | str, dict[str, Any]] = {**_ERRORS, 429: {"model": ErrorResponse}}
 
 
 def _db(request: Request) -> Database:
@@ -33,21 +34,27 @@ def _db(request: Request) -> Database:
 @router.post(
     "/v1/ask",
     response_model=Answer,
-    responses=_ERRORS,
+    responses=_ASK_ERRORS,
     summary="Ask a question; get a grounded answer over the evidence you may read",
     description="Statuses (answered, partial, insufficient_evidence, evidence_only, "
     "ambiguous, unsupported_request, failed) are HTTP 200 outcomes. Every citation "
-    "references an item of `evidence`. Requires the X-Lattice-Request: 1 header.",
+    "references an item of `evidence`. 429 with `Retry-After` when the member's Ask "
+    "limits are exhausted. Requires the X-Lattice-Request: 1 header.",
 )
-async def post_ask(body: AskRequest, request: Request, principal: CurrentPrincipal) -> Answer:
+async def post_ask(
+    body: AskRequest, request: Request, principal: CurrentPrincipal, limits: Limits
+) -> Answer:
     deps: AskDependencies = request.app.state.ask_dependencies
-    outcome = await ask(
-        _db(request),
-        organization_id=principal.organization_id,
-        membership_id=principal.membership_id,
-        request=body,
-        deps=deps,
-    )
+    # Per membership, before retrieval: the limit depends on nothing but the caller.
+    async with limits.ask_concurrency.slot(principal.membership_id):
+        await limits.limiter.hit(principal.organization_id, principal.membership_id, limits.ask)
+        outcome = await ask(
+            _db(request),
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+            request=body,
+            deps=deps,
+        )
     request.state.log_fields = {
         **getattr(request.state, "log_fields", {}),
         "trace_id": str(outcome.answer.trace_id),

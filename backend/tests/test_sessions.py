@@ -238,7 +238,10 @@ async def test_last_seen_is_refreshed_and_idle_timeout_measured_from_it(
 
 async def test_dev_login_is_not_mounted_in_production(app_client: AppFactory, maya: Member) -> None:
     async with app_client(
-        env=Environment.PRODUCTION, dev_auth_enabled=False, session_cookie_secure=True
+        env=Environment.PRODUCTION,
+        dev_auth_enabled=False,
+        session_cookie_secure=True,
+        public_url="https://lattice.example.com",
     ) as prod:
         response = await login(prod, maya.email)
     assert response.status_code == 404

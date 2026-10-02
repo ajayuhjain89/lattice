@@ -5,9 +5,9 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–8 are implemented and merged; Phase 9 (access management and audit
-events, plus the Ask account picker and scope line) is implemented on
-`phase/9-access-management`, awaiting review.** What runs today: a FastAPI backend with typed
+**Status: Phases 1–9 are implemented and merged; Phase 10 (OIDC sign-in, SCIM
+provisioning, rate limits and security hardening) is implemented on
+`phase/10-oidc-sso-hardening`, awaiting review.** What runs today: a FastAPI backend with typed
 fail-fast configuration, PostgreSQL 16 + pgvector with forced row-level security for
 organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -38,8 +38,13 @@ access management: an Access page where administrators see each member's access
 explained in sentences, preview every change (counted only over documents they can
 read themselves), give a reason, and apply it; grants of single documents; an
 append-only audit log of every access and AI-policy change; and on Ask, an account
-picker and a first-run line listing only the person's own sources and accounts. See
-the [implementation plan](docs/implementation-plan.md).
+picker and a first-run line listing only the person's own sources and accounts — and
+(Phase 10) sign-in through each organization's own OIDC identity provider, SCIM
+provisioning of members by that provider (least access by default, suspension and
+removal effective on the next request), per-member and per-client rate limits, an
+access audit the database itself enforces, a nonce-based script policy, a dependency
+audit, and an isolation sweep over every route. See the
+[implementation plan](docs/implementation-plan.md).
 
 ## Local setup
 
@@ -308,6 +313,25 @@ enforced by restrictive row-level policies ([ADR-014](docs/decisions/014-access-
 `make seed` remains the provisioning source: re-running it makes members match the
 manifest again, recorded as `operator:seed` events. A database created before Phase 9
 needs `make migrate` (0012).
+
+## How sign-in and provisioning work (Phase 10)
+
+Production sign-in is OIDC (authorization code with PKCE) against the organization's
+own identity provider; development keeps the persona sign-in. An operator connects the
+provider and issues a SCIM token (`lattice sso add`, `lattice scim token create`; each
+audited, the token shown once); the identity provider then provisions, updates,
+deactivates and removes members over SCIM (`<public URL>/api/scim/v2`). A person signs
+in only if the ID token's identifying claim matches a member that *this*
+organization's provider provisioned — never by e-mail, never into another
+organization. New members get the least access the policy models; administrators
+grant the rest on the Access page, where such members are marked as managed by the
+identity provider (it alone suspends or reactivates them). `lattice member admin`
+gives an organization its first administrator. Asks, access changes, SCIM and sign-in
+are rate limited (429 with `Retry-After`; no role is exempt). Setup and incident
+procedures: [runbook §2 and §9](docs/runbook.md); decisions: D-1, D-19, D-20 and
+[ADR-015](docs/decisions/015-oidc-sign-in-and-scim-provisioning.md). A database created
+before Phase 10 needs `make migrate` (0013); `make audit` checks the locked dependencies
+for known vulnerabilities.
 
 ## Repository layout
 

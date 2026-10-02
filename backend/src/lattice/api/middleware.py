@@ -6,7 +6,7 @@ CsrfMiddleware -> FastAPI.
 RequestContextMiddleware
     * assigns a server-generated request ID (client-supplied IDs are ignored, so they
       cannot be used for log injection) and returns it as ``X-Request-ID``;
-    * adds security headers to every response;
+    * adds security headers to every response (security-model §4; reviewed in Phase 10);
     * logs one structured line per request: method, path, status, duration. Never the
       query string, headers, cookies or body;
     * converts any unhandled exception into the ``internal_error`` envelope, logging
@@ -25,7 +25,9 @@ CsrfMiddleware (docs/authorization-model.md §2)
     form post, and a cross-origin fetch with it needs a CORS preflight, which Lattice
     never grants. Requests the browser marks ``Sec-Fetch-Site: cross-site`` are
     rejected outright. This applies to every route, including sign-in (login CSRF)
-    and routes that do not use the session.
+    and routes that do not use the session -- except SCIM (``/scim/v2/``), which is
+    authenticated by a bearer token in the ``Authorization`` header only and never
+    reads the session cookie: a cross-site page can send neither.
 """
 
 import logging
@@ -46,6 +48,8 @@ logger = logging.getLogger("lattice.http")
 CSRF_HEADER = b"x-lattice-request"
 CSRF_HEADER_VALUE = b"1"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+# Bearer-token routes that never read the session cookie (lattice.api.routes.scim).
+TOKEN_ONLY_PREFIX = "/scim/v2/"  # noqa: S105 - a path, not a secret
 _DOCS_PATHS = ("/docs", "/redoc", "/openapi.json")
 
 
@@ -127,6 +131,11 @@ class RequestContextMiddleware:
             (b"x-frame-options", b"DENY"),
             (b"referrer-policy", b"same-origin"),
             (b"cache-control", b"no-store"),
+            # Phase 10 review: no cross-origin window handle, no cross-origin embedding of
+            # API responses, and no powerful browser features for anything served here.
+            (b"cross-origin-opener-policy", b"same-origin"),
+            (b"cross-origin-resource-policy", b"same-origin"),
+            (b"permissions-policy", b"camera=(), microphone=(), geolocation=(), payment=()"),
         ]
         # The interactive API docs (development/test only) need scripts and styles.
         if not path.startswith(_DOCS_PATHS):
@@ -212,7 +221,9 @@ class CsrfMiddleware:
             return
 
         fetch_site = _get_header(scope, b"sec-fetch-site")
-        if _get_header(scope, CSRF_HEADER) != CSRF_HEADER_VALUE or fetch_site == b"cross-site":
+        token_only = str(scope.get("path", "")).startswith(TOKEN_ONLY_PREFIX)
+        missing_header = _get_header(scope, CSRF_HEADER) != CSRF_HEADER_VALUE and not token_only
+        if missing_header or fetch_site == b"cross-site":
             metrics.REQUESTS_REJECTED.labels(reason="csrf").inc()
             request_id = str(scope.get("state", {}).get("request_id", ""))
             log_event(

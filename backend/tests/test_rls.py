@@ -51,9 +51,15 @@ TENANT_TABLES = (
     "audit_events",
     # Phase 8
     "jobs",
+    # Phase 10
+    "oidc_connections",
+    "oidc_login_attempts",
+    "directory_identities",
+    "scim_tokens",
+    "rate_limit_counters",
 )
 # Tables the runtime role may not read at all (written and read by operator tools).
-RUNTIME_UNREADABLE = frozenset({"audit_events"})
+RUNTIME_UNREADABLE = frozenset({"audit_events", "oidc_connections", "scim_tokens"})
 GLOBAL_TABLES = ("organizations", "users", "external_identities")
 ALL_TABLES = (*GLOBAL_TABLES, *TENANT_TABLES)
 
@@ -203,6 +209,47 @@ async def _populate(db: Database, member: Member) -> None:
                 "VALUES (:o, 'source_sync', :s, :m)"
             ),
             {"o": member.organization_id, "s": source, "m": member.membership_id},
+        )
+        # Phase 10: identity provider connection, sign-in attempt, directory identity,
+        # SCIM token and a rate-limit counter.
+        connection: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO oidc_connections (organization_id, login_key, issuer, "
+                    "client_id) VALUES (:o, :k, 'https://idp.example', 'lattice') RETURNING id"
+                ),
+                {"o": member.organization_id, "k": uuid.uuid4().hex},
+            )
+        ).scalar_one()
+        await s.execute(
+            text(
+                "INSERT INTO oidc_login_attempts (organization_id, connection_id, state_hash, "
+                "binding_hash, nonce, code_verifier, expires_at) VALUES (:o, :c, "
+                "sha256(convert_to(:k, 'UTF8')), sha256('b'::bytea), repeat('n', 22), "
+                "repeat('v', 43), now() + interval '10 minutes')"
+            ),
+            {"o": member.organization_id, "c": connection, "k": uuid.uuid4().hex},
+        )
+        await s.execute(
+            text(
+                "INSERT INTO directory_identities (organization_id, connection_id, "
+                "membership_id, external_id, user_name) VALUES (:o, :c, :m, 'ext-1', 'user')"
+            ),
+            {"o": member.organization_id, "c": connection, "m": member.membership_id},
+        )
+        await s.execute(
+            text(
+                "INSERT INTO scim_tokens (organization_id, connection_id, token_hash) "
+                "VALUES (:o, :c, sha256(convert_to(:k, 'UTF8')))"
+            ),
+            {"o": member.organization_id, "c": connection, "k": uuid.uuid4().hex},
+        )
+        await s.execute(
+            text(
+                "INSERT INTO rate_limit_counters (organization_id, bucket, subject, "
+                "window_start, count) VALUES (:o, 'ask_minute', :m, now(), 1)"
+            ),
+            {"o": member.organization_id, "m": member.membership_id},
         )
 
 
@@ -368,12 +415,34 @@ async def test_cannot_update_another_organizations_sessions(
 @pytest.mark.parametrize(
     "statement",
     [
-        "INSERT INTO memberships (organization_id, user_id) VALUES (lattice_current_org_id(), "
-        "gen_random_uuid())",
+        # Phase 10: provisioning inserts memberships with their least-access defaults
+        # only (column privileges); the row-level limits are tests/test_app_role_access.py.
+        "INSERT INTO memberships (organization_id, user_id, is_admin) VALUES "
+        "(lattice_current_org_id(), gen_random_uuid(), true)",
+        "INSERT INTO memberships (organization_id, user_id, clearance) VALUES "
+        "(lattice_current_org_id(), gen_random_uuid(), 'confidential')",
+        "INSERT INTO memberships (organization_id, user_id, role_label) VALUES "
+        "(lattice_current_org_id(), gen_random_uuid(), 'x')",
         "UPDATE memberships SET is_admin = true",
         "DELETE FROM sessions",
         "UPDATE sessions SET organization_id = organization_id",
-        "INSERT INTO users (email, display_name) VALUES ('x@x.example', 'x')",
+        "UPDATE users SET status = 'disabled'",
+        "UPDATE users SET home_organization_id = NULL",
+        "DELETE FROM users",
+        "INSERT INTO external_identities (user_id, issuer, subject) VALUES "
+        "(gen_random_uuid(), 'dev', 'x')",
+        # Phase 10: identity provider configuration is the operator's.
+        "INSERT INTO oidc_connections (organization_id, login_key, issuer, client_id) VALUES "
+        "(lattice_current_org_id(), 'kkkkkkkkkkkkkkkkkkkkkk', 'https://i.example', 'c')",
+        "SELECT 1 FROM oidc_connections",
+        "SELECT 1 FROM scim_tokens",
+        "UPDATE scim_tokens SET revoked_at = NULL",
+        "UPDATE directory_identities SET external_id = 'x'",
+        "UPDATE directory_identities SET membership_id = membership_id",
+        "DELETE FROM directory_identities",
+        "UPDATE oidc_login_attempts SET nonce = 'x'",
+        "DELETE FROM rate_limit_counters",
+        "UPDATE audit_events SET txid = txid",
         "ALTER TABLE accounts DISABLE ROW LEVEL SECURITY",
         "SET ROLE lattice_auth",
         # Phase 2: authorization facts are read-only at runtime.

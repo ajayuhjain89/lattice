@@ -123,6 +123,32 @@ jobs:
       - name: Tests (real PostgreSQL)
         run: uv run pytest
 
+  # Known vulnerabilities in the locked dependency sets (Phase 10). Separate job: it
+  # needs the advisory databases, and a new advisory must not hide test results.
+  dependency-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.19"
+          enable-cache: true
+          cache-suffix: audit
+
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: apps/web/package.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Audit the backend and web dependencies
+        run: make audit
+
   web:
     runs-on: ubuntu-24.04
     timeout-minutes: 30

@@ -3,7 +3,9 @@
 Status: §1 is implemented (Phases 1–2, worker role Phase 8); §2 procedures are marked
 per row; §3 (embedding) Phase 4, provider configuration Phase 6; §4 (retrieval) Phase 5;
 §5 Phase 5 closure; §6 (answering) Phase 6; §7 (operations: health, metrics, logs, kill
-switches, limits, the worker, deployment, backups, CI) and §8 (failure drills) Phase 8.
+switches, limits, the worker, deployment, backups, CI) and §8 (failure drills) Phase 8;
+§9 (identity: SSO, SCIM provisioning, first administrator) and the rate limits of §7.4
+Phase 10.
 A row marked *planned* names the phase that makes it real; do not follow planned
 procedures on a live system.
 
@@ -32,14 +34,15 @@ operations:
 
 | Role | Used by | Rule |
 | ---- | ------- | ---- |
-| `lattice_app` | API via `LATTICE_DATABASE_URL` | The API's runtime identity: reads, plus Ask traces and sync requests. The API refuses to start with a role that is a superuser, has `BYPASSRLS`, can act as a table owner, or can write documents or grants; it never falls back to another credential |
+| `lattice_app` | API via `LATTICE_DATABASE_URL` | The API's runtime identity: reads, plus Ask traces, sync requests, access changes (ADR-014), SCIM provisioning of organization-owned users with least-access memberships, sign-in attempts and rate-limit counters (ADR-015) — each fenced by restrictive policies, and every access write must commit with its audit event. The API refuses to start with a role that is a superuser, has `BYPASSRLS`, can act as a table owner, or can write documents or grants; it never falls back to another credential |
 | `lattice_worker` | The background worker via `LATTICE_WORKER_DATABASE_URL` (Phase 8, ADR-013) | Writes what a sync writes, through forced row-level security, one organization per job; sees every organization's *jobs* only. Refuses to start under the same checks as the API. Never configured as the API's role (the API refuses it) |
 | `lattice_owner` | `make migrate`, `make seed`, operator tools via `LATTICE_MIGRATION_DATABASE_URL` | Migration/bootstrap/administrative role. Never configured as the API's or the worker's database URL. In production its credential lives in a different secret from the runtime ones and is available only to the migration job and operators |
-| `lattice_auth` | Nobody (NOLOGIN) | Owns the two pre-authentication lookup functions only. Holds no `CREATE` anywhere at rest |
+| `lattice_auth` | Nobody (NOLOGIN) | Owns the four pre-authentication lookup functions only (session, development identity, OIDC connection by login key, SCIM token by hash). Holds no `CREATE` anywhere at rest |
 
 ### Changing a pre-authentication lookup function
 
-`lattice_resolve_session` and `lattice_identity_memberships` are owned by `lattice_auth`,
+`lattice_resolve_session`, `lattice_identity_memberships`, `lattice_oidc_connection` and
+`lattice_resolve_scim_token` are owned by `lattice_auth`,
 which cannot create objects, so they cannot be changed in place (`CREATE OR REPLACE`
 fails even for the owner). In a new migration, as `lattice_owner`:
 
@@ -60,10 +63,13 @@ fails even for the owner). In a new migration, as `lattice_owner`:
 | A sync run is `partial` or `failed` | **As built (Phase 8):** Sources page (administrators) → the source's last sync and failure codes → *Show records*: stage, fixed code, safe parameters, and the record's identifier only if you can read its document (otherwise `rec_…`). `access_unmappable:account` shows the unmapped external account reference: map it in the source configuration, then *Sync now* (or `lattice sync <source>`). `source_unavailable:*` → check the export path and its mount. The raw identifier behind a `rec_…` is available to infrastructure operators only, with database access: `sync_record_failures.external_id` / `location` | 4 / 8 |
 | Re-sync a source now | Sources page → *Sync now* (administrators; queued for the worker, one per source at a time), or `lattice sync --org … --sources … --source <key>` as an operator. Both take the same per-source lock; a request that meets a running CLI sync is retried after a backoff | 8 |
 | Deletion guard tripped | Inspect export completeness; if the deletions are genuine, re-run with `--allow-mass-deletion` after confirming with the source owner. A sync requested from the web app never overrides the guard | 4 |
-| Urgently revoke a person's access | **Works today (Phase 2), without a UI:** set the member's `status: suspended` in the org manifest and `make seed`, or as `lattice_owner` with the organization bound: `UPDATE memberships SET status = 'suspended', authz_updated_at = now() WHERE id = …`. Sessions are rejected and no authorization context can be resolved on the very next request. Narrower changes (account assignment, department, group membership, grant) are single-row writes with the same immediacy. No re-index, re-embed or cache flush exists or is needed. **Admin UI (Phase 9):** Access → the member → *Suspend*, with a reason; the preview states what they lose among documents you can read; audited. Another administrator must do it for your own membership. Note that `make seed` makes members match the manifest again (recording `operator:seed` events), so a suspension done in the UI must also be made in the manifest (or the identity provider, Phase 10) to last | 2 / 9 |
+| Urgently revoke a person's access | **Works today (Phase 2), without a UI:** set the member's `status: suspended` in the org manifest and `make seed`, or as `lattice_owner` with the organization bound: `UPDATE memberships SET status = 'suspended', authz_updated_at = now() WHERE id = …`. Sessions are rejected and no authorization context can be resolved on the very next request. Narrower changes (account assignment, department, group membership, grant) are single-row writes with the same immediacy. No re-index, re-embed or cache flush exists or is needed. **Admin UI (Phase 9):** Access → the member → *Suspend*, with a reason; the preview states what they lose among documents you can read; audited. Another administrator must do it for your own membership. Note that `make seed` makes members match the manifest again (recording `operator:seed` events), so a suspension done in the UI must also be made in the manifest to last. **Provisioned members (Phase 10):** suspend or remove them in the identity provider (SCIM pushes it; sessions are revoked in the same transaction); the Access page refuses lifecycle changes for them. If the provider itself is the problem: `lattice scim token revoke` and `lattice sso disable` (§9), then the owner-role `UPDATE` above | 2 / 9 / 10 |
 | "Why can't Maya see the Kestrel tickets?" | Access → Maya: the sentence states her scope, clearance, departments, groups and grants. *Check a document* explains one document you can read (the reasons that decide). If you can't read the document yourself, you can't inspect it: the rules (her accounts, clearance, departments) answer the question; ask an administrator who can read it, or Leadership for restricted content | 9 |
 | Change a member's access, or grant one document | Access → the member → *Change access* (clearance, account scope, accounts, departments, administrator-defined groups) or *Grant a document* (one document you can read). Each shows a preview (counts only among documents you can read), needs a reason, and fails with 409 if someone changed the member meanwhile: reload and review again. Private channels and source grants follow their source and can't be changed here | 9 |
 | Review who changed access, and why | Access → *Audit log*: every access and AI-provider change, newest first, with actor, reason and effects. Events about documents you can't read aren't listed (D-18): ask an administrator who can read the document, or, as an operator: `SELECT created_at, actor, action, target, before, after, reason FROM audit_events ORDER BY created_at DESC` (organization bound). Events can't be edited or deleted | 9 |
+| Connect SSO, provision with SCIM, give the first administrator | §9 | 10 |
+| A member gets 429 `rate_limited` | They reached a per-member limit (§7.4); `Retry-After` says when to try again, and the web app shows it. Raise the limit for the deployment only if the use is legitimate; there is no per-person exemption. `lattice_rate_limited_total{bucket}` shows which limit | 10 |
+| "Sign-in didn't complete" (`/sign-in?error=sso_failed`) | `auth.oidc.failed` log events carry a fixed `outcome`: `not_provisioned` (the ID token's identifying claim matches no member this connection provisioned: check the claim and the SCIM `externalId` mapping, §9), `inactive` (suspended or removed), `token_invalid` (issuer, audience, signature, expiry or nonce: compare the connection with the provider's app settings), `invalid_state` (an old, replayed or foreign callback: start again). `sso_unavailable` = `provider_error` (discovery, keys or token endpoint unreachable, or the client secret reference unset) | 10 |
 | Remove a source's content now | `lattice source disconnect <source>` → immediate soft delete; purge runs asynchronously | 4 |
 | `security_invariant_violated` (HTTP 500 with that code; metric `lattice_security_invariant_violations_total` > 0; log event `security.invariant_violated` or `answer.citation_invariant_violated`) | Treat as incident: the retrieval predicate returned an unreadable chunk, or a response cited evidence it did not carry. The `security.invariant_violated` log event carries organization, membership, `policy_version`, counts and the offending document UUIDs; capture the request ID and trace ID. Stop generation: for one organization `lattice provider disable --purpose generation …` (live, audited); for everyone `LATTICE_GENERATION_ENABLED=false` and restart the API (§7.4). Investigate `authz` changes (compare `policy_version`); add a regression test before re-enabling. Alerting on the metric is Phase 11 | 6 / 8 |
 | Provider outage | **As built (Phase 6, bounded in Phase 8):** Ask returns HTTP 200 with status `failed` / `provider_unavailable` and the evidence list, within `LATTICE_GENERATION_DEADLINE_SECONDS` (default 120 s for both attempts together); the trace's `error_code` says why (`generation_failed:timeout`, `rate_limited`, `deadline_exceeded`, …) and `lattice_generation_calls_total{outcome}` counts it. Query embedding degrades to exact + lexical after 5 s (`lattice_retrieval_semantic_total{outcome="provider_failed"}`). Switch provider with `lattice provider configure` if an approved alternative exists; or stop generation (§7.4) and keep serving evidence | 6 / 8 |
@@ -191,6 +197,9 @@ ever a label (`lattice.metrics`, tested).
 | `lattice_sync_runs_total{mode,status}`, `lattice_sync_record_failures_total{stage}`, `lattice_sync_duration_seconds` | ingestion health |
 | `lattice_jobs_total{kind,outcome}`, `lattice_jobs_waiting`, `lattice_worker_polls_total{result}`, `lattice_job_duration_seconds` | worker throughput, backlog, errors; `abandoned` jobs |
 | `lattice_maintenance_rows_total{task}` | job retention |
+| `lattice_rate_limited_total{bucket}` | requests refused by a limit (`ask_minute`, `ask_day`, `ask_concurrent`, `access_write`, `scim`, `sign_in`) |
+| `lattice_sso_sign_ins_total{outcome}` | OIDC sign-ins: `started`, `succeeded` and fixed failure outcomes (§2) |
+| `lattice_scim_operations_total{operation,status}` | SCIM requests by operation and status class; `unauthenticated` for bad tokens |
 | `process_*`, `python_gc_*` | memory and CPU per process |
 
 **Logs** are JSON lines on stdout (architecture §8): one `http.request` per request
@@ -198,7 +207,8 @@ ever a label (`lattice.metrics`, tested).
 `answer.completed` per Ask (status, reason, provider, model, counts, duration, trace ID),
 `ingestion.sync` per run, `jobs.started` / `jobs.finished` / `jobs.abandoned` /
 `jobs.retention` per job, `db.unavailable`, `health.*`, `http.request_too_large`,
-`http.csrf_rejected`, `auth.session.rejected`, `security.invariant_violated`. Never
+`http.csrf_rejected`, `auth.session.rejected`, `auth.oidc.started` / `succeeded` /
+`failed` (fixed outcome only), `security.invariant_violated`. Never
 question, answer, document or prompt text, titles, file names or secrets. Correlate a
 user report with its `X-Request-ID` header, then the trace ID in `answer.completed`.
 
@@ -214,8 +224,23 @@ user report with its `X-Request-ID` header, then the trace ID in `answer.complet
 | `LATTICE_DB_STATEMENT_TIMEOUT_MS` (30,000), `LATTICE_DB_CONNECT_TIMEOUT_SECONDS` (5), `LATTICE_DB_POOL_SIZE` (5 + 5 overflow) | API connections | a long statement is cancelled (503); an unreachable database fails fast | API restart |
 | Question length 2,000 characters; one active sync job per source; generation output ≤ 2,048 tokens | per request | 422 / idempotent request / bounded model output | always |
 
-Per-member rate limiting (T19) is Phase 10; it is **not** built. Until then, bound cost at
-the provider (quota) and with the kill switches above.
+**Rate limits (Phase 10, `lattice.ratelimit`).** Server-side, for every role
+(administrators included); none can be set to 0. A refusal is 429 `rate_limited` with
+`Retry-After` (seconds); browser sign-in redirects to `/sign-in?error=rate_limited`.
+
+| Limit | Subject | Default | Where counted |
+| ----- | ------- | ------- | ------------- |
+| `LATTICE_RATE_LIMIT_ASK_PER_MINUTE` / `_PER_DAY` | each membership | 10 / 500 | PostgreSQL (shared by all API processes) |
+| `LATTICE_RATE_LIMIT_ASK_CONCURRENT` | each membership | 2 in flight | per API process |
+| `LATTICE_RATE_LIMIT_ACCESS_WRITES_PER_MINUTE` | each administrator (previews, changes, grants, revocations) | 60 | PostgreSQL |
+| `LATTICE_RATE_LIMIT_SCIM_PER_MINUTE` | each SCIM token | 600 | PostgreSQL |
+| `LATTICE_RATE_LIMIT_SIGN_IN_PER_MINUTE` | each client address: development sign-in, OIDC start and callback, failed SCIM authentication | 30 | per API process (keyed hashes, bounded table) |
+
+Fixed windows: a burst of up to twice a limit can straddle a window boundary. The
+per-process limits multiply by the number of API processes. The client address is the
+peer the API sees: behind a reverse proxy run uvicorn with `--proxy-headers
+--forwarded-allow-ips=<proxy address>`, otherwise every client shares the proxy's
+address (and its limit). Provider quotas and the kill switches above still bound cost.
 
 ### 7.5 The worker
 
@@ -231,7 +256,7 @@ the provider (quota) and with the kill switches above.
 ### 7.6 Deployment checklist
 
 Production refuses to start on any of: `LATTICE_ENV` unset; development login enabled;
-insecure cookies; `LATTICE_QUERY_EMBEDDING=fake` or `LATTICE_SYNC_EMBEDDING=fake`; an
+insecure cookies; `LATTICE_PUBLIC_URL` unset or not `https://`; `LATTICE_QUERY_EMBEDDING=fake` or `LATTICE_SYNC_EMBEDDING=fake`; an
 unsafe runtime role; a schema at another revision; an invalid operational setting. In
 addition, before a first deployment:
 
@@ -242,7 +267,10 @@ addition, before a first deployment:
 3. Metrics listener on an internal interface; alert on
    `lattice_security_invariant_violations_total > 0`, readiness failures,
    `lattice_dependency_failures_total`, and a growing `lattice_jobs_waiting`.
-4. Real identity (OIDC, Phase 10) and container images / infrastructure (Phase 11) are
+4. Identity: connect each organization's OIDC provider and SCIM (§9); set
+   `LATTICE_PUBLIC_URL`; run the API with `--proxy-headers --forwarded-allow-ips=<proxy>`
+   behind the reverse proxy (§7.4); keep `LATTICE_OIDC_SECRET_*` in the secret store.
+5. Container images / infrastructure, retention jobs and alerting (Phase 11) are
    **not built**: the slice runs as documented in the README only.
 
 ### 7.7 Backups, recovery and migrations
@@ -267,7 +295,10 @@ time, and check the run. Each job has a 30-minute timeout. The backend job lints
 checks, bootstraps a clean database with all four roles, round-trips the migrations,
 seeds, verifies the API's and the worker's startup checks, syncs twice, runs both
 evaluation security gates and the full test suite; the web job checks the generated API
-contract, lints, type checks, runs unit tests, builds and runs the browser tests.
+contract, lints, type checks, runs unit tests, builds and runs the browser tests; the
+dependency-audit job (Phase 10) runs `make audit` (pip-audit over the locked backend set
+with hashes, `pnpm audit` over the web lockfile). A new advisory fails only that job:
+upgrade the package (or document why it does not apply) in a reviewed commit.
 
 ## 8. Failure drills — *run for Phase 8 (2026-09-29)*
 
@@ -296,3 +327,22 @@ provider recorded for Halden, fake embeddings), and as automated tests
 `/v1/activity` 31 ms, `/v1/admin/sources` 30 ms, `/v1/admin/activity` 21 ms; a requested
 sync of 148 unchanged tickets 1.7 s, of Drive 0.3 s; API resident memory about 77 MB.
 No model benchmark was run (ADR-012).
+
+## 9. Identity: SSO, SCIM provisioning and administrators — *implemented (Phase 10)*
+
+ADR-015, decisions D-1, D-19, D-20. Every command runs as `lattice_owner`
+(`LATTICE_MIGRATION_DATABASE_URL`), needs `--reason` where it changes something, and
+records an audit event (no secret or secret reference in it). URLs are printed from
+`LATTICE_PUBLIC_URL`.
+
+| Task | Procedure |
+| ---- | --------- |
+| Connect an organization's identity provider | In the provider, create an OIDC web application: redirect URI `<public URL>/api/v1/auth/oidc/<login key>/callback` (printed by the next command; register it after), grant type authorization code, PKCE S256, scopes `openid email profile`. Then `lattice sso add --org <slug> --issuer <issuer exactly as in its discovery document> --client-id <id> [--client-secret-ref env:LATTICE_OIDC_SECRET_<NAME>] [--subject-claim <claim>] --reason "…"`. It prints the sign-in URL (`/sso/<login key>`, also the provider's app-tile / initiate-login URL), the redirect URI and the SCIM base URL. One active connection per organization; the login key is opaque (it names no organization) |
+| Choose the identifying claim | The claim's value must be stable and equal the SCIM `externalId` the provider sends: `sub` where the provider's `sub` is its user ID (Okta, Keycloak); `oid` for Microsoft Entra ID (its `sub` is per application) with `externalId` mapped to `objectId`. E-mail is never used to match a person |
+| Turn on SCIM provisioning | `lattice scim token create --org <slug> --reason "…"` prints a token **once**: paste it into the provider's provisioning settings with the SCIM base URL `<public URL>/api/scim/v2`, auth "HTTP header / Bearer token". Map `userName`, `externalId` (as above), name, e-mail, `active`. The provider can then create, update, deactivate, reactivate and delete members. Groups are not provisioned (not supported); access is granted on the Access page |
+| Give the organization its first administrator | After the person is provisioned: `lattice member admin --org <slug> --email <e-mail> --grant --reason "…"`. `--revoke` takes it away. Administration grants no access to content (SEC-15). This is the only way to change the capability |
+| What a new member can read | Least access: clearance Internal, account scope "assigned" with no accounts, no departments, groups or grants — so documents that are Internal, not account-specific and not department-restricted. Everything else is granted on the Access page (previewed, audited) |
+| Rotate or revoke a SCIM token | `lattice scim token create` (new), update the provider, then `lattice scim token revoke --org <slug> --id <token id> --reason "…"` (`lattice scim token list` shows IDs and states, never values). A leaked token: revoke first. A token is per organization and connection; it cannot reach another organization |
+| Stop SSO for an organization | `lattice sso disable --org <slug> --reason "…"`: sign-in through it fails at once and its SCIM tokens stop working. Existing sessions continue until they expire or the members are suspended; suspend them (provider, or the owner-role `UPDATE` of §2) when the provider is compromised |
+| A person was re-hired after removal | Removal is terminal: SCIM cannot re-provision over it (409). Provision them under a new `externalId`, or ask an operator to restore the old membership deliberately (owner-role `UPDATE`, audited by hand) |
+| Members created by the manifest | `make seed` organizations keep the development persona sign-in; SCIM never touches members it did not provision, and the manifest never touches provisioned ones |

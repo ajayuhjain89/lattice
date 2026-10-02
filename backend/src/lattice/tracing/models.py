@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from lattice.db.base import Base
+from lattice.db.types import Xid8
 
 _UUID_DEFAULT = text("gen_random_uuid()")
 
@@ -81,6 +82,8 @@ class AuditEvent(Base):
             text("created_at DESC"),
             text("id DESC"),
         ),
+        # Access writes by the API need an event of their own transaction (0013).
+        Index("ix_audit_events_txid", "txid"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_DEFAULT)
@@ -94,3 +97,8 @@ class AuditEvent(Base):
     before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     reason: Mapped[str] = mapped_column(Text)
+    # The writing transaction (its default); the access-audit triggers look it up.
+    # Never loaded by the application (deferred).
+    txid: Mapped[int] = mapped_column(
+        Xid8, server_default=text("pg_current_xact_id()"), deferred=True
+    )

@@ -848,6 +848,7 @@ export const MEMBERS_PAGE: S["MembersPage"] = {
       account_scope: "all",
       assigned_accounts: 0,
       departments: [{ id: ID.leadership, name: "Leadership" }],
+      managed_by: null,
     },
     {
       id: ID.lena,
@@ -860,6 +861,7 @@ export const MEMBERS_PAGE: S["MembersPage"] = {
       account_scope: "assigned",
       assigned_accounts: 0,
       departments: [],
+      managed_by: null,
     },
     {
       id: ID.maya,
@@ -872,6 +874,7 @@ export const MEMBERS_PAGE: S["MembersPage"] = {
       account_scope: "assigned",
       assigned_accounts: 2,
       departments: [SALES],
+      managed_by: null,
     },
   ],
   next_after: null,
@@ -936,6 +939,31 @@ export const MEMBER_MAYA: S["MemberAccess"] = {
   has_other_grants: true,
 };
 
+/** A member provisioned by the identity provider (SCIM, Phase 10): it owns suspension. */
+export const MEMBER_PAT_MANAGED: S["MemberAccess"] = {
+  member: {
+    id: "a1000000-0000-4000-8000-0000000000aa",
+    name: "Pat Rivera",
+    email: "pat.rivera@halden.example",
+    role_label: null,
+    status: "active",
+    is_admin: false,
+    clearance: "internal",
+    account_scope: "assigned",
+    assigned_accounts: 0,
+    departments: [],
+    managed_by: "identity_provider",
+  },
+  version: "2026-10-02T09:00:00Z",
+  is_self: false,
+  accounts: [],
+  departments: [],
+  groups: [],
+  has_hidden_groups: false,
+  grants: [],
+  has_other_grants: false,
+};
+
 export const MEMBER_LENA_SELF: S["MemberAccess"] = {
   member: MEMBERS_PAGE.items[1]!,
   version: "2026-09-29T08:00:00Z",
@@ -991,6 +1019,28 @@ export const AUDIT: S["AuditPage"] = {
       reason: "Onboarding cover",
       member: { id: ID.maya, name: "Maya Okafor" },
       document: HANDBOOK,
+      effects: [],
+      details: [],
+    },
+    {
+      id: "a0d10000-0000-4000-8000-000000000004",
+      created_at: "2026-09-28T09:02:00Z",
+      action: "access.identity_changed",
+      actor: { kind: "identity_provider", name: null, operator: null },
+      reason: "Updated by the identity provider (SCIM)",
+      member: { id: "a1000000-0000-4000-8000-0000000000aa", name: "Pat Rivera" },
+      document: null,
+      effects: [],
+      details: [{ field: "name", before: "Pat Doe", after: "Pat Rivera" }],
+    },
+    {
+      id: "a0d10000-0000-4000-8000-000000000003",
+      created_at: "2026-09-28T09:00:00Z",
+      action: "access.member_changed",
+      actor: { kind: "identity_provider", name: null, operator: null },
+      reason: "Provisioned by the identity provider (SCIM)",
+      member: { id: "a1000000-0000-4000-8000-0000000000aa", name: "Pat Rivera" },
+      document: null,
       effects: [],
       details: [],
     },

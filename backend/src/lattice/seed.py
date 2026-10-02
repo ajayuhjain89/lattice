@@ -196,10 +196,12 @@ async def _upsert(
     values: dict[str, Any],
     conflict: list[str],
     update_columns: list[str],
+    conflict_where: ColumnElement[bool] | None = None,
 ) -> bool:
     """INSERT ... ON CONFLICT DO UPDATE only when a column actually differs.
 
-    Returns True if a row was inserted or changed.
+    ``conflict_where`` names a partial unique index's predicate. Returns True if a row
+    was inserted or changed.
     """
     stmt = insert(table).values(**values)
     changed: ColumnElement[bool] | None = None
@@ -208,11 +210,12 @@ async def _upsert(
         changed = or_(*conditions)
         stmt = stmt.on_conflict_do_update(
             index_elements=conflict,
+            index_where=conflict_where,
             set_={c: stmt.excluded[c] for c in update_columns},
             where=changed,
         )
     else:
-        stmt = stmt.on_conflict_do_nothing(index_elements=conflict)
+        stmt = stmt.on_conflict_do_nothing(index_elements=conflict, index_where=conflict_where)
     result = await session.execute(stmt.returning(table.c[conflict[0]]))
     return result.first() is not None
 
@@ -354,9 +357,12 @@ async def seed_manifest(db: Database, manifest: Manifest) -> SeedReport:
                     {"email": member.email, "display_name": member.display_name},
                     ["email"],
                     ["display_name"],
+                    # Manifest people are global users, never an organization's own
+                    # provisioned users (uq_users_email, migration 0013).
+                    users.c.home_organization_id.is_(None),
                 ),
             )
-            user_id = await _id_of(session, users, email=member.email)
+            user_id = await _id_of(session, users, email=member.email, home_organization_id=None)
             report.note(
                 "dev_identity",
                 await _upsert(

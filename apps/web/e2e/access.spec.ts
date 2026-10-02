@@ -94,7 +94,8 @@ test("the audit log shows recorded changes, with documents the viewer can read",
   await mockApi(page, { me: ME_LENA });
   await page.goto("/access/audit");
   const events = page.getByRole("listitem").filter({ hasText: "By " });
-  await expect(events).toHaveCount(2);
+  // Two changes by people and tools, two by the identity provider (SCIM, Phase 10).
+  await expect(events).toHaveCount(4);
   await expect(events.nth(0)).toContainText("Access changed");
   await expect(events.nth(0)).toContainText("Assigned Kestrel Bank");
   await expect(events.nth(0)).toContainText("“Covering Kestrel during the renewal”");

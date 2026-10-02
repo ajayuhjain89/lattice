@@ -2,7 +2,17 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ID, ME_LENA, ME_MAYA, MEMBER_LENA_SELF, MEMBER_MAYA, NOT_FOUND, PREVIEW_ADD_KESTREL, DIRECTORY } from "@/test/fixtures";
+import {
+  ID,
+  ME_LENA,
+  ME_MAYA,
+  MEMBER_LENA_SELF,
+  MEMBER_MAYA,
+  MEMBER_PAT_MANAGED,
+  NOT_FOUND,
+  PREVIEW_ADD_KESTREL,
+  DIRECTORY,
+} from "@/test/fixtures";
 import { mockFetch, renderInWorkspace } from "@/test/render";
 
 import { MemberScreen } from "./MemberScreen";
@@ -25,6 +35,19 @@ describe("MemberScreen", () => {
     expect(screen.getByText("Granted by Lena Brandt", { exact: false })).toBeInTheDocument();
     expect(screen.getByText("“Onboarding cover”")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Revoke grant: Employee handbook" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Change access" })).toBeEnabled();
+  });
+
+  it("leaves suspension of a provisioned member to the identity provider", async () => {
+    const id = MEMBER_PAT_MANAGED.member.id;
+    mockFetch({ [`GET /v1/admin/access/members/${id}`]: [200, MEMBER_PAT_MANAGED] });
+    renderInWorkspace(<MemberScreen id={id} />, { me: ME_LENA });
+    expect(await screen.findByTestId("managed-note")).toHaveTextContent(
+      "Pat Rivera's name, e-mail and whether they're active come from your identity provider.",
+    );
+    expect(screen.getByText("Identity provider")).toBeInTheDocument();
+    expect(screen.getByText("· set by your identity provider", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Suspend" })).toBeNull();
     expect(screen.getByRole("button", { name: "Change access" })).toBeEnabled();
   });
 

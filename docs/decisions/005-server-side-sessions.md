@@ -1,7 +1,8 @@
 # ADR-005: Server-side sessions; development identity for the slice; OIDC before deployment
 
 Status: Accepted (proposed in Phase 0; server-side sessions and the development identity
-provider implemented in Phase 1; OIDC before any deployment, Phase 10)
+provider implemented in Phase 1; generic OIDC with PKCE implemented in Phase 10, with
+SCIM provisioning — ADR-015)
 
 ## Context
 Permission and membership changes must take effect immediately (SEC-4, SEC-11).

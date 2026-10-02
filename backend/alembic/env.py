@@ -20,6 +20,7 @@ from lattice.ingestion import models as ingestion_models  # noqa: F401 - registe
 from lattice.jobs import models as job_models  # noqa: F401 - register tables
 from lattice.orgs import models as org_models  # noqa: F401 - register tables
 from lattice.providers import models as provider_models  # noqa: F401 - register tables
+from lattice.ratelimit import models as ratelimit_models  # noqa: F401 - register tables
 from lattice.sources import models as source_models  # noqa: F401 - register tables
 from lattice.tracing import models as tracing_models  # noqa: F401 - register tables
 

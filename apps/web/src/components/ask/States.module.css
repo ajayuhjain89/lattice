@@ -86,7 +86,8 @@
 .reference {
   composes: t-meta from global;
 
-  color: var(--text-muted);
+  /* Secondary, not muted: it sits on tinted callout backgrounds (4.5:1 there too). */
+  color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
 

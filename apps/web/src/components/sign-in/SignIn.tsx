@@ -20,6 +20,14 @@ export function safeNext(value: string | null): string {
   return value && value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\") ? value : "/ask";
 }
 
+/** The sign-in errors the API's OIDC routes redirect with (a closed set; others ignored). */
+export const SSO_ERRORS: Record<string, string> = {
+  sso_failed:
+    "Sign-in didn't complete. Try again from your identity provider. If it keeps failing, ask your administrator whether your account has access to Lattice.",
+  sso_unavailable: "Your identity provider couldn't be reached. Try again in a moment.",
+  rate_limited: "Too many sign-in attempts from this browser. Wait a minute and try again.",
+};
+
 const PRINCIPLES = [
   ["Permission-aware", "Every search runs inside what you are allowed to read."],
   ["Cited claim by claim", "Each statement links to a verbatim, checked passage."],
@@ -36,7 +44,9 @@ export function SignIn(props: { devEnabled: boolean; organizations: DevOrganizat
 
 function SignInInner({ devEnabled, organizations }: { devEnabled: boolean; organizations: DevOrganization[] }) {
   const router = useRouter();
-  const next = safeNext(useSearchParams().get("next"));
+  const params = useSearchParams();
+  const next = safeNext(params.get("next"));
+  const ssoError = SSO_ERRORS[params.get("error") ?? ""] ?? null;
   const signIn = useSignIn();
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const emailId = useId();
@@ -61,7 +71,7 @@ function SignInInner({ devEnabled, organizations }: { devEnabled: boolean; organ
 
   const error = signIn.error;
   const errorText = !error
-    ? null
+    ? ssoError
     : isApiError(error) && error.status === 404
       ? "Development sign-in isn't available on this server."
       : isApiError(error)
@@ -106,7 +116,7 @@ function SignInInner({ devEnabled, organizations }: { devEnabled: boolean; organ
             <p className={styles.lede}>
               {devEnabled
                 ? "Choose a seeded persona. What you can see depends on who you are — each persona has different access."
-                : "Sign-in isn't configured for this deployment. Contact your administrator."}
+                : "Sign in with your organization's identity provider: open Lattice from its app dashboard, or use the sign-in link your administrator shared."}
             </p>
           </header>
 

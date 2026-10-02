@@ -1,7 +1,8 @@
-"""The final privilege state of lattice_auth, the NOLOGIN owner of the two SECURITY
-DEFINER pre-authentication lookups (docs/data-model.md §8).
+"""The final privilege state of lattice_auth, the NOLOGIN owner of the SECURITY DEFINER
+pre-authentication lookups (docs/data-model.md §8): the session and dev-identity lookups
+(Phase 1) and the OIDC connection and SCIM token lookups (Phase 10, migration 0013).
 
-Invariant: lattice_auth can own and run exactly those two functions and read exactly
+Invariant: lattice_auth can own and run exactly those functions and read exactly
 the rows they need. It cannot log in, cannot create objects anywhere, cannot write,
 and cannot read any other tenant table. Only lattice_owner (and superusers) can act as
 it, and lattice_owner does not inherit its privileges.
@@ -23,9 +24,22 @@ from lattice.identity.sessions import SessionPolicy, SessionService
 from .conftest import alembic_config
 from .factories import create_member, create_org
 
-LOOKUP_FUNCTIONS = {"lattice_resolve_session", "lattice_identity_memberships"}
-# Exactly what the two functions read, and nothing else.
-READABLE_TABLES = {"organizations", "users", "external_identities", "memberships", "sessions"}
+LOOKUP_FUNCTIONS = {
+    "lattice_resolve_session",
+    "lattice_identity_memberships",
+    "lattice_oidc_connection",
+    "lattice_resolve_scim_token",
+}
+# Exactly what the functions read, and nothing else.
+READABLE_TABLES = {
+    "organizations",
+    "users",
+    "external_identities",
+    "memberships",
+    "sessions",
+    "oidc_connections",
+    "scim_tokens",
+}
 TABLE_PRIVILEGES = ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER")
 
 
@@ -68,7 +82,7 @@ async def test_no_create_privilege_on_any_schema_or_the_database(
     assert usage == [(True,)]
 
 
-async def test_owns_exactly_the_two_lookup_functions(superuser_engine: AsyncEngine) -> None:
+async def test_owns_exactly_the_lookup_functions(superuser_engine: AsyncEngine) -> None:
     owned = await _rows(
         superuser_engine,
         """
@@ -93,7 +107,8 @@ async def test_lookup_functions_are_narrow_definer_functions(superuser_engine: A
                      FROM aclexplode(p.proacl) a LEFT JOIN pg_roles r ON r.oid = a.grantee
                      WHERE a.privilege_type = 'EXECUTE' ORDER BY 1)
         FROM pg_proc p
-        WHERE p.proname IN ('lattice_resolve_session', 'lattice_identity_memberships')
+        WHERE p.proname = ANY(ARRAY['lattice_resolve_session', 'lattice_identity_memberships',
+                                    'lattice_oidc_connection', 'lattice_resolve_scim_token'])
         """,
     )
     assert {r[0] for r in rows} == LOOKUP_FUNCTIONS

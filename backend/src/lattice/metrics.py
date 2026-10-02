@@ -160,6 +160,23 @@ AUTH_REJECTIONS: Final = frozenset(
         "context_unavailable",
     }
 )
+# OIDC sign-in outcomes (lattice.identity.oidc); never which account or organization.
+SSO_OUTCOMES: Final = frozenset(
+    {
+        "started",
+        "succeeded",
+        "unknown_connection",
+        "invalid_state",
+        "provider_error",
+        "token_invalid",
+        "not_provisioned",
+        "inactive",
+        "rate_limited",
+    }
+)
+SCIM_OPERATIONS_SET: Final = frozenset(
+    {"create", "read", "list", "replace", "patch", "delete", "metadata", "unauthenticated"}
+)
 SYNC_MODES: Final = frozenset({"full", "acl_only", "reindex"})
 SYNC_STATUSES: Final = frozenset({"succeeded", "partial", "failed", "aborted"})
 SYNC_STAGES: Final = frozenset(
@@ -220,6 +237,24 @@ DEPENDENCY_FAILURES = Counter(
     "lattice_dependency_failures_total",
     "A dependency (the database) was unavailable, by where it was noticed.",
     ["dependency", "check"],
+    registry=REGISTRY,
+)
+RATE_LIMITED = Counter(
+    "lattice_rate_limited_total",
+    "Requests refused by a rate or concurrency limit, by bucket (a closed set).",
+    ["bucket"],
+    registry=REGISTRY,
+)
+SSO_SIGN_INS = Counter(
+    "lattice_sso_sign_ins_total",
+    "OIDC sign-in attempts by fixed outcome.",
+    ["outcome"],
+    registry=REGISTRY,
+)
+SCIM_OPERATIONS = Counter(
+    "lattice_scim_operations_total",
+    "SCIM requests by operation and HTTP status class.",
+    ["operation", "status"],
     registry=REGISTRY,
 )
 SECURITY_INVARIANT_VIOLATIONS = Counter(

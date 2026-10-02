@@ -44,7 +44,7 @@ from lattice.access.models import (
     RevokeRequest,
     VisibleAccount,
 )
-from lattice.api.deps import CurrentPrincipal
+from lattice.api.deps import CurrentPrincipal, Limits
 from lattice.authz import resolve_authorization_context, visible_accounts_predicate
 from lattice.db.engine import Database
 from lattice.errors import ErrorCode, ErrorResponse, LatticeError
@@ -58,7 +58,8 @@ _ERRORS: dict[int | str, dict[str, Any]] = {
     404: {"model": ErrorResponse},
     422: {"model": ErrorResponse},
 }
-_CHANGE_ERRORS: dict[int | str, dict[str, Any]] = {**_ERRORS, 409: {"model": ErrorResponse}}
+_WRITE_ERRORS: dict[int | str, dict[str, Any]] = {**_ERRORS, 429: {"model": ErrorResponse}}
+_CHANGE_ERRORS: dict[int | str, dict[str, Any]] = {**_WRITE_ERRORS, 409: {"model": ErrorResponse}}
 
 
 def _db(request: Request) -> Database:
@@ -69,6 +70,15 @@ def _db(request: Request) -> Database:
 def _require_admin(principal: Principal) -> None:
     if not principal.is_admin:
         raise LatticeError(ErrorCode.PERMISSION_DENIED)
+
+
+async def _admin_write(principal: Principal, limits: Limits) -> None:
+    """Capability first (403 identical for any target), then the administrator's write
+    limit -- before the target is looked up, so a 429 says nothing about it."""
+    _require_admin(principal)
+    await limits.limiter.hit(
+        principal.organization_id, principal.membership_id, limits.access_write
+    )
 
 
 async def _read_member(
@@ -163,15 +173,19 @@ async def get_member(
 @router.post(
     "/v1/admin/access/members/{membership_id}/preview",
     response_model=AccessPreview,
-    responses=_ERRORS,
+    responses=_WRITE_ERRORS,
     summary="What a change would do: effects as rules, counts only over documents you can "
     "read (administrators; nothing is changed)",
     description="Requires the X-Lattice-Request: 1 header.",
 )
 async def post_member_preview(
-    membership_id: uuid.UUID, body: MemberChange, request: Request, principal: CurrentPrincipal
+    membership_id: uuid.UUID,
+    body: MemberChange,
+    request: Request,
+    principal: CurrentPrincipal,
+    limits: Limits,
 ) -> AccessPreview:
-    _require_admin(principal)
+    await _admin_write(principal, limits)
     async with _db(request).tenant_snapshot(principal.organization_id) as session:
         viewer = await resolve_authorization_context(
             session,
@@ -194,8 +208,9 @@ async def patch_member(
     body: MemberChangeRequest,
     request: Request,
     principal: CurrentPrincipal,
+    limits: Limits,
 ) -> MemberAccess:
-    _require_admin(principal)
+    await _admin_write(principal, limits)
     await change_member(
         _db(request),
         organization_id=principal.organization_id,
@@ -257,7 +272,10 @@ async def get_member_document(
     "/v1/admin/access/members/{membership_id}/grants",
     response_model=GrantOut,
     status_code=201,
-    responses={**_ERRORS, 200: {"model": GrantOut, "description": "The grant already exists"}},
+    responses={
+        **_WRITE_ERRORS,
+        200: {"model": GrantOut, "description": "The grant already exists"},
+    },
     summary="Grant a member one document you can read, with a reason (administrators; audited)",
     description="Idempotent: an existing administrator grant is returned with 200. "
     "Requires the X-Lattice-Request: 1 header.",
@@ -268,8 +286,9 @@ async def post_grant(
     request: Request,
     response: Response,
     principal: CurrentPrincipal,
+    limits: Limits,
 ) -> GrantOut:
-    _require_admin(principal)
+    await _admin_write(principal, limits)
     grant_id, created = await create_grant(
         _db(request),
         organization_id=principal.organization_id,
@@ -289,15 +308,19 @@ async def post_grant(
 @router.post(
     "/v1/admin/access/grants/{grant_id}/revoke",
     status_code=204,
-    responses=_ERRORS,
+    responses=_WRITE_ERRORS,
     summary="Revoke an administrator grant on a document you can read, with a reason "
     "(administrators; audited)",
     description="Requires the X-Lattice-Request: 1 header.",
 )
 async def post_revoke(
-    grant_id: uuid.UUID, body: RevokeRequest, request: Request, principal: CurrentPrincipal
+    grant_id: uuid.UUID,
+    body: RevokeRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+    limits: Limits,
 ) -> Response:
-    _require_admin(principal)
+    await _admin_write(principal, limits)
     await revoke_grant(
         _db(request),
         organization_id=principal.organization_id,

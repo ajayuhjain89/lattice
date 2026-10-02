@@ -58,7 +58,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from lattice import cli_answer, cli_providers, cli_retrieval, cli_worker
+from lattice import cli_answer, cli_identity, cli_providers, cli_retrieval, cli_worker
 from lattice.admin_grants import apply_admin_grants, load_admin_grants
 from lattice.config import (
     ConfigurationError,
@@ -340,6 +340,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     grants.add_argument("--prune", action="store_true")
     cli_answer.add_parsers(commands, cli_retrieval.add_parsers(commands))
     cli_providers.add_parsers(commands)
+    cli_identity.add_parsers(commands)
     cli_worker.add_parser(commands)
     args = parser.parse_args(argv)
 
@@ -374,6 +375,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return asyncio.run(cli_providers.provider(args))
         if args.command == "worker":
             return asyncio.run(cli_worker.run(args))
+        if args.command in cli_identity.COMMANDS:
+            return asyncio.run(cli_identity.run(args))
         return asyncio.run(_check_db_role())
     except ConfigurationError as exc:
         return _fail(str(exc))

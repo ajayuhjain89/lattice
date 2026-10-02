@@ -45,6 +45,12 @@ WORKER_TABLES = {
     "query_traces": set(),
     "audit_events": set(),
     "provider_credentials": set(),
+    # Phase 10: identity, provisioning and limits are none of a sync's business.
+    "oidc_connections": set(),
+    "oidc_login_attempts": set(),
+    "directory_identities": set(),
+    "scim_tokens": set(),
+    "rate_limit_counters": set(),
 }
 
 

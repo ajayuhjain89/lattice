@@ -158,6 +158,11 @@ const ACTIONS: Record<string, string> = {
   "credential.rotated": "Credential rotated",
   "credential.revoked": "Credential revoked",
   "egress.levels_changed": "AI data policy changed",
+  "access.identity_changed": "Profile updated",
+  "sso.connection_created": "Sign-in connection added",
+  "sso.connection_disabled": "Sign-in connection disabled",
+  "scim.token_created": "Provisioning token created",
+  "scim.token_revoked": "Provisioning token revoked",
 };
 
 export function actionLabel(action: string): string {
@@ -172,6 +177,7 @@ const OPERATORS: Record<string, string> = {
 
 export function actorLabel(event: AuditEvent): string {
   if (event.actor.kind === "member") return event.actor.name ?? "A former member";
+  if (event.actor.kind === "identity_provider") return "Your identity provider (SCIM)";
   return OPERATORS[event.actor.operator ?? ""] ?? `Operator (${event.actor.operator ?? "unknown"})`;
 }
 
