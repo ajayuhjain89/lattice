@@ -72,7 +72,7 @@ def user(
     user_name: str,
     *,
     email: str | None = None,
-    active: bool = True,
+    active: Any = True,
     given: str = "Pat",
     family: str = "Doe",
     **extra: Any,

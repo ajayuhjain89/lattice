@@ -213,12 +213,10 @@ async def test_access_attributes_in_a_request_are_ignored(
         entitlements=[{"value": "restricted"}],
         clearance="confidential",
         is_admin=True,
-        **{
-            "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User": {
-                "department": "Leadership"
-            }
-        },
     )
+    body["urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"] = {
+        "department": "Leadership"
+    }
     created = await _create(scim, world, body)
     row = await _membership(owner_db, world.halden.org, created["id"])
     assert (row["is_admin"], row["clearance"], row["account_scope"]) == (
@@ -227,7 +225,7 @@ async def test_access_attributes_in_a_request_are_ignored(
         "assigned",
     )
     async with owner_db.tenant_transaction(world.halden.org) as s:
-        links = (
+        links: int = (
             await s.execute(
                 text(
                     "SELECT (SELECT count(*) FROM membership_departments WHERE membership_id = :m)"
@@ -313,7 +311,7 @@ async def test_another_organizations_user_with_the_same_email_is_invisible(
     assert row["user_id"] != world.maya.user_id
     assert row["home_organization_id"] == world.veridian.org
     async with owner_db.tenant_transaction(world.halden.org) as s:
-        name = (
+        name: str = (
             await s.execute(
                 text("SELECT display_name FROM users WHERE id = :u"), {"u": world.maya.user_id}
             )
@@ -321,7 +319,7 @@ async def test_another_organizations_user_with_the_same_email_is_invisible(
     assert name == "maya"
     # Maya can still sign in to Halden only; the Veridian person is a different user.
     async with app_db.unscoped_transaction() as s:
-        orgs = (
+        orgs: list[str] = list(
             (
                 await s.execute(
                     text("SELECT organization_slug FROM lattice_identity_memberships('dev', :e)"),
@@ -343,7 +341,9 @@ async def test_parallel_creates_of_one_person_make_one_member(
     )
     assert sorted(r.status_code for r in responses) == [201] + [409] * 5
     async with owner_db.tenant_transaction(world.halden.org) as s:
-        count = (await s.execute(text("SELECT count(*) FROM directory_identities"))).scalar_one()
+        count: int = (
+            await s.execute(text("SELECT count(*) FROM directory_identities"))
+        ).scalar_one()
     assert count == 1
 
 
@@ -395,17 +395,18 @@ async def test_organizations_never_see_each_others_users(
     assert veridian.status_code == 201  # the same external ID in another organization
     other = veridian.json()["id"]
     assert other != halden["id"]
-    for method, extra in (
-        ("GET", {}),
-        ("PUT", {"json": user("same-id", "x@veridian.example")}),
-        ("PATCH", {"json": patch({"op": "replace", "path": "active", "value": False})}),
-        ("DELETE", {}),
-    ):
+    requests: list[tuple[str, dict[str, Any] | None]] = [
+        ("GET", None),
+        ("PUT", user("same-id", "x@veridian.example")),
+        ("PATCH", patch({"op": "replace", "path": "active", "value": False})),
+        ("DELETE", None),
+    ]
+    for method, payload in requests:
         foreign = await scim.request(
-            method, f"{BASE}/Users/{other}", headers=world.halden.auth, **extra
+            method, f"{BASE}/Users/{other}", headers=world.halden.auth, json=payload
         )
         missing = await scim.request(
-            method, f"{BASE}/Users/{uuid.uuid4()}", headers=world.halden.auth, **extra
+            method, f"{BASE}/Users/{uuid.uuid4()}", headers=world.halden.auth, json=payload
         )
         assert foreign.status_code == missing.status_code == 404
         assert foreign.json() == missing.json()

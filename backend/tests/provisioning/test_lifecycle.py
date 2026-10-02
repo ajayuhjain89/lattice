@@ -113,7 +113,7 @@ async def test_access_ends_on_the_next_request_everywhere(
         assert response.json()["error"]["code"] == "authentication_required"
     # The session row itself was revoked in the change's transaction.
     async with owner_db.tenant_transaction(world.halden.org) as s:
-        revoked = (
+        revoked: bool = (
             await s.execute(
                 text("SELECT revoked_at IS NOT NULL FROM sessions WHERE user_id = :u"),
                 {"u": user_id},
