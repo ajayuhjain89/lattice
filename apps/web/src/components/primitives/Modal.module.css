@@ -1,0 +1,119 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  background: var(--scrim);
+  animation: fade var(--motion-panel) var(--ease);
+}
+
+.dialog {
+  position: fixed;
+  z-index: var(--z-dialog);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 2 * var(--space-4)));
+  max-height: min(88dvh, 880px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-canvas);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+  outline: none;
+  overscroll-behavior: contain;
+  animation: rise var(--motion-panel) var(--ease);
+}
+
+.confirm {
+  width: min(440px, calc(100vw - 2 * var(--space-4)));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-2) var(--space-6);
+}
+
+.title {
+  composes: t-h3 from global;
+}
+
+.description {
+  padding: 0 var(--space-6);
+  color: var(--text-secondary);
+}
+
+.body {
+  padding: var(--space-4) var(--space-6);
+  overflow-y: auto;
+  display: grid;
+  gap: var(--space-5);
+  min-height: 0;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6) var(--space-4);
+  border-top: var(--border-width) solid var(--border-default);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 6px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .dialog {
+    animation: none;
+  }
+}
+
+@media (width < 768px) {
+  .dialog,
+  .confirm {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    transform: none;
+    width: 100%;
+    max-height: 92dvh;
+    border-width: var(--border-width) 0 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+
+  .header {
+    padding-left: var(--space-4);
+  }
+
+  .description,
+  .body {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+
+  .footer {
+    padding: var(--space-3) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom));
+  }
+}
