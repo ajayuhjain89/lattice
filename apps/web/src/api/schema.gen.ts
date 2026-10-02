@@ -303,7 +303,7 @@ export interface paths {
     put?: never;
     /**
      * Ask a question; get a grounded answer over the evidence you may read
-     * @description Statuses (answered, partial, insufficient_evidence, evidence_only, ambiguous, unsupported_request, failed) are HTTP 200 outcomes. Every citation references an item of `evidence`. Requires the X-Lattice-Request: 1 header.
+     * @description Statuses (answered, partial, insufficient_evidence, evidence_only, ambiguous, unsupported_request, failed) are HTTP 200 outcomes. Every citation references an item of `evidence`. 429 with `Retry-After` when the member's Ask limits are exhausted. Requires the X-Lattice-Request: 1 header.
      */
     post: operations["post_ask_v1_ask_post"];
     delete?: never;
@@ -343,6 +343,43 @@ export interface paths {
     put?: never;
     /** Revoke the current session */
     post: operations["logout_v1_auth_logout_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/auth/oidc/{login_key}/callback": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** The identity provider's redirect back to Lattice (OIDC authorization code) */
+    get: operations["oidc_callback_v1_auth_oidc__login_key__callback_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/auth/oidc/{login_key}/start": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Start signing in with the organization's identity provider (OIDC)
+     * @description `login_key` is the connection's opaque login key (the IdP app tile or a link from the administrator). `next`: a same-origin path to return to.
+     */
+    get: operations["oidc_start_v1_auth_oidc__login_key__start_get"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -522,7 +559,7 @@ export interface components {
        * Kind
        * @enum {string}
        */
-      kind: "member" | "operator";
+      kind: "member" | "operator" | "identity_provider";
       /**
        * Name
        * @description The member's name; null if no longer a member.
@@ -780,7 +817,7 @@ export interface components {
       created_at: string;
       /**
        * Details
-       * @description Provider and egress settings events.
+       * @description Provider and egress settings events, and identity changes from the identity provider (user name, e-mail, name).
        */
       details: components["schemas"]["AuditDetail"][];
       /** @description The target document. Events about documents you cannot read now are not listed. */
@@ -1052,6 +1089,7 @@ export interface components {
       | "method_not_allowed"
       | "validation_failed"
       | "request_too_large"
+      | "rate_limited"
       | "service_unavailable"
       | "internal_error"
       | "source_unavailable"
@@ -1335,6 +1373,11 @@ export interface components {
        */
       origin: "admin" | "source";
     };
+    /** HTTPValidationError */
+    HTTPValidationError: {
+      /** Detail */
+      detail?: components["schemas"]["ValidationError"][];
+    };
     /** HealthResponse */
     HealthResponse: {
       /**
@@ -1552,6 +1595,11 @@ export interface components {
        * @description Administrative capability; grants no content access.
        */
       is_admin: boolean;
+      /**
+       * Managed By
+       * @description Provisioned by the organization's identity provider (SCIM): it owns the member's name, e-mail and whether they are active; access stays editable here.
+       */
+      managed_by: "identity_provider" | null;
       /** Name */
       name: string;
       /**
@@ -1842,6 +1890,19 @@ export interface components {
        * Format: uuid
        */
       id: string;
+    };
+    /** ValidationError */
+    ValidationError: {
+      /** Context */
+      ctx?: Record<string, never>;
+      /** Input */
+      input?: unknown;
+      /** Location */
+      loc: (string | number)[];
+      /** Message */
+      msg: string;
+      /** Error Type */
+      type: string;
     };
     /** VisibleAccount */
     VisibleAccount: {
@@ -2141,6 +2202,15 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
     };
   };
   get_members_v1_admin_access_members_get: {
@@ -2330,6 +2400,15 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
     };
   };
   get_member_document_v1_admin_access_members__membership_id__documents__document_id__get: {
@@ -2460,6 +2539,15 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
     };
   };
   post_member_preview_v1_admin_access_members__membership_id__preview_post: {
@@ -2515,6 +2603,15 @@ export interface operations {
       };
       /** @description Unprocessable Entity */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
         headers: {
           [name: string]: unknown;
         };
@@ -2914,6 +3011,15 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       /** @description Internal Server Error */
       500: {
         headers: {
@@ -2974,6 +3080,15 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
     };
   };
   logout_v1_auth_logout_post: {
@@ -3017,6 +3132,79 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  oidc_callback_v1_auth_oidc__login_key__callback_get: {
+    parameters: {
+      query?: {
+        code?: string | null;
+        state?: string | null;
+        error?: string | null;
+      };
+      header?: never;
+      path: {
+        login_key: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A redirect: to the identity provider, back into Lattice, or to /sign-in?error=sso_failed|sso_unavailable|rate_limited */
+      303: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  oidc_start_v1_auth_oidc__login_key__start_get: {
+    parameters: {
+      query?: {
+        next?: string | null;
+      };
+      header?: never;
+      path: {
+        login_key: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A redirect: to the identity provider, back into Lattice, or to /sign-in?error=sso_failed|sso_unavailable|rate_limited */
+      303: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };

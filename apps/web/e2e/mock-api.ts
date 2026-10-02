@@ -29,7 +29,9 @@ type S = components["schemas"];
 export interface MockOptions {
   me?: S["MeResponse"] | "unauthenticated";
   /** Answer for each POST /v1/ask, chosen from the request body. */
-  ask?: (body: S["AskRequest"]) => S["Answer"] | { status: number; body: unknown } | "network";
+  ask?: (
+    body: S["AskRequest"],
+  ) => S["Answer"] | { status: number; body: unknown; headers?: Record<string, string> } | "network";
   evidence?: Record<string, S["EvidenceDetail"]>;
   traces?: Record<string, S["AskerTrace"] | S["AdminTrace"]>;
   providers?: S["ProvidersResponse"] | "forbidden";
@@ -62,12 +64,26 @@ export interface MockLog {
   headers: Record<string, string>[];
 }
 
-const json = (route: Route, status: number, body: unknown) =>
-  route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body), headers: { "x-request-id": "req-fixture" } });
+const json = (route: Route, status: number, body: unknown, headers: Record<string, string> = {}) =>
+  route.fulfill({
+    status,
+    contentType: "application/json",
+    body: JSON.stringify(body),
+    headers: { "x-request-id": "req-fixture", ...headers },
+  });
 
 /** Fulfil every /api/* request from typed fixtures; anything unknown is a 404 envelope. */
 export async function mockApi(page: Page, options: MockOptions = {}): Promise<MockLog> {
-  const log: MockLog = { changes: [], grants: [], revokes: [], syncs: [], asks: [], evidence: [], traces: [], headers: [] };
+  const log: MockLog = {
+    changes: [],
+    grants: [],
+    revokes: [],
+    syncs: [],
+    asks: [],
+    evidence: [],
+    traces: [],
+    headers: [],
+  };
   const forbidden = (route: Route) =>
     json(route, 403, { error: { code: "permission_denied", message: "You don't have permission to do this.", request_id: "req-403" } });
   const evidence = options.evidence ?? DETAILS;
@@ -92,6 +108,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     }
     if (path === "/v1/auth/dev-login" && method === "POST") return json(route, 200, options.me ?? ME_MAYA);
     if (path === "/v1/auth/logout" && method === "POST") return route.fulfill({ status: 204 });
+
     if (path === "/v1/ask" && method === "POST") {
       const body = request.postDataJSON() as S["AskRequest"];
       log.asks.push(body);
@@ -99,7 +116,9 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
       const result = options.ask?.(body);
       if (!result) return json(route, 500, { error: { code: "internal_error", message: "No fixture.", request_id: "req-500" } });
       if (result === "network") return route.abort("connectionrefused");
-      if ("status" in result && "body" in result && typeof result.status === "number") return json(route, result.status, result.body);
+      if ("status" in result && "body" in result && typeof result.status === "number") {
+        return json(route, result.status, result.body, "headers" in result ? result.headers : {});
+      }
       return json(route, 200, result);
     }
     const ev = /^\/v1\/evidence\/([^/]+)$/.exec(path);

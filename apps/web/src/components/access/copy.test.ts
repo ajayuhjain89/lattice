@@ -53,6 +53,7 @@ describe("change copy", () => {
     expect(auditPhrase({ kind: "administrator", before: "false", after: "true" })).toBe("Made an administrator");
     expect(actorLabel(AUDIT.items[0]!)).toBe("Lena Brandt");
     expect(actorLabel(AUDIT.items[1]!)).toBe("admin-grants.yaml");
+    expect(actorLabel(AUDIT.items[2]!)).toBe("Your identity provider (SCIM)");
     expect(actorLabel({ ...AUDIT.items[0]!, actor: { kind: "member", name: null, operator: null } })).toBe("A former member");
   });
 

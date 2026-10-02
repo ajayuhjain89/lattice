@@ -95,7 +95,8 @@
           "kind": {
             "enum": [
               "member",
-              "operator"
+              "operator",
+              "identity_provider"
             ],
             "title": "Kind",
             "type": "string"
@@ -841,7 +842,7 @@
             "type": "string"
           },
           "details": {
-            "description": "Provider and egress settings events.",
+            "description": "Provider and egress settings events, and identity changes from the identity provider (user name, e-mail, name).",
             "items": {
               "$ref": "#/components/schemas/AuditDetail"
             },
@@ -1528,6 +1529,7 @@
           "method_not_allowed",
           "validation_failed",
           "request_too_large",
+          "rate_limited",
           "service_unavailable",
           "internal_error",
           "source_unavailable",
@@ -2281,6 +2283,19 @@
         "title": "GroupAccess",
         "type": "object"
       },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "HealthResponse": {
         "properties": {
           "database": {
@@ -2883,6 +2898,19 @@
             "title": "Is Admin",
             "type": "boolean"
           },
+          "managed_by": {
+            "anyOf": [
+              {
+                "const": "identity_provider",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Provisioned by the organization's identity provider (SCIM): it owns the member's name, e-mail and whether they are active; access stays editable here.",
+            "title": "Managed By"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -2919,7 +2947,8 @@
           "clearance",
           "account_scope",
           "assigned_accounts",
-          "departments"
+          "departments",
+          "managed_by"
         ],
         "title": "MemberSummary",
         "type": "object"
@@ -3597,6 +3626,46 @@
         "title": "UserOut",
         "type": "object"
       },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
       "VisibleAccount": {
         "properties": {
           "key": {
@@ -3984,6 +4053,16 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           }
         },
         "summary": "Revoke an administrator grant on a document you can read, with a reason (administrators; audited)",
@@ -4258,6 +4337,16 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           }
         },
         "summary": "Change a member's access, with a reason (administrators; audited)",
@@ -4435,6 +4524,16 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           }
         },
         "summary": "Grant a member one document you can read, with a reason (administrators; audited)",
@@ -4519,6 +4618,16 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           }
         },
         "summary": "What a change would do: effects as rules, counts only over documents you can read (administrators; nothing is changed)",
@@ -4979,7 +5088,7 @@
     },
     "/v1/ask": {
       "post": {
-        "description": "Statuses (answered, partial, insufficient_evidence, evidence_only, ambiguous, unsupported_request, failed) are HTTP 200 outcomes. Every citation references an item of `evidence`. Requires the X-Lattice-Request: 1 header.",
+        "description": "Statuses (answered, partial, insufficient_evidence, evidence_only, ambiguous, unsupported_request, failed) are HTTP 200 outcomes. Every citation references an item of `evidence`. 429 with `Retry-After` when the member's Ask limits are exhausted. Requires the X-Lattice-Request: 1 header.",
         "operationId": "post_ask_v1_ask_post",
         "requestBody": {
           "content": {
@@ -5041,6 +5150,16 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           },
           "500": {
             "content": {
@@ -5113,6 +5232,16 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           }
         },
         "summary": "Development-only persona sign-in",
@@ -5157,9 +5286,154 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           }
         },
         "summary": "Revoke the current session",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/oidc/{login_key}/callback": {
+      "get": {
+        "operationId": "oidc_callback_v1_auth_oidc__login_key__callback_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "login_key",
+            "required": true,
+            "schema": {
+              "title": "Login Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "A redirect: to the identity provider, back into Lattice, or to /sign-in?error=sso_failed|sso_unavailable|rate_limited"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "The identity provider's redirect back to Lattice (OIDC authorization code)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/oidc/{login_key}/start": {
+      "get": {
+        "description": "`login_key` is the connection's opaque login key (the IdP app tile or a link from the administrator). `next`: a same-origin path to return to.",
+        "operationId": "oidc_start_v1_auth_oidc__login_key__start_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "login_key",
+            "required": true,
+            "schema": {
+              "title": "Login Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "next",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Next"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "A redirect: to the identity provider, back into Lattice, or to /sign-in?error=sso_failed|sso_unavailable|rate_limited"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start signing in with the organization's identity provider (OIDC)",
         "tags": [
           "auth"
         ]

@@ -160,6 +160,7 @@ function Status({ m }: { m: MemberSummary }) {
     <span className={styles.statusCell}>
       <span className={m.status === "active" ? undefined : styles.warn}>{humanize(m.status)}</span>
       {m.is_admin && <Tag tone="quiet">Admin</Tag>}
+      {m.managed_by === "identity_provider" && <Tag tone="quiet">Identity provider</Tag>}
     </span>
   );
 }

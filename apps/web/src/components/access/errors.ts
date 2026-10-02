@@ -1,4 +1,4 @@
-import { isApiError } from "@/api/errors";
+import { isApiError, retryPhrase } from "@/api/errors";
 
 /**
  * What to tell an administrator when a change is refused. The API's fixed issue codes
@@ -16,10 +16,14 @@ export function changeError(error: unknown, name: string): string {
       : "You no longer have administrator access.";
   }
   if (error.status === 404) return "This is no longer available to you. Close this and reload the page.";
+  if (error.isRateLimited) return `You're making changes quickly. Try again ${retryPhrase(error.retryAfter)}.`;
   if (error.status === 422) {
     if (error.issues.includes("no_change")) return "This doesn't change anything.";
     if (error.issues.includes("source_group")) return "Private channels follow their source and can't be changed here.";
     if (error.issues.includes("member_removed")) return `${name} has been removed; their access can't be changed.`;
+    if (error.issues.includes("managed_by_identity_provider")) {
+      return `${name} is managed by your identity provider. Suspend or reactivate them there.`;
+    }
     if (error.issues.includes("source_grant")) return "This grant comes from the source and changes only there.";
     if (error.issues.includes("unknown")) return "Something in this change no longer exists. Close this and reload the page.";
     return "Lattice couldn't apply this. Check the reason and try again.";

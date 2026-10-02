@@ -61,6 +61,8 @@ function Member({ access }: { access: MemberAccess }) {
   const [status, setStatus] = useState(false);
   const m = access.member;
   const canChange = !access.is_self && m.status !== "removed";
+  // Provisioned by the identity provider (SCIM): it owns suspension and reactivation.
+  const managed = m.managed_by === "identity_provider";
   return (
     <>
       <header className={styles.head}>
@@ -70,6 +72,7 @@ function Member({ access }: { access: MemberAccess }) {
           {m.role_label && <span className={styles.fact}>{m.role_label}</span>}
           {m.status !== "active" && <Tag tone="muted">{humanize(m.status)}</Tag>}
           {m.is_admin && <Tag tone="quiet">Admin</Tag>}
+          {managed && <Tag tone="quiet">Identity provider</Tag>}
         </p>
       </header>
 
@@ -87,9 +90,19 @@ function Member({ access }: { access: MemberAccess }) {
             <Button variant="primary" icon={<Icon as={SlidersHorizontal} />} onClick={() => setChanging(true)}>
               Change access
             </Button>
-            <Button icon={<Icon as={m.status === "active" ? PauseCircle : PlayCircle} />} onClick={() => setStatus(true)}>
-              {m.status === "active" ? "Suspend" : "Reactivate"}
-            </Button>
+            {managed ? (
+              <p className={styles.selfNote} data-testid="managed-note">
+                {m.name}&apos;s name, e-mail and whether they&apos;re active come from your identity provider.
+                Suspend or reactivate them there; access is managed here.
+              </p>
+            ) : (
+              <Button
+                icon={<Icon as={m.status === "active" ? PauseCircle : PlayCircle} />}
+                onClick={() => setStatus(true)}
+              >
+                {m.status === "active" ? "Suspend" : "Reactivate"}
+              </Button>
+            )}
           </>
         ) : (
           <p className={styles.selfNote}>
@@ -104,7 +117,10 @@ function Member({ access }: { access: MemberAccess }) {
         <SectionLabel id="rules-label">Access rules</SectionLabel>
         <dl className={styles.facts}>
           <dt>Status</dt>
-          <dd>{humanize(m.status)}</dd>
+          <dd>
+            {humanize(m.status)}
+            {managed && <span className={styles.off}> · set by your identity provider</span>}
+          </dd>
           <dt>Clearance</dt>
           <dd>{levelLabel(m.clearance)}</dd>
           <dt>Account scope</dt>
@@ -149,7 +165,7 @@ function Member({ access }: { access: MemberAccess }) {
       <DocumentCheck access={access} />
 
       {canChange && <ChangeAccessDialog member={access} open={changing} onOpenChange={setChanging} />}
-      {canChange && <StatusDialog member={access} open={status} onOpenChange={setStatus} />}
+      {canChange && !managed && <StatusDialog member={access} open={status} onOpenChange={setStatus} />}
     </>
   );
 }
