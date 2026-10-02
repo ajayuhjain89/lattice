@@ -73,6 +73,15 @@ class AuditEvent(Base):
     """Append-only record of an administrative change, with a stated reason."""
 
     __tablename__ = "audit_events"
+    # The administrators' audit view: newest first, keyset pages (Phase 9).
+    __table_args__ = (
+        Index(
+            "ix_audit_events_organization_id_created_at",
+            "organization_id",
+            text("created_at DESC"),
+            text("id DESC"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_DEFAULT)
     organization_id: Mapped[uuid.UUID] = mapped_column(

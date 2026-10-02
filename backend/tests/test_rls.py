@@ -379,14 +379,12 @@ async def test_cannot_update_another_organizations_sessions(
         # Phase 2: authorization facts are read-only at runtime.
         "INSERT INTO access_groups (organization_id, key, origin, name) "
         "VALUES (lattice_current_org_id(), 'x', 'admin', 'x')",
-        "DELETE FROM access_group_members",
         "INSERT INTO documents (organization_id, sensitivity, access_mode, "  # noqa: S608
         f"{FIXTURE_DOCUMENT_COLUMNS}) VALUES (lattice_current_org_id(), 'internal', 'policy', "
         f"{fixture_document_values('lattice_current_org_id()')})",
         "UPDATE documents SET access_mode = 'policy'",
         "UPDATE documents SET sensitivity = 'internal'",
         "DELETE FROM documents",
-        "DELETE FROM document_grants",
         "UPDATE document_grants SET membership_id = NULL",
         "ALTER TABLE documents NO FORCE ROW LEVEL SECURITY",
         # Phase 4: ingestion is an operator tool (lattice_owner); the runtime role only
@@ -406,7 +404,7 @@ async def test_cannot_update_another_organizations_sessions(
         "UPDATE model_providers SET approved_for_level = 'restricted'",
         # Phase 6: provider configuration and credentials are administrative writes
         # (operator tools); traces are append-only for the runtime; audit events are
-        # not the runtime's at all.
+        # append-only (Phase 9: the runtime may insert access events only).
         "UPDATE model_providers SET enabled = true",
         "INSERT INTO model_providers (organization_id, purpose, provider, model, deployment, "
         "retention_mode, training_opt_out) VALUES (lattice_current_org_id(), 'generation', "
@@ -419,10 +417,20 @@ async def test_cannot_update_another_organizations_sessions(
         "UPDATE query_traces SET answer = NULL",
         "UPDATE query_traces SET question_text = ''",
         "DELETE FROM query_traces",
-        "SELECT 1 FROM audit_events",
-        "INSERT INTO audit_events (organization_id, actor, action, target, reason) VALUES "
-        "(lattice_current_org_id(), 'x', 'x', '{}', 'x')",
         "DELETE FROM audit_events",
+        "UPDATE audit_events SET reason = 'x'",
+        # Phase 9: access management writes only what migration 0012 grants (the exact
+        # set, and its row-level limits, are tests/test_app_role_access.py).
+        "UPDATE memberships SET role_label = 'x'",
+        "UPDATE memberships SET user_id = user_id",
+        "DELETE FROM memberships",
+        "UPDATE document_grants SET origin = 'admin'",
+        "UPDATE access_group_members SET group_id = group_id",
+        "UPDATE account_assignments SET account_id = account_id",
+        "INSERT INTO accounts (organization_id, key, name) VALUES (lattice_current_org_id(), "
+        "'x', 'x')",
+        "INSERT INTO departments (organization_id, key, name) VALUES "
+        "(lattice_current_org_id(), 'x', 'x')",
     ],
 )
 async def test_runtime_role_lacks_unneeded_privileges(
