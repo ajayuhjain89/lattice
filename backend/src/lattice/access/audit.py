@@ -100,11 +100,12 @@ def _uuid(value: Any) -> uuid.UUID | None:
 
 
 def _scalar(value: Any) -> str | None:
+    """JSON spelling for everything but strings: ``true``, ``3``, ``["a"]``."""
     if value is None:
         return None
-    if isinstance(value, (dict, list)):
-        return json.dumps(value, sort_keys=True)
-    return str(value)
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, sort_keys=True)
 
 
 def _details(target: dict[str, Any], before: Any, after: Any) -> list[AuditDetail]:
@@ -113,7 +114,7 @@ def _details(target: dict[str, Any], before: Any, after: Any) -> list[AuditDetai
     found = [AuditDetail(field=k, before=None, after=_scalar(v)) for k, v in sorted(target.items())]
     old = before if isinstance(before, dict) else {}
     new = after if isinstance(after, dict) else {}
-    for key in sorted(set(old) | set(new)):
+    for key in sorted((set(old) | set(new)) - set(target)):
         if old.get(key) != new.get(key):
             found.append(
                 AuditDetail(field=key, before=_scalar(old.get(key)), after=_scalar(new.get(key)))

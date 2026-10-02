@@ -421,5 +421,5 @@ async def test_audit_events_are_listed_newest_first_with_effects(
     assert {(d["field"], d["before"], d["after"]) for d in provider["details"]} == {
         ("provider", None, "fake"),
         ("purpose", None, "generation"),
-        ("enabled", "False", "True"),
+        ("enabled", "false", "true"),
     }
