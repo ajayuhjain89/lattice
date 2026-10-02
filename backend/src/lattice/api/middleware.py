@@ -6,7 +6,7 @@ CsrfMiddleware -> FastAPI.
 RequestContextMiddleware
     * assigns a server-generated request ID (client-supplied IDs are ignored, so they
       cannot be used for log injection) and returns it as ``X-Request-ID``;
-    * adds security headers to every response;
+    * adds security headers to every response (security-model §4; reviewed in Phase 10);
     * logs one structured line per request: method, path, status, duration. Never the
       query string, headers, cookies or body;
     * converts any unhandled exception into the ``internal_error`` envelope, logging
@@ -131,6 +131,11 @@ class RequestContextMiddleware:
             (b"x-frame-options", b"DENY"),
             (b"referrer-policy", b"same-origin"),
             (b"cache-control", b"no-store"),
+            # Phase 10 review: no cross-origin window handle, no cross-origin embedding of
+            # API responses, and no powerful browser features for anything served here.
+            (b"cross-origin-opener-policy", b"same-origin"),
+            (b"cross-origin-resource-policy", b"same-origin"),
+            (b"permissions-policy", b"camera=(), microphone=(), geolocation=(), payment=()"),
         ]
         # The interactive API docs (development/test only) need scripts and styles.
         if not path.startswith(_DOCS_PATHS):
