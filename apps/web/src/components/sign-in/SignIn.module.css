@@ -66,36 +66,6 @@
   line-height: var(--type-heading-line);
 }
 
-/* One message from a closed set: a margin bar in the signal, its tint, icon and words. */
-.message {
-  display: grid;
-  grid-template-columns: var(--space-4) minmax(0, 1fr);
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-left: 3px solid var(--message-mark);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: var(--message-tint);
-  color: var(--message-text);
-}
-
-.message[data-tone="fault"] {
-  --message-mark: var(--signal-fault-mark);
-  --message-tint: var(--signal-fault-tint);
-  --message-text: var(--signal-fault-text);
-}
-
-.message[data-tone="time"] {
-  --message-mark: var(--signal-time-mark);
-  --message-tint: var(--signal-time-tint);
-  --message-text: var(--signal-time-text);
-}
-
-.messageIcon {
-  display: grid;
-  place-items: center;
-  height: var(--type-body-line);
-}
-
 /* The route sign-in takes: the trace's rail, three stops. */
 .route {
   display: grid;
@@ -364,11 +334,5 @@
 
   .go {
     opacity: 1;
-  }
-}
-
-@media (forced-colors: active) {
-  .message {
-    border-left-color: CanvasText;
   }
 }

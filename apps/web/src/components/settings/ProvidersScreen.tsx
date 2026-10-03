@@ -16,6 +16,7 @@ import { StatusMark } from "@/components/primitives/StatusMark";
 import { AdminGate, OpsHead, OpsPage, OpsSection } from "@/components/ops/OpsPage";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { ErrorState } from "@/components/states/ErrorState";
+import { RuleSkeleton } from "@/components/primitives/RuleSkeleton";
 import { humanize, levelLabel, retentionLabel } from "@/lib/format";
 
 import { byPurpose, neverSent, providerKey, readCell, trustClassMeaning, trustClassName } from "./egress-model";
@@ -46,14 +47,7 @@ export function ProvidersScreen() {
         {query.isError ? (
           <ErrorState error={query.error} title="Couldn't load provider settings" onRetry={() => query.refetch()} retrying={query.isFetching} />
         ) : !query.data ? (
-          <div className={styles.skeleton} aria-busy="true">
-            <span className="visually-hidden" role="status">
-              Loading provider settings
-            </span>
-            {[0, 1, 2, 3].map((i) => (
-              <span key={i} aria-hidden="true" />
-            ))}
-          </div>
+          <RuleSkeleton variant="ledger" rows={4} label="Loading provider settings" />
         ) : (
           <>
             <Policy egress={query.data.egress} />
@@ -211,10 +205,11 @@ function Providers({ providers }: { providers: ProviderOut[] }) {
             {p.model}
             {p.endpoint_configured ? " · custom endpoint" : ""}
           </span>
+          {/* Purpose sits with the provider: a seventh column crushed the others at 1024 px. */}
+          <span className={styles.secondary}>{humanize(p.purpose)}</span>
         </span>
       ),
     },
-    { key: "purpose", header: "Purpose", short: true, width: "7rem", cell: (p) => humanize(p.purpose) },
     {
       key: "trust",
       header: "Trust class",
@@ -252,11 +247,11 @@ function Providers({ providers }: { providers: ProviderOut[] }) {
           </StatusMark>
         ),
     },
-    { key: "credential", header: "Credential", width: "11rem", cell: (p) => <Credential p={p} /> },
+    { key: "credential", header: "Credential", width: "10rem", cell: (p) => <Credential p={p} /> },
     {
       key: "terms",
       header: "Data terms",
-      width: "11rem",
+      width: "10rem",
       cell: (p) => (
         <span className={styles.stack}>
           <span>{retentionLabel(p.retention_mode)}</span>

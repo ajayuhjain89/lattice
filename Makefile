@@ -124,7 +124,7 @@ web-check: ## Web lint (ESLint, jsx-a11y, Stylelint), type check and unit/compon
 	$(WEB) pnpm lint && pnpm typecheck && pnpm test
 
 web-e2e: ## Browser tests against the production build, API mocked (run `make web-build` first)
-	$(WEB) pnpm exec playwright test --project=desktop --project=mobile
+	$(WEB) pnpm exec playwright test --project=desktop --project=mobile --project=production
 
 api-contract: ## Re-export the OpenAPI schema and regenerate the web app's TypeScript types
 	$(WEB) pnpm api:schema && pnpm api:types

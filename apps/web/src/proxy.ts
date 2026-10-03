@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { DEV_SIGN_IN_ROUTE, devSignInEnabled } from "@/lib/dev-sign-in";
+
 /**
  * Content-Security-Policy with a fresh nonce per page request (Phase 10 headers review).
  *
@@ -9,6 +11,9 @@ import { NextResponse, type NextRequest } from "next/server";
  * which is why every page renders dynamically (the root layout opts in). Styles keep
  * 'unsafe-inline': components set inline style attributes, which a nonce cannot cover.
  * `/api/*` is FastAPI's (its own `default-src 'none'` policy) and static assets need none.
+ *
+ * Development sign-in: where this server enables it, `/sign-in` is served (same address)
+ * from its own route, so the production page never carries the persona picker's code.
  */
 export function proxy(request: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
@@ -30,7 +35,10 @@ export function proxy(request: NextRequest) {
   const headers = new Headers(request.headers);
   headers.set("x-nonce", nonce);
   headers.set("Content-Security-Policy", policy);
-  const response = NextResponse.next({ request: { headers } });
+  const response =
+    request.nextUrl.pathname === "/sign-in" && devSignInEnabled()
+      ? NextResponse.rewrite(new URL(`${DEV_SIGN_IN_ROUTE}${request.nextUrl.search}`, request.url), { request: { headers } })
+      : NextResponse.next({ request: { headers } });
   response.headers.set("Content-Security-Policy", policy);
   return response;
 }

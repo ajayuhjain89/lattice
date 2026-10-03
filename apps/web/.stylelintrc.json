@@ -82,7 +82,8 @@
         "src/components/settings/**/*.css",
         "src/components/landing/**/*.css",
         "src/components/public/**/*.css",
-        "src/components/sign-in/**/*.css"
+        "src/components/sign-in/**/*.css",
+        "src/components/states/**/*.css"
       ],
       "rules": {
         "declaration-property-unit-disallowed-list": {

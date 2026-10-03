@@ -12,6 +12,7 @@ import { StateBlock } from "@/components/primitives/StateBlock";
 import { AdminGate, OpsHead, OpsPage } from "@/components/ops/OpsPage";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { ErrorState } from "@/components/states/ErrorState";
+import { RuleSkeleton } from "@/components/primitives/RuleSkeleton";
 import { groupByDay } from "@/lib/chronology";
 import { dayHeading, formatCount, formatDay, formatDayTime, formatTime, humanize } from "@/lib/format";
 import { useNow } from "@/lib/use-now";
@@ -48,7 +49,7 @@ export function AuditScreen() {
         {query.isError ? (
           <ErrorState error={query.error} title="Couldn't load the audit log" onRetry={() => query.refetch()} retrying={query.isFetching} />
         ) : !query.data ? (
-          <LedgerSkeleton />
+          <RuleSkeleton variant="ledger" rows={4} label="Loading the audit log" />
         ) : events.length === 0 ? (
           <StateBlock family="quiet" heading="No changes recorded yet">
             <p>Access, identity and AI-provider changes appear here as they are made, each with who made it and why.</p>
@@ -173,15 +174,3 @@ function Subject({ event: e }: { event: AuditEvent }) {
   return null;
 }
 
-function LedgerSkeleton() {
-  return (
-    <div className={styles.skeleton} aria-busy="true">
-      <span className="visually-hidden" role="status">
-        Loading the audit log
-      </span>
-      {[0, 1, 2, 3].map((i) => (
-        <span key={i} className={styles.skeletonRow} aria-hidden="true" />
-      ))}
-    </div>
-  );
-}

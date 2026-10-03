@@ -19,6 +19,7 @@ import { shortStatus } from "@/components/shell/status-labels";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { ErrorState } from "@/components/states/ErrorState";
 import { NotAvailable } from "@/components/states/NotAvailable";
+import { RuleSkeleton } from "@/components/primitives/RuleSkeleton";
 import { buildAnswerModel, type AnswerModel } from "@/lib/answer-model";
 import { formatCount, formatDay, formatDayTime, formatDuration, humanize, isUuid, levelLabel, sourceTypeLabel, trustClassLabel } from "@/lib/format";
 import { createStore, useStore } from "@/lib/store";
@@ -66,15 +67,8 @@ function TraceLoader({ id }: { id: string }) {
   }
   if (!query.data) {
     return (
-      <div className={`${record.text} ${styles.loading}`} aria-busy="true">
-        <span className="visually-hidden" role="status">
-          Loading trace
-        </span>
-        <span className={styles.ruleSkeleton} aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </span>
+      <div className={`${record.text} ${styles.loading}`}>
+        <RuleSkeleton label="Loading trace" />
       </div>
     );
   }

@@ -60,25 +60,6 @@
   gap: var(--space-6);
 }
 
-.ruleSkeleton {
-  display: grid;
-  gap: var(--space-5);
-  padding-top: var(--space-2);
-}
-
-.ruleSkeleton span {
-  display: block;
-  border-top: var(--border-width) solid var(--rule);
-}
-
-.ruleSkeleton span:first-child {
-  width: 70%;
-}
-
-.ruleSkeleton span:last-child {
-  width: 55%;
-}
-
 .keys {
   composes: t-meta from global;
 

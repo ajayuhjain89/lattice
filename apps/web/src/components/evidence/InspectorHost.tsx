@@ -16,7 +16,7 @@ import styles from "./InspectorHost.module.css";
 
 /**
  * Where the inspector lives: docked beside the page at ≥1280 px, a modal drawer at
- * 768–1279 px, a bottom sheet below 768 px (design-system §B14).
+ * 768–1279 px, a bottom sheet below 768 px (design-system §6).
  */
 export function InspectorHost({ className }: { className?: string }) {
   const { state } = useWorkspace();

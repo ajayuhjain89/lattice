@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { PublicMasthead } from "@/components/public/PublicMasthead";
+import { Callout } from "@/components/primitives/Callout";
 import { Icon } from "@/components/primitives/icons";
 
 import type { Continuation } from "./sign-in-model";
@@ -45,12 +46,9 @@ export function SignInHeadline({ children }: { children: ReactNode }) {
  */
 export function SignInMessage({ tone, children, id }: { tone: "fault" | "time"; children: ReactNode; id?: string }) {
   return (
-    <div className={styles.message} data-tone={tone} role={tone === "fault" ? "alert" : "status"} id={id}>
-      <span className={styles.messageIcon}>
-        <Icon as={tone === "fault" ? AlertCircle : Clock} />
-      </span>
-      <span>{children}</span>
-    </div>
+    <Callout tone={tone} icon={<Icon as={tone === "fault" ? AlertCircle : Clock} />} role={tone === "fault" ? "alert" : "status"} id={id}>
+      {children}
+    </Callout>
   );
 }
 

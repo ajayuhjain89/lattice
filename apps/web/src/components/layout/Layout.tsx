@@ -6,7 +6,7 @@
  *   Cluster    a wrapping row (chips, facts, actions)
  *   Inline     a non-wrapping row whose middle child shrinks (label · value · action)
  *   Split      two columns that stack below a breakpoint
- *   Page       the page container: gutter, and a width for reading or admin pages
+ *   Page       the page container: gutter, and the admin width or the full canvas
  *   MarginGrid the reading grammar: [margin][measure][notes] -- exhibit numbers sit in
  *              the margin, sidenotes in the notes column (which folds away when narrow)
  */
@@ -86,7 +86,7 @@ export function Split({
   );
 }
 
-export function Page({ as: Tag = "div", width = "admin", className, children, ...rest }: Box & { width?: "reading" | "admin" | "full" }) {
+export function Page({ as: Tag = "div", width = "admin", className, children, ...rest }: Box & { width?: "admin" | "full" }) {
   return (
     <Tag className={cx(styles.page, className)} data-width={width} {...rest}>
       {children}

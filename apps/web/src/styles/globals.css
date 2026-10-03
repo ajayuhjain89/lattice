@@ -124,6 +124,11 @@ samp {
   font-family: var(--font-ledger);
 }
 
+/* A date is one word: "28 Sep 2026" never breaks across lines. */
+time {
+  white-space: nowrap;
+}
+
 /* Type roles (design-direction §4.1). Shared by components through `composes`. ------
    Record (serif): display, lead, prose. Interface (sans): title, subtitle, heading,
    body, small, section, caption. Ledger (mono): meta, mark, code. Uppercase exists

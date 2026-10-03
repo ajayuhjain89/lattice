@@ -40,6 +40,19 @@ test("points to the identity provider; no persona, organization, e-mail or provi
   await audit(page);
 });
 
+test("the development route doesn't exist here, and no persona-picker code is downloaded", async ({ page }) => {
+  const response = await page.request.get("/sign-in/development");
+  expect(response.status()).toBe(404);
+  const scripts: string[] = [];
+  page.on("response", async (r) => {
+    if (r.request().resourceType() === "script") scripts.push(await r.text().catch(() => ""));
+  });
+  await open(page);
+  await page.waitForLoadState("networkidle");
+  expect(scripts.length).toBeGreaterThan(0);
+  for (const body of scripts) expect(body).not.toMatch(/Development sign-in|seeded persona|dev-login|Use another seeded e-mail/);
+});
+
 test("without JavaScript the page is complete", async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();

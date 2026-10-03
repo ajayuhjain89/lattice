@@ -30,7 +30,6 @@ export type MemberSourcesResponse = Schemas["MemberSourcesResponse"];
 export type MemberSource = Schemas["MemberSourceOut"];
 export type AdminSourcesResponse = Schemas["AdminSourcesResponse"];
 export type AdminSource = Schemas["AdminSourceOut"];
-export type SyncRun = Schemas["RunOut"];
 export type SyncJob = Schemas["JobOut"];
 export type FailuresResponse = Schemas["FailuresResponse"];
 export type SyncFailure = Schemas["FailureOut"];
@@ -59,17 +58,6 @@ export type ErrorBody = Schemas["ErrorBody"];
 export type ErrorCode = Schemas["ErrorCode"];
 export type SourceType = NonNullable<RetrievalScope["source_types"]>[number];
 export type Level = NonNullable<AskRequest["classification"]>;
-
-/** Every answer status the API can return, in the order the UI documents them. */
-export const ANSWER_STATUSES = [
-  "answered",
-  "partial",
-  "insufficient_evidence",
-  "evidence_only",
-  "ambiguous",
-  "unsupported_request",
-  "failed",
-] as const satisfies readonly AnswerStatus[];
 
 export const SOURCE_TYPES = ["doc", "ticket", "chat"] as const satisfies readonly SourceType[];
 export const LEVELS = ["internal", "confidential", "restricted"] as const satisfies readonly Level[];

@@ -116,8 +116,10 @@
   border-bottom: var(--border-width) solid var(--rule);
 }
 
+/* The status word as Activity and Jump write it: sentence case. Tracked uppercase belongs
+   to the brief's ledger line only. */
 .recentStatus {
-  composes: t-mark from global;
+  composes: t-caption from global;
 
   grid-area: status;
   color: var(--text-secondary);

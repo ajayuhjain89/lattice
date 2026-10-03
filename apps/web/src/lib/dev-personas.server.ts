@@ -27,10 +27,6 @@ export interface DevOrganization {
   personas: DevPersona[];
 }
 
-export function devSignInEnabled(): boolean {
-  return process.env.LATTICE_WEB_DEV_SIGN_IN === "true";
-}
-
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null;
 

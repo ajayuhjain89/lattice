@@ -16,8 +16,9 @@
   overflow-wrap: anywhere;
 }
 
-/* The chevron is drawn, not written, so it isn't read out between segments. */
-.segment + .segment::before {
+/* The chevron is drawn, not written, so it isn't read out between segments. It ends a
+   segment rather than starting the next, so a wrapped trail never begins a line with it. */
+.segment:not(:last-child)::after {
   content: "›" / "";
   padding: 0 var(--space-2);
   color: var(--text-muted);

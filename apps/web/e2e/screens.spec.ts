@@ -1,8 +1,18 @@
 /**
  * Visual review harness: renders every screen and state at the five review widths and
- * writes full-page screenshots to e2e/screens/ (git-ignored). Run explicitly:
+ * writes screenshots to e2e/screens/ (git-ignored). Run explicitly:
  *   pnpm exec playwright test --project=screens
  * It asserts only the layout invariants; the images are for human review.
+ *
+ * Captures are real windows, not stitched full-page images: the window is made as tall as
+ * the page and photographed at the top, so the sticky masthead, the docked inspector and
+ * the phone tab bar sit where they would in a tall window. Overlays fixed to the viewport
+ * (drawers and sheets below 1280 px, dialogs at every width) are captured at the device's
+ * own height. Motion is
+ * reduced, focus cleared and the caret hidden, so the same build gives the same images.
+ *
+ * The canonical set (docs/screens/, committed) is the CANONICAL subset, written as JPEG:
+ *   pnpm screens:canonical
  */
 import { test, type Page } from "@playwright/test";
 
@@ -41,8 +51,9 @@ import { mockApi, type MockOptions } from "./mock-api";
 const only = process.env.SCREENS?.split(",");
 const widths = process.env.SCREEN_WIDTHS ? process.env.SCREEN_WIDTHS.split(",").map(Number) : [...WIDTHS];
 
-// Overlays (drawers, sheets) are fixed to the viewport: full-page captures distort them.
-const OVERLAYS = new Set(["ask-inspector", "ask-inspector-long", "access-change"]);
+// Overlays fixed to the viewport are photographed at the device's own height: the
+// inspector below 1280 px (a drawer or a sheet; docked above), and dialogs at every width.
+const OVERLAYS: Record<string, number> = { "ask-inspector": 1280, "ask-inspector-long": 1280, "access-change": Infinity };
 
 /** The operational screens read ages and day headings: they render at the fixtures' "now". */
 async function at(page: Page, options: MockOptions = {}) {
@@ -56,11 +67,58 @@ const PRODUCTION = "http://127.0.0.1:3101";
 // SCREENS_DIR writes elsewhere (e.g. a review folder) without touching the harness output.
 const DIR = process.env.SCREENS_DIR ?? "e2e/screens";
 
+// The committed reference set: one representative state per surface, at the widths that
+// matter for it. Everything else stays in the git-ignored harness output.
+const CANONICAL: Record<string, readonly number[]> = {
+  landing: [1440, 390],
+  "sign-in-production": [1440, 390],
+  "sign-in-production-error": [1440],
+  "sign-in-dev": [1440],
+  "error-workspace": [1440],
+  "not-found": [1440],
+  "ask-intro": [1440, 390],
+  "ask-answered": [1440, 390],
+  "ask-many-to-many": [1440],
+  "ask-conflicts": [1440],
+  "ask-partial": [1440],
+  "ask-evidence-only": [1440],
+  "ask-inspector": [1440, 1024],
+  "trace-asker": [1440],
+  evidence: [1440],
+  "sources-admin": [1440, 390],
+  "activity-member": [1440],
+  "access-members": [1440, 390],
+  "access-member": [1440],
+  "access-change": [1440],
+  "access-audit": [1440],
+  providers: [1440, 390],
+};
+const CANONICAL_DIR = process.env.CANONICAL_DIR;
+// A window taller than this is photographed at this height (no page comes close).
+const MAX_HEIGHT = 8000;
+
 const shot = async (page: Page, name: string, width: number) => {
-  await page.waitForTimeout(250);
+  await page.evaluate(() => document.fonts.ready);
+  // Nothing focused (no skip link, no focus ring left by the setup), and the top of the page.
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    window.scrollTo(0, 0);
+  });
+  await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page);
-  const fullPage = !(OVERLAYS.has(name) && width < 1280);
-  await page.screenshot({ path: `${DIR}/${name}@${width}.png`, fullPage, animations: "disabled" });
+  if (!(width < (OVERLAYS[name] ?? 0))) {
+    // Grow the window to the page twice: a taller window can change what 100svh lays out.
+    for (let i = 0; i < 2; i++) {
+      const height = await page.evaluate(() => document.documentElement.scrollHeight);
+      const current = page.viewportSize()!.height;
+      if (height <= current) break;
+      await page.setViewportSize({ width, height: Math.min(height, MAX_HEIGHT) });
+      await page.waitForTimeout(150);
+    }
+  }
+  const options = { animations: "disabled", caret: "hide" } as const;
+  if (CANONICAL_DIR) await page.screenshot({ ...options, path: `${CANONICAL_DIR}/${name}@${width}.jpg`, type: "jpeg", quality: 80 });
+  else await page.screenshot({ ...options, path: `${DIR}/${name}@${width}.png` });
 };
 
 const SCREENS: Record<string, (page: Page) => Promise<void>> = {
@@ -295,6 +353,18 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
     await page.goto("/access/audit");
     await page.getByTestId("audit-entry").first().waitFor();
   },
+  "error-workspace": async (page) => {
+    page.on("pageerror", () => {}); // a render failure is the state under review
+    await mockApi(page, { ask: () => ({ ...ANSWERED, claims: null }) as unknown as typeof ANSWERED });
+    await page.goto("/ask");
+    await page.getByRole("textbox", { name: "Question" }).fill("When will SCIM ship for Acme?");
+    await page.getByRole("textbox", { name: "Question" }).press("Enter");
+    await page.getByTestId("page-fault").waitFor();
+  },
+  "not-found": async (page) => {
+    await page.goto("/no-such-page");
+    await page.getByRole("heading", { name: "This page doesn't exist" }).waitFor();
+  },
   "providers-forbidden": async (page) => {
     await at(page, { providers: "forbidden" });
     await page.goto("/settings/providers");
@@ -305,7 +375,9 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
 for (const [name, render] of Object.entries(SCREENS)) {
   if (only && !only.includes(name)) continue;
   for (const width of widths) {
+    if (CANONICAL_DIR && !CANONICAL[name]?.includes(width)) continue;
     test(`${name} @ ${width}`, async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: "reduce" });
       await page.setViewportSize({ width, height: width < 768 ? 844 : 900 });
       await render(page);
       await shot(page, name, width);

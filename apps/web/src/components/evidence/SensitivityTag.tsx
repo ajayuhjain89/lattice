@@ -4,7 +4,7 @@ import { Tag } from "@/components/primitives/Tag";
 import { levelLabel } from "@/lib/format";
 
 /**
- * Sensitivity is monochrome (design-system §B2): Internal shows nothing, Confidential an
+ * Sensitivity is monochrome (design-system §2.1): Internal shows nothing, Confidential an
  * outlined tag with a lock, Restricted an ink-filled tag.
  */
 export function SensitivityTag({ level }: { level: string }) {

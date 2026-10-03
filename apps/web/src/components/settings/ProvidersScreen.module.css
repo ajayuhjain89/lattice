@@ -94,19 +94,6 @@
   font-weight: 600;
 }
 
-.skeleton {
-  display: grid;
-}
-
-.skeleton span {
-  height: var(--row-height);
-  border-bottom: var(--border-width) solid var(--rule);
-}
-
-.skeleton span:first-child {
-  border-bottom-color: var(--rule-ink);
-}
-
 @media (width < 768px) {
   .egress {
     padding: var(--space-3);

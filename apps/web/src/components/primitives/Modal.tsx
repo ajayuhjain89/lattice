@@ -20,7 +20,7 @@ export interface ModalProps {
 }
 
 /**
- * A centred dialog (design-system B12 "Dialogs"): 560 px (440 for confirmations), ink
+ * A centred dialog (design-system §4): 560 px (440 for confirmations), ink
  * border and overlay shadow, focus trapped by Radix, Escape closes, focus returns to the
  * control that opened it. Below 768 px it is a full-width sheet anchored to the bottom.
  */

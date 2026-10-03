@@ -20,8 +20,9 @@
   min-width: 0;
 }
 
-/* The separator between tokens is drawn, so it isn't read out. */
-.token + .token::before {
+/* The separator between tokens is drawn, so it isn't read out. It ends a token rather
+   than starting the next, so a wrapped line never begins with it. */
+.token:not(:last-child)::after {
   content: "·" / "";
   margin: 0 var(--space-1);
   color: var(--text-muted);

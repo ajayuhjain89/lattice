@@ -11,6 +11,7 @@ import { Icon } from "@/components/primitives/icons";
 import { Kbd } from "@/components/primitives/Kbd";
 import { ErrorState } from "@/components/states/ErrorState";
 import { NotAvailable } from "@/components/states/NotAvailable";
+import { RuleSkeleton } from "@/components/primitives/RuleSkeleton";
 import type { RenderClaim } from "@/lib/answer-model";
 import { isUuid } from "@/lib/format";
 import type { InspectorContext } from "@/lib/workspace-state";
@@ -136,15 +137,7 @@ export function EvidenceInspector({ evidenceId, context, onClose, onNavigate, on
           </>
         ) : (
           <div className={styles.loading}>
-            <span className="visually-hidden" role="status">
-              Loading evidence
-            </span>
-            <span className={styles.ruleSkeleton} aria-hidden="true">
-              <span />
-              <span />
-              <span />
-              <span />
-            </span>
+            <RuleSkeleton label="Loading evidence" rows={4} />
           </div>
         )}
       </div>

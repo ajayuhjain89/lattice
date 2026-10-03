@@ -12,6 +12,7 @@ import { StateBlock } from "@/components/primitives/StateBlock";
 import { OpsHead, OpsPage } from "@/components/ops/OpsPage";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { ErrorState } from "@/components/states/ErrorState";
+import { RuleSkeleton } from "@/components/primitives/RuleSkeleton";
 import { groupByDay } from "@/lib/chronology";
 import { dayHeading, formatCount, formatDay, formatDayTime, formatTime } from "@/lib/format";
 import { useNow } from "@/lib/use-now";
@@ -53,7 +54,7 @@ function Questions() {
   if (query.isError) {
     return <ErrorState error={query.error} title="Couldn't load your questions" onRetry={() => query.refetch()} retrying={query.isFetching} />;
   }
-  if (!query.data) return <TimelineSkeleton />;
+  if (!query.data) return <RuleSkeleton variant="ledger" rows={3} label="Loading your questions" />;
   if (items.length === 0) {
     return (
       <StateBlock family="quiet" heading="You haven't asked anything yet" actions={<ButtonLink href="/ask">Ask a question</ButtonLink>}>
@@ -132,16 +133,3 @@ function Entry({ q, onAskAgain }: { q: OwnActivity; onAskAgain: (question: strin
   );
 }
 
-/** The chronology's own rules, drawn before the questions arrive (no grey bars). */
-function TimelineSkeleton() {
-  return (
-    <div className={styles.skeleton} aria-busy="true">
-      <span className="visually-hidden" role="status">
-        Loading your questions
-      </span>
-      {[0, 1, 2].map((i) => (
-        <span key={i} className={styles.skeletonRow} aria-hidden="true" />
-      ))}
-    </div>
-  );
-}

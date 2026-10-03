@@ -163,19 +163,6 @@
   font-size: var(--type-small-size);
 }
 
-.skeleton {
-  display: grid;
-}
-
-.skeletonRow {
-  height: var(--row-height);
-  border-bottom: var(--border-width) solid var(--rule);
-}
-
-.skeletonRow:first-child {
-  border-bottom-color: var(--rule-ink);
-}
-
 /* Tablet: who-and-why moves under the change. */
 @media (width < 1024px) {
   .entry {

@@ -22,21 +22,6 @@
   color: var(--text-secondary);
 }
 
-.ruleSkeleton {
-  display: grid;
-  gap: var(--space-5);
-  padding-block: var(--space-3);
-}
-
-.ruleSkeleton span {
-  display: block;
-  border-top: var(--border-width) solid var(--rule);
-}
-
-.ruleSkeleton span:last-child {
-  width: 60%;
-}
-
 @media (width < 768px) {
   .sheet {
     padding: var(--space-4);

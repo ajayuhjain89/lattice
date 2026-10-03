@@ -106,13 +106,8 @@ export function formatCount(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** "3f2a9c1e…" -- a readable prefix of an opaque identifier (the full value stays available). */
-export function shortId(id: string, length = 8): string {
-  return id.length > length ? `${id.slice(0, length)}…` : id;
-}
-
 const SOURCE_TYPE_LABEL: Record<string, string> = {
-  doc: "Doc",
+  doc: "Document",
   ticket: "Ticket",
   chat: "Chat",
 };
@@ -200,19 +195,4 @@ const CONNECTOR: Record<string, string> = {
 /** Source connector types (ingestion-design §1). */
 export function connectorLabel(connectorType: string): string {
   return CONNECTOR[connectorType] ?? humanize(connectorType);
-}
-
-const SYNC_STATUS: Record<string, string> = {
-  succeeded: "Synced",
-  partial: "Partial",
-  failed: "Failed",
-  aborted: "Interrupted",
-  running: "Syncing",
-  queued: "Queued",
-};
-
-/** A sync run's or requested job's status, as the Sources page shows it. */
-export function syncStatusLabel(status: string | null | undefined): string {
-  if (!status) return "Never synced";
-  return SYNC_STATUS[status] ?? humanize(status);
 }

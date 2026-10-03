@@ -50,6 +50,9 @@
 .body {
   padding: var(--space-4) var(--space-6);
   overflow-y: auto;
+
+  /* Room for a sticky action row: a focused field is never scrolled under it. */
+  scroll-padding-block-end: var(--space-16);
   display: grid;
   gap: var(--space-5);
   min-height: 0;

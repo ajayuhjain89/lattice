@@ -8,6 +8,7 @@ import { RecordPage, record } from "@/components/record/RecordPage";
 import { PageTrail } from "@/components/shell/PageTrail";
 import { ErrorState } from "@/components/states/ErrorState";
 import { NotAvailable } from "@/components/states/NotAvailable";
+import { RuleSkeleton } from "@/components/primitives/RuleSkeleton";
 import { isUuid } from "@/lib/format";
 
 import styles from "./EvidenceScreen.module.css";
@@ -48,15 +49,8 @@ export function EvidenceScreen({ id }: { id: string }) {
             <ExhibitViewer detail={query.data} context={null} headingId={headingId} headingLevel="h1" />
           </div>
         ) : (
-          <div className={styles.sheet} aria-busy="true">
-            <span className="visually-hidden" role="status">
-              Loading evidence
-            </span>
-            <span className={styles.ruleSkeleton} aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </span>
+          <div className={styles.sheet}>
+            <RuleSkeleton label="Loading evidence" />
           </div>
         )}
       </div>

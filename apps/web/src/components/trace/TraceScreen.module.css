@@ -10,20 +10,6 @@
   margin-top: var(--space-6);
 }
 
-.ruleSkeleton {
-  display: grid;
-  gap: var(--space-5);
-}
-
-.ruleSkeleton span {
-  display: block;
-  border-top: var(--border-width) solid var(--rule);
-}
-
-.ruleSkeleton span:last-child {
-  width: 60%;
-}
-
 .head {
   display: grid;
   gap: var(--space-3);
@@ -70,8 +56,11 @@
   color: var(--signal-fault-text);
 }
 
-.fact::before {
+/* Separators end an item, so a wrapped ledger line never starts with one. */
+.keyword:not(:last-child)::after,
+.fact:not(:last-child)::after {
   content: "·" / "";
+  font-weight: 400;
   padding: 0 var(--space-2);
   color: var(--text-muted);
 }
@@ -102,7 +91,7 @@
   color: var(--text-primary);
 }
 
-.scopePart + .scopePart::before {
+.scopePart:not(:last-child)::after {
   content: "·" / "";
   padding: 0 var(--space-2);
   font-weight: 400;

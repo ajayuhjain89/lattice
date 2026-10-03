@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-/** Breakpoints of the layout grid (design-system §B6). */
+/** Breakpoints of the layout grid (design-system §2.5). */
 export const BREAKPOINTS = { mobile: 768, tablet: 1024, docked: 1280, wide: 1440 } as const;
 
 export function useMinWidth(px: number): boolean {

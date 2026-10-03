@@ -34,8 +34,11 @@
   color: var(--signal-fault-text);
 }
 
-.fact::before {
+/* Separators end an item, so a wrapped ledger line never starts with one. */
+.keyword:not(:last-child)::after,
+.fact:not(:last-child)::after {
   content: "·" / "";
+  font-weight: 400;
   padding: 0 var(--space-2);
   color: var(--text-muted);
 }

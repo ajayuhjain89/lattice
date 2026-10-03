@@ -17,6 +17,7 @@ import { AdminGate, OpsPage, OpsSection } from "@/components/ops/OpsPage";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { ErrorState } from "@/components/states/ErrorState";
 import { NotAvailable } from "@/components/states/NotAvailable";
+import { RuleSkeleton } from "@/components/primitives/RuleSkeleton";
 import { formatCount, formatTime, isUuid } from "@/lib/format";
 
 import styles from "./Access.module.css";
@@ -63,7 +64,7 @@ export function MemberScreen({ id }: { id: string }) {
         ) : query.isError ? (
           <ErrorState error={query.error} title="Couldn't load this member's access" onRetry={() => query.refetch()} retrying={query.isFetching} headingLevel="h1" />
         ) : !query.data ? (
-          <MemberSkeleton />
+          <RuleSkeleton variant="ledger" rows={5} label="Loading this member's access" />
         ) : (
           <Member access={query.data} />
         )}
@@ -269,15 +270,3 @@ function memberNames(names: string[]): string {
   return names.length > shown.length ? `${shown.join(", ")} and ${names.length - shown.length} more` : shown.join(", ");
 }
 
-function MemberSkeleton() {
-  return (
-    <div className={styles.skeleton} aria-busy="true">
-      <span className="visually-hidden" role="status">
-        Loading this member&apos;s access
-      </span>
-      {[0, 1, 2, 3, 4].map((i) => (
-        <span key={i} className={styles.skeletonRow} aria-hidden="true" />
-      ))}
-    </div>
-  );
-}

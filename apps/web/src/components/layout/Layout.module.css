@@ -107,10 +107,6 @@
   max-width: calc(var(--admin-max) + 2 * var(--gutter));
 }
 
-.page[data-width="reading"] {
-  max-width: calc(var(--margin-col) + var(--measure) + var(--notes-col) + 2 * var(--gutter));
-}
-
 /* [margin][measure][notes]: the margin carries exhibit numbers, centred on the first line. */
 .marginGrid {
   display: grid;
