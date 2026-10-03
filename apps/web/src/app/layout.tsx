@@ -6,8 +6,6 @@ import { preload } from "react-dom";
 import { FONT_PRELOADS } from "@/lib/fonts.gen";
 import "@/styles/globals.css";
 
-import { Providers } from "./providers";
-
 export const metadata: Metadata = {
   title: { default: "Lattice", template: "%s · Lattice" },
   description: "Permission-aware answers from your organization's sources, with every claim cited.",
@@ -33,9 +31,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   for (const href of FONT_PRELOADS) preload(href, { as: "font", type: "font/woff2", crossOrigin: "anonymous" });
   return (
     <html lang="en">
-      <body>
-        <Providers>{children}</Providers>
-      </body>
+      {/* Client providers (queries, toasts, tooltips) wrap only the pages that use them --
+          the workspace, development sign-in and the specimen -- so the static public pages
+          ship none of that script. */}
+      <body>{children}</body>
     </html>
   );
 }

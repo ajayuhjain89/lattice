@@ -154,7 +154,7 @@ function Shell({ children, onSignedOut }: { children: ReactNode; onSignedOut: ()
       data-layout={phone ? "phone" : "masthead"}
       style={bottomInset !== null && phone ? ({ "--shell-bottom-inset": `${bottomInset}px` } as CSSProperties) : undefined}
     >
-      <a href="#main" className={styles.skip}>
+      <a href="#main" className="skip-link">
         Skip to main content
       </a>
       {phone ? (

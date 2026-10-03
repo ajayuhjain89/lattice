@@ -247,6 +247,7 @@
   --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;
+  --space-20: 80px;
 
   /* Controls and rows */
   --control-xs: 20px;
@@ -257,6 +258,10 @@
   --row-height: 40px;
   --row-height-dense: 32px;
   --citation-size: 18px;
+
+  /* A lattice cell and the space between cells (primitives/Lattice). */
+  --lattice-cell: 22px;
+  --lattice-gap: 3px;
   --icon-size: 16px;
 
   /* Shape and rule (design-direction §4.4) */
@@ -297,6 +302,9 @@
   --record-gap: var(--space-4);
   --measure: 66ch;
   --admin-max: 1200px;
+
+  /* The public pages' content width (landing, sign-in), the admin width's twin. */
+  --public-max: 1200px;
 
   /* Shell geometry (§6.3): the masthead (≥768) or the phone top bar, its ink rule
      included; the phone tab bar (without the safe area beneath it); the header row of a

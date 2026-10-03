@@ -6,6 +6,8 @@ import { defineConfig, devices } from "@playwright/test";
  * backend or database. `pnpm build` must run first (CI does).
  */
 const PORT = 3100;
+// A second server with development sign-in off: production sign-in, as it really renders.
+const PRODUCTION_PORT = 3101;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -21,22 +23,42 @@ export default defineConfig({
     locale: "en-GB",
   },
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }, testIgnore: /screens\.spec/ },
+    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }, testIgnore: /(screens|production)\.spec/ },
     { name: "mobile", use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } }, testMatch: /(shell|responsive|mobile)\.spec/ },
     { name: "screens", use: { ...devices["Desktop Chrome"] }, testMatch: /screens\.spec/ },
-  ],
-  webServer: {
-    command: `pnpm exec next start --port ${PORT} --hostname 127.0.0.1`,
-    url: `http://127.0.0.1:${PORT}/sign-in`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-    env: {
-      LATTICE_WEB_DEV_SIGN_IN: "true",
-      // The design-system specimen (/specimen) is development-only; the tests need it.
-      LATTICE_WEB_SPECIMEN: "true",
-      LATTICE_DEV_PERSONA_MANIFESTS: "../../data/synthetic/halden/org.yaml,../../data/synthetic/veridian/org.yaml",
-      // Never reached: every /api request is fulfilled by the test's mock.
-      LATTICE_API_URL: "http://127.0.0.1:9",
+    {
+      name: "production",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 }, baseURL: `http://127.0.0.1:${PRODUCTION_PORT}` },
+      testMatch: /production\.spec/,
     },
-  },
+  ],
+  webServer: [
+    {
+      command: `pnpm exec next start --port ${PORT} --hostname 127.0.0.1`,
+      url: `http://127.0.0.1:${PORT}/sign-in`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      env: {
+        LATTICE_WEB_DEV_SIGN_IN: "true",
+        // The design-system specimen (/specimen) is development-only; the tests need it.
+        LATTICE_WEB_SPECIMEN: "true",
+        // The two seeded organizations, plus a test-only manifest of long names.
+        LATTICE_DEV_PERSONA_MANIFESTS: "../../data/synthetic/halden/org.yaml,../../data/synthetic/veridian/org.yaml,e2e/fixtures/long-names.yaml",
+        // Never reached: every /api request is fulfilled by the test's mock.
+        LATTICE_API_URL: "http://127.0.0.1:9",
+      },
+    },
+    {
+      command: `pnpm exec next start --port ${PRODUCTION_PORT} --hostname 127.0.0.1`,
+      url: `http://127.0.0.1:${PRODUCTION_PORT}/sign-in`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      env: {
+        LATTICE_WEB_DEV_SIGN_IN: "false",
+        // Set, to show they are ignored while development sign-in is off.
+        LATTICE_DEV_PERSONA_MANIFESTS: "../../data/synthetic/halden/org.yaml",
+        LATTICE_API_URL: "http://127.0.0.1:9",
+      },
+    },
+  ],
 });

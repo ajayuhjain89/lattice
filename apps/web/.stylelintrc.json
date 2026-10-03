@@ -79,7 +79,10 @@
         "src/components/sources/**/*.css",
         "src/components/activity/**/*.css",
         "src/components/access/**/*.css",
-        "src/components/settings/**/*.css"
+        "src/components/settings/**/*.css",
+        "src/components/landing/**/*.css",
+        "src/components/public/**/*.css",
+        "src/components/sign-in/**/*.css"
       ],
       "rules": {
         "declaration-property-unit-disallowed-list": {

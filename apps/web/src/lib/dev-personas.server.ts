@@ -8,7 +8,8 @@ import { parse } from "yaml";
  * Development sign-in only. The persona picker lists the members of the seed manifests
  * named by LATTICE_DEV_PERSONA_MANIFESTS (comma-separated paths), read on the server at
  * request time -- never bundled into the client and never shipped as fixed data. Only
- * what a picker needs is kept: email, display name, role label, organization. Nothing
+ * what a picker needs is kept: email, display name, role label, organization (and whether
+ * the manifest marks its data synthetic). Nothing
  * about access (clearance, accounts, departments) leaves this module.
  */
 
@@ -21,6 +22,8 @@ export interface DevPersona {
 export interface DevOrganization {
   slug: string;
   name: string;
+  /** The manifest declares its data generated (`data_origin: synthetic`). */
+  synthetic: boolean;
   personas: DevPersona[];
 }
 
@@ -48,9 +51,9 @@ export async function loadDevPersonas(): Promise<DevOrganization[]> {
           ? [{ email: m.email, displayName: m.display_name, roleLabel: typeof m.role_label === "string" ? m.role_label : null }]
           : [],
       );
-      out.push({ slug, name, personas });
+      out.push({ slug, name, synthetic: doc.organization.data_origin === "synthetic", personas });
     } catch {
-      // A missing or unreadable manifest just means no shortcuts; the email form remains.
+      // A missing or unreadable manifest just means no personas; the e-mail form remains.
     }
   }
   return out;

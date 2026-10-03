@@ -1,0 +1,116 @@
+/* The public pages' masthead: the application masthead's rule and voice (D3), without a
+   session. Paper ground, one 52 px row ended by the ink rule of a header of authority. */
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-shell);
+  border-bottom: var(--border-width) solid var(--rule-ink);
+  background: var(--surface-paper);
+}
+
+.bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "brand links action";
+  align-items: center;
+  column-gap: var(--space-6);
+  min-height: calc(var(--masthead-height) - var(--border-width));
+  max-width: calc(var(--public-max) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+.brand {
+  grid-area: brand;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-md);
+  border-radius: var(--radius-xs);
+  text-decoration: none;
+}
+
+.links {
+  grid-area: links;
+  align-self: stretch;
+  display: flex;
+}
+
+.links ul {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+}
+
+.links li {
+  display: flex;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--motion-quick) var(--ease);
+}
+
+.link:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-thickness: var(--border-width);
+  text-underline-offset: 0.3em;
+}
+
+.link:focus-visible {
+  outline-offset: -2px;
+}
+
+.action {
+  grid-area: action;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Phones: the section links take a row of their own under the bar and wrap; nothing is
+   hidden behind a menu. The masthead scrolls away so the page gets the whole screen. */
+@media (width < 768px) {
+  .masthead {
+    position: static;
+  }
+
+  .bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand action"
+      "links links";
+  }
+
+  .links {
+    margin-inline: calc(-1 * var(--space-2));
+    padding-bottom: var(--space-1);
+  }
+
+  .links ul {
+    flex-wrap: wrap;
+    gap: 0;
+  }
+
+  .link {
+    min-height: var(--control-lg);
+  }
+}
+
+/* A page that doesn't exist: the not-available state at the content width. */
+.notFound {
+  width: 100%;
+  max-width: calc(var(--public-max) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding: var(--space-16) var(--gutter);
+}
+
+.notFound:focus {
+  outline: none;
+}

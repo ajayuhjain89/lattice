@@ -1,0 +1,13 @@
+# Test-only persona manifest (Playwright): long organization, persona and e-mail names for
+# the development sign-in's layout checks. Not seed data; never loaded by `lattice seed`.
+organization:
+  slug: longnames
+  name: Northwind Österreichische Logistik- und Speditionsgesellschaft mit beschränkter Haftung
+  data_origin: synthetic
+
+members:
+  - email: maximiliane.oberhauser-wittgenstein.verwaltung@northwind-logistik-oesterreich.example
+    display_name: Maximiliane Oberhauser-Wittgenstein von Hohenberg
+    role_label: Leiterin Qualitätssicherung und regulatorische Compliance (EMEA)
+  - email: li.wu@northwind-logistik-oesterreich.example
+    display_name: Li Wu

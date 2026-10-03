@@ -19,15 +19,17 @@ async function audit(page: Page) {
 }
 
 test.describe("sign-in with the organization's identity provider", () => {
-  for (const [code, text] of [
-    ["sso_failed", "Sign-in didn't complete."],
-    ["sso_unavailable", "Your identity provider couldn't be reached."],
-    ["rate_limited", "Too many sign-in attempts from this browser."],
+  // Production sign-in has its own server and suite (sign-in-production.spec.ts); these
+  // check the same closed set where development sign-in is on.
+  for (const [code, role, text] of [
+    ["sso_failed", "alert", "Sign-in didn't complete."],
+    ["sso_unavailable", "alert", "Your identity provider couldn't be reached."],
+    ["rate_limited", "status", "Too many sign-in attempts from this browser."],
   ] as const) {
     test(`shows the fixed message for ${code}`, async ({ page }) => {
       await mockApi(page);
       await page.goto(`/sign-in?error=${code}`);
-      await expect(page.getByRole("alert").filter({ hasText: text })).toBeVisible();
+      await expect(page.getByRole(role).filter({ hasText: text })).toBeVisible();
       await audit(page);
     });
   }
@@ -35,7 +37,7 @@ test.describe("sign-in with the organization's identity provider", () => {
   test("an unknown error code is ignored, not echoed", async ({ page }) => {
     await mockApi(page);
     await page.goto(`/sign-in?error=${encodeURIComponent("<b>zq-injected</b>")}`);
-    await expect(page.getByRole("heading", { name: "Sign in", level: 2 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sign in to Lattice", level: 1 })).toBeVisible();
     // Next.js keeps an empty role=alert route announcer; no alert has any text.
     await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText("zq-injected");
@@ -52,6 +54,9 @@ test.describe("sign-in with the organization's identity provider", () => {
   for (const [link, location] of [
     ["/sso/short", "/sign-in?error=sso_failed"],
     ["/sso/halden-login-key-0123456789abc?next=//evil.example", "/api/v1/auth/oidc/halden-login-key-0123456789abc/start"],
+    // Browsers drop tabs from URLs: "/\t/evil.example" would become "//evil.example".
+    ["/sso/halden-login-key-0123456789abc?next=%2F%09%2Fevil.example", "/api/v1/auth/oidc/halden-login-key-0123456789abc/start"],
+    ["/sso/halden-login-key-0123456789abc?next=%2Fa%5Cb", "/api/v1/auth/oidc/halden-login-key-0123456789abc/start"],
   ] as const) {
     test(`${link} redirects to ${location}`, async ({ page }) => {
       const response = await page.request.get(link, { maxRedirects: 0 });

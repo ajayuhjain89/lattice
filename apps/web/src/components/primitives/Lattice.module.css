@@ -17,11 +17,13 @@
   border-radius: var(--radius-sm);
 }
 
+/* --lattice-cell / --lattice-gap are component tokens: a surface where a lattice is the
+   subject of the view (the landing page's example) may set them larger. */
 .lattice {
-  --cell: 22px;
+  --cell: var(--lattice-cell);
 
   border-collapse: separate;
-  border-spacing: 3px;
+  border-spacing: var(--lattice-gap);
 }
 
 .caption {

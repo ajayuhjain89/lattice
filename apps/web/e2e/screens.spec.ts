@@ -50,6 +50,9 @@ async function at(page: Page, options: MockOptions = {}) {
   return mockApi(page, options);
 }
 
+// The development-sign-in-off server (playwright.config.ts): production sign-in.
+const PRODUCTION = "http://127.0.0.1:3101";
+
 // SCREENS_DIR writes elsewhere (e.g. a review folder) without touching the harness output.
 const DIR = process.env.SCREENS_DIR ?? "e2e/screens";
 
@@ -70,9 +73,35 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
     await page.getByRole("button", { name: "Dark map" }).click();
     await page.evaluate(() => document.fonts.ready);
   },
-  "sign-in": async (page) => {
+  landing: async (page) => {
+    await page.goto("/");
+    await page.evaluate(() => document.fonts.ready);
+  },
+  "sign-in-dev": async (page) => {
     await mockApi(page);
     await page.goto("/sign-in");
+  },
+  "sign-in-dev-next": async (page) => {
+    await mockApi(page);
+    await page.goto(`/sign-in?next=${encodeURIComponent("/access/audit")}`);
+  },
+  "sign-in-dev-failed": async (page) => {
+    await mockApi(page, { devLogin: { status: 401, body: { error: { code: "authentication_failed", message: "Sign-in failed.", request_id: "r" } } } });
+    await page.goto("/sign-in");
+    await page.getByRole("button", { name: /Maya Okafor/ }).click();
+    await page.getByRole("alert").filter({ hasText: "Sign-in failed." }).waitFor();
+  },
+  "sign-in-production": async (page) => {
+    await page.goto(`${PRODUCTION}/sign-in`);
+  },
+  "sign-in-production-error": async (page) => {
+    await page.goto(`${PRODUCTION}/sign-in?error=sso_failed`);
+  },
+  "sign-in-production-rate-limited": async (page) => {
+    await page.goto(`${PRODUCTION}/sign-in?error=rate_limited`);
+  },
+  "sign-in-production-next": async (page) => {
+    await page.goto(`${PRODUCTION}/sign-in?next=${encodeURIComponent("/access/members/40000000-0000-4000-8000-000000000001")}`);
   },
   "ask-intro": async (page) => {
     await openAsk(page);

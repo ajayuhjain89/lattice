@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 
 import { SpecimenScreen } from "@/components/specimen/SpecimenScreen";
 
+import { Providers } from "../providers";
+
 export const metadata: Metadata = { title: "Specimen" };
 export const dynamic = "force-dynamic";
 
@@ -14,5 +16,9 @@ export const dynamic = "force-dynamic";
  */
 export default function SpecimenPage() {
   if (process.env.NODE_ENV === "production" && process.env.LATTICE_WEB_SPECIMEN !== "true") notFound();
-  return <SpecimenScreen />;
+  return (
+    <Providers>
+      <SpecimenScreen />
+    </Providers>
+  );
 }

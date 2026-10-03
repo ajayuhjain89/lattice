@@ -1193,3 +1193,168 @@ Access (members with forty rows, member, long-named member, suspended, review wi
 rules, applied result), audit (sixty events), providers (three and eight providers) and
 the providers refusal; phone views of Sources, the member and providers. No backend,
 API or shared contract changed, so backend CI was not run.
+
+### D6 — Public landing page and sign-in (2026-10-03, `phase/design-overhaul`)
+
+**Built.** The public face and the identity surfaces on the D1–D5 system. Frontend only:
+no API, schema, authorization or backend change.
+
+- **One public frame** (`components/public`): `PublicMasthead` is the application
+  masthead's rule and voice without a session — mark + wordmark (home is `/`), an optional
+  in-page section nav, one action. Under 768 px the section links take a row of their own
+  that wraps (three anchors don't need a menu; it works without script) and the masthead
+  scrolls away. The landing, both sign-in pages and the root not-found page use it.
+- **Landing `/`** (`components/landing`): replaces the redirect to `/ask`. Static and
+  server-rendered: no API call, no session probe, `noindex`; a signed-in visitor gets the
+  same page. One labelled example — Halden's *acme-scim-commitment* storyline from the
+  synthetic corpus (`example.ts`), every passage quoted verbatim from
+  `data/synthetic/halden` (a unit test reads the corpus to prove it). Narrative, in the
+  order an answer is made:
+  1. **Hero** (5/7 split): record display headline "Answers you can follow back to the
+     page.", a two-sentence deck, *Sign in* (the only CTA) and *How an answer is made*;
+     the specimen is a brief as Ask renders it (question, ledger line, claims with margin
+     markers, the disagreement note, exhibit 1 open at its verified passage), built from
+     ExhibitMarker, ProvenanceTrail, NoticeLine and the type roles — no screenshot. A
+     three-row key at the foot of the text column reads its marks (exhibit, verified
+     passage, disagreement).
+  2. **It searches only what you can read** (`#how`): the answer path in the trace's own
+     geometry — Your access → Search inside it → AI data policy (a hatched gate, the one
+     boundary on the path) → Draft → Verify every quote; then *Same question, two
+     readers*: Maya's and Grace's evidence for the same question. Grace's list carries the
+     executive escalation notes on a hatched edge ("Not sent to the AI model · AI data
+     policy · you can read it"); Maya's has no gap, count or hint.
+  3. **Every claim keeps its evidence**: the one interactive island — claims with
+     ExhibitButtons beside an exhibit viewer (trail, verified passage marked, author ·
+     date · level); it opens on exhibit 2 so it doesn't repeat the hero.
+  4. **Disagreement stays on the page**: the DisagreementAxis on paper with three dated
+     positions (ticket · working, decision record · system of record, Slack ·
+     conversational) and the API's own conflict sentence. The newest position is the
+     unverified chat message; the page says so and crowns nothing.
+  5. **Boundaries are drawn, not hidden** (`#boundaries`): the egress lattice on Halden's
+     example policy (Lattice primitive, larger cells) and the brief's egress notice, with
+     SEC-10's default stated and the hatch rule in words.
+  6. **Access you can explain** (`#administrators`): one member — the product's access
+     sentence, the access ledger, a Now → After review row and the audit entry it leaves;
+     administrators manage access and see no content.
+  7. **Closing** (*Sign in through your organization*) and a minimal **footer** (the
+     synthetic-example note and the in-page links; nothing invented).
+- **Sign-in `/sign-in`** (`components/sign-in`), one route, two compositions chosen on the
+  server (`LATTICE_WEB_DEV_SIGN_IN`); the error and `next` are read on the server.
+  - **Production** (`ProductionSignIn`, server-only, no script needed): record headline
+    "Sign in to Lattice", "There is no separate Lattice password", and the route sign-in
+    takes as a three-stop rail (identity provider → Lattice opens with your access → Ask,
+    or the `next` destination with its path). No organization lookup, e-mail field or
+    provider button. With `next`, a same-origin *Continue to …* link for someone who
+    signed in from the identity provider in another tab.
+  - **States**: the API's closed set of three (`sign-in-model.ts`), each its fixed
+    sentence — `sso_failed` and `sso_unavailable` as a fault alert, `rate_limited` as a
+    wait (time signal, `role="status"`, as Ask's limit). Expired or reused attempts,
+    inactive, suspended or unknown identities and unknown keys all arrive as
+    `sso_failed` and read identically (tested with extra query parameters); anything else
+    is ignored, never echoed. The error is also in the document title, so it is heard on
+    arrival without moving focus.
+  - **Development** (`DevSignIn`, client): a hatched *Development sign-in* band, the same
+    headline, personas grouped by organization (`section` per organization, a "Synthetic"
+    tag when the manifest says `data_origin: synthetic`, a count), dense rows (initials,
+    name · seed role label, e-mail in the ledger voice, truncated with a title). A row
+    sends the persona's exact seeded subject and organization; while it runs the row is
+    busy but focusable (`aria-busy` / `aria-disabled`), "Signing in as …" is announced
+    once, and a failure is one alert the rows describe. *Use another seeded e-mail* is a
+    native disclosure; the form posts, so an e-mail never reaches a URL. Nothing about
+    access is derived or shown.
+- **`next`** (`lib/next-path.ts`), shared by sign-in and `/sso/<key>`: the API's own
+  `safe_return_to` rule (a single leading `/`, ≤ 512 characters, no control character or
+  backslash anywhere) plus a parsed-origin check, and never back to sign-in. Destinations
+  are named from the navigation model by path alone (no lookup).
+- **Not found**: the public masthead over the one not-available state.
+
+**Primitive and foundation changes.**
+- `ExhibitMarker` is no longer a client module (no hooks), so static markers render on
+  the server.
+- `Lattice`: cell size and spacing are component tokens (`--lattice-cell`,
+  `--lattice-gap`); the landing sets them larger where the lattice is the subject.
+- `Button`: in forced colours a primary button says which system colours replace its ink
+  fill (an `<a>` primary kept its paper-coloured text on the system canvas; axe found it).
+- Tokens: `--space-20` (80 px, the landing's section rhythm), `--public-max` (1200 px).
+- The skip link is one global `.skip-link` rule, shared by the shell and the public pages.
+- Client providers (queries, toasts, tooltips) moved from the root layout to the pages
+  that use them — the workspace layout, development sign-in (`DevSignInRoot`) and the
+  specimen — so the landing ships none of that script.
+
+**Removed.** The redirect `/` → `/ask`; the two-column sign-in (`SignIn.tsx`, its editorial
+column and repeated "principles", the ad-hoc inputs and error row, its whole stylesheet);
+`SectionLabel` (its last users were sign-in); the second skip-link stylesheet; the root
+layout's providers.
+
+| Planned (§6.1, §6.2, D6 brief) | As built | Why |
+| ------------------------------ | -------- | --- |
+| Landing hero: brief with the disagreement axis and the provenance lattice | Brief with a one-line disagreement note; the axis has its own section; no claims × exhibits lattice | The example's claims each cite one exhibit, so a provenance lattice would be the diagonal the D4 gate refuses; the full axis in a hero was too much at once |
+| "The problem, in four rows" | Not built | The D6 brief's narrative starts from asking; four abstract problems read as marketing |
+| "How an answer is made" and "every answer has a trace" | One section: the five-stop path, then the trace in one sentence | The trace *is* that path; two sections would repeat it |
+| Egress lattice: approved external / your infrastructure / stays in Lattice | Two example models (external API up to Internal; Halden's own server up to Confidential) | D5's lesson: an always-filled column is decoration; the two trust classes show the policy |
+| Sign-in: centred credential sheet on a faint lattice grid | A single column on paper under the public masthead; no sheet, no grid | The D6 brief: don't reuse a card on a decorative grid; the route rail carries the identity |
+| Sign-in: "Continue to Access → Maya Okafor" | The destination's name and its path | Naming a member would need a lookup before sign-in |
+| Development e-mail form as a disclosure | As planned (native `<details>`, POST) | — |
+| Canonical URL, social card | None | No public deployment or real asset yet; `noindex` stays (§10, decision 1) |
+| Production sign-in without the development picker's script | Same route, so its chunks still download (≈ 47 KB) though nothing of it renders | `next/dynamic` doesn't stop the preload; a proxy rewrite to a separate route is the fix, left for D7 to decide |
+| Global error page (§8, D6 row) | Not built | Outside the D6 brief; D7 decides with the product-wide review |
+
+**Defects found by the new tests and fixed.**
+- The old sign-in's `next` check accepted `/%09/evil.example` (and backslashes after the
+  first character). Browsers strip tabs from URLs, which makes it the protocol-relative
+  `//evil.example`. (Found by review, not exercised against the old build; the API's own
+  `return_to` already refused it on the OIDC path.) `next` now follows the API's rule
+  exactly, in sign-in and in `/sso/<key>`.
+- The landing's primary buttons failed contrast in forced colours (above).
+- Server components passed a function prop to the client `Lattice`; the egress example is
+  its own small client island.
+
+**Accessibility.** Landing: skip link (first stop, moves focus to `main`), banner / main /
+contentinfo, named navigations, one h1 and h2s in narrative order, every example a
+`figure` with its label as the name, decorative SVGs hidden, markers named
+("Exhibit 2: HAL-4821, 14 Aug 2026") with `aria-pressed`, the opened exhibit announced
+once (polite), every section understandable without hover or script (JavaScript-disabled
+render tested), the passage sweep and all transitions off under reduced motion, hatches
+dropping to dashed edges in forced colours, 200 % zoom (640 CSS px) and 320 px reflow,
+44 px phone targets. Sign-in: keyboard persona selection with focus kept through the
+request, one alert per failure, rate limits as status, errors in the title, the
+destination stated in words, no focus trap, organizations as labelled regions.
+
+**Security and privacy invariants checked.** The landing makes zero `/api` requests,
+signed in or not (asserted from the first navigation, including after interaction), names
+no organization but the labelled synthetic example, and reveals nothing of a session.
+Production sign-in renders no persona, organization, e-mail or provider control and calls
+no API even with persona manifests configured (asserted on a second server with
+development sign-in off); its messages are the closed set, identical across every folded
+failure; unknown codes are ignored. `next`: other origins, protocol-relative, tab/newline
+and backslash tricks, `javascript:` and sign-in loops are refused in sign-in and in
+`/sso/<key>`. Development sign-in sends exactly the seeded subject and organization and
+leaves nothing in the URL. CSP unchanged (every landing script carries the nonce); no
+third-party request, no extra font subset on the landing.
+
+**Performance.** The landing is server-rendered with two client islands (the evidence
+viewer and the egress lattice): 145.6 KB of script on the wire, down from 189.6 KB once
+the providers left the root layout; 18 KB of HTML, 25 KB of CSS, the three preloaded
+Latin fonts (160 KB) and no image. The core message is in the HTML.
+
+**Verification.** Local gate, run sequentially: lint (ESLint + Stylelint, raw-px rule
+widened to `landing`, `public`, `sign-in`), typecheck, 203 unit tests (was 162; new:
+`next-path`, the sign-in model, production and development sign-in, the landing's
+structure, island and corpus checks), production build, Playwright — desktop, mobile and
+the new `production` project (a second `next start` with development sign-in off):
+269 passed, 52 skipped by project, 0 failed; the screens harness: 260 passed. New
+specs: `landing` (no API signed in or out, metadata, landmarks and heading order, CTA and
+section links clear of the sticky masthead, keyboard order and skip link, the evidence
+island, hatch semantics, axe at rest and open, reduced motion, forced colours, six widths
+plus 200 % zoom, JavaScript off, weight and nonce), `landing-mobile`, `sign-in` (gating
+and groups, exact subject, keyboard, busy focus, generic failure once, 404, 429, `next`
+followed and six unsafe values refused, the e-mail disclosure, closed error set, long
+names at six widths, links between landing and sign-in) and `sign-in-production` (no
+control and no API, JavaScript off, three errors with titles, folded failures identical,
+`next` named and unsafe values ignored, keyboard, phone, 320 px and zoom); `identity`
+updated, with two more `/sso` `next` cases. A test-only manifest of long names
+(`e2e/fixtures/long-names.yaml`) joins the development server. Reviewed at
+1440/1280/1024/768/390: the landing's hero, path and readers, evidence, disagreement,
+boundaries, administrators, closing and footer; production sign-in (initial, error, rate
+limited, `next`), development sign-in (initial, `next`, failed, rate limited, long names);
+phone views of both. No backend, API or shared contract changed, so backend CI was not run.

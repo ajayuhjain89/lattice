@@ -173,6 +173,13 @@
     border-color: ButtonText;
   }
 
+  /* The ink fill is dropped in forced colours; say which colours replace it, so a primary
+     link (an <a>) doesn't keep its authored paper-coloured text on the system canvas. */
+  .primary {
+    background-color: ButtonFace;
+    color: ButtonText;
+  }
+
   .button:disabled,
   .button[aria-disabled="true"]:not([aria-busy="true"]) {
     border-color: GrayText;

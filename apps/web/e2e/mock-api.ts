@@ -53,6 +53,8 @@ export interface MockOptions {
   preview?: S["AccessPreview"];
   /** Answer for PATCH /v1/admin/access/members/{id}. */
   change?: (body: S["MemberChangeRequest"]) => S["MemberAccess"] | { status: number; body: unknown };
+  /** Answer for POST /v1/auth/dev-login (default: 200 with `me`). */
+  devLogin?: { status: number; body: unknown; headers?: Record<string, string> };
   /** The audit log, or a function of the `before` cursor (keyset paging). */
   audit?: S["AuditPage"] | ((before: string | null) => S["AuditPage"]);
 }
@@ -63,6 +65,7 @@ export interface MockLog {
   revokes: string[];
   syncs: string[];
   asks: S["AskRequest"][];
+  devLogins: unknown[];
   evidence: string[];
   traces: string[];
   headers: Record<string, string>[];
@@ -84,6 +87,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     revokes: [],
     syncs: [],
     asks: [],
+    devLogins: [],
     evidence: [],
     traces: [],
     headers: [],
@@ -111,7 +115,11 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
         ? json(route, 401, { error: { code: "authentication_required", message: "Sign in to continue.", request_id: "req-401" } })
         : json(route, 200, me);
     }
-    if (path === "/v1/auth/dev-login" && method === "POST") return json(route, 200, options.me ?? ME_MAYA);
+    if (path === "/v1/auth/dev-login" && method === "POST") {
+      log.devLogins.push(request.postDataJSON());
+      if (options.devLogin) return json(route, options.devLogin.status, options.devLogin.body, options.devLogin.headers);
+      return json(route, 200, options.me === "unauthenticated" ? ME_MAYA : (options.me ?? ME_MAYA));
+    }
     if (path === "/v1/auth/logout" && method === "POST") return route.fulfill({ status: 204 });
 
     if (path === "/v1/ask" && method === "POST") {
