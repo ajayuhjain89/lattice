@@ -1,233 +1,147 @@
 "use client";
 
-import { EyeOff } from "lucide-react";
+import { CornerDownLeft, XCircle } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-import { useActivity, useAdminActivity } from "@/api/queries";
-import type { OperationalActivity, OwnActivity } from "@/api/types";
-import { Button } from "@/components/primitives/Button";
+import { useActivity } from "@/api/queries";
+import type { OwnActivity } from "@/api/types";
+import { Button, ButtonLink } from "@/components/primitives/Button";
 import { Icon } from "@/components/primitives/icons";
-import { SectionLabel } from "@/components/primitives/SectionLabel";
-import { SkeletonLines } from "@/components/primitives/Skeleton";
-import { shortStatus } from "@/components/shell/status-labels";
+import { StateBlock } from "@/components/primitives/StateBlock";
+import { OpsHead, OpsPage } from "@/components/ops/OpsPage";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { ErrorState } from "@/components/states/ErrorState";
-import { formatDayTime, formatDuration, humanize } from "@/lib/format";
+import { groupByDay } from "@/lib/chronology";
+import { dayHeading, formatCount, formatDay, formatDayTime, formatTime } from "@/lib/format";
+import { useNow } from "@/lib/use-now";
 
 import styles from "./ActivityScreen.module.css";
+import { ActivityViews } from "./ActivityViews";
+import { questionStatus, traceHref } from "./questions";
 
 /**
- * Activity (design-system B11). Everyone: their own questions (GET /v1/activity), each
- * opening its trace, which the API re-checks against current access. Administrators also
- * see the organization's Asks as operational rows (GET /v1/admin/activity): member, time,
- * status, provider, duration -- never a question, answer, evidence, count or scope (D-5).
+ * Activity (design-direction §6.7): the questions you asked, as a chronology -- grouped by
+ * day, newest first, each at its time. GET /v1/activity returns only the viewer's own
+ * questions: the question, its status and when. Opening one loads its trace, which the API
+ * checks again against current access (an answer that relied on something no longer
+ * readable stays hidden there); nothing of the answer is shown or kept here.
  */
 export function ActivityScreen() {
-  const { isAdmin } = useWorkspace();
   return (
-    <>
-      <div className={styles.main}>
-        <div className={styles.column}>
-          <header className={styles.head}>
-            <h1 className={styles.title}>Activity</h1>
-            <p className={styles.deck}>
-              Your recent questions. Each opens its trace, checked again against your current access: an answer that relied
-              on something you can no longer read stays hidden.
-            </p>
-          </header>
-          <OwnQuestions />
-          {isAdmin && <OrganizationActivity />}
-        </div>
-      </div>
-    </>
+    <OpsPage aria-labelledby="page-title">
+      <OpsHead title="Activity" deck="Every question you've asked, newest first. Opening one shows its trace, checked again against what you can read now.">
+        <ActivityViews />
+      </OpsHead>
+      <Questions />
+    </OpsPage>
   );
 }
 
-function OwnQuestions() {
+
+function Questions() {
   const query = useActivity();
+  const now = useNow();
+  const { state } = useWorkspace();
+  const router = useRouter();
   const items = query.data?.pages.flatMap((p) => p.items) ?? [];
+  const askAgain = (question: string) => {
+    state.prefill.set(question);
+    router.push("/ask");
+  };
+
+  if (query.isError) {
+    return <ErrorState error={query.error} title="Couldn't load your questions" onRetry={() => query.refetch()} retrying={query.isFetching} />;
+  }
+  if (!query.data) return <TimelineSkeleton />;
+  if (items.length === 0) {
+    return (
+      <StateBlock family="quiet" heading="You haven't asked anything yet" actions={<ButtonLink href="/ask">Ask a question</ButtonLink>}>
+        <p>
+          Activity keeps each question you ask with its status and time. Opening one shows how it was answered — the scope, the
+          steps and the evidence — re-checked against what you can read at that moment.
+        </p>
+      </StateBlock>
+    );
+  }
   return (
-    <section className={styles.section} aria-labelledby="own-label">
-      <SectionLabel id="own-label">Your questions</SectionLabel>
-      {query.isError ? (
-        <ErrorState error={query.error} title="Couldn't load your questions" onRetry={() => query.refetch()} retrying={query.isFetching} />
-      ) : !query.data ? (
-        <Loading label="Loading your questions" />
-      ) : items.length === 0 ? (
-        <div className={styles.empty}>
-          <p className={styles.emptyTitle}>You haven&apos;t asked anything yet</p>
-          <p>
-            Questions you ask appear here. <Link href="/ask">Ask a question</Link>
-          </p>
-        </div>
-      ) : (
-        <>
-          <ol className={styles.list}>
-            {items.map((item) => (
-              <OwnRow key={item.trace_id} item={item} />
-            ))}
-          </ol>
-          <More query={query} />
-        </>
-      )}
+    <section aria-labelledby="questions-heading" className={styles.questions}>
+      <h2 className="visually-hidden" id="questions-heading">
+        Your questions
+      </h2>
+      <ol className={styles.days}>
+        {groupByDay(items, (q) => q.created_at).map((day) => {
+          const heading = dayHeading(day.first, now);
+          const relative = heading === "Today" || heading === "Yesterday";
+          return (
+          <li key={day.key} className={styles.day}>
+            <h3 className={styles.dayHead}>
+              <span>{heading}</span>
+              <span className={styles.dayMeta}>
+                {/* The absolute date beside Today / Yesterday, and the day's count. */}
+                {relative ? `${formatDay(day.first)} · ` : ""}
+                {formatCount(day.items.length, "question", "questions")}
+              </span>
+            </h3>
+            <ol className={styles.entries}>
+              {day.items.map((q) => (
+                <Entry key={q.trace_id} q={q} onAskAgain={askAgain} />
+              ))}
+            </ol>
+          </li>
+          );
+        })}
+      </ol>
+      <div className={styles.footer}>
+        {query.hasNextPage ? (
+          <Button onClick={() => query.fetchNextPage()} loading={query.isFetchingNextPage}>
+            Show older questions
+          </Button>
+        ) : (
+          <p className={styles.end}>No older questions.</p>
+        )}
+      </div>
     </section>
   );
 }
 
-function OwnRow({ item }: { item: OwnActivity }) {
+function Entry({ q, onAskAgain }: { q: OwnActivity; onAskAgain: (question: string) => void }) {
+  const failed = q.status === "failed";
   return (
-    <li className={styles.row}>
-      <Link href={`/traces/${item.trace_id}`} className={styles.question} title={item.question}>
-        {item.question}
-      </Link>
-      <span className={styles.meta}>
-        <span>{shortStatus(item.status)}</span>
-        <time dateTime={item.created_at}>{formatDayTime(item.created_at)}</time>
+    <li className={styles.entry}>
+      <time className={styles.time} dateTime={q.created_at} title={formatDayTime(q.created_at) ?? undefined}>
+        {formatTime(q.created_at)}
+      </time>
+      <span className={[styles.status, failed && styles.failed].filter(Boolean).join(" ")}>
+        {failed && <Icon as={XCircle} size={14} />}
+        {questionStatus(q)}
       </span>
+      <Link className={styles.question} href={traceHref(q)}>
+        {q.question}
+      </Link>
+      <Button
+        size="sm"
+        variant="quiet"
+        className={styles.again}
+        icon={<Icon as={CornerDownLeft} />}
+        aria-label={`Ask again: ${q.question}`}
+        title="Put this question back in the box"
+        onClick={() => onAskAgain(q.question)}
+      />
     </li>
   );
 }
 
-function OrganizationActivity() {
-  const query = useAdminActivity(true);
-  const items = query.data?.pages.flatMap((p) => p.items) ?? [];
+/** The chronology's own rules, drawn before the questions arrive (no grey bars). */
+function TimelineSkeleton() {
   return (
-    <section className={styles.section} aria-labelledby="org-label">
-      <SectionLabel id="org-label">Organization activity</SectionLabel>
-      <p className={styles.notice}>
-        <span className={styles.noticeIcon}>
-          <Icon as={EyeOff} />
-        </span>
-        Content of other members&apos; questions isn&apos;t visible to administrators: this view shows who asked, when, and how
-        the request ran — never the question, the answer or what it found.
-      </p>
-      {query.isError ? (
-        <ErrorState error={query.error} title="Couldn't load activity" onRetry={() => query.refetch()} retrying={query.isFetching} />
-      ) : !query.data ? (
-        <Loading label="Loading activity" />
-      ) : items.length === 0 ? (
-        <div className={styles.empty}>
-          <p className={styles.emptyTitle}>No questions have been asked yet</p>
-        </div>
-      ) : (
-        <>
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <caption className="visually-hidden">Organization activity (operational view)</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Member</th>
-                  <th scope="col">Time</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Provider · model</th>
-                  <th scope="col" className={styles.num}>
-                    Duration
-                  </th>
-                  <th scope="col" className={styles.num}>
-                    Tokens in / out
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.trace_id}>
-                    <th scope="row" className={styles.rowHead}>
-                      <Link href={`/traces/${item.trace_id}`}>{item.member_name}</Link>
-                    </th>
-                    <td>
-                      <time dateTime={item.created_at}>{formatDayTime(item.created_at)}</time>
-                    </td>
-                    <td>
-                      <OperationalStatus item={item} />
-                    </td>
-                    <td>
-                      <Provider item={item} />
-                    </td>
-                    <td className={styles.num}>{formatDuration(item.duration_ms) ?? "—"}</td>
-                    <td className={styles.num}>
-                      {item.input_tokens.toLocaleString("en-GB")} / {item.output_tokens.toLocaleString("en-GB")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <ul className={styles.cards} aria-label="Organization activity (operational view)">
-            {items.map((item) => (
-              <li key={item.trace_id} className={styles.card}>
-                <Link href={`/traces/${item.trace_id}`} className={styles.primary}>
-                  {item.member_name}
-                </Link>
-                <dl>
-                  <dt>Time</dt>
-                  <dd>
-                    <time dateTime={item.created_at}>{formatDayTime(item.created_at)}</time>
-                  </dd>
-                  <dt>Status</dt>
-                  <dd>
-                    <OperationalStatus item={item} />
-                  </dd>
-                  <dt>Provider</dt>
-                  <dd>
-                    <Provider item={item} />
-                  </dd>
-                  <dt>Duration</dt>
-                  <dd>{formatDuration(item.duration_ms) ?? "—"}</dd>
-                </dl>
-              </li>
-            ))}
-          </ul>
-          <More query={query} />
-        </>
-      )}
-    </section>
-  );
-}
-
-function OperationalStatus({ item }: { item: OperationalActivity }) {
-  return (
-    <>
-      <span className={styles.primary}>{shortStatus(item.status)}</span>
-      {(item.error_code ?? item.status_reason) && (
-        <span className={`${styles.secondary} ${styles.mono}`}>{item.error_code ?? humanize(item.status_reason ?? "")}</span>
-      )}
-    </>
-  );
-}
-
-function Provider({ item }: { item: OperationalActivity }) {
-  // A configured provider that was not called (policy, kill switch, no evidence) is not
-  // shown as if it had answered.
-  if (!item.provider || item.generation_calls === 0) return <span className={styles.off}>No model call</span>;
-  return (
-    <>
-      <span>{item.provider}</span>
-      <span className={`${styles.secondary} ${styles.mono}`}>
-        {item.model}
-        {item.generation_calls > 1 ? ` · ${item.generation_calls} calls` : ""}
-      </span>
-    </>
-  );
-}
-
-function More({ query }: { query: { hasNextPage: boolean; isFetchingNextPage: boolean; fetchNextPage: () => unknown } }) {
-  if (!query.hasNextPage) return null;
-  return (
-    <div>
-      <Button size="sm" variant="secondary" onClick={() => query.fetchNextPage()} loading={query.isFetchingNextPage}>
-        Show older
-      </Button>
-    </div>
-  );
-}
-
-function Loading({ label }: { label: string }) {
-  return (
-    <div aria-busy="true">
+    <div className={styles.skeleton} aria-busy="true">
       <span className="visually-hidden" role="status">
-        {label}
+        Loading your questions
       </span>
-      <SkeletonLines widths={["100%", "100%", "70%"]} />
+      {[0, 1, 2].map((i) => (
+        <span key={i} className={styles.skeletonRow} aria-hidden="true" />
+      ))}
     </div>
   );
 }

@@ -27,7 +27,7 @@ describe("navigation model", () => {
       ["Administration", ["Access", "AI providers"]],
     ]);
     expect(visibleSubpages(ME_MAYA)).toEqual([]);
-    expect(visibleSubpages(ME_LENA).map((p) => p.label)).toEqual(["Audit log"]);
+    expect(visibleSubpages(ME_LENA).map((p) => p.label)).toEqual(["Organization runs", "Audit log"]);
   });
 
   it("deep pages belong to their destination", () => {

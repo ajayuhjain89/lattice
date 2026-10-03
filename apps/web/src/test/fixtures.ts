@@ -965,6 +965,44 @@ export const FAILURES: S["FailuresResponse"] = {
   ],
 };
 
+/** A source whose last run failed as a whole, and whose last requested sync failed too. */
+export const SOURCE_FAILED: S["AdminSourceOut"] = {
+  ...SOURCES_ADMIN.sources[0]!,
+  id: "5d2c1b0a-4444-4e3f-9a8b-7c6d5e4f3a04",
+  key: "wiki",
+  name: "Halden Wiki",
+  documents: 37,
+  last_synced_at: "2026-09-29T06:00:09Z",
+  last_succeeded_at: "2026-09-12T06:00:04Z",
+  acl_synced_at: "2026-09-12T06:00:04Z",
+  last_run: {
+    id: "6e1f0a9b-4444-4c2d-8e3f-0a1b2c3d4e04",
+    mode: "full",
+    status: "failed",
+    started_at: "2026-09-29T06:00:01Z",
+    finished_at: "2026-09-29T06:00:09Z",
+    counts: { ...RUN_COUNTS },
+    deletion_guard_tripped: false,
+    error_code: "source_unavailable:timeout",
+  },
+  failure_codes: [],
+  job: {
+    id: "7f2a1b0c-4444-4d3e-9f4a-1b2c3d4e5f04",
+    source_id: "5d2c1b0a-4444-4e3f-9a8b-7c6d5e4f3a04",
+    mode: "full",
+    status: "failed",
+    attempts: 3,
+    error_code: "source_unavailable:timeout",
+    created_at: "2026-09-29T05:59:58Z",
+    started_at: "2026-09-29T06:00:01Z",
+    finished_at: "2026-09-29T06:00:09Z",
+    sync_run_id: "6e1f0a9b-4444-4c2d-8e3f-0a1b2c3d4e04",
+  },
+};
+
+/** "Now" for tests that read ages and day headings (the fixtures' week). */
+export const FIXTURE_NOW = "2026-09-29T10:00:00Z";
+
 // --- activity (Phase 8) --------------------------------------------------------------------
 
 export const ACTIVITY_OWN: S["OwnActivityResponse"] = {
@@ -1259,4 +1297,80 @@ export const AUDIT: S["AuditPage"] = {
     },
   ],
   next_before: null,
+};
+
+// --- stress fixtures for the operational surfaces (D5 responsive checks) -----------------------
+
+const LONG_NAME = "Maximiliana Wilhelmina Featherstonehaugh-Ollerenshaw de la Cruz-Abernathy";
+
+/** A source with a very long title and key, beside the usual three. */
+export const SOURCES_ADMIN_LONG: S["AdminSourcesResponse"] = {
+  sources: [
+    ...SOURCES_ADMIN.sources,
+    {
+      ...SOURCES_ADMIN.sources[1]!,
+      id: "5d2c1b0a-5555-4e3f-9a8b-7c6d5e4f3a05",
+      key: "customer-success-escalations-and-renewals-archive-emea",
+      name: "Customer Success — Escalations, Renewals and Executive Correspondence Archive (EMEA and APAC regions, 2019–2026)",
+      job: null,
+    },
+    SOURCE_FAILED,
+  ],
+};
+
+/** Forty members, some with very long names and e-mail addresses. */
+export const MANY_MEMBERS: S["MembersPage"] = {
+  items: Array.from({ length: 40 }, (_, i) => ({
+    ...MEMBERS_PAGE.items[i % 3]!,
+    id: `b${String(i).padStart(7, "0")}-0000-4000-8000-000000000000`,
+    name: i % 7 === 0 ? `${LONG_NAME} ${i}` : `Member ${String(i + 1).padStart(2, "0")}`,
+    email: i % 7 === 0 ? `maximiliana.featherstonehaugh-ollerenshaw.${i}@customer-success.halden.example` : `member${i + 1}@halden.example`,
+    status: i % 9 === 4 ? ("suspended" as const) : ("active" as const),
+    managed_by: i % 5 === 2 ? "identity_provider" : null,
+  })),
+  next_after: "b0000039-0000-4000-8000-000000000000",
+};
+
+/** A member with a long name and many accounts, departments and groups. */
+export const MEMBER_WIDE: S["MemberAccess"] = {
+  ...MEMBER_MAYA,
+  member: { ...MEMBER_MAYA.member, id: "b0000000-0000-4000-8000-000000000000", name: LONG_NAME, email: "maximiliana.featherstonehaugh-ollerenshaw@customer-success.halden.example" },
+  accounts: Array.from({ length: 14 }, (_, i) => ({ id: `ac000000-0000-4000-8000-0000000001${String(i).padStart(2, "0")}`, name: `Account ${i + 1} — Northern Europe Holdings` })),
+  departments: [SALES, { id: ID.leadership, name: "Leadership" }],
+};
+
+/** Every trust class and approval the egress lattice must draw, eight providers wide. */
+export const PROVIDERS_MANY: S["ProvidersResponse"] = {
+  egress: { ...PROVIDERS.egress, external_egress_level: "internal", organization_controlled_level: "confidential" },
+  providers: [
+    ...PROVIDERS.providers,
+    { ...PROVIDERS.providers[0]!, provider: "vllm-private", model: "llama-4-scout-17b-instruct", deployment: "organization_controlled", approved_for_level: "confidential", explicitly_approved: true, endpoint_configured: true },
+    { ...PROVIDERS.providers[0]!, provider: "vllm-staging", model: "qwen3-32b", deployment: "organization_controlled", approved_for_level: "restricted", explicitly_approved: false, enabled: true },
+    { ...PROVIDERS.providers[1]!, provider: "anthropic", model: "claude-sonnet-5-5", enabled: true, training_opt_out: true, retention_mode: "zero", credential: { state: "active", source: "env", resolvable: true, data_use: "paid" } },
+    { ...PROVIDERS.providers[1]!, provider: "legacy-gateway", model: "unknown-model", deployment: "private", enabled: true, training_opt_out: true },
+    { ...PROVIDERS.providers[2]!, provider: "voyage", model: "voyage-3-large", deployment: "external_api", approved_for_level: "internal", credential: { state: "active", source: "env", resolvable: true, data_use: "paid" } },
+  ],
+};
+
+/** A long audit log, paged by its cursor. */
+export function auditPages(before: string | null, total = 60, size = 25): S["AuditPage"] {
+  const all = Array.from({ length: total }, (_, i) => ({
+    ...AUDIT.items[i % AUDIT.items.length]!,
+    id: `a0d1${String(i).padStart(4, "0")}-0000-4000-8000-000000000000`,
+    created_at: new Date(Date.parse("2026-09-29T09:00:00Z") - i * 3_600_000 * 5).toISOString(),
+  }));
+  const start = before ? all.findIndex((e) => e.id === before) + 1 : 0;
+  const items = all.slice(start, start + size);
+  return { items, next_before: start + size < all.length ? (items.at(-1)?.id ?? null) : null };
+}
+
+/** A change that both widens and narrows: clearance up, an account added, a department removed. */
+export const PREVIEW_MIXED: S["AccessPreview"] = {
+  effects: [
+    { kind: "clearance", before: "internal", after: "confidential", subject: null },
+    { kind: "account_added", before: null, after: null, subject: { id: ID.kestrel, name: "Kestrel Bank" } },
+    { kind: "department_removed", before: null, after: null, subject: { id: ID.sales, name: "Sales" } },
+  ],
+  documents_gained: 7,
+  documents_lost: 3,
 };

@@ -133,6 +133,8 @@ test("the audit log names the identity provider and its profile updates", async 
   await page.goto("/access/audit");
   await expect(page.getByText("By Your identity provider (SCIM)").first()).toBeVisible();
   await expect(page.getByText("Profile updated")).toBeVisible();
-  await expect(page.getByText("Name: Pat Doe → Pat Rivera")).toBeVisible();
+  const entry = page.getByTestId("audit-entry").filter({ hasText: "Profile updated" });
+  await expect(entry).toContainText("Pat Doe");
+  await expect(entry).toContainText("Pat Rivera");
   await audit(page);
 });

@@ -41,6 +41,8 @@ export interface Subpage {
   href: string;
   label: string;
   parent: Destination["href"];
+  /** Shown only with this capability (beyond what its parent requires). */
+  requires?: Capability;
 }
 
 export const SECTIONS: readonly NavSection[] = [
@@ -91,7 +93,10 @@ export const DESTINATIONS: readonly Destination[] = [
   },
 ];
 
-export const SUBPAGES: readonly Subpage[] = [{ href: "/access/audit", label: "Audit log", parent: "/access" }];
+export const SUBPAGES: readonly Subpage[] = [
+  { href: "/activity/organization", label: "Organization runs", parent: "/activity", requires: "admin" },
+  { href: "/access/audit", label: "Audit log", parent: "/access" },
+];
 
 /** At most this many tabs in the phone bar (plus More); the rest move to the sheet. */
 export const PHONE_TABS = 4;
@@ -117,7 +122,7 @@ export function visibleNav(me: Me): VisibleSection[] {
 
 export function visibleSubpages(me: Me): Subpage[] {
   const parents = new Set(visibleNav(me).flatMap((s) => s.destinations.map((d) => d.href)));
-  return SUBPAGES.filter((p) => parents.has(p.parent));
+  return SUBPAGES.filter((p) => parents.has(p.parent) && allowed(me, p.requires));
 }
 
 /** The destination that owns this path, if any (the first match wins). */

@@ -13,11 +13,11 @@ import { CornerDownRight, History, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { useAccessMembers, useActivity } from "@/api/queries";
+import { questionStatus, traceHref } from "@/components/activity/questions";
 import { Jump, type JumpGroupStatus, type JumpItem } from "@/components/primitives/Jump";
 import { formatDay } from "@/lib/format";
 
 import { visibleNav, visibleSubpages } from "./nav";
-import { shortStatus } from "./status-labels";
 import { useWorkspace } from "./workspace-context";
 
 const GO = "Go to";
@@ -75,9 +75,9 @@ export function ShellJump({
         id: `trace:${q.trace_id}`,
         group: RECENT,
         label: q.question,
-        detail: [shortStatus(q.status), formatDay(q.created_at)].filter(Boolean).join(" · "),
+        detail: [questionStatus(q), formatDay(q.created_at)].filter(Boolean).join(" · "),
         icon: History,
-        onSelect: () => onGo(`/traces/${q.trace_id}`),
+        onSelect: () => onGo(traceHref(q)),
       });
     }
 

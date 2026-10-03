@@ -1,412 +1,488 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, CircleSlash, Loader2, RefreshCw, XCircle } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, ChevronRight, Clock, Hourglass, RefreshCw, ShieldAlert } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { isApiError } from "@/api/errors";
 import { useAdminSources, useRequestSync, useSourceFailures, useSources } from "@/api/queries";
-import type { AdminSource, MemberSource, SyncFailure } from "@/api/types";
+import type { AdminSource, MemberSource, SyncFailure, SyncJob } from "@/api/types";
 import { Button } from "@/components/primitives/Button";
+import { DataTable, type Column } from "@/components/primitives/DataTable";
+import { SOURCE_GLYPHS } from "@/components/primitives/glyphs";
 import { Icon } from "@/components/primitives/icons";
-import { SectionLabel } from "@/components/primitives/SectionLabel";
-import { SkeletonLines } from "@/components/primitives/Skeleton";
+import { StateBlock } from "@/components/primitives/StateBlock";
+import { StatusMark } from "@/components/primitives/StatusMark";
+import { useToast } from "@/components/primitives/Toast";
+import { OpsHead, OpsPage, OpsSection } from "@/components/ops/OpsPage";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { ErrorState } from "@/components/states/ErrorState";
-import { connectorLabel, formatDay, formatDayTime, humanize, levelLabel, syncStatusLabel } from "@/lib/format";
+import { ageLabel, connectorLabel, formatCount, formatDay, formatDayTime, formatTime, humanize, levelLabel } from "@/lib/format";
+import { useNow } from "@/lib/use-now";
 
 import styles from "./SourcesScreen.module.css";
+import { failedCounts, isOld, jobActive, readRun, registerSummary, requestMessage, requestState, sourceFailed, sourceKind, type SyncRequest } from "./sync-model";
 
 /**
- * Sources (security-model §10). Members: GET /v1/sources -- only sources they can read from,
- * with counts computed inside their access. Administrators: GET /v1/admin/sources --
- * every source with aggregate totals, the last sync, failure codes and requested syncs;
- * failed records by opaque reference unless the administrator can read the document.
+ * Sources (design-direction §6.6; security-model §10): a live register of what Lattice
+ * synchronizes. Members: GET /v1/sources -- only sources they can read from, counted inside
+ * their access. Administrators: GET /v1/admin/sources -- every source with aggregate
+ * totals, the last run, failure codes and the requested sync, polled while one is queued
+ * or running; failed records open inline, by opaque reference unless the administrator
+ * can read the document.
  */
 export function SourcesScreen() {
   const { isAdmin, me } = useWorkspace();
   return (
-    <>
-      <div className={styles.main}>
-        <div className={styles.column}>
-          <header className={styles.head}>
-            <h1 className={styles.title}>Sources</h1>
-            <p className={styles.deck}>
-              {isAdmin
-                ? `Every source ${me.organization.name} has connected: when it last synced, what failed and why, and totals only — never which documents, accounts or people are behind them.`
-                : "What Lattice can search for you, and when each source last synced. Counts include only what you can read."}
-            </p>
-          </header>
-          {isAdmin ? <AdminSources /> : <MemberSources />}
-        </div>
-      </div>
-    </>
+    <OpsPage aria-labelledby="page-title">
+      {isAdmin ? <AdminRegister organization={me.organization.name} /> : <MemberRegister />}
+    </OpsPage>
   );
 }
 
 /* --- members --------------------------------------------------------------------------- */
 
-function MemberSources() {
+function MemberRegister() {
   const query = useSources();
-  if (query.isError) {
-    return <ErrorState error={query.error} title="Couldn't load sources" onRetry={() => query.refetch()} retrying={query.isFetching} />;
-  }
-  if (!query.data) return <Loading label="Loading sources" />;
-  const sources = query.data.sources;
-  return (
-    <section className={styles.section} aria-labelledby="sources-label">
-      <SectionLabel id="sources-label" meta={`${sources.length} ${sources.length === 1 ? "source" : "sources"}`}>
-        Your sources
-      </SectionLabel>
-      {sources.length === 0 ? (
-        <div className={styles.empty}>
-          <p className={styles.emptyTitle}>Lattice hasn&apos;t indexed any sources you can access yet</p>
-          <p>When an administrator connects a source that holds content you can read, it appears here.</p>
-        </div>
-      ) : (
-        <>
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <caption className="visually-hidden">Sources you can read from</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Source</th>
-                  <th scope="col">Type</th>
-                  <th scope="col" className={styles.num}>
-                    Documents you can read
-                  </th>
-                  <th scope="col">Last sync</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sources.map((s) => (
-                  <tr key={s.id}>
-                    <th scope="row" className={styles.rowHead}>
-                      {s.name}
-                    </th>
-                    <td>{connectorLabel(s.connector_type)}</td>
-                    <td className={styles.num}>{s.readable_documents.toLocaleString("en-GB")}</td>
-                    <td>
-                      <MemberSync s={s} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <ul className={styles.cards} aria-label="Sources you can read from">
-            {sources.map((s) => (
-              <li key={s.id} className={styles.card}>
-                <span className={styles.primary}>{s.name}</span>
-                <dl>
-                  <dt>Type</dt>
-                  <dd>{connectorLabel(s.connector_type)}</dd>
-                  <dt>You can read</dt>
-                  <dd>{s.readable_documents.toLocaleString("en-GB")} documents</dd>
-                  <dt>Last sync</dt>
-                  <dd>
-                    <MemberSync s={s} />
-                  </dd>
-                </dl>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </section>
-  );
-}
-
-function MemberSync({ s }: { s: MemberSource }) {
+  const now = useNow();
+  const sources = query.data?.sources ?? [];
+  const columns: Column<MemberSource>[] = [
+    { key: "source", header: "Source", primary: true, cell: (s) => <SourceName name={s.name} connector={s.connector_type} /> },
+    {
+      key: "readable",
+      header: "You can read",
+      align: "end",
+      mono: true,
+      short: true,
+      width: "9rem",
+      cell: (s) => formatCount(s.readable_documents, "document", "documents"),
+    },
+    {
+      key: "sync",
+      header: "Last sync",
+      width: "17rem",
+      cell: (s) => <SyncReading status={s.last_run_status} at={s.last_synced_at} succeededAt={s.last_succeeded_at} now={now} />,
+    },
+  ];
   return (
     <>
-      <RunStatus status={s.last_run_status} />
-      <When iso={s.last_synced_at} />
+      <OpsHead
+        title="Sources"
+        deck="What Lattice can search for you, and when each source last synced. Counts include only what you can read."
+      />
+      {query.isError ? (
+        <ErrorState error={query.error} title="Couldn't load sources" onRetry={() => query.refetch()} retrying={query.isFetching} />
+      ) : query.data && sources.length === 0 ? (
+        <StateBlock family="quiet" heading="Lattice hasn't indexed any sources you can access yet">
+          <p>When an administrator connects a source that holds content you can read, it appears here with its last sync.</p>
+        </StateBlock>
+      ) : (
+        <DataTable
+          caption="Sources you can read from"
+          columns={columns}
+          rows={sources}
+          rowKey={(s) => s.id}
+          loading={!query.data}
+          loadingRows={2}
+          stackBelow="768"
+        />
+      )}
     </>
   );
 }
 
 /* --- administrators -------------------------------------------------------------------- */
 
-function AdminSources() {
+function AdminRegister({ organization }: { organization: string }) {
   const query = useAdminSources(true);
-  const [open, setOpen] = useState<string | null>(null);
-  const forbidden = query.isError && isApiError(query.error) && query.error.status === 403;
-  if (query.isError && !forbidden) {
-    return <ErrorState error={query.error} title="Couldn't load sources" onRetry={() => query.refetch()} retrying={query.isFetching} />;
-  }
-  if (!query.data) return <Loading label="Loading sources" />;
-  const sources = query.data.sources;
-  const failing = sources.filter((s) => s.failure_codes.length > 0);
+  const now = useNow();
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  const announce = useSyncAnnouncer(query.data?.sources);
+  const forbidden = query.isError && isApiError(query.error) && query.error.isForbidden;
+  const sources = query.data?.sources ?? [];
+  const toggle = (id: string) =>
+    setOpen((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const columns: Column<AdminSource>[] = [
+    {
+      key: "source",
+      header: "Source",
+      primary: true,
+      cell: (s) => (
+        <SourceName name={s.name} connector={s.connector_type} sourceKey={s.key} inactive={s.status !== "active" ? humanize(s.status) : null} />
+      ),
+    },
+    {
+      key: "sync",
+      header: "Last sync",
+      cell: (s) => (
+        <SyncReading
+          status={s.last_run?.status ?? null}
+          at={s.last_run?.finished_at ?? s.last_synced_at}
+          succeededAt={s.last_succeeded_at}
+          now={now}
+          code={sourceFailed(s) ? s.last_run?.error_code : null}
+          guard={s.last_run?.deletion_guard_tripped ?? false}
+        />
+      ),
+    },
+    { key: "access", header: "Permissions", cell: (s) => <AccessReading s={s} now={now} /> },
+    { key: "documents", header: "Documents", align: "end", mono: true, short: true, width: "7rem", cell: (s) => s.documents.toLocaleString("en-GB") },
+    { key: "records", header: "Failed records", short: true, cell: (s) => <RecordsReading s={s} open={open.has(s.id)} onToggle={() => toggle(s.id)} /> },
+    { key: "action", header: "Sync", hideHeader: true, cell: (s) => <SyncControl s={s} announce={announce} /> },
+  ];
+
   return (
     <>
-      <section className={styles.section} aria-labelledby="sources-label">
-        <SectionLabel id="sources-label" meta={`${sources.length} ${sources.length === 1 ? "source" : "sources"}`}>
-          Connected sources
-        </SectionLabel>
-        {sources.length === 0 ? (
-          <div className={styles.empty}>
-            <p className={styles.emptyTitle}>No sources are connected</p>
-            <p>
-              Sources are connected with the operator command <code>lattice sync</code>; once one has synced, it can be
-              re-synced from here.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <caption className="visually-hidden">Connected sources and their sync status</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Source</th>
-                    <th scope="col">Permissions</th>
-                    <th scope="col" className={styles.num}>
-                      Documents
-                    </th>
-                    <th scope="col">Last sync</th>
-                    <th scope="col">Failed records</th>
-                    <th scope="col">
-                      <span className="visually-hidden">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sources.map((s) => (
-                    <tr key={s.id}>
-                      <th scope="row" className={styles.rowHead}>
-                        <span className={styles.primary}>{s.name}</span>
-                        <span className={`${styles.secondary} ${styles.mono}`}>
-                          {s.key} · {connectorLabel(s.connector_type)}
-                        </span>
-                      </th>
-                      <td>
-                        <Permissions s={s} />
-                      </td>
-                      <td className={styles.num}>{s.documents.toLocaleString("en-GB")}</td>
-                      <td>
-                        <AdminSync s={s} />
-                      </td>
-                      <td>
-                        <FailureSummary s={s} />
-                      </td>
-                      <td className={styles.action}>
-                        <SyncButton s={s} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <ul className={styles.cards} aria-label="Connected sources and their sync status">
-              {sources.map((s) => (
-                <li key={s.id} className={styles.card}>
-                  <span>
-                    <span className={styles.primary}>{s.name}</span>
-                    <span className={`${styles.secondary} ${styles.mono}`}>
-                      {s.key} · {connectorLabel(s.connector_type)}
-                    </span>
-                  </span>
-                  <dl>
-                    <dt>Permissions</dt>
-                    <dd>
-                      <Permissions s={s} />
-                    </dd>
-                    <dt>Documents</dt>
-                    <dd>{s.documents.toLocaleString("en-GB")}</dd>
-                    <dt>Last sync</dt>
-                    <dd>
-                      <AdminSync s={s} />
-                    </dd>
-                    <dt>Failed</dt>
-                    <dd>
-                      <FailureSummary s={s} />
-                    </dd>
-                  </dl>
-                  <div>
-                    <SyncButton s={s} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
-      {failing.length > 0 && (
-        <section className={styles.section} aria-labelledby="failures-label">
-          <SectionLabel id="failures-label">Failed records in the last sync</SectionLabel>
-          <p className={styles.note}>
-            Each failure is a stage and a fixed code. A record is named only if you can read its document; otherwise it is
-            shown by an opaque reference. Record contents, titles and file names are never shown here.
+      <OpsHead
+        title="Sources"
+        deck={`Every source ${organization} has connected: when it last synced, whether access was applied, which records failed and why. Totals only — never which documents, accounts or people are behind them.`}
+      >
+        {query.data && sources.length > 0 && (
+          <p className={styles.summary} data-testid="register-summary">
+            {registerSummary(sources, now)}
           </p>
-          {failing.map((s) => (
-            <SourceFailures key={s.id} s={s} open={open === s.id} onToggle={() => setOpen(open === s.id ? null : s.id)} />
-          ))}
-        </section>
+        )}
+      </OpsHead>
+      {forbidden ? (
+        <StateBlock family="boundary" label="Administrators only" heading="You no longer have administrator access">
+          <p>The sources register is available to your organization&apos;s administrators.</p>
+        </StateBlock>
+      ) : query.isError ? (
+        <ErrorState error={query.error} title="Couldn't load sources" onRetry={() => query.refetch()} retrying={query.isFetching} />
+      ) : query.data && sources.length === 0 ? (
+        <StateBlock family="quiet" heading="No sources are connected">
+          <p>
+            An operator connects a source with the <code>lattice sync</code> command. Once it has synced, it appears here and can be
+            synced again from this page.
+          </p>
+        </StateBlock>
+      ) : (
+        <OpsSection id="register-heading" title="Connected sources" count={query.data ? sources.length.toLocaleString("en-GB") : undefined}>
+          <DataTable
+            caption="Connected sources and their sync status"
+            columns={columns}
+            rows={sources}
+            rowKey={(s) => s.id}
+            loading={!query.data}
+            loadingRows={3}
+            expanded={open}
+            renderExpansion={(s) => <FailureDetail s={s} />}
+          />
+          <p className={styles.note}>
+            A failed record is named by its document only if you can read that document; otherwise by an opaque reference. Record
+            contents, titles and file names never appear here.
+          </p>
+        </OpsSection>
       )}
-    </>
-  );
-}
-
-function Permissions({ s }: { s: AdminSource }) {
-  return (
-    <>
-      <span className={styles.primary}>{s.account_scoped ? "Account-scoped" : "From source metadata"}</span>
-      <span className={styles.secondary}>Default {levelLabel(s.default_sensitivity)}</span>
-    </>
-  );
-}
-
-function AdminSync({ s }: { s: AdminSource }) {
-  const run = s.last_run;
-  return (
-    <>
-      <RunStatus status={run?.status ?? null} code={run?.error_code ?? null} guard={run?.deletion_guard_tripped ?? false} />
-      <When iso={run?.finished_at ?? s.last_synced_at} />
-      {s.acl_synced_at && <span className={styles.secondary}>Permissions synced {formatDay(s.acl_synced_at)}</span>}
-    </>
-  );
-}
-
-function FailureSummary({ s }: { s: AdminSource }) {
-  const total = s.last_run?.counts["failed"] ?? 0;
-  const embedding = s.last_run?.counts["embedding_failures"] ?? 0;
-  if (!s.last_run) return <span className={styles.off}>—</span>;
-  if (total === 0 && embedding === 0) return <span className={styles.off}>None</span>;
-  const top = s.failure_codes[0];
-  return (
-    <>
-      <span className={styles.primary}>
-        {total > 0 ? `${total} ${total === 1 ? "record" : "records"}` : `${embedding} embedding ${embedding === 1 ? "failure" : "failures"}`}
+      <span className="visually-hidden" role="status" aria-live="polite" data-testid="sync-announcer">
+        {announce.message}
       </span>
-      {top && (
-        <span className={`${styles.secondary} ${styles.mono}`}>
-          <Code value={top.code} />
+    </>
+  );
+}
+
+/* --- cells ----------------------------------------------------------------------------- */
+
+function SourceName({ name, connector, sourceKey, inactive = null }: { name: string; connector: string; sourceKey?: string; inactive?: string | null }) {
+  const Glyph = SOURCE_GLYPHS[sourceKind(connector)];
+  return (
+    <span className={styles.source}>
+      <span className={styles.glyph}>
+        <Glyph size={16} aria-hidden="true" focusable="false" />
+      </span>
+      <span className={styles.sourceName}>{name}</span>
+      <span className={styles.sourceMeta}>
+        {sourceKey && <span className={styles.key}>{sourceKey}</span>}
+        {sourceKey && <span aria-hidden="true">·</span>}
+        <span>{connectorLabel(connector)}</span>
+        {inactive && <span className={styles.inactive}>{inactive}: not synced</span>}
+      </span>
+    </span>
+  );
+}
+
+function When({ iso, withTime = false }: { iso: string | null | undefined; withTime?: boolean }) {
+  if (!iso) return null;
+  return (
+    <time className={styles.when} dateTime={iso} title={formatDayTime(iso) ?? undefined}>
+      {formatDay(iso)}
+      {withTime && `, ${formatTime(iso)}`}
+    </time>
+  );
+}
+
+/**
+ * The last run in words, when it finished, and how long ago the source last fully synced.
+ * Age is ink under a week and ochre (time) after; a failed run is the only fault.
+ */
+function SyncReading({
+  status,
+  at,
+  succeededAt,
+  now,
+  code = null,
+  guard = false,
+}: {
+  status: string | null;
+  at: string | null | undefined;
+  succeededAt: string | null;
+  now: number;
+  code?: string | null;
+  guard?: boolean;
+}) {
+  const run = readRun(status);
+  const succeeded = status === "succeeded";
+  const old = isOld(succeededAt, now);
+  return (
+    <span className={styles.stack}>
+      <span className={styles.line}>
+        <StatusMark tone={run.tone} icon={run.icon}>
+          {run.label}
+        </StatusMark>
+        {status && <When iso={at} withTime />}
+      </span>
+      {code && (
+        <span className={styles.code}>
+          <Code value={code} />
         </span>
       )}
-    </>
-  );
-}
-
-function SyncButton({ s }: { s: AdminSource }) {
-  const request = useRequestSync();
-  const active = s.job?.status === "queued" || s.job?.status === "running";
-  const inactive = s.status !== "active";
-  const failedRequest = request.isError && request.variables === s.id;
-  const label = active ? (s.job?.status === "running" ? "Syncing…" : "Queued") : "Sync now";
-  return (
-    <span className={styles.syncCell}>
-      <Button
-        size="sm"
-        variant="secondary"
-        icon={<Icon as={active ? Loader2 : RefreshCw} />}
-        onClick={() => request.mutate(s.id)}
-        disabled={active || inactive || (request.isPending && request.variables === s.id)}
-        aria-label={`${label}: ${s.name}`}
-      >
-        {label}
-      </Button>
-      {inactive && <span className={styles.secondary}>{humanize(s.status)}</span>}
-      {!active && s.job?.status === "failed" && (
-        <span className={`${styles.secondary} ${styles.warn}`}>Last request failed · {s.job.error_code ?? "error"}</span>
+      {/* The age of the last full sync, when it adds something: it's old, or the last run wasn't one. */}
+      {status && (!succeeded || old) && (
+        <span className={[styles.age, old && styles.old].filter(Boolean).join(" ")} data-old={old || undefined}>
+          {old && <Icon as={Clock} size={14} />}
+          {!succeededAt ? (
+            "Never fully synced"
+          ) : succeeded ? (
+            capitalize(ageLabel(succeededAt, now) ?? "")
+          ) : (
+            <>
+              <span>Last full sync</span>{" "}
+              <span className={styles.nowrap}>
+                <When iso={succeededAt} /> · {ageLabel(succeededAt, now)}
+              </span>
+            </>
+          )}
+        </span>
       )}
-      {failedRequest && (
-        <span className={`${styles.secondary} ${styles.warn}`} role="alert">
-          Couldn&apos;t request a sync. Try again.
+      {guard && (
+        <span className={styles.guard}>
+          <Icon as={ShieldAlert} size={14} /> Deletion guard held back deletions
         </span>
       )}
     </span>
   );
 }
 
-function SourceFailures({ s, open, onToggle }: { s: AdminSource; open: boolean; onToggle: () => void }) {
-  const panel = `failures-${s.id}`;
+function AccessReading({ s, now }: { s: AdminSource; now: number }) {
+  const old = isOld(s.acl_synced_at, now);
   return (
-    <div className={styles.failureGroup}>
-      <div className={styles.failureHead}>
-        <span>
-          <span className={styles.primary}>{s.name}</span>
-          <span className={`${styles.secondary} ${styles.codes}`}>
-            {s.failure_codes.map((c) => (
-              <span key={`${c.stage}-${c.code}`} className={styles.code}>
-                {c.stage} · {c.code} × {c.count}
-              </span>
-            ))}
-          </span>
+    <span className={styles.stack}>
+      <span>{s.account_scoped ? "Follows the source, by account" : "Follows the source's sharing"}</span>
+      <span className={[styles.age, old && styles.old].filter(Boolean).join(" ")} data-old={old || undefined}>
+        {old && <Icon as={Clock} size={14} />}
+        {s.acl_synced_at ? (
+          <>
+            Access applied <When iso={s.acl_synced_at} />
+          </>
+        ) : (
+          "Not applied yet"
+        )}
+      </span>
+      <span className={styles.secondary}>Default {levelLabel(s.default_sensitivity)}</span>
+    </span>
+  );
+}
+
+function RecordsReading({ s, open, onToggle }: { s: AdminSource; open: boolean; onToggle: () => void }) {
+  if (!s.last_run) return <span className={styles.secondary}>—</span>;
+  const { records, embeddings } = failedCounts(s);
+  if (records === 0 && embeddings === 0) {
+    // A run that failed as a whole says nothing about its records.
+    return <span className={styles.secondary}>{sourceFailed(s) ? "—" : "None"}</span>;
+  }
+  const label = [records ? formatCount(records, "record", "records") : null, embeddings ? formatCount(embeddings, "embedding", "embeddings") : null]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <span className={styles.stack}>
+      <span className={styles.failed}>{label}</span>
+      <Button
+        size="sm"
+        variant="quiet"
+        className={styles.disclosure}
+        icon={<Icon as={open ? ChevronDown : ChevronRight} />}
+        aria-expanded={open}
+        aria-label={`${open ? "Hide" : "Show"} failed records: ${s.name}`}
+        onClick={onToggle}
+      >
+        {open ? "Hide" : "Show"}
+      </Button>
+    </span>
+  );
+}
+
+/**
+ * Sync now: the real request (POST /v1/admin/sources/{id}/sync). While a sync is queued or
+ * running the control stays focusable but inert, and the state is written beside it; the
+ * outcome is announced to assistive tech and kept in the register (the toast only echoes).
+ */
+function SyncControl({ s, announce }: { s: AdminSource; announce: SyncAnnouncer }) {
+  const request = useRequestSync();
+  const toast = useToast();
+  const active = jobActive(s.job);
+  const inactive = s.status !== "active";
+  const pending = request.isPending;
+  const inert = active || inactive || pending;
+  const stateId = `sync-state-${s.id}`;
+  const failedRequest = request.isError && !pending ? request.error : null;
+  const submit = () => {
+    if (inert) return;
+    request.mutate(s.id, {
+      onSuccess: (job) => {
+        announce.requested(s, job);
+        toast({ title: "Sync requested", description: s.name });
+      },
+    });
+  };
+  return (
+    <span className={styles.control}>
+      <Button
+        size="sm"
+        variant="secondary"
+        icon={<Icon as={RefreshCw} />}
+        loading={pending}
+        onClick={submit}
+        aria-disabled={inert || undefined}
+        aria-describedby={active || inactive || s.job?.status === "failed" ? stateId : undefined}
+        aria-label={`Sync now: ${s.name}`}
+      >
+        Sync now
+      </Button>
+      <JobLine id={stateId} job={s.job} inactive={inactive ? humanize(s.status) : null} />
+      {failedRequest && (
+        <span className={styles.requestError} role="alert">
+          Couldn&apos;t request a sync: {isApiError(failedRequest) ? failedRequest.message.replace(/\.$/, "") : "something went wrong"}. Try again.
         </span>
-        <Button size="sm" variant="quiet" aria-expanded={open} aria-controls={panel} onClick={onToggle}>
-          {open ? "Hide records" : "Show records"}
-        </Button>
-      </div>
-      <div id={panel} hidden={!open}>
-        {open && <FailureRecords sourceId={s.id} />}
-      </div>
+      )}
+    </span>
+  );
+}
+
+function JobLine({ id, job, inactive }: { id: string; job: SyncJob | null; inactive: string | null }) {
+  if (inactive) {
+    return (
+      <span id={id} className={styles.secondary}>
+        {inactive}: syncing is off
+      </span>
+    );
+  }
+  if (job?.status === "queued") {
+    return (
+      <span id={id} className={styles.job}>
+        <Icon as={Hourglass} size={14} />
+        Queued <span className={styles.when}>since {formatTime(job.created_at)}</span>
+      </span>
+    );
+  }
+  if (job?.status === "running") {
+    return (
+      <span id={id} className={styles.job}>
+        <Icon as={RefreshCw} size={14} />
+        Syncing <span className={styles.when}>since {formatTime(job.started_at ?? job.created_at)}</span>
+      </span>
+    );
+  }
+  if (job?.status === "failed") {
+    return (
+      <span id={id} className={styles.jobFailed}>
+        Requested sync failed{job.error_code ? " · " : ""}
+        {job.error_code && (
+          <span className={styles.code}>
+            <Code value={job.error_code} />
+          </span>
+        )}
+      </span>
+    );
+  }
+  return null;
+}
+
+/* --- failed records (inline expansion) ------------------------------------------------- */
+
+function FailureDetail({ s }: { s: AdminSource }) {
+  return (
+    <div className={styles.detail}>
+      {s.failure_codes.length > 0 && (
+        <ul className={styles.codes} aria-label={`Failure codes in the last sync of ${s.name}`}>
+          {s.failure_codes.map((c) => (
+            <li key={`${c.stage}-${c.code}`}>
+              <span className={styles.code}>
+                {c.stage} · <Code value={c.code} />
+              </span>{" "}
+              <span className={styles.secondary}>× {c.count.toLocaleString("en-GB")}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <FailureRecords source={s} />
     </div>
   );
 }
 
-function FailureRecords({ sourceId }: { sourceId: string }) {
-  const query = useSourceFailures(sourceId);
+function FailureRecords({ source }: { source: AdminSource }) {
+  const query = useSourceFailures(source.id);
   if (query.isError) {
-    return <ErrorState error={query.error} title="Couldn't load failed records" onRetry={() => query.refetch()} retrying={query.isFetching} />;
+    return <ErrorState error={query.error} title="Couldn't load failed records" onRetry={() => query.refetch()} retrying={query.isFetching} headingLevel="h3" />;
   }
-  if (!query.data) return <Loading label="Loading failed records" />;
-  const failures = query.data.failures;
-  if (failures.length === 0) return <p className={styles.note}>No failed records in the last sync.</p>;
+  const columns: Column<SyncFailure>[] = [
+    { key: "record", header: "Record", cell: (f) => <RecordRef f={f} /> },
+    {
+      key: "code",
+      header: "Stage · code",
+      mono: true,
+      cell: (f) => (
+        <>
+          {f.stage} · <Code value={f.code} />
+        </>
+      ),
+    },
+    { key: "params", header: "Details", cell: (f) => <Params f={f} /> },
+  ];
   return (
-    <ul className={styles.records}>
-      {failures.map((f, i) => (
-        <li key={`${f.record}-${f.code}-${i}`} className={styles.record}>
-          <span className={styles.mono}>{f.stage}</span>
-          <span className={styles.mono}>{f.code}</span>
-          <RecordRef f={f} />
-          <Params f={f} />
-        </li>
-      ))}
-    </ul>
+    <DataTable
+      caption={`Failed records in the last sync of ${source.name}`}
+      columns={columns}
+      rows={query.data?.failures ?? []}
+      rowKey={(f) => `${f.record}-${f.stage}-${f.code}`}
+      loading={!query.data}
+      loadingRows={1}
+      density="dense"
+      stackBelow="768"
+      empty={<p className={styles.secondary}>No failed records in the last sync.</p>}
+    />
   );
 }
 
 function RecordRef({ f }: { f: SyncFailure }) {
   return f.record_kind === "identifier" ? (
-    <span className={styles.mono}>{f.record}</span>
+    <span className={styles.code}>{f.record}</span>
   ) : (
-    <span className={`${styles.mono} ${styles.off}`} title="Opaque reference: you can't read this record's document">
-      {f.record}
+    <span className={styles.opaque}>
+      <span className={styles.code}>{f.record}</span>
+      <span className={styles.secondary}>opaque reference</span>
     </span>
   );
 }
 
 function Params({ f }: { f: SyncFailure }) {
   const entries = Object.entries(f.params);
-  if (entries.length === 0) return <span />;
-  return (
-    <span className={styles.secondary}>
-      {entries.map(([k, v]) => `${humanize(k)}: ${String(v)}`).join(" · ")}
-    </span>
-  );
-}
-
-/* --- shared ---------------------------------------------------------------------------- */
-
-const STATUS_ICON = { succeeded: CheckCircle2, partial: AlertTriangle, failed: XCircle, aborted: XCircle } as const;
-
-function RunStatus({ status, code = null, guard = false }: { status: string | null; code?: string | null; guard?: boolean }) {
-  const tone = status === "succeeded" ? styles.ok : status === "partial" ? styles.warn : status ? styles.bad : styles.off;
-  const icon = status ? (STATUS_ICON[status as keyof typeof STATUS_ICON] ?? CircleSlash) : CircleSlash;
-  return (
-    <span className={styles.statusLine}>
-      <span className={`${styles.state} ${tone}`}>
-        <Icon as={icon} size={14} />
-        {syncStatusLabel(status)}
-      </span>
-      {code && (
-        <span className={`${styles.secondary} ${styles.mono}`}>
-          <Code value={code} />
-        </span>
-      )}
-      {guard && <span className={`${styles.secondary} ${styles.warn}`}>Deletion guard held back deletions</span>}
-    </span>
-  );
+  if (entries.length === 0) return <>—</>;
+  return <>{entries.map(([k, v]) => `${humanize(k)}: ${String(v)}`).join(" · ")}</>;
 }
 
 /** A fixed code that may wrap only after its ":" separators, never inside a word. */
@@ -428,23 +504,35 @@ function Code({ value }: { value: string }) {
   );
 }
 
-function When({ iso }: { iso: string | null | undefined }) {
-  const day = formatDay(iso);
-  if (!day || !iso) return null;
-  return (
-    <time className={styles.secondary} dateTime={iso} title={formatDayTime(iso) ?? undefined}>
-      {day}
-    </time>
-  );
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/* --- announcements --------------------------------------------------------------------- */
+
+interface SyncAnnouncer {
+  message: string;
+  requested: (source: AdminSource, job: SyncJob) => void;
 }
 
-function Loading({ label }: { label: string }) {
-  return (
-    <div aria-busy="true">
-      <span className="visually-hidden" role="status">
-        {label}
-      </span>
-      <SkeletonLines widths={["100%", "100%", "70%"]} />
-    </div>
-  );
+/**
+ * Speaks the progress of the sync requested last (queued → running → finished), derived
+ * from the polled register itself, and echoes the outcome in a toast once.
+ */
+function useSyncAnnouncer(sources: readonly AdminSource[] | undefined): SyncAnnouncer {
+  const [request, setRequest] = useState<SyncRequest>();
+  const toasted = useRef(new Set<string>());
+  const toast = useToast();
+  const message = requestMessage(request, sources);
+  const state = requestState(request, sources);
+
+  useEffect(() => {
+    if (!request || toasted.current.has(request.jobId) || !(state === "succeeded" || state === "superseded" || state === "failed")) return;
+    toasted.current.add(request.jobId);
+    const run = readRun(sources?.find((x) => x.id === request.sourceId)?.last_run?.status);
+    toast({ title: state === "failed" ? "Sync failed" : `Sync finished: ${run.label}`, description: request.name });
+  }, [request, state, sources, toast]);
+
+  return {
+    message,
+    requested: (source, job) => setRequest({ sourceId: source.id, jobId: job.id, name: source.name, createdAt: job.created_at }),
+  };
 }

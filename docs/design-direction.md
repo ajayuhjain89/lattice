@@ -1006,3 +1006,190 @@ and `ask-mobile.spec.ts` (inline markers, folded lattice, vertical axis, sheet i
 long exhibit), conflicts, many exhibits, partial, evidence-only, rate limit, supersession,
 failed, insufficient, ambiguous, unsupported, trace (asker, administrator, hidden),
 evidence and not-available.
+
+### D5 — Sources, Activity, Access and AI providers (2026-10-03, `phase/design-overhaul`)
+
+**Built.** The operational and administrative surfaces on the D1–D4 system, each with its
+own structure. Frontend only: no API, schema, authorization or backend change.
+
+- **Shared frame only** (`components/ops/OpsPage`): the admin width, a title with one
+  sentence under it, the back trail of a deep page, a view switch between sibling pages
+  (`ViewTabs`: Members · Audit log; Your questions · Organization runs), the administrator
+  gate, and a section heading. What sits under the head is each page's own structure.
+- **Sources — a live register** (`SourcesScreen`, `sync-model`). One headline sentence
+  built from the listing ("3 sources: 1 syncing now · 1 with failed records · 1 last fully
+  synced over a week ago · 1 never synced.") instead of stat cards, then a DataTable:
+  source (type glyph, name, key · connector, "Paused: not synced" when inactive), last sync
+  (status word + icon + finish time; a failed or interrupted run is the only fault, with
+  its code; a partial run is a warning icon, not red; the age of the last *full* sync only
+  when it adds information, in the time signal after a week), permissions (sentence form,
+  when access was last applied, default sensitivity), documents, failed records (count,
+  and an inline expansion with stage · code and each record by opaque reference) and
+  *Sync now*. Members get the same anatomy with "N documents you can read" and no action.
+  - *Sync now* keeps the real request. While pending, queued or running the button stays
+    focusable but inert (`aria-disabled`), the state is written beside it ("Queued since
+    09:10", "Syncing since 09:10", "Requested sync failed · code"), the listing is polled,
+    and the request's progress is announced in a polite live region derived from the
+    listing itself (requested → syncing → finished: outcome). A refused request is an
+    alert in the row. The toast only echoes.
+- **Activity — a chronology** (`ActivityScreen`). Your questions grouped by UTC day
+  (Today / Yesterday / weekday date, with the date and count), each at its time on a ruled
+  rail: status word, the question (opens its re-authorized trace) and *Ask again* (back in
+  the composer, unsent) — the same concept, words and destinations as Jump and the Ask
+  desk (`activity/questions.ts`). Kept to a reading width. Empty state says what Activity
+  records. **Organization runs** moved to its own page, `/activity/organization`
+  (administrators; also in Jump): a dense DataTable — when, member (links to their access),
+  status and code, model, duration, tokens, run details — under one boundary band
+  ("Questions, answers and evidence aren't visible to administrators").
+- **Access — members** (`AccessScreen`; a table down to 768 px, stacked on phones): *Find a member* (D2 Field + SearchInput; the
+  API's own `q` search, announced as "3 members shown"), then a DataTable: member (name,
+  e-mail in the ledger voice, role · Administrator), status (Active; Suspended / Removed
+  with an icon; "Managed by your identity provider"), clearance as a LevelMeter, accounts,
+  departments. No results is a quiet state naming what was typed.
+- **Access — a member** (`MemberScreen`): identity (name, e-mail, role, status,
+  administrator, identity-provider tag); the explanation as the page's lead in the record
+  voice (the accepted access sentences); actions or the refusal note (self, removed,
+  identity-provider lifecycle); the last write's result; then **How this access is made
+  up** — a ruled ledger of rule · value · what it gives (clearance, accounts, departments,
+  groups and channels with their origin and members, direct grants). Hidden private groups
+  and grants on unreadable documents are one inline boundary each — no name, id or count.
+  A suspended member keeps the ledger under a line saying none of it is in effect.
+- **Change access — Now → After** (`ChangeAccess`, `compare.ts`). Step 1 edits with the
+  D2 field family (radio and checkbox groups with help; a filter beyond eight choices; a
+  live "2 rules changed"). Step 2 is the review, built from the **preview endpoint's
+  effects** (the server's reading, not the form's): one row per rule — Now, After, items
+  added (+) or removed (−, struck through), and the direction in words (Gains / Loses /
+  Gains and loses) with a verdigris or vermilion margin bar — then the effect sentences,
+  the exact counts the API returns ("Among documents you can read: Gains 7 · Loses 3"),
+  the required reason (Field + TextArea) and *Apply change*. Focus moves to the review
+  heading, *Back* returns to *Review change* with the edit kept. A 409 is an alert with
+  *Close and review the latest* and Apply disabled. Suspend / Reactivate go straight to the
+  review (Suspend is the danger variant). Every write leaves a persistent result line on
+  the page (`role="status"`, the time, the audit phrases, a link to the audit log); the
+  toast only echoes.
+- **Grants**: document search on Field + SearchInput with Radio results (only documents
+  the reviewer can read), the verdict (can / can't, the deciding reasons), reason fields,
+  Revoke as the danger variant.
+- **Audit — an immutable ledger** (`AuditScreen`): "Entries can't be edited or deleted"
+  with a lock, then days under ink rules; each entry is time (ledger voice, seconds) on the
+  rail · action and subject · the change (effects, field-by-field details with values in
+  the ledger voice, or the document) · actor (member, operator tool or identity provider,
+  each with its icon) and the quoted reason. Keyset paging ("Show older changes", then
+  "No older changes."). No filters: the API has none.
+- **AI providers — the trust boundary** (`ProvidersScreen`, `egress-model`): a hatched
+  read-only band naming the audited commands (and linking the audit log); the policy as one
+  ruled line; then **What may leave Lattice** — the egress lattice, levels × recorded
+  providers grouped Generation / Embedding, every cell either filled (may be sent) or
+  hatched (not sent), each a named button ("Confidential data isn't sent to gemini ·
+  gemini-3.5-flash-lite: the AI data policy allows external APIs only up to Internal.");
+  one Tab stop, arrows / Home / End, the focused or hovered cell explained in a line under
+  it, Enter pins it. Then which levels never leave Lattice, and the provider ledger
+  (trust class with its meaning, approval as a LevelMeter, status, masked credential, data
+  terms). The cells follow the server's decision order using only returned fields; a
+  credential is not an input (tested).
+
+**Primitive changes.**
+- `Lattice`: `focusable="all"` (every non-empty cell is a keyboard stop), `colGroups`, and
+  `ground` (paper / sheet) so its row headers, now sticky inside a scrolling lattice, match
+  the surface under them.
+- `DataTable`: `short` columns keep label and value on one line when stacked on phones;
+  the name column never narrows below 11rem while the table is a table.
+- `Lattice` and `DataTable` scroll regions are positioned (see defects).
+- `Button`: `loading` is now `aria-busy` + `aria-disabled` with clicks ignored, not the
+  native `disabled` attribute (see defects); busy keeps the variant's look, danger too.
+- `Field`: the visually hidden "(required)" is gone — the control's own `required` is
+  announced; the name stays "Reason".
+- Formatting: `formatTime` (± seconds), `daysAgo`, `dayHeading`, `ageLabel`, `dayKey`;
+  `lib/chronology.groupByDay`; `lib/use-now` (ages read once per view).
+- Navigation: subpages may require a capability; *Organization runs* is one.
+
+**Removed (v1).** The four page tables and their stacked card lists (Sources ×2, Activity,
+Access, Providers) → DataTable; `Access.module.css` (669 lines) and the page modules
+rewritten; `AccessFrame` → `AdminGate`; `ReasonField` and both ad-hoc search inputs →
+Field / TextArea / SearchInput; the raw radio/checkbox lists → ChoiceGroup / Radio /
+Checkbox; the `Skeleton` primitive (grey bars; nothing used it any more — loading is rule
+skeletons and DataTable's own rows); the old section labels on these pages. `SectionLabel`
+remains only on sign-in (D6). The raw-px Stylelint rule now covers `ops`, `sources`,
+`activity`, `access` and `settings`.
+
+| Planned (§6.6–§6.9, D5 brief) | As built | Why |
+| ----------------------------- | -------- | --- |
+| Sources: a freshness *bar* | Words: the age of the last full sync, in the time signal after a week, shown only when it adds information | A bar's length reads as a score; the API gives one timestamp |
+| Failures expand inline | Inline, under the row, with stage · code totals and each record | As planned |
+| Activity: status filter (client-side) | Not built | Filtering one loaded page misleads once there are older pages |
+| Organization activity: a hatched question cell on every row | One boundary band over the runs | Hatching every row was decoration (the D4 lesson: one hatch per boundary) |
+| Organization activity on the Activity page | Its own page, `/activity/organization`, behind a view switch | Two different questions (mine vs the organization's runs) get two structures |
+| Member: access lattice (levels × reach) | A ruled ledger: rule · value · what it gives | A levels × accounts grid would compute authorization in the browser; the D5 brief forbids that and forbids a lattice for its own sake |
+| Egress lattice: a "Stays in Lattice" column | A sentence naming the levels no provider may receive, plus the readers rule | A column that is always filled is decoration |
+| Provider credential problems in ochre | A warning icon and words, no signal colour | Ochre means time; a broken reference isn't a time state |
+| Audit: filters | None | The audit endpoint has no filter parameters |
+
+**Accessibility.** Tables keep explicit roles when stacked; chronologies are headed lists;
+every row action is a named button reachable by Tab in reading order; busy buttons keep
+focus; sync progress and write results are announced once (status), refusals are alerts;
+dialogs move focus to the review and back, and return it to their opener; the egress
+lattice is one Tab stop with named cells; colour never carries a state alone (icons and
+words for run status, member status, gain / loss, permitted / not sent; dashed vs solid
+cells, kept in forced colours); nothing animates under reduced motion; 200 % zoom (640 CSS
+px) and 320 px reflow without page scroll; 44 px touch targets on phones.
+
+**Security and privacy invariants checked.** Administrator ≠ content: organization runs
+show no question, answer or evidence (asserted), the administrator trace is unchanged.
+D-17: no change, suspend, grant or revoke control on your own page (asserted; the API
+still refuses). D-18: private groups and unreadable grants appear only as one
+acknowledgement each, never named, listed or counted (asserted, unit and browser). Audit:
+only what the API returns is shown; pages follow its cursor only; a removed member is "A
+former member" without a link. Members are found only through the existing `q` search;
+non-administrators get one not-available page and no request is made. Lifecycle of
+identity-provider members stays with the identity provider. Counts appear only as the
+preview returns them. The egress lattice adds no permission: credentials don't change a
+cell (asserted), unknown classes fail closed, the readers rule is stated.
+
+**Defects found by the new tests and fixed.**
+- `Button`'s `loading` used the native `disabled` attribute, so focus fell to the page mid
+  request (Sync now, Apply change, Grant, Revoke).
+- Visually hidden labels inside a scrolling `Lattice` or `DataTable` escaped the scroll
+  region (no positioned ancestor) and widened the page once it scrolled; found by the
+  eight-provider lattice at 390 px.
+- A future-dated event (a clock ahead of the browser's) was headed "Today"; days ahead now
+  get their date.
+- `Field` named required controls "Reason (required)" while also announcing `required`.
+- `composes` in a descendant selector broke the production build again (D4 lesson).
+- At 1024 px fixed column widths crushed the Sources name column to one letter per line
+  (and cramped the provider ledger); found in the five-width review, not by a test.
+- A first take on the sticky lattice headers set their ground as a `:root` token, which
+  froze it to the light paper; the dark-map specimen's axe pass caught it.
+
+**Contract observations (no change made; none blocks the approved UX).**
+- `GET /v1/admin/providers` returns the recorded configuration, not each provider's
+  effective level or the implementation-declared trust class the server also compares.
+  A filled cell is therefore what the recorded configuration allows; the server can still
+  refuse at call time (a declared-class mismatch, a missing credential), never send more.
+- `GET /v1/activity` doesn't say which traces would now hide their answer; Activity shows
+  only the question and status, and the trace decides when opened.
+- No list endpoint filters by status, clearance or audit action; the only filter built is
+  the members `q` search the API already has.
+
+**Verification.** Local gate, run sequentially: lint (ESLint + Stylelint), typecheck, 162
+unit tests (was 128; new: `sync-model`, `compare`, `egress-model`, the Sources, Activity,
+Access, Audit and Providers screens, time formatting), production build, and the full
+Playwright run with one worker — 434 passed, 48 skipped by project (desktop-only /
+phone-only), 0 failed. New or rewritten browser specs: `sources` (healthy / partial /
+failed / never synced, the queued → running → finished sync with its announcements and an
+inert, still-focused button, a refused request, failed records, empty, five widths and
+320 px with long titles), `activity` (chronology, trace, the hidden-answer trace, *Ask
+again*, empty, organization runs and the members' refusal, widths), `access` (review with
+Now → After and exact counts, Back, conflict, self-change refusal, member search and no
+results, grants, audit chronology, identity events, cursor paging, widths with forty
+members and a long-named member), `access-mobile`, `providers` (read-only, the lattice's
+keyboard walk and pinned explanation, hatched vs solid cells in forced colours, eight
+providers at every width as a named scroll region), `operations` (200 % zoom on every D5
+page, axe at rest, forced-colour signals, reduced motion, Tab order of row actions) and
+`operations-mobile` (Sync now reachable above the tab bar with a 44 px target, the member
+ledger, sticky lattice levels); the existing safety, identity, shell, keyboard and a11y
+suites updated for the new names. Reviewed at 1440/1280/1024/768/390: Sources (healthy,
+failed with records open, member, empty), Activity (populated, empty, organization runs),
+Access (members with forty rows, member, long-named member, suspended, review with three
+rules, applied result), audit (sixty events), providers (three and eight providers) and
+the providers refusal; phone views of Sources, the member and providers. No backend,
+API or shared contract changed, so backend CI was not run.

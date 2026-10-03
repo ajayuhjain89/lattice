@@ -47,12 +47,16 @@ function Content({ icon, iconEnd, loading, children }: { icon?: ReactNode; iconE
 }
 
 export interface ButtonProps extends Common, ButtonHTMLAttributes<HTMLButtonElement> {
-  /** Busy: the label stays (width doesn't change), the icon becomes a spinner, clicks stop. */
+  /**
+   * Busy: the label stays (width doesn't change), the icon becomes a spinner, clicks stop.
+   * The button stays focusable (aria-disabled, not `disabled`), so keyboard focus isn't
+   * dropped to the page while the request runs.
+   */
   loading?: boolean;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = "secondary", size = "md", icon, iconEnd, loading = false, className, children, disabled, type, ...rest },
+  { variant = "secondary", size = "md", icon, iconEnd, loading = false, className, children, disabled, type, onClick, ...rest },
   ref,
 ) {
   return (
@@ -60,8 +64,16 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type ?? "button"}
       className={classes(variant, size, !children, className)}
-      disabled={disabled || loading}
+      disabled={disabled}
       aria-busy={loading || undefined}
+      aria-disabled={loading || undefined}
+      onClick={(event) => {
+        if (loading) {
+          event.preventDefault();
+          return;
+        }
+        onClick?.(event);
+      }}
       {...rest}
     >
       <Content icon={icon} iconEnd={iconEnd} loading={loading}>

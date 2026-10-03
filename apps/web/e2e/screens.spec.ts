@@ -13,8 +13,16 @@ import {
   MANY_EXHIBITS,
   MANY_TO_MANY,
   RATE_LIMITED,
+  auditPages,
   EV,
   EVIDENCE_ONLY,
+  FIXTURE_NOW,
+  MANY_MEMBERS,
+  MEMBER_MAYA,
+  MEMBER_WIDE,
+  PREVIEW_MIXED,
+  PROVIDERS_MANY,
+  SOURCES_ADMIN_LONG,
   FAILED,
   ID,
   INSUFFICIENT,
@@ -28,13 +36,19 @@ import {
 } from "../src/test/fixtures";
 
 import { askFor, expectNoHorizontalOverflow, openAsk, WIDTHS } from "./helpers";
-import { mockApi } from "./mock-api";
+import { mockApi, type MockOptions } from "./mock-api";
 
 const only = process.env.SCREENS?.split(",");
 const widths = process.env.SCREEN_WIDTHS ? process.env.SCREEN_WIDTHS.split(",").map(Number) : [...WIDTHS];
 
 // Overlays (drawers, sheets) are fixed to the viewport: full-page captures distort them.
 const OVERLAYS = new Set(["ask-inspector", "ask-inspector-long", "access-change"]);
+
+/** The operational screens read ages and day headings: they render at the fixtures' "now". */
+async function at(page: Page, options: MockOptions = {}) {
+  await page.clock.setFixedTime(new Date(FIXTURE_NOW));
+  return mockApi(page, options);
+}
 
 // SCREENS_DIR writes elsewhere (e.g. a review folder) without touching the harness output.
 const DIR = process.env.SCREENS_DIR ?? "e2e/screens";
@@ -161,56 +175,99 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
     await page.getByRole("heading", { name: "This evidence isn't available" }).waitFor();
   },
   providers: async (page) => {
-    await mockApi(page, { me: ME_LENA });
+    await at(page, { me: ME_LENA });
     await page.goto("/settings/providers");
-    await page.getByRole("heading", { name: "Providers", exact: true }).waitFor();
+    await page.getByTestId("egress-lattice").waitFor();
+  },
+  "providers-many": async (page) => {
+    await at(page, { me: ME_LENA, providers: PROVIDERS_MANY });
+    await page.goto("/settings/providers");
+    await page.getByTestId("egress-lattice").waitFor();
+    await page.getByRole("button", { name: /^Confidential data isn't sent to anthropic/ }).focus();
   },
   "sources-member": async (page) => {
-    await mockApi(page);
+    await at(page);
     await page.goto("/sources");
-    await page.getByRole("heading", { name: "Your sources" }).waitFor();
+    await page.getByRole("table", { name: "Sources you can read from" }).and(page.locator(":not([aria-busy])")).waitFor();
   },
   "sources-admin": async (page) => {
-    await mockApi(page, { me: ME_LENA });
+    await at(page, { me: ME_LENA });
     await page.goto("/sources");
-    await page.getByRole("button", { name: "Show records" }).click();
+    await page.getByTestId("register-summary").waitFor();
+  },
+  "sources-failed": async (page) => {
+    await at(page, { me: ME_LENA, adminSources: SOURCES_ADMIN_LONG });
+    await page.goto("/sources");
+    await page.getByRole("button", { name: "Show failed records: Halden Support (Zendesk)" }).click();
     await page.getByText("rec_3f9a0c1d2e4b5a67").waitFor();
   },
+  "sources-empty": async (page) => {
+    await at(page, { me: ME_LENA, adminSources: { sources: [] } });
+    await page.goto("/sources");
+    await page.getByRole("heading", { name: "No sources are connected" }).waitFor();
+  },
   "activity-member": async (page) => {
-    await mockApi(page);
+    await at(page);
     await page.goto("/activity");
-    await page.getByRole("heading", { name: "Your questions" }).waitFor();
+    await page.getByRole("heading", { name: /^Today/ }).waitFor();
+  },
+  "activity-empty": async (page) => {
+    await at(page, { activity: { items: [] } });
+    await page.goto("/activity");
+    await page.getByRole("heading", { name: "You haven't asked anything yet" }).waitFor();
   },
   "activity-admin": async (page) => {
-    await mockApi(page, { me: ME_LENA });
-    await page.goto("/activity");
-    await page.getByRole("heading", { name: "Organization activity" }).waitFor();
+    await at(page, { me: ME_LENA });
+    await page.goto("/activity/organization");
+    await page.getByRole("table", { name: "Organization runs (operational view)" }).and(page.locator(":not([aria-busy])")).waitFor();
   },
   "access-members": async (page) => {
-    await mockApi(page, { me: ME_LENA });
+    await at(page, { me: ME_LENA, members: MANY_MEMBERS });
     await page.goto("/access");
-    await page.getByRole("heading", { name: "Members", exact: true }).waitFor();
+    await page.getByRole("link", { name: "Member 02" }).waitFor();
   },
   "access-member": async (page) => {
-    await mockApi(page, { me: ME_LENA });
+    await at(page, { me: ME_LENA });
     await page.goto(`/access/members/${ID.maya}`);
-    await page.getByTestId("access-summary").waitFor();
+    await page.getByTestId("reach").waitFor();
+  },
+  "access-member-wide": async (page) => {
+    await at(page, { me: ME_LENA, member: { [MEMBER_WIDE.member.id]: MEMBER_WIDE } });
+    await page.goto(`/access/members/${MEMBER_WIDE.member.id}`);
+    await page.getByTestId("reach").waitFor();
+  },
+  "access-suspended": async (page) => {
+    await at(page, { me: ME_LENA, member: { [ID.maya]: { ...MEMBER_MAYA, member: { ...MEMBER_MAYA.member, status: "suspended" } } } });
+    await page.goto(`/access/members/${ID.maya}`);
+    await page.getByTestId("reach").waitFor();
   },
   "access-change": async (page) => {
-    await mockApi(page, { me: ME_LENA });
+    await at(page, { me: ME_LENA, preview: PREVIEW_MIXED });
+    await page.goto(`/access/members/${ID.maya}`);
+    await page.getByRole("button", { name: "Change access" }).click();
+    await page.getByRole("checkbox", { name: "Kestrel Bank" }).check();
+    await page.getByRole("checkbox", { name: "Sales" }).uncheck();
+    await page.getByRole("radio", { name: "Confidential" }).check();
+    await page.getByRole("button", { name: "Review change" }).click();
+    await page.getByRole("table", { name: "Now and after this change, rule by rule" }).waitFor();
+  },
+  "access-applied": async (page) => {
+    await at(page, { me: ME_LENA });
     await page.goto(`/access/members/${ID.maya}`);
     await page.getByRole("button", { name: "Change access" }).click();
     await page.getByRole("checkbox", { name: "Kestrel Bank" }).check();
     await page.getByRole("button", { name: "Review change" }).click();
-    await page.getByText("Maya Okafor will gain access to Kestrel Bank content.").waitFor();
+    await page.getByRole("textbox", { name: "Reason" }).fill("Covering Kestrel during the renewal");
+    await page.getByRole("button", { name: "Apply change" }).click();
+    await page.getByTestId("applied-change").waitFor();
   },
   "access-audit": async (page) => {
-    await mockApi(page, { me: ME_LENA });
+    await at(page, { me: ME_LENA, audit: (before) => auditPages(before) });
     await page.goto("/access/audit");
-    await page.getByText("Assigned Kestrel Bank").waitFor();
+    await page.getByTestId("audit-entry").first().waitFor();
   },
   "providers-forbidden": async (page) => {
-    await mockApi(page, { providers: "forbidden" });
+    await at(page, { providers: "forbidden" });
     await page.goto("/settings/providers");
     await page.getByRole("heading", { name: /administrator access/ }).waitFor();
   },

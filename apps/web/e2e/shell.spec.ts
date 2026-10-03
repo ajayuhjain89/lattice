@@ -311,7 +311,7 @@ test.describe("Jump", () => {
     await mockApi(page, { me: ME_LENA });
     await page.goto("/ask");
     await page.keyboard.press(await jumpChord(page));
-    await expect(page.getByRole("group", { name: "Go to" }).getByRole("option")).toHaveText(["Ask", "Activity", "Sources", "Access", "AI providers", "Audit log, Access"]);
+    await expect(page.getByRole("group", { name: "Go to" }).getByRole("option")).toHaveText(["Ask", "Activity", "Sources", "Access", "AI providers", "Organization runs, Activity", "Audit log, Access"]);
     // No member is listed, or requested, before anything is typed.
     expect(admin).toEqual([]);
     const input = page.getByRole("combobox", { name: "Jump to" });

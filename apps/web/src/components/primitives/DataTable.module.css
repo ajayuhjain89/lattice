@@ -10,7 +10,9 @@
   --cell-pad-y: var(--space-2);
 }
 
+/* Positioned, so visually hidden labels inside are clipped with the table when it scrolls. */
 .scroll {
+  position: relative;
   overflow-x: auto;
   min-width: 0;
 }
@@ -123,8 +125,9 @@
   padding-top: var(--space-3);
 }
 
-/* Sticky name column while the table scrolls inside itself. */
+/* Sticky name column while the table scrolls inside itself; it never narrows below a name's width. */
 .primary {
+  min-width: 11rem;
   position: sticky;
   left: 0;
   z-index: var(--z-sticky);
@@ -171,6 +174,7 @@
   }
 
   .wrap[data-stack="1024"] .primary {
+    min-width: 0;
     position: static;
     display: block;
     background: none;
@@ -222,6 +226,7 @@
   }
 
   .wrap[data-stack="768"] .primary {
+    min-width: 0;
     position: static;
     display: block;
     background: none;
@@ -240,9 +245,9 @@
   }
 }
 
-/* Narrow phones: labels sit above their values. */
+/* Narrow phones: labels sit above their values, except short ones. */
 @media (width < 480px) {
-  .wrap:not([data-stack="never"]) .cell {
+  .wrap:not([data-stack="never"]) .cell:not(.short) {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
   }

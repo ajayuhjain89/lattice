@@ -1,282 +1,296 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, CircleSlash, Lock } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleSlash } from "lucide-react";
+import Link from "next/link";
+import { useMemo, useState } from "react";
 
 import { useProviders } from "@/api/queries";
 import { isApiError } from "@/api/errors";
 import type { EgressOut, ProviderOut } from "@/api/types";
-import { Icon } from "@/components/primitives/icons";
-import { SectionLabel } from "@/components/primitives/SectionLabel";
-import { SkeletonLines } from "@/components/primitives/Skeleton";
+import { BoundaryBand } from "@/components/primitives/Boundary";
+import { DataTable, type Column } from "@/components/primitives/DataTable";
+import { cellKey, Lattice, LatticeLegend, type LatticeAxis, type LatticeCell } from "@/components/primitives/Lattice";
+import { LEVELS, LevelMeter, type Level } from "@/components/primitives/LevelMeter";
+import { StateBlock } from "@/components/primitives/StateBlock";
+import { StatusMark } from "@/components/primitives/StatusMark";
+import { AdminGate, OpsHead, OpsPage, OpsSection } from "@/components/ops/OpsPage";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { ErrorState } from "@/components/states/ErrorState";
-import { NotAvailable } from "@/components/states/NotAvailable";
-import { humanize, levelLabel, retentionLabel, trustClassLabel } from "@/lib/format";
+import { humanize, levelLabel, retentionLabel } from "@/lib/format";
 
+import { byPurpose, neverSent, providerKey, readCell, trustClassMeaning, trustClassName } from "./egress-model";
 import styles from "./ProvidersScreen.module.css";
 
 /**
- * GET /v1/admin/providers, read-only. There is no provider-configuration write API: every
- * change is an audited administrative command, so this page offers no controls that would
- * pretend otherwise. Credentials are masked by the API (state and scheme, never a value or
- * reference).
+ * AI providers (design-direction §6.9): the boundary between Lattice and the models it may
+ * call. GET /v1/admin/providers, read-only -- there is no write API: every change is an
+ * audited operator command, so the page has no control that would pretend otherwise.
+ * Credentials are masked by the API (state and scheme, never a value or reference), and
+ * none of them changes what a provider may receive.
  */
 export function ProvidersScreen() {
   const { isAdmin, me } = useWorkspace();
   // The API decides; a non-admin still gets its 403 if they reach this page.
-  const query = useProviders(true);
-  const forbidden = !isAdmin || (query.isError && isApiError(query.error) && query.error.status === 403);
+  const query = useProviders(isAdmin);
+  const forbidden = query.isError && isApiError(query.error) && query.error.isForbidden;
 
   return (
-    <>
-      <div className={styles.main}>
-        <div className={styles.column}>
-          {forbidden ? (
-            <NotAvailable
-              label="Administrators only"
-              title="You need administrator access to view this page"
-              body="AI provider settings are visible to your organization's administrators."
-              action={{ href: "/ask", label: "Back to Ask" }}
-            />
-          ) : (
-            <>
-              <header className={styles.head}>
-                <h1 className={styles.title}>AI providers</h1>
-                <p className={styles.deck}>
-                  How {me.organization.name}&apos;s AI features are configured, and the most sensitive data each provider may
-                  receive.
-                </p>
-                <div className={styles.readonly}>
-                  <span className={styles.readonlyIcon}>
-                    <Icon as={Lock} />
-                  </span>
-                  <p>
-                    <span className={styles.readonlyTitle}>Read-only</span>
-                    <span className={styles.readonlyBody}>
-                      Providers, approvals, credentials and the AI data policy are changed by an administrator with the
-                      audited <code>lattice provider</code> and <code>lattice org egress</code> commands. Each change
-                      records who made it and why.
-                    </span>
-                  </p>
-                </div>
-              </header>
-              {query.isError ? (
-                <ErrorState error={query.error} title="Couldn't load provider settings" onRetry={() => query.refetch()} retrying={query.isFetching} />
-              ) : !query.data ? (
-                <div aria-busy="true">
-                  <span className="visually-hidden" role="status">
-                    Loading provider settings
-                  </span>
-                  <SkeletonLines widths={["100%", "100%", "100%", "60%"]} />
-                </div>
-              ) : (
-                <>
-                  <Policy egress={query.data.egress} />
-                  <Providers providers={query.data.providers} />
-                </>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </>
+    <OpsPage aria-labelledby="page-title">
+      <AdminGate forbidden={forbidden} body="AI provider settings are visible to your organization's administrators.">
+        <OpsHead title="AI providers" deck={`Which AI providers ${me.organization.name}'s data may reach, at which sensitivity — and what never leaves Lattice.`} />
+        <BoundaryBand>
+          <strong>Read-only here.</strong> Providers, approvals, credentials and the AI data policy change only through the audited{" "}
+          <code>lattice provider</code> and <code>lattice org egress</code> commands, run by an operator on the server. Each change is
+          recorded in the <Link href="/access/audit">audit log</Link> with who made it and why.
+        </BoundaryBand>
+        {query.isError ? (
+          <ErrorState error={query.error} title="Couldn't load provider settings" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        ) : !query.data ? (
+          <div className={styles.skeleton} aria-busy="true">
+            <span className="visually-hidden" role="status">
+              Loading provider settings
+            </span>
+            {[0, 1, 2, 3].map((i) => (
+              <span key={i} aria-hidden="true" />
+            ))}
+          </div>
+        ) : (
+          <>
+            <Policy egress={query.data.egress} />
+            {query.data.providers.length === 0 ? (
+              <StateBlock family="quiet" heading="No AI providers are configured">
+                <p>Nothing leaves Lattice. Search still works, and without a generation provider Ask returns the sources it finds as evidence only.</p>
+              </StateBlock>
+            ) : (
+              <>
+                <Egress egress={query.data.egress} providers={query.data.providers} />
+                <Providers providers={query.data.providers} />
+              </>
+            )}
+          </>
+        )}
+      </AdminGate>
+    </OpsPage>
   );
 }
 
+/* --- the policy ------------------------------------------------------------------------- */
+
 function Policy({ egress }: { egress: EgressOut }) {
   return (
-    <section className={styles.section} aria-labelledby="policy-label">
-      <SectionLabel id="policy-label">AI data policy</SectionLabel>
+    <OpsSection id="policy-heading" title="AI data policy">
       <dl className={styles.policy}>
-        <div className={styles.policyItem}>
-          <dt>External providers</dt>
-          <dd>
-            <span className={styles.policyValue}>Up to {levelLabel(egress.external_egress_level)}</span>
-            <span className={styles.policyNote}>Third-party APIs, when approved</span>
-          </dd>
+        <div>
+          <dt>External APIs</dt>
+          <dd>{`Up to ${levelLabel(egress.external_egress_level)}`}</dd>
         </div>
-        <div className={styles.policyItem}>
+        <div>
           <dt>Organization-controlled</dt>
-          <dd>
-            <span className={styles.policyValue}>
-              {egress.organization_controlled_level ? `Up to ${levelLabel(egress.organization_controlled_level)}` : "Not allowed"}
-            </span>
-            <span className={styles.policyNote}>Your own model infrastructure</span>
-          </dd>
+          <dd>{egress.organization_controlled_level ? `Up to ${levelLabel(egress.organization_controlled_level)}` : "Not allowed"}</dd>
         </div>
-        <div className={styles.policyItem}>
+        <div>
+          <dt>Local</dt>
+          <dd>Each provider&apos;s own approval</dd>
+        </div>
+        <div>
           <dt>Questions default to</dt>
           <dd>
-            <span className={styles.policyValue}>{levelLabel(egress.default_query_sensitivity)}</span>
+            {levelLabel(egress.default_query_sensitivity)}
             <span className={styles.policyNote}>Askers can only raise this</span>
           </dd>
         </div>
-        <div className={styles.policyItem}>
+        <div>
           <dt>Data origin</dt>
           <dd>
-            <span className={styles.policyValue}>{humanize(egress.data_origin)}</span>
+            {humanize(egress.data_origin)}
             <span className={styles.policyNote}>{egress.data_origin === "synthetic" ? "Generated test data" : "Recorded by the operator"}</span>
           </dd>
         </div>
       </dl>
-      <p className={styles.note}>
-        A credential never widens what a provider may receive. The provider&apos;s trust class, its approval and this policy
-        decide; content above the allowed level stays out of the prompt and is shown to readers as evidence only.
-      </p>
-    </section>
+    </OpsSection>
   );
 }
 
-function Status({ p }: { p: ProviderOut }) {
-  return p.enabled ? (
-    <span className={`${styles.state} ${styles.ok}`}>
-      <Icon as={CheckCircle2} size={14} />
-      Enabled
-    </span>
-  ) : (
-    <span className={`${styles.state} ${styles.off}`}>
-      <Icon as={CircleSlash} size={14} />
-      Disabled
-    </span>
+/* --- the egress lattice ---------------------------------------------------------------- */
+
+const LEVEL_ROWS: LatticeAxis[] = LEVELS.map((l) => ({ key: l, label: levelLabel(l), name: `${levelLabel(l)} data` }));
+
+function Egress({ egress, providers }: { egress: EgressOut; providers: ProviderOut[] }) {
+  const groups = useMemo(() => byPurpose(providers), [providers]);
+  const ordered = groups.flatMap((g) => g.providers);
+  const cols: LatticeAxis[] = ordered.map((p) => ({
+    key: providerKey(p),
+    label: p.provider,
+    name: `${p.provider} · ${p.model} (${humanize(p.purpose).toLowerCase()}, ${trustClassName(p.deployment).toLowerCase()}${p.purpose === "generation" && !p.enabled ? ", disabled" : ""})`,
+    detail: trustClassName(p.deployment),
+  }));
+  const readings = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof readCell>>();
+    for (const p of ordered) for (const level of LEVELS) map.set(cellKey(level, providerKey(p)), readCell(egress, p, level));
+    return map;
+  }, [egress, ordered]);
+  // Every cell is a known relationship: permitted (filled) or a boundary (hatched). None is empty.
+  const cells = useMemo(() => new Map<string, LatticeCell>([...readings].map(([k, r]) => [k, r.permitted ? "filled" : "hatched"])), [readings]);
+  const sentence = (row: string, col: string) => {
+    const r = readings.get(cellKey(row, col));
+    const p = ordered.find((x) => providerKey(x) === col);
+    if (!r || !p) return "";
+    return `${levelLabel(row)} data ${r.permitted ? "may be sent to" : "isn't sent to"} ${p.provider} · ${p.model}: ${r.because}.`;
+  };
+  const [hover, setHover] = useState<{ row: string; col: string } | null>(null);
+  const [pinned, setPinned] = useState<{ row: string; col: string } | null>(null);
+  const shown = hover ?? pinned;
+  const kept = neverSent(egress, providers);
+
+  return (
+    <OpsSection id="egress-heading" title="What may leave Lattice">
+      <p className={styles.note}>
+        Each cell is one data level and one provider: filled where the AI data policy and the provider&apos;s approval allow that level to be
+        sent, hatched where they don&apos;t. A credential never changes a cell.
+      </p>
+      <div className={styles.egress} data-testid="egress-lattice">
+        <Lattice
+          caption="Which data levels each AI provider may receive"
+          corner="Data level"
+          headers="interface"
+          rows={LEVEL_ROWS}
+          cols={cols}
+          cells={cells}
+          colGroups={groups.map((g) => ({ key: g.purpose, label: humanize(g.purpose), span: g.providers.length }))}
+          focusable="all"
+          ground="sheet"
+          cellLabel={(r, c) => sentence(r.key, c.key)}
+          onActivate={(row, col) => setPinned((current) => (current?.row === row && current.col === col ? null : { row, col }))}
+          onHighlight={setHover}
+          highlight={shown ?? undefined}
+          selected={pinned ?? undefined}
+          legend={
+            <LatticeLegend
+              items={[
+                { state: "filled", label: "may be sent" },
+                { state: "hatched", label: "not sent — kept inside Lattice" },
+              ]}
+            />
+          }
+        />
+        <p className={styles.why} data-testid="egress-why">
+          {shown ? sentence(shown.row, shown.col) : "Point at or move to a cell to see why it holds."}
+        </p>
+      </div>
+      <div className={styles.keptBlock} data-testid="never-sent">
+        <p className={styles.kept}>
+          {kept.length > 0
+            ? `${listLevels(kept)} content is never sent to an AI provider: it stays in Lattice.`
+            : "Every level may reach at least one provider, each only within its own approval."}
+        </p>
+        <p className={styles.note}>
+          Content held back from a model stays in Lattice and is shown, as evidence only, to the people allowed to read it. This policy is
+          about models, not people: each person still sees only what they may read.
+        </p>
+      </div>
+    </OpsSection>
+  );
+}
+
+const listLevels = (levels: readonly Level[]) =>
+  levels.length <= 1 ? levels.map(levelLabel).join("") : `${levels.slice(0, -1).map(levelLabel).join(", ")} and ${levelLabel(levels.at(-1)!)}`;
+
+/* --- the provider ledger ---------------------------------------------------------------- */
+
+function Providers({ providers }: { providers: ProviderOut[] }) {
+  const ordered = byPurpose(providers).flatMap((g) => g.providers);
+  const columns: Column<ProviderOut>[] = [
+    {
+      key: "provider",
+      header: "Provider",
+      primary: true,
+      cell: (p) => (
+        <span className={styles.stack}>
+          <span>{p.provider}</span>
+          <span className={styles.model}>
+            {p.model}
+            {p.endpoint_configured ? " · custom endpoint" : ""}
+          </span>
+        </span>
+      ),
+    },
+    { key: "purpose", header: "Purpose", short: true, width: "7rem", cell: (p) => humanize(p.purpose) },
+    {
+      key: "trust",
+      header: "Trust class",
+      cell: (p) => (
+        <span className={styles.stack}>
+          <span>{trustClassName(p.deployment)}</span>
+          <span className={styles.secondary}>{trustClassMeaning(p.deployment)}</span>
+        </span>
+      ),
+    },
+    {
+      key: "approval",
+      header: "Approved up to",
+      width: "10rem",
+      cell: (p) => (
+        <span className={styles.stack}>
+          {LEVELS.includes(p.approved_for_level as Level) ? <LevelMeter level={p.approved_for_level as Level} /> : humanize(p.approved_for_level)}
+          <span className={styles.secondary}>{p.explicitly_approved ? "Explicitly approved" : "Default approval"}</span>
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      short: true,
+      width: "7rem",
+      cell: (p) =>
+        p.enabled ? (
+          <StatusMark tone="neutral" icon={CheckCircle2}>
+            Enabled
+          </StatusMark>
+        ) : (
+          <StatusMark tone="neutral" icon={CircleSlash}>
+            Disabled
+          </StatusMark>
+        ),
+    },
+    { key: "credential", header: "Credential", width: "11rem", cell: (p) => <Credential p={p} /> },
+    {
+      key: "terms",
+      header: "Data terms",
+      width: "11rem",
+      cell: (p) => (
+        <span className={styles.stack}>
+          <span>{retentionLabel(p.retention_mode)}</span>
+          <span className={styles.secondary}>{p.training_opt_out ? "Training opt-out" : "May use submitted data"}</span>
+        </span>
+      ),
+    },
+  ];
+  return (
+    <OpsSection id="providers-heading" title="Providers" count={`${providers.length.toLocaleString("en-GB")} recorded`}>
+      <DataTable caption="Recorded AI providers (read-only)" columns={columns} rows={ordered} rowKey={providerKey} />
+      <p className={styles.note}>
+        A credential is how Lattice calls a provider. It never raises a provider&apos;s trust class, its approval or the levels it may
+        receive; its value is never shown.
+      </p>
+    </OpsSection>
   );
 }
 
 function Credential({ p }: { p: ProviderOut }) {
   const c = p.credential;
-  if (c.state === "none") return <span className={styles.off}>None</span>;
+  if (c.state === "none") return <span className={styles.secondary}>None recorded</span>;
   return (
-    <>
-      <span className={`${styles.state} ${c.resolvable ? styles.ok : styles.warn}`}>
-        <Icon as={c.resolvable ? CheckCircle2 : AlertTriangle} size={14} />
-        {c.resolvable ? "Active" : "Active · doesn't resolve"}
-      </span>
-      <span className={styles.secondary}>
-        {[c.source ? `${c.source} reference` : null, c.data_use ? `${humanize(c.data_use)} data use` : null].filter(Boolean).join(" · ") ||
-          "Value never shown"}
-      </span>
-    </>
-  );
-}
-
-function Approval({ p }: { p: ProviderOut }) {
-  return (
-    <>
-      <span className={styles.primary}>Up to {levelLabel(p.approved_for_level)}</span>
-      <span className={styles.secondary}>{p.explicitly_approved ? "Explicitly approved" : "Default approval"}</span>
-    </>
-  );
-}
-
-function Terms({ p }: { p: ProviderOut }) {
-  return (
-    <>
-      <span className={styles.primary}>{retentionLabel(p.retention_mode)}</span>
-      <span className={styles.secondary}>{p.training_opt_out ? "Training opt-out" : "No training opt-out"}</span>
-    </>
-  );
-}
-
-function byPurpose(providers: ProviderOut[]): [string, ProviderOut[]][] {
-  const groups = new Map<string, ProviderOut[]>();
-  for (const p of providers) groups.set(p.purpose, [...(groups.get(p.purpose) ?? []), p]);
-  return [...groups.entries()];
-}
-
-function Providers({ providers }: { providers: ProviderOut[] }) {
-  return (
-    <section className={styles.section} aria-labelledby="providers-label">
-      <SectionLabel id="providers-label" meta={`${providers.length} configured`}>
-        Providers
-      </SectionLabel>
-      {providers.length === 0 ? (
-        <div className={styles.empty}>
-          <p className={styles.emptyTitle}>No AI providers are configured</p>
-          <p>Search still works. Without a generation provider, Ask returns the sources it finds as evidence only.</p>
-        </div>
+    <span className={styles.stack}>
+      {c.resolvable ? (
+        <span>Active</span>
       ) : (
-        <>
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <caption className="visually-hidden">Configured AI providers (read-only)</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Provider · model</th>
-                  <th scope="col">Trust class</th>
-                  <th scope="col">Approved for</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Credential</th>
-                  <th scope="col">Data terms</th>
-                </tr>
-              </thead>
-              {byPurpose(providers).map(([purpose, rows]) => (
-                <tbody key={purpose}>
-                  <tr className={styles.groupRow}>
-                    <th scope="rowgroup" colSpan={6}>
-                      {humanize(purpose)}
-                    </th>
-                  </tr>
-                  {rows.map((p) => (
-                    <tr key={`${p.purpose}-${p.provider}-${p.model}`}>
-                      <td>
-                        <span className={styles.primary}>{p.provider}</span>
-                        <span className={`${styles.secondary} ${styles.model}`}>
-                          {p.model}
-                          {p.endpoint_configured ? " · custom endpoint" : ""}
-                        </span>
-                      </td>
-                      <td>{trustClassLabel(p.deployment)}</td>
-                      <td>
-                        <Approval p={p} />
-                      </td>
-                      <td>
-                        <Status p={p} />
-                      </td>
-                      <td>
-                        <Credential p={p} />
-                      </td>
-                      <td>
-                        <Terms p={p} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              ))}
-            </table>
-          </div>
-          <ul className={styles.cards} aria-label="Configured AI providers (read-only)">
-            {providers.map((p) => (
-              <li key={`${p.purpose}-${p.provider}-${p.model}`} className={styles.card}>
-                <span>
-                  <span className={styles.primary}>
-                    {p.provider} · {humanize(p.purpose)}
-                  </span>
-                  <span className={styles.secondary}>{p.model}</span>
-                </span>
-                <dl>
-                  <dt>Trust class</dt>
-                  <dd>{trustClassLabel(p.deployment)}</dd>
-                  <dt>Approved for</dt>
-                  <dd>
-                    <Approval p={p} />
-                  </dd>
-                  <dt>Status</dt>
-                  <dd>
-                    <Status p={p} />
-                  </dd>
-                  <dt>Credential</dt>
-                  <dd>
-                    <Credential p={p} />
-                  </dd>
-                  <dt>Data terms</dt>
-                  <dd>
-                    <Terms p={p} />
-                  </dd>
-                </dl>
-              </li>
-            ))}
-          </ul>
-        </>
+        <StatusMark tone="neutral" icon={AlertTriangle}>
+          Active · doesn&apos;t resolve
+        </StatusMark>
       )}
-    </section>
+      <span className={styles.secondary}>
+        {[c.source ? `${c.source} reference` : null, c.data_use ? `${humanize(c.data_use)} data use` : null].filter(Boolean).join(" · ") || "Value never shown"}
+      </span>
+    </span>
   );
 }

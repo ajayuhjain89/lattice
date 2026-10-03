@@ -34,7 +34,11 @@ describe("Button", () => {
     );
     const button = screen.getByRole("button", { name: "Syncing" });
     expect(button).toHaveAttribute("aria-busy", "true");
-    expect(button).toBeDisabled();
+    // Inert but focusable: focus isn't dropped to the page while it works.
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button).not.toBeDisabled();
+    button.focus();
+    expect(button).toHaveFocus();
     await userEvent.click(button);
     expect(onClick).not.toHaveBeenCalled();
   });
@@ -52,7 +56,7 @@ describe("Field", () => {
         {(c) => <TextInput {...c} />}
       </Field>,
     );
-    const input = screen.getByRole("textbox", { name: "Reason (required)" });
+    const input = screen.getByRole("textbox", { name: "Reason" });
     expect(input).toBeRequired();
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(input).toHaveAccessibleDescription("Give a reason. Recorded in the audit log.");

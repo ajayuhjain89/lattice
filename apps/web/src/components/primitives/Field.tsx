@@ -8,7 +8,8 @@
  *   </Field>
  *
  * Field owns the ids and wiring (label → control, help and error → aria-describedby,
- * aria-invalid, required); the controls own only their look. Errors are an icon plus
+ * aria-invalid, required); the controls own only their look. "Required" is the control's
+ * own state (announced with it), so it isn't repeated inside the label's name. Errors are an icon plus
  * text below the help, never colour alone. Choices (checkboxes, radios) are grouped
  * in a ChoiceGroup, a fieldset whose legend names the question.
  */
@@ -58,12 +59,6 @@ export function Field({ label, hideLabel = false, help, error, required = false,
           <>
             {" "}
             <span className={styles.hint}>{hint}</span>
-          </>
-        )}
-        {required && (
-          <>
-            {" "}
-            <span className="visually-hidden">(required)</span>
           </>
         )}
       </label>

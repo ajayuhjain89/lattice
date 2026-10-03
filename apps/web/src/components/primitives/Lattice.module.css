@@ -5,7 +5,9 @@
   min-width: 0;
 }
 
+/* Positioned, so visually hidden labels inside are clipped with the table when it scrolls. */
 .scroll {
+  position: relative;
   overflow-x: auto;
   min-width: 0;
 
@@ -56,6 +58,20 @@
   min-width: var(--cell);
 }
 
+/* Row headers stay in view while a wide lattice scrolls (on the lattice's own ground). */
+.rowHead,
+.corner {
+  position: sticky;
+  left: 0;
+  z-index: var(--z-sticky);
+  background: var(--surface-paper);
+}
+
+.lattice[data-ground="sheet"] .rowHead,
+.lattice[data-ground="sheet"] .corner {
+  background: var(--surface-sheet);
+}
+
 .rowHead {
   text-align: right;
   padding-right: var(--space-2);
@@ -63,6 +79,18 @@
 
 .headLabel {
   display: block;
+}
+
+/* A column group (Generation · Embedding): a caption over a hairline spanning its columns. */
+.groupHead {
+  composes: t-caption from global;
+
+  padding: 0 var(--space-2) var(--space-1);
+  border-bottom: var(--border-width) solid var(--rule);
+  color: var(--text-muted);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
 }
 
 .lattice[data-headers="interface"] .colHead,

@@ -6,16 +6,15 @@ import Link from "next/link";
 import { useAccounts, useActivity, useSources } from "@/api/queries";
 import type { MemberSource } from "@/api/types";
 import { Button } from "@/components/primitives/Button";
-import { DocumentGlyph, SOURCE_GLYPHS } from "@/components/primitives/glyphs";
+import { SOURCE_GLYPHS } from "@/components/primitives/glyphs";
 import { Icon } from "@/components/primitives/icons";
 import { StateBlock } from "@/components/primitives/StateBlock";
 import { record } from "@/components/record/RecordPage";
-import { shortStatus } from "@/components/shell/status-labels";
+import { questionStatus, traceHref } from "@/components/activity/questions";
+import { sourceKind } from "@/components/sources/sync-model";
 import { formatCount, formatDay } from "@/lib/format";
 
 import styles from "./AskDesk.module.css";
-
-const TYPE_OF: Record<string, keyof typeof SOURCE_GLYPHS> = { document_repository: "doc", ticketing: "ticket", chat_export: "chat" };
 
 /** The desk's heading: what Ask is, in one line, before the composer. */
 export function DeskHeading({ organization }: { organization: string }) {
@@ -82,7 +81,7 @@ function Reach({ sources, failed }: { sources: readonly MemberSource[] | undefin
       ) : (
         <ul className={styles.rows}>
           {sources.map((s) => {
-            const Glyph = SOURCE_GLYPHS[TYPE_OF[s.connector_type] ?? "doc"] ?? DocumentGlyph;
+            const Glyph = SOURCE_GLYPHS[sourceKind(s.connector_type)];
             const synced = formatDay(s.last_succeeded_at);
             return (
               <li key={s.id} className={styles.source}>
@@ -127,8 +126,8 @@ function Recent({ onAskAgain }: { onAskAgain: (question: string) => void }) {
       <ol className={styles.rows}>
         {items.map((q) => (
           <li key={q.trace_id} className={styles.recent}>
-            <span className={styles.recentStatus}>{shortStatus(q.status)}</span>
-            <Link className={styles.recentQuestion} href={`/traces/${q.trace_id}`} title={q.question}>
+            <span className={styles.recentStatus}>{questionStatus(q)}</span>
+            <Link className={styles.recentQuestion} href={traceHref(q)} title={q.question}>
               {q.question}
             </Link>
             <span className={styles.recentDate}>{formatDay(q.created_at)}</span>

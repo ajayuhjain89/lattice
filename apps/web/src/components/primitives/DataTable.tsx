@@ -38,6 +38,8 @@ export interface Column<T> {
   primary?: boolean;
   /** Visually hidden header (an actions column). */
   hideHeader?: boolean;
+  /** A short value (a count, "None"): when stacked, it stays on its label's line even on narrow phones. */
+  short?: boolean;
 }
 
 export interface DataTableProps<T> {
@@ -83,7 +85,7 @@ export function DataTable<T>({
   const [scrollRef, overflows] = useOverflow<HTMLDivElement>();
   const label = (c: Column<T>) => c.label ?? (typeof c.header === "string" ? c.header : c.key);
   const cellClass = (c: Column<T>) =>
-    [styles.cell, c.align === "end" && styles.end, c.mono && styles.mono, c.primary && styles.primary].filter(Boolean).join(" ");
+    [styles.cell, c.align === "end" && styles.end, c.mono && styles.mono, c.primary && styles.primary, c.short && styles.short].filter(Boolean).join(" ");
 
   return (
     <div className={styles.wrap} data-stack={stackBelow} data-density={density} id={id}>

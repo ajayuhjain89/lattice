@@ -74,7 +74,12 @@
         "src/components/ask/**/*.css",
         "src/components/evidence/**/*.css",
         "src/components/trace/**/*.css",
-        "src/components/record/**/*.css"
+        "src/components/record/**/*.css",
+        "src/components/ops/**/*.css",
+        "src/components/sources/**/*.css",
+        "src/components/activity/**/*.css",
+        "src/components/access/**/*.css",
+        "src/components/settings/**/*.css"
       ],
       "rules": {
         "declaration-property-unit-disallowed-list": {

@@ -114,16 +114,22 @@
 }
 
 /* Busy keeps the variant's look: it is working, not unavailable. */
-.primary[aria-busy="true"]:disabled {
+.primary[aria-busy="true"] {
   background: var(--surface-inverse);
   border-color: var(--surface-inverse);
   color: var(--text-inverse);
 }
 
-.secondary[aria-busy="true"]:disabled {
+.secondary[aria-busy="true"] {
   background: var(--surface-sheet);
   border-color: var(--rule-strong);
   color: var(--text-primary);
+}
+
+.danger[aria-busy="true"] {
+  background: var(--surface-sheet);
+  border-color: var(--signal-fault-mark);
+  color: var(--signal-fault-text);
 }
 
 .icon {
@@ -167,7 +173,8 @@
     border-color: ButtonText;
   }
 
-  .button:disabled {
+  .button:disabled,
+  .button[aria-disabled="true"]:not([aria-busy="true"]) {
     border-color: GrayText;
     color: GrayText;
   }

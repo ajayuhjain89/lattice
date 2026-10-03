@@ -1,300 +1,114 @@
-.main {
-  flex: 1;
-  outline: none;
-}
-
-.column {
-  width: 100%;
-  max-width: calc(var(--admin-max) + 2 * var(--gutter));
-  padding: var(--space-8) var(--gutter) var(--space-16);
-  display: grid;
-  gap: var(--space-10);
-  min-width: 0;
-}
-
-.head {
-  display: grid;
-  gap: var(--space-3);
-  max-width: 720px;
-}
-
-.title {
-  composes: t-title from global;
-}
-
-.deck {
-  font-size: var(--type-heading-size);
-  line-height: var(--type-heading-line);
-  color: var(--text-secondary);
-}
-
-.readonly {
-  margin-top: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border: var(--border-width) solid var(--rule-strong);
-  border-radius: var(--radius-md);
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  gap: var(--space-3);
-  align-items: start;
-}
-
-.readonlyIcon {
-  display: grid;
-  place-items: center;
-  height: var(--type-body-line);
-}
-
-.readonlyTitle {
-  composes: t-body-strong from global;
-
-  display: block;
-}
-
-.readonlyBody {
-  color: var(--text-secondary);
-}
-
-.readonlyBody code {
-  font-size: var(--type-meta-size);
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-xs);
-  background: var(--surface-well);
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.section {
-  display: grid;
-  gap: var(--space-4);
-  min-width: 0;
-}
-
-.policy {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: var(--border-width) solid var(--rule-ink);
-  border-bottom: var(--border-width) solid var(--rule);
-}
-
-.policyItem {
-  display: grid;
-  gap: var(--space-1);
-  align-content: start;
-  padding: var(--space-4) var(--space-4) var(--space-4) 0;
-  min-width: 0;
-}
-
-.policyItem + .policyItem {
-  padding-left: var(--space-4);
-  border-left: var(--border-width) solid var(--rule);
-}
-
-.policyItem dt {
-  font-size: var(--type-section-size);
-  line-height: var(--type-section-line);
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.policyValue {
-  composes: t-heading from global;
-
-  display: block;
-}
-
-.policyNote {
-  display: block;
-  color: var(--text-muted);
-  font-size: var(--type-caption-size);
-  line-height: var(--type-caption-line);
-}
-
+/* AI providers (design-direction §6.9): a trust boundary first, configuration second. */
 .note {
+  max-width: var(--measure);
   color: var(--text-secondary);
-  max-width: 80ch;
-}
-
-.tableWrap {
-  overflow-x: auto;
-  border-bottom: var(--border-width) solid var(--rule);
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 760px;
-}
-
-.table .groupRow th {
-  height: auto;
-  padding-top: var(--space-4);
-  padding-bottom: var(--space-2);
-  background: transparent;
-  border-bottom: var(--border-width) solid var(--rule);
-  color: var(--text-muted);
-}
-
-.table tbody tr.groupRow:hover {
-  background: transparent;
-}
-
-.model {
-  white-space: nowrap;
-  overflow-wrap: normal;
-}
-
-.table th {
-  font-size: var(--type-section-size);
-  line-height: var(--type-section-line);
-  font-weight: 600;
-  height: 32px;
-  padding: 0 var(--space-4) 0 0;
-  background: var(--surface-well-strong);
-  border-bottom: var(--border-width) solid var(--rule-ink);
-  color: var(--text-primary);
-  text-align: left;
-  white-space: nowrap;
-}
-
-.table th:first-child,
-.table td:first-child {
-  padding-left: var(--space-4);
-}
-
-.table td {
-  padding: var(--space-3) var(--space-4) var(--space-3) 0;
-  border-bottom: var(--border-width) solid var(--rule);
-  vertical-align: top;
-}
-
-.table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.table tbody tr:hover {
-  background: var(--surface-well);
-}
-
-.primary {
-  composes: t-body-strong from global;
-
-  display: block;
 }
 
 .secondary {
-  composes: t-meta from global;
-
-  display: block;
-  color: var(--text-muted);
-  margin-top: var(--space-0-5);
-  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
 }
 
-.state {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  white-space: nowrap;
-}
-
-.ok {
-  color: var(--signal-healthy-text);
-}
-
-.off {
-  color: var(--text-muted);
-}
-
-.warn {
-  color: var(--signal-time-text);
-}
-
-.cards {
-  display: none;
-}
-
-.card {
+.stack {
   display: grid;
-  gap: var(--space-2);
-  padding: var(--space-4) 0;
-  border-bottom: var(--border-width) solid var(--rule);
-}
-
-.card dl {
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  gap: var(--space-2) var(--space-3);
-}
-
-.card dt {
-  font-size: var(--type-section-size);
-  line-height: var(--type-section-line);
-  font-weight: 600;
-  color: var(--text-muted);
-  padding-top: 2px;
-}
-
-.card dd {
+  gap: var(--space-0-5);
+  justify-items: start;
   min-width: 0;
 }
 
-.empty {
-  padding: var(--space-6) 0;
-  border-top: var(--border-width) solid var(--rule-ink);
+.model {
+  font-family: var(--font-ledger);
+  font-size: var(--type-meta-size);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* The policy: five facts on one ruled line, wrapping where narrow. */
+.policy {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  margin: 0;
+  border-top: var(--border-width) solid var(--rule-ink);
+}
+
+.policy > div {
+  display: grid;
+  align-content: start;
+  gap: var(--space-0-5);
+  padding: var(--space-3) var(--space-4) var(--space-3) 0;
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.policy dt {
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.policy dd {
+  display: grid;
+  margin: 0;
+  font-weight: 600;
+}
+
+.policyNote {
+  color: var(--text-muted);
+  font-size: var(--type-caption-size);
+  font-weight: 400;
+  line-height: var(--type-caption-line);
+}
+
+/* The lattice and its reading line, on the sheet. */
+
+/* The lattice keeps its natural width; wider than the sheet, it scrolls inside (a named region). */
+.egress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  max-width: 100%;
+  padding: var(--space-4) var(--space-5);
+  border: var(--border-width) solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sheet);
+  min-width: 0;
+}
+
+.why {
+  min-height: calc(2 * var(--type-body-line));
+  max-width: var(--measure);
+  padding-top: var(--space-2);
+  border-top: var(--border-width) solid var(--rule);
+  color: var(--text-primary);
+}
+
+.keptBlock {
   display: grid;
   gap: var(--space-1);
 }
 
-.emptyTitle {
-  composes: t-heading from global;
-
-  color: var(--text-primary);
+.kept {
+  max-width: var(--measure);
+  font-weight: 600;
 }
 
-@media (width < 1024px) {
-  .tableWrap {
-    display: none;
-  }
+.skeleton {
+  display: grid;
+}
 
-  .cards {
-    display: block;
-    border-top: var(--border-width) solid var(--rule-ink);
-  }
+.skeleton span {
+  height: var(--row-height);
+  border-bottom: var(--border-width) solid var(--rule);
+}
 
-  .policy {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .policyItem:nth-child(3) {
-    padding-left: 0;
-    border-left: 0;
-  }
-
-  .policyItem:nth-child(n + 3) {
-    border-top: var(--border-width) solid var(--rule);
-  }
+.skeleton span:first-child {
+  border-bottom-color: var(--rule-ink);
 }
 
 @media (width < 768px) {
-  .column {
-    padding-top: var(--space-5);
-    gap: var(--space-8);
+  .egress {
+    padding: var(--space-3);
   }
-
-  .policy {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .policyItem,
-  .policyItem + .policyItem {
-    padding: var(--space-3) 0;
-    border-left: 0;
-  }
-
-  .policyItem + .policyItem {
-    border-top: var(--border-width) solid var(--rule);
-  }
-
 }

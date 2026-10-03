@@ -10,6 +10,10 @@
  * arrow keys move between related cells (skipping empty ones), Home / End jump to the
  * first / last in the row, and hover and focus report the cell through `onHighlight`
  * so the matching claim and exhibit can light with it.
+ *
+ * `focusable="all"` makes every non-empty cell a stop (a hatched "not sent" cell says as
+ * much as a filled one: the egress lattice explains both), and `colGroups` adds a header
+ * row grouping the columns (Generation · Embedding).
  */
 import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
@@ -49,6 +53,13 @@ export function latticeAddsInformation(cells: ReadonlyMap<string, LatticeCell>):
   return [...rows.values(), ...cols.values()].some((n) => n > 1);
 }
 
+export interface LatticeColGroup {
+  key: string;
+  label: ReactNode;
+  /** How many consecutive columns the group spans, in column order. */
+  span: number;
+}
+
 export interface LatticeProps {
   /** The table's accessible name; shown when `showCaption`. */
   caption: string;
@@ -69,6 +80,11 @@ export interface LatticeProps {
   legend?: ReactNode;
   /** Header voice: ledger for numbered axes (claims, exhibits), interface for words. */
   headers?: "ledger" | "interface";
+  /** Which cells are keyboard stops when `onActivate` is set: filled only, or every non-empty cell. */
+  focusable?: "filled" | "all";
+  colGroups?: readonly LatticeColGroup[];
+  /** The surface the lattice sits on, so sticky row headers match it while scrolling. */
+  ground?: "paper" | "sheet";
 }
 
 export function Lattice({
@@ -85,12 +101,16 @@ export function Lattice({
   selected,
   legend,
   headers = "ledger",
+  focusable = "filled",
+  colGroups,
+  ground = "paper",
 }: LatticeProps) {
   const interactive = Boolean(onActivate);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
+  const isStop = useCallback((state: LatticeCell | null | undefined) => (focusable === "all" ? state != null : state === "filled"), [focusable]);
   const filled = useMemo(
-    () => rows.flatMap((r, ri) => cols.flatMap((c, ci) => (cells.get(cellKey(r.key, c.key)) === "filled" ? [{ r: r.key, c: c.key, ri, ci }] : []))),
-    [rows, cols, cells],
+    () => rows.flatMap((r, ri) => cols.flatMap((c, ci) => (isStop(cells.get(cellKey(r.key, c.key))) ? [{ r: r.key, c: c.key, ri, ci }] : []))),
+    [rows, cols, cells, isStop],
   );
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const tabKey = focusKey && filled.some((f) => cellKey(f.r, f.c) === focusKey) ? focusKey : filled[0] ? cellKey(filled[0].r, filled[0].c) : null;
@@ -149,9 +169,19 @@ export function Lattice({
   return (
     <figure className={styles.figure}>
       <div ref={scrollRef} className={styles.scroll} {...scrollRegionProps(overflows, caption)}>
-        <table className={styles.lattice} data-interactive={interactive || undefined} data-headers={headers}>
+        <table className={styles.lattice} data-interactive={interactive || undefined} data-headers={headers} data-ground={ground}>
           <caption className={showCaption ? styles.caption : "visually-hidden"}>{caption}</caption>
           <thead>
+            {colGroups && colGroups.length > 0 && (
+              <tr>
+                <td className={styles.corner} />
+                {colGroups.map((g) => (
+                  <th key={g.key} scope="colgroup" colSpan={g.span} className={styles.groupHead}>
+                    {g.label}
+                  </th>
+                ))}
+              </tr>
+            )}
             <tr>
               <td className={styles.corner}>{corner ? <span className={styles.cornerLabel}>{corner}</span> : null}</td>
               {cols.map((c) => (
@@ -192,10 +222,10 @@ export function Lattice({
                   const key = cellKey(r.key, c.key);
                   const state = cells.get(key) ?? null;
                   const label = cellLabel(r, c, state);
-                  const lit = state === "filled" && (rowLit(r.key) || colLit(c.key));
-                  const chosen = state === "filled" && selected?.col === c.key && (!selected.row || selected.row === r.key);
+                  const lit = isStop(state) && (rowLit(r.key) || colLit(c.key));
+                  const chosen = isStop(state) && selected?.col === c.key && (!selected.row || selected.row === r.key);
                   const square = [styles.square, state && styles[state], lit && styles.cellLit, chosen && styles.cellSelected].filter(Boolean).join(" ");
-                  if (interactive && state === "filled") {
+                  if (interactive && isStop(state)) {
                     return (
                       <td key={c.key} className={styles.cell}>
                         <button
