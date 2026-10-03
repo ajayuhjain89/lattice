@@ -367,5 +367,6 @@ Makefile            developer commands (thin wrappers; read before running)
 | [Design system](docs/design-system.md) | Design system v2: foundations, signature language, components, patterns, accessibility and security-sensitive UI rules |
 | [Design direction](docs/design-direction.md) | The design overhaul's accepted direction, decisions and D1–D7 implementation log |
 | [Implementation plan](docs/implementation-plan.md) | Phases, traceability, open decisions, as-built notes per phase |
+| [Phase 11 plan](docs/phase-11-plan.md) | Production deployment, identity operations and reliability: contract, decisions D-22–D-27, checkpoints P11.0–P11.7 |
 | [Decisions](docs/decisions/README.md) | ADRs |
 | [Runbook](docs/runbook.md) | Local development, procedures, operations (health, metrics, kill switches, the worker, deployment, backups, CI) and failure drills |
