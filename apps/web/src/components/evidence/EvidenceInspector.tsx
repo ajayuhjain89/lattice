@@ -6,15 +6,18 @@ import { useEffect, useId, useRef, type KeyboardEvent } from "react";
 import { useEvidence } from "@/api/queries";
 import { isApiError } from "@/api/errors";
 import { Button } from "@/components/primitives/Button";
+import { ExhibitMarker } from "@/components/primitives/ExhibitMarker";
 import { Icon } from "@/components/primitives/icons";
-import { SkeletonBlock, SkeletonLines } from "@/components/primitives/Skeleton";
+import { Kbd } from "@/components/primitives/Kbd";
 import { ErrorState } from "@/components/states/ErrorState";
 import { NotAvailable } from "@/components/states/NotAvailable";
+import { RuleSkeleton } from "@/components/primitives/RuleSkeleton";
+import type { RenderClaim } from "@/lib/answer-model";
 import { isUuid } from "@/lib/format";
 import type { InspectorContext } from "@/lib/workspace-state";
 
-import { EvidenceBody } from "./EvidenceBody";
 import styles from "./EvidenceInspector.module.css";
+import { ExhibitViewer } from "./ExhibitViewer";
 import { SourceTypeTag } from "./SourceTypeTag";
 
 export interface EvidenceInspectorProps {
@@ -22,19 +25,23 @@ export interface EvidenceInspectorProps {
   context: InspectorContext | null;
   onClose: () => void;
   onNavigate: (evidenceId: string) => void;
-  /** Move focus into the panel when the evidence changes (docked mode). */
+  /** Take the reader to a claim of the answer that cites this exhibit. */
+  onShowClaim?: (claim: RenderClaim) => void;
+  /** Move focus into the panel when the evidence changes. */
   focusOnOpen: boolean;
 }
 
 /**
- * The evidence inspector. Content comes only from GET /v1/evidence/{id}, fetched when
- * opened and never kept after it closes. Loading has one geometry; a 404 -- nonexistent
- * or unreadable, the API does not say which -- has one presentation.
+ * The evidence inspector: the exhibit viewer in a panel, with its number, previous / next
+ * through the answer's exhibits ([ and ]) and close (Esc). Content comes only from GET
+ * /v1/evidence/{id}, fetched when opened and never kept after it closes. A 404 --
+ * nonexistent or unreadable, the API does not say which -- has one presentation.
  */
-export function EvidenceInspector({ evidenceId, context, onClose, onNavigate, focusOnOpen }: EvidenceInspectorProps) {
+export function EvidenceInspector({ evidenceId, context, onClose, onNavigate, onShowClaim, focusOnOpen }: EvidenceInspectorProps) {
   const valid = isUuid(evidenceId);
   const query = useEvidence(valid ? evidenceId : null);
   const panel = useRef<HTMLElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
   const headingId = useId();
   const number = context?.numberOf.get(evidenceId);
   const order = context?.order ?? [];
@@ -45,6 +52,17 @@ export function EvidenceInspector({ evidenceId, context, onClose, onNavigate, fo
   useEffect(() => {
     if (focusOnOpen) panel.current?.focus({ preventScroll: true });
   }, [evidenceId, focusOnOpen]);
+
+  // Bring the first verified quote into view inside the panel (never scrolls the page).
+  useEffect(() => {
+    const box = scroller.current;
+    if (!box || !query.data) return;
+    box.scrollTop = 0;
+    const mark = box.querySelector("mark");
+    if (!mark) return;
+    const offset = mark.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    if (offset > box.clientHeight * 0.6) box.scrollTop = offset - box.clientHeight / 3;
+  }, [query.data]);
 
   // Escape closes; [ and ] step through the answer's evidence (while focus is inside).
   // Escape always closes, even when a tooltip layer has also handled it.
@@ -81,54 +99,45 @@ export function EvidenceInspector({ evidenceId, context, onClose, onNavigate, fo
     >
       <div className={styles.header}>
         <p className={styles.headerLabel} id={`${headingId}-label`}>
-          {number !== undefined && (
-            <span className={styles.number} aria-label={`Citation ${number}`}>
-              {number}
+          {number !== undefined && <ExhibitMarker n={number} size="lg" state="selected" label={`Exhibit ${number}`} />}
+          {query.data && !notFound ? <SourceTypeTag sourceType={query.data.source_type} /> : <span>Evidence</span>}
+          {order.length > 1 && at >= 0 && (
+            <span className={styles.position}>
+              {at + 1} of {order.length}
             </span>
           )}
-          {query.data ? <SourceTypeTag sourceType={query.data.source_type} /> : <span>Evidence</span>}
         </p>
         <div className={styles.tools}>
           {order.length > 1 && (
             <>
-              <Button variant="ghost" size="sm" icon={<Icon as={ChevronLeft} />} aria-label="Previous evidence" aria-keyshortcuts="[" disabled={!prev} onClick={() => prev && onNavigate(prev)} />
-              <Button variant="ghost" size="sm" icon={<Icon as={ChevronRight} />} aria-label="Next evidence" aria-keyshortcuts="]" disabled={!next} onClick={() => next && onNavigate(next)} />
+              <Button variant="quiet" size="sm" icon={<Icon as={ChevronLeft} />} aria-label="Previous evidence" aria-keyshortcuts="[" disabled={!prev} onClick={() => prev && onNavigate(prev)} />
+              <Button variant="quiet" size="sm" icon={<Icon as={ChevronRight} />} aria-label="Next evidence" aria-keyshortcuts="]" disabled={!next} onClick={() => next && onNavigate(next)} />
             </>
           )}
-          <Button variant="ghost" size="sm" icon={<Icon as={X} />} aria-label="Close evidence" aria-keyshortcuts="Escape" onClick={onClose} />
+          <Button variant="quiet" size="sm" icon={<Icon as={X} />} aria-label="Close evidence" aria-keyshortcuts="Escape" onClick={onClose} />
         </div>
       </div>
 
-      <div className={styles.scroll} aria-busy={query.isPending && valid ? true : undefined}>
+      <div ref={scroller} className={styles.scroll} aria-busy={query.isPending && valid ? true : undefined}>
         {notFound ? (
-          <NotAvailable
-            headingLevel="h2"
-            label="Not available"
-            title="This evidence isn't available"
-            body="It doesn't exist, or you don't have access to it. Lattice doesn't say which."
-          />
+          <NotAvailable headingLevel="h2" label="Not available" title="This evidence isn't available" body="It doesn't exist, or you don't have access to it. Lattice doesn't say which." />
         ) : query.isError ? (
           <ErrorState error={query.error} title="Couldn't load this evidence" onRetry={() => query.refetch()} retrying={query.isFetching} />
         ) : query.data ? (
           <>
-            <EvidenceBody detail={query.data} context={context} headingId={headingId} onOpen={onNavigate} />
+            <ExhibitViewer detail={query.data} context={context} headingId={headingId} onOpen={onNavigate} onShowClaim={onShowClaim} />
             <p className={styles.keys} aria-hidden="true">
               {order.length > 1 && (
                 <>
-                  <kbd>[</kbd> previous · <kbd>]</kbd> next ·{" "}
+                  <Kbd>[</Kbd> previous · <Kbd>]</Kbd> next ·{" "}
                 </>
               )}
-              <kbd>Esc</kbd> close
+              <Kbd>Esc</Kbd> close
             </p>
           </>
         ) : (
           <div className={styles.loading}>
-            <span className="visually-hidden" role="status">
-              Loading evidence
-            </span>
-            <SkeletonLines widths={["88%", "54%"]} />
-            <SkeletonBlock height={196} />
-            <SkeletonLines widths={["100%", "96%", "92%", "98%", "64%"]} />
+            <RuleSkeleton label="Loading evidence" rows={4} />
           </div>
         )}
       </div>

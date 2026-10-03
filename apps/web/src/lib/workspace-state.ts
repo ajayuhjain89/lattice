@@ -1,7 +1,8 @@
 /**
  * State of one signed-in tab, in memory only (never persisted): the current Ask, the
- * questions asked in this session (links to their traces, which the API re-authorizes on
- * every read) and the evidence open in the inspector. Signing out drops all of it.
+ * evidence open in the inspector, and the composer's text. Signing out drops all of it.
+ * Past questions are not kept here: they come from GET /v1/activity, which persists them
+ * and re-authorizes every trace they link to.
  */
 import type { Answer, AskRequest, EvidenceItem } from "@/api/types";
 import type { ApiError } from "@/api/errors";
@@ -23,12 +24,6 @@ export interface AskState {
   elapsedMs?: number;
 }
 
-export interface HistoryEntry {
-  traceId: string;
-  question: string;
-  status: Answer["status"];
-}
-
 /** What the page that opened the inspector knows about the evidence's role in its answer. */
 export interface InspectorContext {
   /** evidence_id → citation number in the answer on screen */
@@ -43,6 +38,8 @@ export interface InspectorContext {
 
 export interface InspectorState {
   evidenceId: string | null;
+  /** The statement whose marker (or lattice cell) opened it, when one did. */
+  claim?: string | null;
   /** The element to return focus to when the inspector closes. */
   returnFocus: HTMLElement | null;
   context: InspectorContext | null;
@@ -50,10 +47,11 @@ export interface InspectorState {
 
 export interface WorkspaceState {
   ask: Store<AskState>;
-  history: Store<HistoryEntry[]>;
   inspector: Store<InspectorState>;
   /** The composer's current text, kept so a sign-in redirect can preserve it. */
   draft: Store<string>;
+  /** A question chosen in Jump ("Ask “…”"): Ask puts it in the composer, then clears it. */
+  prefill: Store<string | null>;
 }
 
 export const EMPTY_ASK: AskState = {
@@ -69,13 +67,11 @@ export const CLOSED_INSPECTOR: InspectorState = { evidenceId: null, returnFocus:
 export function createWorkspaceState(): WorkspaceState {
   return {
     ask: createStore<AskState>(EMPTY_ASK),
-    history: createStore<HistoryEntry[]>([]),
     inspector: createStore<InspectorState>(CLOSED_INSPECTOR),
     draft: createStore(""),
+    prefill: createStore<string | null>(null),
   };
 }
-
-export const HISTORY_LIMIT = 12;
 
 /** The draft kept across a sign-in redirect (the person's own text; this tab only). */
 export const DRAFT_KEY = "lattice.draft-question";

@@ -1,45 +1,61 @@
+/* A margin bar in the state's mark plus, for signals, its tint -- never a full box. */
 .callout {
-  border: var(--border-width) solid var(--callout-border);
-  border-radius: var(--radius-md);
+  border-left: 3px solid var(--callout-mark);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   background: var(--callout-bg);
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-4);
   min-width: 0;
 }
 
 .neutral {
-  --callout-bg: var(--bg-sunken);
-  --callout-border: var(--border-strong);
+  --callout-bg: var(--surface-well);
+  --callout-mark: var(--rule-ink);
   --callout-text: var(--text-primary);
 }
 
 .plain {
   --callout-bg: transparent;
-  --callout-border: var(--border-strong);
+  --callout-mark: var(--rule-strong);
   --callout-text: var(--text-primary);
 }
 
-.info {
-  --callout-bg: var(--status-info-bg);
-  --callout-border: var(--status-info-border);
-  --callout-text: var(--status-info-text);
+.time {
+  --callout-bg: var(--signal-time-tint);
+  --callout-mark: var(--signal-time-mark);
+  --callout-text: var(--signal-time-text);
 }
 
-.warning {
-  --callout-bg: var(--status-warning-bg);
-  --callout-border: var(--status-warning-border);
-  --callout-text: var(--status-warning-text);
+.fault {
+  --callout-bg: var(--signal-fault-tint);
+  --callout-mark: var(--signal-fault-mark);
+  --callout-text: var(--signal-fault-text);
 }
 
-.error {
-  --callout-bg: var(--status-error-bg);
-  --callout-border: var(--status-error-border);
-  --callout-text: var(--status-error-text);
+.disagreement {
+  --callout-bg: var(--signal-disagreement-tint);
+  --callout-mark: var(--signal-disagreement-mark);
+  --callout-text: var(--signal-disagreement-text);
 }
 
-.conflict {
-  --callout-bg: var(--status-conflict-bg);
-  --callout-border: var(--status-conflict-border);
-  --callout-text: var(--status-conflict-text);
+/* Boundary: a dashed edge and a hatched leading band, like the boundary notice. */
+.boundary {
+  --callout-bg: var(--surface-sheet);
+  --callout-mark: transparent;
+  --callout-text: var(--text-primary);
+
+  position: relative;
+  border: var(--border-width) dashed var(--boundary-edge);
+  border-radius: var(--radius-sm);
+  padding-left: calc(var(--space-2) + var(--space-4));
+}
+
+.boundary::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--space-2);
+  border-right: var(--border-width) dashed var(--boundary-edge);
+  background-image: var(--boundary-hatch);
 }
 
 .header {
@@ -47,11 +63,11 @@
   align-items: center;
   gap: var(--space-2);
   color: var(--callout-text);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 
 .label {
-  composes: t-label from global;
+  composes: t-section from global;
 
   margin: 0;
 }
@@ -59,8 +75,8 @@
 .icon {
   display: grid;
   place-items: center;
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size);
+  height: var(--icon-size);
   flex: none;
 }
 
@@ -69,4 +85,31 @@
   gap: var(--space-3);
   color: var(--text-primary);
   min-width: 0;
+}
+
+/* A single message: the icon on the sentence's first line. */
+.message {
+  display: grid;
+  grid-template-columns: var(--icon-size) minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.message .icon {
+  height: var(--type-body-line);
+  color: var(--callout-text);
+}
+
+.messageText {
+  min-width: 0;
+  color: var(--callout-text);
+}
+
+@media (forced-colors: active) {
+  .callout {
+    border-left-color: CanvasText;
+  }
+
+  .boundary::before {
+    background-image: none;
+  }
 }

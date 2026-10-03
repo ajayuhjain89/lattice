@@ -5,9 +5,9 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–9 are implemented and merged; Phase 10 (OIDC sign-in, SCIM
-provisioning, rate limits and security hardening) is implemented on
-`phase/10-oidc-sso-hardening`, awaiting review.** What runs today: a FastAPI backend with typed
+**Status: Phases 1–10 are implemented and merged; a frontend product-design overhaul
+(`phase/design-overhaul`, [design direction](docs/design-direction.md)) is complete and
+awaiting review before Phase 11.** What runs today: a FastAPI backend with typed
 fail-fast configuration, PostgreSQL 16 + pgvector with forced row-level security for
 organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -149,7 +149,7 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 | `make db-down` / `make db-destroy` | Stop Postgres / **delete** the local database volume |
 | `make web` / `make web-build` | Web app dev server on :3000 / production build |
 | `make web-check` | Web lint (ESLint with jsx-a11y, Stylelint: no raw colours outside `tokens.css`), type check, unit and component tests |
-| `make web-e2e` | Browser tests against the production build with the API mocked from typed fixtures: flows, not-found safety, keyboard, axe WCAG 2.2 AA, responsive shell (after `make web-build`) |
+| `make web-e2e` | Browser tests against the production build with the API mocked from typed fixtures: flows, not-found safety, keyboard, axe WCAG 2.2 AA on every route, responsive layouts, and production sign-in on a second server with development sign-in off (after `make web-build`). `pnpm screens` in `apps/web` renders every screen for review; `pnpm screens:canonical` refreshes [docs/screens](docs/screens/README.md) |
 | `make api-contract` | Re-export the OpenAPI schema and regenerate the web app's TypeScript types (CI fails if they drift) |
 | `make help` | List all targets |
 
@@ -160,7 +160,7 @@ sync of the dataset (twice, the second writing nothing), the retrieval and answe
 evaluations as every persona with fake providers (each fails on any security
 violation), and the test suite against `pgvector/pgvector:0.8.1-pg16`. A second job checks the web app: the generated API
 contract matches the backend, lint, type check, unit and component tests, the
-production build, and the Playwright suite (desktop and phone).
+production build, and the Playwright suite (desktop, phone, and production sign-in).
 
 ## How isolation works (Phase 1)
 
@@ -257,26 +257,29 @@ run on the 8 GB reference machine, and no external quota was available
 [retrieval design, Part II and §13](docs/retrieval-design.md); results:
 [evaluation plan §13](docs/evaluation-plan.md).
 
-## How the web app works (Phase 7)
+## How the web app works (Phase 7, redesigned in the design overhaul)
 
 `apps/web` is a Next.js (App Router, TypeScript strict) app that renders and nothing
 more: every permission decision is the API's. Its types are generated from the API's
 OpenAPI schema; one client adds the CSRF header and normalizes errors; one module holds
 every query. Ask sends the question with scope filters that can only narrow the search
-(source types, dates, and a per-question sensitivity that can only be raised). Each
-answer status has its own presentation — an answer with a lead and supporting claims,
-each followed by citation chips numbered in reading order; a partial answer with what
-the evidence doesn't establish; a quiet "nothing you can access answers this"; evidence
-without a summary when the AI data policy or a missing model stops generation; the
-API's own clarification choices; an explanation when a request asks Lattice to act; a
-safe failure with retry. A claim citing evidence absent from the response is not
-rendered. Potential conflicts keep every position, oldest first, with equal weight; a
-supersession appears only when the source records it. The evidence inspector (docked at
-≥1280 px, a drawer below, a bottom sheet on phones) reads `GET /v1/evidence/{id}` each
-time it opens; a 404 — nonexistent or unreadable — has one presentation. Traces are
-fetched fresh and never filled in from the Ask page's memory. AI provider settings are
-read-only: configuration is changed with the audited CLI. Details: [design
-system](docs/design-system.md), [implementation plan, Phase 7](docs/implementation-plan.md).
+(source types, dates, and a per-question sensitivity that can only be raised). An answer
+is a brief: a status line, claims set in the record voice with numbered exhibit markers
+in the margin, a claims × exhibits lattice when the relationship isn't one-to-one,
+potential conflicts on a date axis with equal weight (a supersession only when the
+source records it), what the evidence doesn't establish, and the exhibits — with the
+evidence the AI data policy kept from the model shown, hatched, to the people who may
+read it. Every other status has its own presentation. A claim citing evidence absent
+from the response is not rendered. The evidence inspector (docked at ≥1280 px, a drawer
+below, a bottom sheet on phones) reads `GET /v1/evidence/{id}` each time it opens; a 404
+— nonexistent or unreadable — has one presentation. Traces are fetched fresh and never
+filled in from the Ask page's memory. AI provider settings are read-only: configuration
+is changed with the audited CLI. `/` is a static public landing page (no API call; a
+labelled synthetic example) and `/sign-in` is the organization's identity provider, or
+the persona picker where development sign-in is on. Details: [design
+system](docs/design-system.md) (v2, the current reference), [design
+direction](docs/design-direction.md) (how the overhaul decided it),
+[implementation plan, Phase 7](docs/implementation-plan.md).
 
 ## How operations work (Phase 8)
 
@@ -360,7 +363,8 @@ Makefile            developer commands (thin wrappers; read before running)
 | [Retrieval design](docs/retrieval-design.md) | Hybrid retrieval, ranking, generation, citations, freshness, conflicts, refusals |
 | [Evaluation plan](docs/evaluation-plan.md) | Synthetic dataset, golden set, metrics, retrieval and answer results |
 | [Synthetic dataset](data/synthetic/README.md) | Halden and Veridian: personas, storylines, timeline, access design, canaries, golden set |
-| [Design system](docs/design-system.md) | Reference analysis, tokens, components, states |
+| [Design system](docs/design-system.md) | Design system v2: foundations, signature language, components, patterns, accessibility and security-sensitive UI rules |
+| [Design direction](docs/design-direction.md) | The design overhaul's accepted direction, decisions and D1–D7 implementation log |
 | [Implementation plan](docs/implementation-plan.md) | Phases, traceability, open decisions, as-built notes per phase |
 | [Decisions](docs/decisions/README.md) | ADRs |
 | [Runbook](docs/runbook.md) | Local development, procedures, operations (health, metrics, kill switches, the worker, deployment, backups, CI) and failure drills |

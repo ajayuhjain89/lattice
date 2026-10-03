@@ -1,0 +1,31 @@
+.mark {
+  flex: none;
+}
+
+.line {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.5;
+}
+
+.inner {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1;
+}
+
+.lit {
+  fill: var(--signal-provenance-mark);
+}
+
+@media (forced-colors: active) {
+  .inner {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1;
+}
+
+.lit {
+    fill: canvastext;
+  }
+}

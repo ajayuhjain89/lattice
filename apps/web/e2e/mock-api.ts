@@ -38,7 +38,10 @@ export interface MockOptions {
   /** Milliseconds before the Ask response (to observe the pending state). */
   askDelay?: number;
   sources?: S["MemberSourcesResponse"];
-  adminSources?: S["AdminSourcesResponse"] | "forbidden";
+  /** The administrator listing, or a function of how many times it has been read (a sync progressing). */
+  adminSources?: S["AdminSourcesResponse"] | "forbidden" | ((reads: number) => S["AdminSourcesResponse"]);
+  /** Answer for POST /v1/admin/sources/{id}/sync (default: 202 with a queued job). */
+  sync?: (sourceId: string) => { status: number; body: unknown };
   failures?: S["FailuresResponse"];
   activity?: S["OwnActivityResponse"];
   adminActivity?: S["OperationalActivityResponse"] | "forbidden";
@@ -50,7 +53,10 @@ export interface MockOptions {
   preview?: S["AccessPreview"];
   /** Answer for PATCH /v1/admin/access/members/{id}. */
   change?: (body: S["MemberChangeRequest"]) => S["MemberAccess"] | { status: number; body: unknown };
-  audit?: S["AuditPage"];
+  /** Answer for POST /v1/auth/dev-login (default: 200 with `me`). */
+  devLogin?: { status: number; body: unknown; headers?: Record<string, string> };
+  /** The audit log, or a function of the `before` cursor (keyset paging). */
+  audit?: S["AuditPage"] | ((before: string | null) => S["AuditPage"]);
 }
 
 export interface MockLog {
@@ -59,6 +65,7 @@ export interface MockLog {
   revokes: string[];
   syncs: string[];
   asks: S["AskRequest"][];
+  devLogins: unknown[];
   evidence: string[];
   traces: string[];
   headers: Record<string, string>[];
@@ -80,10 +87,12 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     revokes: [],
     syncs: [],
     asks: [],
+    devLogins: [],
     evidence: [],
     traces: [],
     headers: [],
   };
+  let adminSourceReads = 0;
   const forbidden = (route: Route) =>
     json(route, 403, { error: { code: "permission_denied", message: "You don't have permission to do this.", request_id: "req-403" } });
   const evidence = options.evidence ?? DETAILS;
@@ -106,7 +115,11 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
         ? json(route, 401, { error: { code: "authentication_required", message: "Sign in to continue.", request_id: "req-401" } })
         : json(route, 200, me);
     }
-    if (path === "/v1/auth/dev-login" && method === "POST") return json(route, 200, options.me ?? ME_MAYA);
+    if (path === "/v1/auth/dev-login" && method === "POST") {
+      log.devLogins.push(request.postDataJSON());
+      if (options.devLogin) return json(route, options.devLogin.status, options.devLogin.body, options.devLogin.headers);
+      return json(route, 200, options.me === "unauthenticated" ? ME_MAYA : (options.me ?? ME_MAYA));
+    }
     if (path === "/v1/auth/logout" && method === "POST") return route.fulfill({ status: 204 });
 
     if (path === "/v1/ask" && method === "POST") {
@@ -142,13 +155,17 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     if (path === "/v1/sources" && method === "GET") return json(route, 200, options.sources ?? SOURCES_MEMBER);
     if (path === "/v1/admin/sources" && method === "GET") {
       const a = options.adminSources ?? SOURCES_ADMIN;
-      return a === "forbidden" ? forbidden(route) : json(route, 200, a);
+      adminSourceReads += 1;
+      if (a === "forbidden") return forbidden(route);
+      return json(route, 200, typeof a === "function" ? a(adminSourceReads) : a);
     }
     const failures = /^\/v1\/admin\/sources\/([^/]+)\/failures$/.exec(path);
     if (failures && method === "GET") return json(route, 200, options.failures ?? FAILURES);
     const sync = /^\/v1\/admin\/sources\/([^/]+)\/sync$/.exec(path);
     if (sync && method === "POST") {
       log.syncs.push(sync[1]!);
+      const answer = options.sync?.(sync[1]!);
+      if (answer) return json(route, answer.status, answer.body);
       return json(route, 202, {
         id: "7f2a1b0c-9999-4d3e-9f4a-1b2c3d4e5f99",
         source_id: sync[1]!,
@@ -170,10 +187,18 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     if (path === "/v1/accounts" && method === "GET") return json(route, 200, options.accounts ?? ACCOUNTS_MAYA);
     if (path.startsWith("/v1/admin/access") || path === "/v1/admin/audit-events") {
       if (options.access === "forbidden") return forbidden(route);
-      if (path === "/v1/admin/access/members" && method === "GET") return json(route, 200, options.members ?? MEMBERS_PAGE);
+      if (path === "/v1/admin/access/members" && method === "GET") {
+        // The server's search: names and e-mail addresses containing the query.
+        const page = options.members ?? MEMBERS_PAGE;
+        const q = url.searchParams.get("q")?.toLowerCase();
+        return json(route, 200, q ? { ...page, items: page.items.filter((m) => `${m.name} ${m.email}`.toLowerCase().includes(q)) } : page);
+      }
       if (path === "/v1/admin/access/directory" && method === "GET") return json(route, 200, DIRECTORY);
       if (path === "/v1/admin/access/documents" && method === "GET") return json(route, 200, DOCUMENTS);
-      if (path === "/v1/admin/audit-events" && method === "GET") return json(route, 200, options.audit ?? AUDIT);
+      if (path === "/v1/admin/audit-events" && method === "GET") {
+        const a = options.audit ?? AUDIT;
+        return json(route, 200, typeof a === "function" ? a(url.searchParams.get("before")) : a);
+      }
       const members = options.member ?? { [MEMBER_MAYA.member.id]: MEMBER_MAYA };
       const explain = /^\/v1\/admin\/access\/members\/([^/]+)\/documents\/([^/]+)$/.exec(path);
       if (explain && method === "GET") return json(route, 200, EXPLANATION_DENIED);

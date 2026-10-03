@@ -1,9 +1,9 @@
 .docked {
   position: sticky;
-  top: 0;
+  top: var(--masthead-height);
   width: var(--inspector-width);
-  height: 100dvh;
-  border-left: var(--border-width) solid var(--border-strong);
+  height: calc(100dvh - var(--masthead-height));
+  border-left: var(--border-width) solid var(--rule-strong);
   animation: enter var(--motion-panel) var(--ease);
 }
 

@@ -1,0 +1,195 @@
+/* The audit log (design-direction §6.8): an immutable ledger, ruled by day. */
+.immutable {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.immutable svg {
+  flex: none;
+}
+
+.ledger {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.days,
+.entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.days {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.day {
+  display: grid;
+  min-width: 0;
+}
+
+.dayHead {
+  composes: t-heading from global;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule-ink);
+}
+
+.dayMeta {
+  composes: t-meta from global;
+
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/*
+ * One entry: [time][what: action → subject][the change][by whom, and why]. The time column
+ * is the ledger's rail; the four columns let an eye run down any one of them.
+ */
+.entry {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(10rem, 1.1fr) minmax(0, 1.3fr) minmax(0, 1.2fr);
+  gap: var(--space-1) var(--space-5);
+  align-items: baseline;
+  padding-block: var(--space-3);
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.time {
+  composes: t-meta from global;
+
+  align-self: stretch;
+  border-right: var(--border-width) solid var(--rule);
+  color: var(--text-secondary);
+}
+
+.what {
+  display: grid;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.action {
+  font-weight: 600;
+}
+
+.subject {
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.former {
+  color: var(--text-secondary);
+}
+
+.detail {
+  min-width: 0;
+}
+
+.changes {
+  display: grid;
+  gap: var(--space-0-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fields {
+  display: grid;
+  gap: var(--space-0-5);
+  margin: 0;
+}
+
+.field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+}
+
+.field dt {
+  color: var(--text-secondary);
+}
+
+.field dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.value {
+  font-family: var(--font-ledger);
+  font-size: var(--type-meta-size);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.by {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.by svg {
+  flex: none;
+  align-self: center;
+}
+
+.reason {
+  font-family: var(--font-record);
+  overflow-wrap: anywhere;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+}
+
+.end {
+  color: var(--text-muted);
+  font-size: var(--type-small-size);
+}
+
+/* Tablet: who-and-why moves under the change. */
+@media (width < 1024px) {
+  .entry {
+    grid-template-columns: 5.5rem minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .time {
+    grid-row: span 2;
+  }
+
+  .by {
+    grid-column: 2 / -1;
+  }
+}
+
+/* Phones: the time leads its entry; everything else stacks under it. */
+@media (width < 768px) {
+  .entry {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .time {
+    grid-row: auto;
+    border-right: 0;
+  }
+
+  .by {
+    grid-column: 1;
+  }
+}

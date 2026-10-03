@@ -471,6 +471,216 @@ export const DANGLING: S["Answer"] = {
   freshness: FRESH,
 };
 
+// --- D4: provenance shapes ------------------------------------------------------------------
+
+/**
+ * Many-to-many: one claim rests on two exhibits, and one exhibit backs two claims -- the
+ * case the provenance lattice exists for.
+ */
+export const MANY_TO_MANY: S["Answer"] = {
+  ...BASE,
+  trace_id: "70000000-0000-4000-8000-0000000000e1",
+  status: "answered",
+  status_reason: null,
+  message: null,
+  claims: [
+    {
+      text: "SCIM general availability moves to December, with a November beta for Acme's pilot group.",
+      role: "direct_answer",
+      citations: [cite(I.decision, "SCIM GA moves to December"), cite(I.decision, "Acme gets a beta in November, limited to their pilot group")],
+    },
+    {
+      text: "In June, Halden told Acme it was targeting SCIM provisioning in Q3, and Acme planned a 40-user pilot.",
+      role: "supporting",
+      citations: [cite(I.kickoff, "we're targeting SCIM provisioning in Q3"), cite(I.kickoff, "Acme will pilot with 40 users first")],
+    },
+    {
+      text: "Support told Acme in August that SCIM was expected in October, and Acme raised it again in September.",
+      role: "supporting",
+      citations: [cite(I.ticket, "engineering now expects SCIM to be generally available in October"), cite(I.slack, "acme asked again about scim in their weekly")],
+    },
+    {
+      text: "The November beta is limited to Acme's pilot group of 40 users.",
+      role: "supporting",
+      citations: [cite(I.decision, "Acme gets a beta in November, limited to their pilot group"), cite(I.kickoff, "Acme will pilot with 40 users first")],
+    },
+  ],
+  evidence: [I.decision, I.kickoff, I.ticket, I.slack, I.roadmap],
+  freshness: FRESH,
+};
+
+const PILOT_CHAT = item(
+  {
+    evidence_id: "e0000000-0000-4000-8000-0000000000c1",
+    document_id: "a1f0c3e2-9999-4a1a-8b1b-0000000000c1",
+    title: "#acme-pilot — 12 Jun 2026",
+    source_type: "chat",
+    document_kind: "chat_channel_day",
+    source_name: "Halden Slack",
+    text: "#acme-pilot · 12 Jun 2026\n\ndana: we'll start the pilot with 25 seats, not 40",
+    occurred_at: "2026-06-12T18:30:00Z",
+    authority: "conversational",
+  },
+  7,
+);
+const PILOT_GUIDE = item(
+  {
+    evidence_id: "e0000000-0000-4000-8000-0000000000c2",
+    document_id: "a1f0c3e2-9999-4a1a-8b1b-0000000000c2",
+    title: "Customer pilot guide",
+    text: "Customer pilot guide\n\nPilots cover up to 50 users and last six weeks.",
+    occurred_at: null,
+    authority: "system_of_record",
+  },
+  8,
+);
+const SLA_OLD = item(
+  {
+    evidence_id: "e0000000-0000-4000-8000-0000000000c3",
+    document_id: "a1f0c3e2-9999-4a1a-8b1b-0000000000c3",
+    title: "Support policy 2023",
+    text: "Support policy 2023\n\nSupport responds to priority tickets within 2 business days.",
+    occurred_at: "2023-02-01T09:00:00Z",
+    authority: "system_of_record",
+  },
+  9,
+);
+const SLA_NEW = item(
+  {
+    evidence_id: "e0000000-0000-4000-8000-0000000000c4",
+    document_id: "a1f0c3e2-9999-4a1a-8b1b-0000000000c4",
+    title: "Acme renewal order form",
+    source_name: "Halden Drive",
+    text: "Acme renewal order form\n\nSupport responds to priority tickets within 1 business day.",
+    occurred_at: "2026-09-01T09:00:00Z",
+    account: ACME,
+  },
+  10,
+);
+
+const position = (e: Evidence, quote: string, text: string): S["ConflictPosition"] => ({
+  claim: { text, role: "supporting", citations: [cite(e, quote)] },
+  document_id: e.document_id,
+  title: e.title,
+  source_type: e.source_type,
+  authority: e.authority,
+  occurred_at: e.occurred_at,
+  version: e.version,
+});
+
+/** Potential conflicts with three positions (same day, undated) and with dates years apart. */
+export const CONFLICTS: S["Answer"] = {
+  ...BASE,
+  trace_id: "70000000-0000-4000-8000-0000000000e2",
+  status: "answered",
+  status_reason: null,
+  message: null,
+  claims: [
+    { text: "Acme's pilot was planned around 40 users.", role: "direct_answer", citations: [cite(I.kickoff, "Acme will pilot with 40 users first")] },
+    { text: "Acme's renewal promises a response to priority tickets within 1 business day.", role: "supporting", citations: [cite(SLA_NEW, "Support responds to priority tickets within 1 business day.")] },
+  ],
+  conflicts: [
+    {
+      kind: "potential_conflict",
+      topic: "Pilot group size",
+      summary: "These sources may disagree. Lattice can't confirm which is current.",
+      positions: [
+        position(I.kickoff, "Acme will pilot with 40 users first", "Acme will pilot with 40 users."),
+        position(PILOT_CHAT, "we'll start the pilot with 25 seats", "The pilot starts with 25 seats."),
+        position(PILOT_GUIDE, "Pilots cover up to 50 users", "Pilots cover up to 50 users."),
+      ],
+      supersession: null,
+    },
+    {
+      kind: "potential_conflict",
+      topic: "Priority ticket response time",
+      summary: 'These sources may disagree. The most recent is the document "Acme renewal order form" (1 Sep 2026). Lattice can\'t confirm which is current.',
+      positions: [
+        position(SLA_OLD, "Support responds to priority tickets within 2 business days.", "Priority tickets get a response within 2 business days."),
+        position(SLA_NEW, "Support responds to priority tickets within 1 business day.", "Priority tickets get a response within 1 business day."),
+      ],
+      supersession: null,
+    },
+  ],
+  evidence: [I.kickoff, SLA_NEW, PILOT_CHAT, PILOT_GUIDE, SLA_OLD],
+  freshness: { ...FRESH, newest_cited_at: "2026-09-01T09:00:00Z", newest_evidence_at: "2026-09-01T09:00:00Z" },
+};
+
+const LONG_TITLE =
+  "Acme Corp — SCIM provisioning rollout plan for the production tenant, the EU sandbox and the November pilot group, including the identity team's revised capacity estimate after the August security review";
+
+function generated(i: number, quote: string, extra: Partial<Evidence> = {}): Evidence {
+  const n = String(i).padStart(2, "0");
+  const text = `${i === 1 ? LONG_TITLE : `Planning note ${n}`}\n\n${"Background on the rollout and its dependencies. ".repeat(6)}${quote} ${"Further detail on owners, risks and dates follows here. ".repeat(5)}`;
+  return item(
+    {
+      evidence_id: `e0000000-0000-4000-8000-0000000001${n}`,
+      document_id: `a1f0c3e2-9999-4a1a-8b1b-0000000001${n}`,
+      title: i === 1 ? LONG_TITLE : `Planning note ${n} · SCIM rollout`,
+      display_ref: i % 3 === 0 ? `HAL-48${n}` : null,
+      source_type: i % 3 === 0 ? "ticket" : "doc",
+      document_kind: i % 3 === 0 ? "ticket" : "doc",
+      source_name: i % 3 === 0 ? "Halden Support (Zendesk)" : "Halden Drive",
+      text,
+      author: i % 2 ? "Priya Natarajan" : "Tom Lindqvist",
+      occurred_at: `2026-0${(i % 9) + 1}-1${i % 10}T09:00:00Z`,
+      account: i % 2 ? ACME : null,
+      ...extra,
+    },
+    i,
+  );
+}
+
+const QUOTES = [
+  "the identity team estimates eleven engineering weeks for SCIM, including directory sync, group push and deprovisioning, before general availability can be declared for any customer tenant",
+  "group push ships first",
+  "deprovisioning ships second",
+  "the EU sandbox follows the production tenant by two weeks",
+  "Acme's pilot group is the first external cohort",
+  "rollback is manual during the beta",
+  "audit events are recorded for every provisioning change",
+  "support is staffed for the beta from 9:00 to 17:00 UK time",
+  "the beta ends when GA is declared",
+  "pricing is unchanged by SCIM",
+  "the November date depends on the security review sign-off",
+  "no customer data leaves the EU region during the pilot",
+];
+const MANY = QUOTES.map((q, i) => generated(i + 1, q, i >= 10 ? { used_for_answer: false, not_used_reason: i === 10 ? "egress_policy" : "relevance_floor", classification: i === 10 ? "confidential" : "internal" } : {}));
+
+/** A long answer with many exhibits, a very long title and a very long quote. */
+export const MANY_EXHIBITS: S["Answer"] = {
+  ...BASE,
+  trace_id: "70000000-0000-4000-8000-0000000000e3",
+  status: "answered",
+  status_reason: null,
+  message: null,
+  claims: [
+    {
+      text: "The identity team estimates eleven engineering weeks before SCIM can be generally available for any customer tenant, covering directory sync, group push and deprovisioning.",
+      role: "direct_answer",
+      citations: [cite(MANY[0]!, QUOTES[0]!)],
+    },
+    ...QUOTES.slice(1, 10).map((q, i): S["Claim"] => ({
+      text: `${q.charAt(0).toUpperCase()}${q.slice(1)}.`,
+      role: "supporting",
+      citations: [cite(MANY[i + 1]!, q)],
+    })),
+  ],
+  unknowns: ["Whether the EU sandbox needs a separate security review.", "Who approves the end of the beta."],
+  evidence: MANY,
+  freshness: { ...FRESH, newest_cited_at: "2026-09-10T09:00:00Z", newest_evidence_at: "2026-09-10T09:00:00Z" },
+  notices: [
+    { code: "egress_excluded", count: 1, message: "1 source you can access wasn't sent to the AI model because of your organization's AI data policy. Review them below." },
+  ],
+};
+
+/** 429 from POST /v1/ask, as the API sends it. */
+export const RATE_LIMITED = {
+  status: 429,
+  body: { error: { code: "rate_limited", message: "Too many requests. Try again later.", request_id: "req-429-fixture" } },
+  headers: { "retry-after": "30" },
+};
+
 // --- evidence details (GET /v1/evidence/{id}) -----------------------------------------------
 
 function detail(e: Evidence, charStart = 0): Detail {
@@ -479,7 +689,10 @@ function detail(e: Evidence, charStart = 0): Detail {
 }
 
 export const DETAILS: Record<string, Detail> = Object.fromEntries(
-  [I.kickoff, I.ticket, I.decision, I.escalation, I.slack, I.roadmap, REFUND_V1, REFUND_V2].map((e, i) => [e.evidence_id, detail(e, i * 311)]),
+  [I.kickoff, I.ticket, I.decision, I.escalation, I.slack, I.roadmap, REFUND_V1, REFUND_V2, PILOT_CHAT, PILOT_GUIDE, SLA_OLD, SLA_NEW, ...MANY].map((e, i) => [
+    e.evidence_id,
+    detail(e, i * 311),
+  ]),
 );
 
 // --- traces --------------------------------------------------------------------------------
@@ -751,6 +964,44 @@ export const FAILURES: S["FailuresResponse"] = {
     },
   ],
 };
+
+/** A source whose last run failed as a whole, and whose last requested sync failed too. */
+export const SOURCE_FAILED: S["AdminSourceOut"] = {
+  ...SOURCES_ADMIN.sources[0]!,
+  id: "5d2c1b0a-4444-4e3f-9a8b-7c6d5e4f3a04",
+  key: "wiki",
+  name: "Halden Wiki",
+  documents: 37,
+  last_synced_at: "2026-09-29T06:00:09Z",
+  last_succeeded_at: "2026-09-12T06:00:04Z",
+  acl_synced_at: "2026-09-12T06:00:04Z",
+  last_run: {
+    id: "6e1f0a9b-4444-4c2d-8e3f-0a1b2c3d4e04",
+    mode: "full",
+    status: "failed",
+    started_at: "2026-09-29T06:00:01Z",
+    finished_at: "2026-09-29T06:00:09Z",
+    counts: { ...RUN_COUNTS },
+    deletion_guard_tripped: false,
+    error_code: "source_unavailable:timeout",
+  },
+  failure_codes: [],
+  job: {
+    id: "7f2a1b0c-4444-4d3e-9f4a-1b2c3d4e5f04",
+    source_id: "5d2c1b0a-4444-4e3f-9a8b-7c6d5e4f3a04",
+    mode: "full",
+    status: "failed",
+    attempts: 3,
+    error_code: "source_unavailable:timeout",
+    created_at: "2026-09-29T05:59:58Z",
+    started_at: "2026-09-29T06:00:01Z",
+    finished_at: "2026-09-29T06:00:09Z",
+    sync_run_id: "6e1f0a9b-4444-4c2d-8e3f-0a1b2c3d4e04",
+  },
+};
+
+/** "Now" for tests that read ages and day headings (the fixtures' week). */
+export const FIXTURE_NOW = "2026-09-29T10:00:00Z";
 
 // --- activity (Phase 8) --------------------------------------------------------------------
 
@@ -1046,4 +1297,80 @@ export const AUDIT: S["AuditPage"] = {
     },
   ],
   next_before: null,
+};
+
+// --- stress fixtures for the operational surfaces (D5 responsive checks) -----------------------
+
+const LONG_NAME = "Maximiliana Wilhelmina Featherstonehaugh-Ollerenshaw de la Cruz-Abernathy";
+
+/** A source with a very long title and key, beside the usual three. */
+export const SOURCES_ADMIN_LONG: S["AdminSourcesResponse"] = {
+  sources: [
+    ...SOURCES_ADMIN.sources,
+    {
+      ...SOURCES_ADMIN.sources[1]!,
+      id: "5d2c1b0a-5555-4e3f-9a8b-7c6d5e4f3a05",
+      key: "customer-success-escalations-and-renewals-archive-emea",
+      name: "Customer Success — Escalations, Renewals and Executive Correspondence Archive (EMEA and APAC regions, 2019–2026)",
+      job: null,
+    },
+    SOURCE_FAILED,
+  ],
+};
+
+/** Forty members, some with very long names and e-mail addresses. */
+export const MANY_MEMBERS: S["MembersPage"] = {
+  items: Array.from({ length: 40 }, (_, i) => ({
+    ...MEMBERS_PAGE.items[i % 3]!,
+    id: `b${String(i).padStart(7, "0")}-0000-4000-8000-000000000000`,
+    name: i % 7 === 0 ? `${LONG_NAME} ${i}` : `Member ${String(i + 1).padStart(2, "0")}`,
+    email: i % 7 === 0 ? `maximiliana.featherstonehaugh-ollerenshaw.${i}@customer-success.halden.example` : `member${i + 1}@halden.example`,
+    status: i % 9 === 4 ? ("suspended" as const) : ("active" as const),
+    managed_by: i % 5 === 2 ? "identity_provider" : null,
+  })),
+  next_after: "b0000039-0000-4000-8000-000000000000",
+};
+
+/** A member with a long name and many accounts, departments and groups. */
+export const MEMBER_WIDE: S["MemberAccess"] = {
+  ...MEMBER_MAYA,
+  member: { ...MEMBER_MAYA.member, id: "b0000000-0000-4000-8000-000000000000", name: LONG_NAME, email: "maximiliana.featherstonehaugh-ollerenshaw@customer-success.halden.example" },
+  accounts: Array.from({ length: 14 }, (_, i) => ({ id: `ac000000-0000-4000-8000-0000000001${String(i).padStart(2, "0")}`, name: `Account ${i + 1} — Northern Europe Holdings` })),
+  departments: [SALES, { id: ID.leadership, name: "Leadership" }],
+};
+
+/** Every trust class and approval the egress lattice must draw, eight providers wide. */
+export const PROVIDERS_MANY: S["ProvidersResponse"] = {
+  egress: { ...PROVIDERS.egress, external_egress_level: "internal", organization_controlled_level: "confidential" },
+  providers: [
+    ...PROVIDERS.providers,
+    { ...PROVIDERS.providers[0]!, provider: "vllm-private", model: "llama-4-scout-17b-instruct", deployment: "organization_controlled", approved_for_level: "confidential", explicitly_approved: true, endpoint_configured: true },
+    { ...PROVIDERS.providers[0]!, provider: "vllm-staging", model: "qwen3-32b", deployment: "organization_controlled", approved_for_level: "restricted", explicitly_approved: false, enabled: true },
+    { ...PROVIDERS.providers[1]!, provider: "anthropic", model: "claude-sonnet-5-5", enabled: true, training_opt_out: true, retention_mode: "zero", credential: { state: "active", source: "env", resolvable: true, data_use: "paid" } },
+    { ...PROVIDERS.providers[1]!, provider: "legacy-gateway", model: "unknown-model", deployment: "private", enabled: true, training_opt_out: true },
+    { ...PROVIDERS.providers[2]!, provider: "voyage", model: "voyage-3-large", deployment: "external_api", approved_for_level: "internal", credential: { state: "active", source: "env", resolvable: true, data_use: "paid" } },
+  ],
+};
+
+/** A long audit log, paged by its cursor. */
+export function auditPages(before: string | null, total = 60, size = 25): S["AuditPage"] {
+  const all = Array.from({ length: total }, (_, i) => ({
+    ...AUDIT.items[i % AUDIT.items.length]!,
+    id: `a0d1${String(i).padStart(4, "0")}-0000-4000-8000-000000000000`,
+    created_at: new Date(Date.parse("2026-09-29T09:00:00Z") - i * 3_600_000 * 5).toISOString(),
+  }));
+  const start = before ? all.findIndex((e) => e.id === before) + 1 : 0;
+  const items = all.slice(start, start + size);
+  return { items, next_before: start + size < all.length ? (items.at(-1)?.id ?? null) : null };
+}
+
+/** A change that both widens and narrows: clearance up, an account added, a department removed. */
+export const PREVIEW_MIXED: S["AccessPreview"] = {
+  effects: [
+    { kind: "clearance", before: "internal", after: "confidential", subject: null },
+    { kind: "account_added", before: null, after: null, subject: { id: ID.kestrel, name: "Kestrel Bank" } },
+    { kind: "department_removed", before: null, after: null, subject: { id: ID.sales, name: "Sales" } },
+  ],
+  documents_gained: 7,
+  documents_lost: 3,
 };

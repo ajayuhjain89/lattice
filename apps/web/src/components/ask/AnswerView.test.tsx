@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -6,6 +6,8 @@ import type { Answer } from "@/api/types";
 import {
   AMBIGUOUS,
   ANSWERED,
+  CONFLICTS,
+  MANY_TO_MANY,
   DANGLING,
   EV,
   EVIDENCE_ONLY,
@@ -43,11 +45,11 @@ describe("AnswerView", () => {
     show(ANSWERED);
     expect(screen.getByTestId("answer-prose")).toHaveTextContent("SCIM general availability to December");
     expect(chips().length).toBeGreaterThan(0);
-    const conflict = screen.getByRole("region", { name: "Potential conflict" });
+    const conflict = screen.getByRole("region", { name: /^Potential conflict/ });
     expect(within(conflict).getByText(/expected to be generally available in October/)).toBeInTheDocument();
     expect(within(conflict).getByText(/moves to December/)).toBeInTheDocument();
     expect(conflict).not.toHaveTextContent(/supersedes|correct|resolved/i);
-    expect(screen.getByText(/Not used to draft this answer/)).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /Not sent to the AI model/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Also retrieved, not cited/ })).toHaveAttribute("aria-expanded", "false");
   });
 
@@ -136,6 +138,57 @@ describe("AnswerView", () => {
     expect(within(block).getByRole("button", { name: "Inspect earlier" })).toBeInTheDocument();
     expect(within(block).getByRole("button", { name: "Inspect replacement" })).toBeInTheDocument();
     expect(screen.getByText("The most recent evidence available to you is from 3 Mar 2026.")).toBeInTheDocument();
+  });
+
+  it("one-to-one citations: the margin markers say it all, so no provenance lattice", () => {
+    show(ANSWERED);
+    expect(screen.queryByTestId("provenance-lattice")).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("many-to-many citations: the lattice appears, built only from the answer's claims and exhibits", () => {
+    show(MANY_TO_MANY);
+    const table = screen.getByRole("table", { name: "Which claims cite which exhibits" });
+    expect(within(table).getAllByRole("rowheader")).toHaveLength(4);
+    expect(within(table).getAllByRole("columnheader")).toHaveLength(4);
+    // Claim 4 rests on exhibits 1 and 2; exhibit 1 backs claims 1 and 4.
+    expect(within(table).getByRole("button", { name: "Claim 4 cites exhibit 1, DR-112" })).toBeInTheDocument();
+    expect(within(table).getByRole("button", { name: /^Claim 4 cites exhibit 2,/ })).toBeInTheDocument();
+    expect(within(table).getByRole("button", { name: "Claim 1 cites exhibit 1, DR-112" })).toBeInTheDocument();
+    // Empty cells are named, never hidden, and never stand for anything unseen.
+    expect(within(table).getByText(/^Claim 1 doesn't cite exhibit 3/)).toBeInTheDocument();
+    // Exhibit 5 (Identity roadmap) was retrieved but not cited: no column.
+    expect(within(table).queryByText(/exhibit 5/)).toBeNull();
+  });
+
+  it("claim → exhibit: focusing a marker lights its claim, its exhibit row and its lattice cell", () => {
+    show(MANY_TO_MANY);
+    const marker = screen.getAllByRole("button", { name: /^Citation 2:/ })[0]!;
+    fireEvent.focus(marker);
+    const claim = marker.closest("[data-claim]")!;
+    expect(claim.querySelector("[data-lit]")).not.toBeNull();
+    expect(document.querySelector(`[data-testid="evidence"] [data-evidence="${EV.kickoff}"]`)).toHaveAttribute("data-lit", "true");
+    expect(document.querySelector(`[data-testid="evidence"] [data-evidence="${EV.decision}"]`)).not.toHaveAttribute("data-lit");
+    fireEvent.blur(marker);
+    expect(document.querySelector(`[data-testid="evidence"] [data-evidence="${EV.kickoff}"]`)).not.toHaveAttribute("data-lit");
+  });
+
+  it("exhibit → claims: pointing at an exhibit lights every claim that cites it", () => {
+    show(MANY_TO_MANY);
+    fireEvent.mouseEnter(document.querySelector(`[data-testid="evidence"] [data-evidence="${EV.decision}"]`)!);
+    const lit = [...document.querySelectorAll("[data-testid='answer-prose'] [data-claim]")].filter((c) => c.querySelector("[data-lit]"));
+    expect(lit.map((c) => c.getAttribute("data-claim"))).toEqual(["claim-0", "claim-3"]);
+  });
+
+  it("conflicts keep every position in date order, same-day and undated ones included, with no verdict", () => {
+    show(CONFLICTS);
+    const pilot = screen.getByRole("region", { name: /Pilot group size/ });
+    const items = within(pilot).getAllByRole("listitem");
+    expect(items.map((i) => i.querySelector("p")?.textContent)).toEqual(["12 Jun 2026", "12 Jun 2026Same day", "Undated"]);
+    expect(pilot).toHaveTextContent("Lattice can't confirm which is current.");
+    const sla = screen.getByRole("region", { name: /Priority ticket response time/ });
+    expect(sla).toHaveTextContent(/1,308 days later/);
+    expect(sla).not.toHaveTextContent(/supersed|correct|resolved/i);
   });
 
   it("says which question it answers once the composer text has changed", () => {

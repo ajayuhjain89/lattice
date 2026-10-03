@@ -1,0 +1,171 @@
+/* The exhibit viewer (design-direction §6.5): the provenance chain, the title, then the
+   passage set as a page with the verified quotes marked. */
+.viewer {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.title {
+  composes: t-subtitle from global;
+
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.pageTitle {
+  composes: t-title from global;
+
+  overflow-wrap: anywhere;
+}
+
+.notes {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.linkButton {
+  color: var(--signal-provenance-text);
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sectionHeading {
+  composes: t-section from global;
+
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.sectionMeta {
+  composes: t-meta from global;
+
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.section,
+.passageSection {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* The passage as a page: record voice on the sheet; a verdigris bar in the margin beside
+   each paragraph that holds a verified quote. */
+.passage {
+  composes: t-prose from global;
+
+  display: grid;
+  gap: var(--space-3);
+  max-width: var(--measure);
+  padding-left: var(--space-4);
+  color: var(--text-primary);
+  white-space: pre-line;
+  overflow-wrap: break-word;
+}
+
+.passage p {
+  position: relative;
+}
+
+.cited::before {
+  content: "";
+  position: absolute;
+  inset: var(--space-1) auto var(--space-1) calc(-1 * var(--space-4));
+  width: 2px;
+  border-radius: var(--radius-xs);
+  background: var(--signal-provenance-mark);
+}
+
+.passage mark {
+  animation: sweep var(--motion-base) var(--ease) var(--motion-panel) both;
+}
+
+@keyframes sweep {
+  from {
+    background-color: transparent;
+    box-shadow: inset 0 -2px 0 transparent;
+  }
+}
+
+.claims {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.claim {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+}
+
+.claim > :first-child {
+  margin-top: var(--space-0-5);
+}
+
+.claimText {
+  composes: t-prose from global;
+
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
+}
+
+.relation {
+  color: var(--text-secondary);
+}
+
+/* Source details: a compact two-column ledger. */
+.meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+
+.meta div {
+  display: grid;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.meta dt  {
+  font-family: var(--font-interface);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+  color: var(--text-muted);
+}
+
+.meta dd {
+  overflow-wrap: anywhere;
+}
+
+.ledger {
+  composes: t-meta from global;
+
+  align-self: center;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+@media (forced-colors: active) {
+  .cited::before {
+    background: CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .passage mark {
+    animation: none;
+  }
+}

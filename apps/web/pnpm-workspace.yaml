@@ -1,0 +1,14 @@
+# pnpm settings for the web app (single package; no `packages:` list).
+#
+# Audit exceptions: an explicit allowlist, one advisory per line, each recorded in
+# docs/runbook.md §7 and pinned by src/test/audit-exceptions.test.ts. Never add
+# `ignoreCves`, `--ignore-unfixable` or a lower `--audit-level` instead.
+auditConfig:
+  ignoreGhsas:
+    # GHSA-vfj7-8cjw-p6xm (CVE-2026-93687, high): braces <=3.0.3, stack exhaustion on
+    # deeply nested patterns. No patched release exists. It reaches Lattice only
+    # through lint tooling (eslint-config-next > @next/eslint-plugin-next > fast-glob >
+    # micromatch > braces), a dev dependency that is never in the production bundle,
+    # and it is present on main as well. Accepted 2026-10-03, temporarily: remove this
+    # entry as soon as a patched braces reaches that chain or braces leaves the lockfile.
+    - GHSA-vfj7-8cjw-p6xm

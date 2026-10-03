@@ -1,0 +1,127 @@
+/* The operational frame: the admin width (design-direction §4.3), a quiet head. */
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--space-8);
+  padding-block: var(--space-8) var(--space-16);
+}
+
+.head {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.title {
+  composes: t-title from global;
+
+  overflow-wrap: anywhere;
+}
+
+.deck {
+  max-width: var(--measure);
+  color: var(--text-secondary);
+}
+
+.views {
+  margin-top: var(--space-3);
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.viewList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The current view: ink, 600 and a 2 px verdigris border on the rule (as in the masthead). */
+.view {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-md);
+  margin-bottom: calc(-1 * var(--border-width));
+  border-bottom: var(--focus-width) solid transparent;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.view:hover {
+  color: var(--text-primary);
+}
+
+.view[aria-current="page"] {
+  border-bottom-color: var(--signal-provenance-mark);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
+}
+
+.sectionTitle {
+  composes: t-heading from global;
+
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.count {
+  composes: t-meta from global;
+
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.aside {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+@media (width < 1280px) {
+  .page {
+    padding-top: var(--space-6);
+  }
+}
+
+@media (width < 768px) {
+  .page {
+    gap: var(--space-6);
+    padding-top: var(--space-4);
+  }
+
+  .viewList {
+    gap: var(--space-4);
+  }
+
+  .view {
+    min-height: var(--touch-target);
+  }
+}
+
+@media (forced-colors: active) {
+  .view[aria-current="page"] {
+    border-bottom-color: CanvasText;
+  }
+}

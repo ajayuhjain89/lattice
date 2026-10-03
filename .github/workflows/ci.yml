@@ -206,7 +206,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Browser tests (flows, accessibility, responsive shell; API mocked from typed fixtures)
-        run: pnpm exec playwright test --project=desktop --project=mobile
+        run: pnpm exec playwright test --project=desktop --project=mobile --project=production
         env:
           CI: "true"
 

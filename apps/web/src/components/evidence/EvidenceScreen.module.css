@@ -1,32 +1,29 @@
-.main {
-  flex: 1;
-  outline: none;
-}
-
 .column {
-  width: 100%;
-  max-width: calc(var(--reading-max) + 2 * var(--gutter));
-  margin: 0 auto;
-  padding: var(--space-8) var(--gutter) var(--space-16);
   display: grid;
   gap: var(--space-5);
-  min-width: 0;
+  max-width: calc(var(--measure) + var(--notes-col));
+}
+
+/* The exhibit as a page on the reading sheet, ruled at the top like the inspector. */
+.sheet {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6) var(--space-6);
+  border-top: var(--border-width) solid var(--rule-ink);
+  background: var(--surface-sheet);
 }
 
 .eyebrow {
+  composes: t-section from global;
+
   display: flex;
   align-items: center;
   gap: var(--space-2);
-}
-
-.eyebrowLabel {
-  composes: t-label from global;
-
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 @media (width < 768px) {
-  .column {
-    padding-top: var(--space-5);
+  .sheet {
+    padding: var(--space-4);
   }
 }

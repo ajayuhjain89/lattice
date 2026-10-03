@@ -1,0 +1,223 @@
+.axis {
+  --axis-mark: var(--signal-disagreement-mark);
+  --axis-text: var(--signal-disagreement-text);
+  --dot: 11px;
+
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: var(--border-width) solid var(--axis-mark);
+  min-width: 0;
+}
+
+.superseded {
+  --axis-mark: var(--rule-ink);
+  --axis-text: var(--text-primary);
+}
+
+.heading {
+  composes: t-section from global;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  color: var(--axis-text);
+}
+
+.heading svg {
+  flex: none;
+}
+
+.sep {
+  color: var(--text-muted);
+}
+
+.topic {
+  color: var(--text-primary);
+}
+
+/* The axis: evenly spaced positions on one rule; first left, last right, others centred. */
+.positions {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--positions), minmax(0, 1fr));
+  gap: var(--space-5);
+  padding-top: calc(var(--dot) + var(--space-3));
+}
+
+.positions::before {
+  content: "";
+  position: absolute;
+  inset: calc(var(--dot) / 2) 0 auto;
+  border-top: var(--border-width) solid var(--rule-strong);
+}
+
+.position {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.dot {
+  position: absolute;
+  top: calc(-1 * (var(--dot) + var(--space-3)));
+  left: 0;
+  width: var(--dot);
+  height: var(--dot);
+  border: 2px solid var(--axis-mark);
+  border-radius: var(--radius-round);
+  background: var(--surface-paper);
+}
+
+.position:not(:first-child, :last-child) {
+  text-align: center;
+  justify-items: center;
+}
+
+.position:not(:first-child, :last-child) .dot {
+  left: calc(50% - var(--dot) / 2);
+}
+
+.position:last-child:not(:first-child) {
+  text-align: right;
+  justify-items: end;
+}
+
+.position:last-child:not(:first-child) .dot {
+  left: auto;
+  right: 0;
+}
+
+.when {
+  composes: t-meta from global;
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  color: var(--text-primary);
+}
+
+.position:last-child:not(:first-child) .when {
+  justify-content: flex-end;
+}
+
+.position:not(:first-child, :last-child) .when {
+  justify-content: center;
+}
+
+.later {
+  color: var(--text-muted);
+}
+
+.source {
+  composes: t-caption from global;
+
+  color: var(--text-muted);
+}
+
+.title {
+  composes: t-small from global;
+
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.claim {
+  composes: t-prose from global;
+
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
+  overflow-wrap: break-word;
+}
+
+.conclusion {
+  composes: t-small from global;
+
+  color: var(--text-secondary);
+  max-width: var(--measure);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+@media (forced-colors: active) {
+  .dot {
+    border-color: CanvasText;
+  }
+}
+
+/* Phones, and more than three positions: a vertical rail, oldest at the top. */
+@media (width < 768px) {
+  .positions {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+    padding-top: 0;
+    padding-left: calc(var(--dot) + var(--space-3));
+  }
+
+  .positions::before {
+    inset: 0 auto 0 calc(var(--dot) / 2);
+    border-top: 0;
+    border-left: var(--border-width) solid var(--rule-strong);
+  }
+
+  .position,
+  .position:not(:first-child, :last-child),
+  .position:last-child:not(:first-child) {
+    text-align: left;
+    justify-items: start;
+  }
+
+  .dot,
+  .position:not(:first-child, :last-child) .dot,
+  .position:last-child:not(:first-child) .dot {
+    top: var(--space-0-5);
+    left: calc(-1 * (var(--dot) + var(--space-3)));
+    right: auto;
+  }
+
+  .position:last-child:not(:first-child) .when,
+  .position:not(:first-child, :last-child) .when {
+    justify-content: flex-start;
+  }
+}
+
+.vertical .positions {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  padding-top: 0;
+  padding-left: calc(var(--dot) + var(--space-3));
+}
+
+.vertical .positions::before {
+  inset: 0 auto 0 calc(var(--dot) / 2);
+  border-top: 0;
+  border-left: var(--border-width) solid var(--rule-strong);
+}
+
+.vertical .position,
+.vertical .position:not(:first-child, :last-child),
+.vertical .position:last-child:not(:first-child) {
+  text-align: left;
+  justify-items: start;
+}
+
+.vertical .dot,
+.vertical .position:not(:first-child, :last-child) .dot,
+.vertical .position:last-child:not(:first-child) .dot {
+  top: var(--space-0-5);
+  left: calc(-1 * (var(--dot) + var(--space-3)));
+  right: auto;
+}
+
+.vertical .position:last-child:not(:first-child) .when,
+.vertical .position:not(:first-child, :last-child) .when {
+  justify-content: flex-start;
+}

@@ -1,0 +1,31 @@
+.skeleton {
+  display: grid;
+  min-width: 0;
+}
+
+.rule {
+  display: block;
+}
+
+.prose {
+  gap: var(--space-5);
+  padding-block: var(--space-3);
+}
+
+.prose .rule {
+  border-top: var(--border-width) solid var(--rule);
+}
+
+.prose .rule:last-child {
+  width: 60%;
+}
+
+.ledger .rule {
+  height: var(--row-height);
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+/* The status comes first, so the first rule is the second child: the header's ink rule. */
+.ledger .rule:nth-child(2) {
+  border-bottom-color: var(--rule-ink);
+}

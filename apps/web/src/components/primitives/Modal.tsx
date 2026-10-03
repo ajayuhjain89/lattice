@@ -20,7 +20,7 @@ export interface ModalProps {
 }
 
 /**
- * A centred dialog (design-system B12 "Dialogs"): 560 px (440 for confirmations), ink
+ * A centred dialog (design-system §4): 560 px (440 for confirmations), ink
  * border and overlay shadow, focus trapped by Radix, Escape closes, focus returns to the
  * control that opened it. Below 768 px it is a full-width sheet anchored to the bottom.
  */
@@ -33,6 +33,7 @@ export function Modal({ open, onOpenChange, title, description, children, footer
       <Dialog.Portal>
         <Dialog.Overlay className={styles.overlay} />
         <Dialog.Content
+          data-modal=""
           className={`${styles.dialog} ${size === "confirm" ? styles.confirm : ""}`}
           onOpenAutoFocus={() => {
             opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -47,7 +48,7 @@ export function Modal({ open, onOpenChange, title, description, children, footer
           <header className={styles.header}>
             <Dialog.Title className={styles.title}>{title}</Dialog.Title>
             <Dialog.Close asChild>
-              <Button variant="ghost" size="sm" icon={<Icon as={X} />} aria-label="Close" />
+              <Button variant="quiet" size="sm" icon={<Icon as={X} />} aria-label="Close" />
             </Dialog.Close>
           </header>
           {description && <Dialog.Description className={styles.description}>{description}</Dialog.Description>}

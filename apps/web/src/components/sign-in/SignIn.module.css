@@ -1,250 +1,338 @@
+/* Sign-in (design-direction §6.2): the public masthead over a single column on paper.
+   Production is a headline, one instruction and the route sign-in takes; development
+   adds its boundary band and a register of seeded personas. No card, no backdrop. */
+
 .page {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  min-height: 100dvh;
-}
-
-.editorial {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: var(--space-12);
-  padding: var(--space-10) var(--space-12);
-  border-right: var(--border-width) solid var(--border-strong);
+  min-height: 100svh;
 }
 
-.headline {
-  composes: t-display from global;
-
-  max-width: 15ch;
-  font-size: clamp(2rem, 3.4vw, 3.25rem);
-  line-height: 1.06;
+.main {
+  flex: 1 0 auto;
+  padding: clamp(var(--space-10), 9vh, var(--space-20)) var(--gutter) calc(var(--space-16) + env(safe-area-inset-bottom));
 }
 
-.headline em {
-  font-style: normal;
-  color: var(--accent-lavender-text);
+.main:focus {
+  outline: none;
 }
 
-.deck {
-  margin-top: var(--space-5);
-  max-width: 46ch;
-  font-size: var(--type-lead-size);
-  line-height: var(--type-lead-line);
-  color: var(--text-secondary);
-}
-
-.principles {
+.column,
+.columnWide {
   display: grid;
-  gap: 0;
-  max-width: 520px;
-  border-top: var(--border-width) solid var(--border-strong);
-}
-
-.principle {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
-}
-
-.principleIndex {
-  composes: t-meta from global;
-
-  color: var(--text-muted);
-  padding-top: 2px;
-}
-
-.principleTitle {
-  composes: t-body-strong from global;
-}
-
-.principleBody {
-  color: var(--text-secondary);
-}
-
-.panel {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: var(--space-10) var(--space-12);
-}
-
-.panelInner {
+  align-content: start;
+  gap: var(--space-6);
   width: 100%;
-  max-width: 440px;
-  margin: 0 auto;
-  display: grid;
-  gap: var(--space-8);
+  margin-inline: auto;
 }
 
-.panelHeader {
+.column {
+  max-width: 34rem;
+}
+
+.columnWide {
+  max-width: 60rem;
+}
+
+.mastheadLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-md);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.mastheadLink:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+.intro {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .title {
-  composes: t-h1 from global;
+  composes: t-display from global;
 }
 
-.lede {
+.deck {
+  max-width: 46ch;
   color: var(--text-secondary);
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
+}
+
+/* The route sign-in takes: the trace's rail, three stops. */
+.route {
+  display: grid;
+  padding-top: var(--space-5);
+  border-top: var(--border-width) solid var(--rule-ink);
+}
+
+.step {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--control-xs) minmax(0, 1fr);
+  gap: var(--space-0-5) var(--space-4);
+  padding-bottom: var(--space-5);
+}
+
+.step:last-child {
+  padding-bottom: 0;
+}
+
+.step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--control-xs) + var(--space-1));
+  bottom: var(--space-1);
+  left: calc(var(--control-xs) / 2);
+  border-left: var(--border-width) solid var(--rule-strong);
+}
+
+.stepMark {
+  grid-row: span 2;
+  display: flex;
+}
+
+.stepName {
+  composes: t-body-strong from global;
+}
+
+.stepBody {
+  composes: t-small from global;
+
+  color: var(--text-secondary);
+}
+
+.continuation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--surface-well);
+}
+
+.path {
+  composes: t-meta from global;
+
+  min-width: 0;
+  word-break: break-all;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.help {
+  composes: t-small from global;
+
+  color: var(--text-secondary);
+}
+
+.continueLink {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-underline-offset: 0.2em;
+}
+
+/* Development ------------------------------------------------------------------------ */
+
+.devBand {
+  max-width: 46rem;
+}
+
+.orgs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  gap: var(--space-8);
+  align-items: start;
 }
 
 .org {
   display: grid;
+  min-width: 0;
+}
+
+.orgHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule-ink);
+}
+
+.orgName {
+  composes: t-heading from global;
+
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.orgMeta {
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-2);
 }
 
-.personaList {
-  border-top: var(--border-width) solid var(--border-strong);
+.count {
+  composes: t-meta from global;
+
+  color: var(--text-muted);
+}
+
+.personas > li {
+  border-bottom: var(--border-width) solid var(--rule);
 }
 
 .persona {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-3);
+  gap: 0 var(--space-3);
   width: 100%;
-  min-height: var(--control-lg);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
-  border-bottom: var(--border-width) solid var(--border-default);
+  min-height: var(--space-16);
+  padding: var(--space-2);
   text-align: left;
-  transition: background-color var(--motion-fast) var(--ease);
+  transition: background-color var(--motion-quick) var(--ease);
 }
 
-.persona:hover:not(:disabled) {
-  background: var(--bg-sunken);
+.persona:hover:not([aria-disabled="true"]) {
+  background: var(--surface-well);
 }
 
-.persona:disabled {
-  color: var(--text-muted);
+.persona:focus-visible {
+  outline-offset: -2px;
+}
+
+.persona[aria-disabled="true"] {
+  cursor: progress;
+}
+
+.persona[data-pending] {
+  background: var(--surface-well-strong);
+}
+
+.initials {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: inline-grid;
+  place-items: center;
+  min-width: var(--control-md);
+  height: var(--control-md);
+  padding: 0 var(--space-1);
+  border: var(--border-width) solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sheet);
+  font-size: var(--type-small-size);
+  line-height: 1;
+  font-weight: 600;
+}
+
+.who {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+  min-width: 0;
 }
 
 .personaName {
-  composes: t-body-strong from global;
-
-  display: block;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .personaRole {
-  display: block;
-  color: var(--text-muted);
-  font-size: var(--type-caption-size);
-  line-height: var(--type-caption-line);
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+  overflow-wrap: anywhere;
 }
 
 .personaEmail {
   composes: t-meta from global;
 
-  color: var(--text-muted);
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 200px;
+  color: var(--text-muted);
+}
+
+.go {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity var(--motion-quick) var(--ease);
+}
+
+.persona:hover .go,
+.persona:focus-visible .go,
+.persona[data-pending] .go {
+  opacity: 1;
+}
+
+.other {
+  padding-top: var(--space-4);
+  border-top: var(--border-width) solid var(--rule);
+}
+
+.otherSummary {
+  display: list-item;
+  width: fit-content;
+  min-height: var(--control-md);
+  padding-block: var(--space-2);
+  border-radius: var(--radius-xs);
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .form {
   display: grid;
-  gap: var(--space-3);
-}
-
-.field {
-  display: grid;
-  gap: var(--space-1);
-}
-
-.fieldLabel {
-  composes: t-body-strong from global;
-}
-
-.input {
-  height: var(--control-md);
-  padding: 0 var(--space-3);
-  border: var(--border-width) solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  min-width: 0;
-  width: 100%;
-}
-
-.input::placeholder {
-  color: var(--text-muted);
+  gap: var(--space-4);
+  max-width: 40rem;
+  margin-top: var(--space-3);
 }
 
 .formRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 140px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 14rem);
   gap: var(--space-3);
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.error {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: var(--border-width) solid var(--status-error-border);
-  border-radius: var(--radius-sm);
-  background: var(--status-error-bg);
-  color: var(--status-error-text);
-}
-
-.errorIcon {
-  height: var(--type-body-line);
-  display: grid;
-  place-items: center;
-}
-
-.devNote {
-  color: var(--text-muted);
-  font-size: var(--type-caption-size);
-  line-height: var(--type-caption-line);
-}
-
-@media (width < 1024px) {
-  .page {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .editorial {
-    border-right: 0;
-    border-bottom: var(--border-width) solid var(--border-strong);
-    padding: var(--space-8) var(--gutter);
-    gap: var(--space-8);
-  }
-
-  .panel {
-    padding: var(--space-8) var(--gutter) var(--space-12);
-    justify-content: flex-start;
-  }
-
-  .principles {
-    display: none;
-  }
+  align-items: start;
 }
 
 @media (width < 768px) {
-  .headline {
-    font-size: 2rem;
-    line-height: 2.25rem;
+  .main {
+    padding-top: var(--space-8);
   }
 
-  .deck {
-    font-size: var(--type-prose-size);
-    line-height: var(--type-prose-line);
+  .mastheadLink {
+    min-height: var(--control-lg);
   }
 
-  .personaEmail {
-    display: none;
+  .column,
+  .columnWide {
+    gap: var(--space-5);
   }
 
   .formRow {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .go {
+    opacity: 1;
   }
 }

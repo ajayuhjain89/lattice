@@ -1,0 +1,393 @@
+/* The landing page frame (design-direction §6.1): paper, ruled sections, the product's
+   type roles. One container width, shared with the public masthead. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+}
+
+.main {
+  flex: 1 0 auto;
+}
+
+.main:focus {
+  outline: none;
+}
+
+.hero,
+.section,
+.closing,
+.footerInner {
+  width: 100%;
+  max-width: calc(var(--public-max) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* Hero ------------------------------------------------------------------------------ */
+
+.hero {
+  display: grid;
+  grid-template: "text specimen" auto "key specimen" 1fr / minmax(0, 5fr) minmax(0, 7fr);
+  column-gap: var(--space-16);
+  align-items: start;
+  padding-block: var(--space-16) var(--space-20);
+}
+
+.heroText {
+  grid-area: text;
+  display: grid;
+  gap: var(--space-6);
+  padding-top: var(--space-10);
+}
+
+.heroTitle {
+  composes: t-display from global;
+
+  font-size: 3.5rem;
+  line-height: 3.75rem;
+  max-width: 12ch;
+}
+
+.heroDeck {
+  max-width: 34ch;
+  color: var(--text-secondary);
+  font-size: var(--type-subtitle-size);
+  line-height: var(--type-prose-line);
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-6);
+  margin-top: var(--space-2);
+}
+
+.textLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-lg);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--rule-strong);
+  text-decoration-thickness: var(--border-width);
+  text-underline-offset: 0.3em;
+  transition: text-decoration-color var(--motion-quick) var(--ease);
+}
+
+.textLink:hover {
+  text-decoration-color: var(--rule-ink);
+}
+
+.heroNote {
+  composes: t-caption from global;
+
+  color: var(--text-muted);
+}
+
+.heroSpecimen {
+  grid-area: specimen;
+  min-width: 0;
+}
+
+/* How to read the specimen: its three marks, set at the foot of the text column. */
+.key {
+  grid-area: key;
+  align-self: end;
+  display: grid;
+  gap: var(--space-2);
+  max-width: 24rem;
+  padding-top: var(--space-4);
+  border-top: var(--border-width) solid var(--rule);
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.key li {
+  display: grid;
+  grid-template-columns: var(--space-8) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.keyMark {
+  display: flex;
+  justify-content: center;
+}
+
+.keyPassage {
+  font-family: var(--font-record);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.keyConflict {
+  color: var(--signal-disagreement-mark);
+}
+
+/* Sections --------------------------------------------------------------------------- */
+
+.section {
+  display: grid;
+  gap: var(--space-10);
+  padding-block: var(--space-20);
+  scroll-margin-top: var(--masthead-height);
+}
+
+/* The rule belongs to the content width, not the window. */
+.section,
+.closing {
+  background-image: linear-gradient(var(--rule), var(--rule));
+  background-size: calc(100% - 2 * var(--gutter)) var(--border-width);
+  background-position: var(--gutter) 0;
+  background-repeat: no-repeat;
+}
+
+.head {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  min-width: 0;
+}
+
+.title {
+  composes: t-title from global;
+
+  max-width: 22ch;
+}
+
+.deck {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 46ch;
+  color: var(--text-secondary);
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
+}
+
+.hint {
+  composes: t-caption from global;
+
+  color: var(--text-muted);
+}
+
+.wide .head {
+  max-width: 44rem;
+}
+
+.split {
+  grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+  column-gap: var(--space-16);
+  align-items: start;
+}
+
+/* The heading stays beside a long specimen while it scrolls past. */
+.split .head {
+  position: sticky;
+  top: calc(var(--masthead-height) + var(--space-8));
+}
+
+.body {
+  min-width: 0;
+}
+
+.after {
+  max-width: 66ch;
+  color: var(--text-secondary);
+}
+
+.after strong {
+  color: var(--text-primary);
+}
+
+.compare {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+}
+
+.subTitle {
+  composes: t-subtitle from global;
+}
+
+.subDeck {
+  max-width: 60ch;
+  color: var(--text-secondary);
+}
+
+/* Closing and footer ------------------------------------------------------------------ */
+
+.closing {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  align-items: end;
+  gap: var(--space-6) var(--space-16);
+  padding-block: var(--space-20) var(--space-16);
+}
+
+.closingAction {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+}
+
+.closingTitle {
+  composes: t-display from global;
+
+  max-width: 18ch;
+}
+
+.closingDeck {
+  max-width: 46ch;
+  color: var(--text-secondary);
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
+}
+
+.footer {
+  border-top: var(--border-width) solid var(--rule-ink);
+  padding-block: var(--space-6) calc(var(--space-6) + env(safe-area-inset-bottom));
+}
+
+.footerInner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-8);
+}
+
+.footerNote {
+  composes: t-caption from global;
+
+  flex: 1 1 24rem;
+  color: var(--text-muted);
+}
+
+.footerNav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+}
+
+.footerNav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-sm);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+  text-decoration: none;
+}
+
+.footerNav a:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+/* Widths ------------------------------------------------------------------------------ */
+
+@media (width < 1280px) {
+  .hero {
+    column-gap: var(--space-10);
+    padding-top: var(--space-12);
+  }
+
+  .heroTitle {
+    font-size: 3rem;
+    line-height: 3.25rem;
+  }
+
+  .split {
+    column-gap: var(--space-10);
+  }
+
+  .section {
+    padding-block: var(--space-16);
+  }
+}
+
+/* Below 1024 the hero and the split sections stack: text first, then the specimen at the
+   full content width, never squeezed beside it. */
+@media (width < 1024px) {
+  .hero {
+    grid-template: "text" auto "specimen" auto "key" auto / minmax(0, 1fr);
+    row-gap: var(--space-10);
+  }
+
+  .key {
+    align-self: start;
+  }
+
+  .closing {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .heroText {
+    padding-top: 0;
+  }
+
+  .heroTitle {
+    font-size: var(--type-display-size);
+    line-height: var(--type-display-line);
+    max-width: 16ch;
+  }
+
+  .heroDeck {
+    max-width: 46ch;
+  }
+
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-8);
+  }
+
+  .split .head {
+    position: static;
+  }
+}
+
+@media (width < 768px) {
+  .hero {
+    padding-block: var(--space-8) var(--space-12);
+    row-gap: var(--space-6);
+  }
+
+  .heroText {
+    gap: var(--space-4);
+  }
+
+  .heroDeck {
+    font-size: var(--type-heading-size);
+    line-height: var(--type-heading-line);
+  }
+
+  .section {
+    gap: var(--space-8);
+    padding-block: var(--space-12);
+    scroll-margin-top: 0;
+  }
+
+  .closing {
+    padding-block: var(--space-12);
+  }
+
+  .closingTitle {
+    font-size: var(--type-title-size);
+    line-height: var(--type-title-line);
+  }
+}
+
+@media (forced-colors: active) {
+  .section,
+  .closing {
+    background-image: none;
+    border-top: var(--border-width) solid CanvasText;
+  }
+}

@@ -37,7 +37,13 @@
     ],
     "property-no-vendor-prefix": null,
     "no-descending-specificity": null,
-    "custom-property-empty-line-before": null
+    "custom-property-empty-line-before": null,
+    "declaration-property-value-allowed-list": {
+      "font-family": [
+        "/^var\\(--font-(record|interface|ledger)\\)$/",
+        "inherit"
+      ]
+    }
   },
   "overrides": [
     {
@@ -46,7 +52,45 @@
       ],
       "rules": {
         "color-no-hex": null,
-        "declaration-property-value-disallowed-list": null
+        "declaration-property-value-disallowed-list": null,
+        "declaration-property-value-allowed-list": null,
+        "no-duplicate-selectors": null
+      }
+    },
+    {
+      "files": [
+        "src/styles/fonts.css"
+      ],
+      "rules": {
+        "declaration-property-value-allowed-list": null,
+        "font-family-name-quotes": null
+      }
+    },
+    {
+      "files": [
+        "src/components/brand/**/*.css",
+        "src/components/layout/**/*.css",
+        "src/components/specimen/**/*.css",
+        "src/components/ask/**/*.css",
+        "src/components/evidence/**/*.css",
+        "src/components/trace/**/*.css",
+        "src/components/record/**/*.css",
+        "src/components/ops/**/*.css",
+        "src/components/sources/**/*.css",
+        "src/components/activity/**/*.css",
+        "src/components/access/**/*.css",
+        "src/components/settings/**/*.css",
+        "src/components/landing/**/*.css",
+        "src/components/public/**/*.css",
+        "src/components/sign-in/**/*.css",
+        "src/components/states/**/*.css"
+      ],
+      "rules": {
+        "declaration-property-unit-disallowed-list": {
+          "/^(margin|padding|gap|row-gap|column-gap|inset|top|right|bottom|left)/": [
+            "px"
+          ]
+        }
       }
     }
   ]

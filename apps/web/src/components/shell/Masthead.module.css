@@ -1,0 +1,160 @@
+/* The masthead (design-direction §6.3): one 52 px row on paper, ended by the ink rule of
+   a header of authority. No card, no fill, no pills: sections are set apart by a hairline,
+   and the current page is ink, heavier, and underlined on the masthead rule. */
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-shell);
+  border-bottom: var(--border-width) solid var(--rule-ink);
+  background: var(--surface-paper);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: calc(var(--masthead-height) - var(--border-width));
+  padding-inline: var(--gutter);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  min-height: var(--control-md);
+  border-radius: var(--radius-xs);
+  text-decoration: none;
+}
+
+/* The organization: secondary, after a hairline, truncated before anything else gives way. */
+.org {
+  flex: 0 1 auto;
+  min-width: 8ch;
+  max-width: 28ch;
+  padding-left: var(--space-4);
+  border-left: var(--border-width) solid var(--rule);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.nav {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  flex: none;
+}
+
+.group {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0 var(--space-3);
+  list-style: none;
+}
+
+.group:first-child {
+  padding-left: 0;
+}
+
+/* Sections are separated by a hairline, inset from the masthead's top and rule. */
+.group + .group {
+  position: relative;
+}
+
+.group + .group::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: var(--space-4);
+  bottom: var(--space-4);
+  border-left: var(--border-width) solid var(--rule);
+}
+
+.group > li {
+  display: flex;
+}
+
+.item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--motion-quick) var(--ease);
+}
+
+.item:hover {
+  color: var(--text-primary);
+}
+
+.item[aria-current="page"],
+.item[data-current] {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* The current page's mark sits on the masthead rule: a 2 px provenance bar. A border, so
+   it survives forced colours; the heavier ink label carries it without colour. */
+.item[aria-current="page"]::after,
+.item[data-current]::after {
+  content: "";
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  bottom: calc(-1 * var(--border-width));
+  border-top: 2px solid var(--signal-provenance-mark);
+}
+
+.item:focus-visible {
+  outline-offset: -2px;
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  margin-left: auto;
+}
+
+.jump {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--control-md);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border: var(--border-width) solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sheet);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition:
+    border-color var(--motion-quick) var(--ease),
+    color var(--motion-quick) var(--ease);
+}
+
+.jump:hover {
+  border-color: var(--rule-ink);
+  color: var(--text-primary);
+}
+
+.masthead[data-level="1"] .jump,
+.masthead[data-level="2"] .jump,
+.masthead[data-level="3"] .jump,
+.masthead[data-level="4"] .jump {
+  padding-left: var(--space-2);
+}
+
+@media (forced-colors: active) {
+  .item[aria-current="page"]::after,
+  .item[data-current]::after {
+    border-top-color: Highlight;
+  }
+}

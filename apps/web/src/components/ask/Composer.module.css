@@ -1,17 +1,22 @@
+/* The composer (design-direction §6.5): a sheet with a control edge that turns ink on focus. */
 .composer {
-  border: var(--border-width) solid var(--border-strong);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  transition: box-shadow var(--motion-fast) var(--ease);
+  border: var(--border-width) solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sheet);
+  transition: border-color var(--motion-quick) var(--ease);
 }
 
 .composer:focus-within {
-  box-shadow: 0 0 0 1px var(--border-strong);
+  border-color: var(--rule-ink);
+}
+
+.composer[data-disabled] {
+  background: var(--surface-well);
 }
 
 .field {
   display: block;
-  padding: var(--space-4) var(--space-4) var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-1);
 }
 
 .textarea {
@@ -23,14 +28,14 @@
   border: 0;
   background: transparent;
   resize: none;
-  font-size: var(--type-prose-size);
+  font-size: 1rem;
   line-height: var(--type-prose-line);
   color: var(--text-primary);
-  field-sizing: content;
   overflow-y: auto;
   overflow-wrap: anywhere;
 }
 
+/* The composer's edge carries focus; the box inside doesn't draw a second ring. */
 .textarea:focus-visible {
   outline: none;
 }
@@ -39,13 +44,33 @@
   color: var(--text-muted);
 }
 
-.footer {
+.problem {
+  composes: t-caption from global;
+
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-2);
-  min-height: var(--control-lg);
+  padding: 0 var(--space-4) var(--space-1);
+  color: var(--signal-fault-text);
+}
+
+.problem svg {
+  flex: none;
+}
+
+.footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
   padding: var(--space-1) var(--space-2) var(--space-2) var(--space-3);
+  border-top: var(--border-width) solid var(--rule);
+}
+
+.scope {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-block: var(--space-1);
 }
 
 .submitGroup {
@@ -53,55 +78,38 @@
   align-items: center;
   gap: var(--space-3);
   flex: none;
-  align-self: flex-end;
 }
 
 .hint {
-  composes: t-meta from global;
+  composes: t-caption from global;
 
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   color: var(--text-muted);
   white-space: nowrap;
 }
 
-.hint kbd {
-  font-family: inherit;
-}
-
 .over {
-  color: var(--status-error-text);
+  composes: t-meta from global;
+
+  color: var(--signal-fault-text);
 }
 
-.problem {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-  color: var(--status-error-text);
-  font-size: var(--type-caption-size);
-  line-height: var(--type-caption-line);
+@media (width < 1024px) {
+  .hint:not(.over) {
+    display: none;
+  }
 }
 
-.submitLabel {
-  display: inline;
-}
-
+/* Phones: the scope sentence takes the full width, the button sits under it at the end. */
 @media (width < 768px) {
-  .composer .submit {
-    --button-height: var(--control-lg);
-
-    width: var(--control-lg);
-    padding: 0;
-  }
-
-  .submitLabel {
-    display: none;
-  }
-
-  .hint {
-    display: none;
-  }
-
   .footer {
-    align-items: flex-end;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .submitGroup {
+    justify-content: flex-end;
   }
 }

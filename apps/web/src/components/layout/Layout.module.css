@@ -1,0 +1,152 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-width: 0;
+}
+
+.cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  min-width: 0;
+}
+
+.inline {
+  display: flex;
+  gap: var(--gap);
+  min-width: 0;
+}
+
+.inline > * {
+  flex: none;
+}
+
+/* The middle (or only) flexible child shrinks and truncates rather than wrapping. */
+.inline > :not(:first-child, :last-child),
+.inline > :only-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cluster[data-align="start"],
+.inline[data-align="start"] {
+  align-items: flex-start;
+}
+
+.cluster[data-align="center"],
+.inline[data-align="center"] {
+  align-items: center;
+}
+
+.cluster[data-align="baseline"],
+.inline[data-align="baseline"] {
+  align-items: baseline;
+}
+
+.cluster[data-align="end"] {
+  align-items: flex-end;
+}
+
+.cluster[data-justify="between"] {
+  justify-content: space-between;
+}
+
+.cluster[data-justify="end"] {
+  justify-content: flex-end;
+}
+
+.split {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.split[data-ratio="5:7"] {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+}
+
+.split[data-ratio="7:5"] {
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+}
+
+.split[data-ratio="2:1"] {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+
+.split[data-ratio="1:2"] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+}
+
+@media (width < 1280px) {
+  .split[data-below="1280"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (width < 1024px) {
+  .split[data-below="1024"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (width < 768px) {
+  .split[data-below="768"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.page {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+  min-width: 0;
+}
+
+.page[data-width="admin"] {
+  max-width: calc(var(--admin-max) + 2 * var(--gutter));
+}
+
+/* [margin][measure][notes]: the margin carries exhibit numbers, centred on the first line. */
+.marginGrid {
+  display: grid;
+  grid-template-columns: var(--margin-col) minmax(0, var(--measure)) var(--notes-col);
+  column-gap: var(--space-4);
+  align-items: start;
+  min-width: 0;
+}
+
+.margin {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-0-5);
+  padding-top: var(--space-1);
+  min-width: 0;
+}
+
+.measure {
+  min-width: 0;
+}
+
+.notes {
+  min-width: 0;
+  color: var(--text-muted);
+}
+
+/* No room for sidenotes: the notes column folds under the content. */
+@media (width < 1440px) {
+  .marginGrid {
+    grid-template-columns: var(--margin-col) minmax(0, var(--measure));
+  }
+
+  .notes {
+    grid-column: 2;
+  }
+}
+
+@media (width < 768px) {
+  .marginGrid {
+    column-gap: var(--space-2);
+  }
+}

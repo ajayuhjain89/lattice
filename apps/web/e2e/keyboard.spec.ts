@@ -50,7 +50,7 @@ test("drawer mode (1024 px): focus is trapped and Escape returns focus to the ch
 
 test("evidence rows are buttons reachable in order after the prose", async ({ page }) => {
   await askFor(page, ANSWERED);
-  const row = page.locator(`[data-evidence="${EV.kickoff}"]`);
+  const row = page.getByTestId("evidence").locator(`[data-evidence="${EV.kickoff}"]`);
   await row.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("evidence-inspector").getByRole("heading", { name: "Acme kickoff — call notes" })).toBeVisible();
@@ -59,7 +59,7 @@ test("evidence rows are buttons reachable in order after the prose", async ({ pa
 
 test("scope popovers work from the keyboard and close with Escape", async ({ page }) => {
   await openAsk(page);
-  const trigger = page.getByRole("button", { name: "Set dates" });
+  const trigger = page.getByRole("button", { name: "Dates: any date. Change" });
   await trigger.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByLabel("From")).toBeVisible();

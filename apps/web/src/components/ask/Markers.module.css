@@ -1,0 +1,29 @@
+/* 6 px apart: neighbouring 18 px markers keep 24 px between centres (WCAG 2.5.8). */
+.margin,
+.inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: calc(var(--space-1) + var(--space-0-5));
+}
+
+/* In the margin: right-aligned against the text, two to a line, aligned to its first line. */
+.margin {
+  justify-content: flex-end;
+}
+
+.inline {
+  margin-left: var(--space-1);
+  vertical-align: baseline;
+}
+
+.tooltipTitle {
+  display: block;
+  font-weight: 600;
+}
+
+.tooltipMeta {
+  composes: t-meta from global;
+
+  display: block;
+  opacity: 0.8;
+}

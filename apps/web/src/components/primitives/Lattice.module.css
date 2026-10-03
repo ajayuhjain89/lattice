@@ -1,0 +1,244 @@
+.figure {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  min-width: 0;
+}
+
+/* Positioned, so visually hidden labels inside are clipped with the table when it scrolls. */
+.scroll {
+  position: relative;
+  overflow-x: auto;
+  min-width: 0;
+
+  /* Room for the linked / selected ring around edge cells. */
+  padding: var(--space-1);
+  margin: calc(-1 * var(--space-1));
+  border-radius: var(--radius-sm);
+}
+
+/* --lattice-cell / --lattice-gap are component tokens: a surface where a lattice is the
+   subject of the view (the landing page's example) may set them larger. */
+.lattice {
+  --cell: var(--lattice-cell);
+
+  border-collapse: separate;
+  border-spacing: var(--lattice-gap);
+}
+
+.caption {
+  composes: t-section from global;
+
+  text-align: left;
+  padding: 0 3px var(--space-1);
+}
+
+.corner {
+  padding: 0;
+}
+
+.cornerLabel {
+  composes: t-caption from global;
+
+  color: var(--text-muted);
+}
+
+.colHead,
+.rowHead {
+  composes: t-meta from global;
+
+  padding: 0 var(--space-1);
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: color var(--motion-quick) var(--ease);
+}
+
+.colHead {
+  text-align: center;
+  vertical-align: bottom;
+  min-width: var(--cell);
+}
+
+/* Row headers stay in view while a wide lattice scrolls (on the lattice's own ground). */
+.rowHead,
+.corner {
+  position: sticky;
+  left: 0;
+  z-index: var(--z-sticky);
+  background: var(--surface-paper);
+}
+
+.lattice[data-ground="sheet"] .rowHead,
+.lattice[data-ground="sheet"] .corner {
+  background: var(--surface-sheet);
+}
+
+.rowHead {
+  text-align: right;
+  padding-right: var(--space-2);
+}
+
+.headLabel {
+  display: block;
+}
+
+/* A column group (Generation · Embedding): a caption over a hairline spanning its columns. */
+.groupHead {
+  composes: t-caption from global;
+
+  padding: 0 var(--space-2) var(--space-1);
+  border-bottom: var(--border-width) solid var(--rule);
+  color: var(--text-muted);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.lattice[data-headers="interface"] .colHead,
+.lattice[data-headers="interface"] .rowHead {
+  font-family: var(--font-interface);
+  font-size: var(--type-caption-size);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.lattice[data-headers="interface"] .colHead {
+  padding: 0 var(--space-2);
+}
+
+.detail {
+  composes: t-caption from global;
+
+  display: block;
+  color: var(--text-muted);
+  font-family: var(--font-interface);
+  font-weight: 400;
+}
+
+.lit {
+  color: var(--signal-provenance-text);
+}
+
+/* A column in a potential conflict: plum underline (and a spoken note in the header). */
+.conflict .headLabel {
+  color: var(--signal-disagreement-text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.cell {
+  padding: 0;
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* The cell is always a square, however wide its column header is. */
+.square {
+  display: inline-block;
+  width: var(--cell);
+  height: var(--cell);
+  vertical-align: middle;
+  border: var(--border-width) solid var(--rule);
+  border-radius: var(--radius-xs);
+  transition:
+    box-shadow var(--motion-quick) var(--ease),
+    background-color var(--motion-quick) var(--ease);
+}
+
+.filled {
+  border-color: var(--signal-provenance-mark);
+  background: var(--signal-provenance-mark);
+}
+
+.hatched {
+  border-style: dashed;
+  border-color: var(--boundary-edge);
+  background-image: var(--boundary-hatch);
+}
+
+/* Linked: the related claim or exhibit is hovered or focused. */
+.cellLit {
+  box-shadow: 0 0 0 2px var(--surface-paper), 0 0 0 4px var(--signal-provenance-tint);
+}
+
+/* The open exhibit's cells: the passage marker, as on the selected exhibit marker. */
+.cellSelected {
+  box-shadow: 0 0 0 2px var(--surface-paper), 0 0 0 4px var(--signal-passage-fill);
+}
+
+.cellButton {
+  cursor: pointer;
+}
+
+.cellButton:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.legend {
+  composes: t-caption from global;
+
+  color: var(--text-secondary);
+}
+
+.legendItems {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.swatch {
+  width: 12px;
+  height: 12px;
+  border: var(--border-width) solid var(--rule);
+  border-radius: var(--radius-xs);
+  flex: none;
+}
+
+.swatch-filled {
+  border-color: var(--signal-provenance-mark);
+  background: var(--signal-provenance-mark);
+}
+
+.swatch-hatched {
+  border-style: dashed;
+  border-color: var(--boundary-edge);
+  background-image: var(--boundary-hatch);
+}
+
+.swatch-conflict {
+  border-color: var(--signal-disagreement-mark);
+}
+
+@media (forced-colors: active) {
+  .filled,
+  .swatch-filled {
+    background: CanvasText;
+  }
+
+  .hatched,
+  .swatch-hatched {
+    background-image: none;
+  }
+
+  .cellLit,
+  .cellSelected {
+    outline: 2px solid Highlight;
+    box-shadow: none;
+  }
+}
+
+/* Touch layouts: cells become 24 px targets (WCAG 2.5.8). */
+@media (pointer: coarse) {
+  .lattice[data-interactive] {
+    --cell: 26px;
+  }
+}

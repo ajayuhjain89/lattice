@@ -1,17 +1,19 @@
 "use client";
 
 import { Dialog } from "radix-ui";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
 import styles from "./Drawer.module.css";
 
 export interface DrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  side: "left" | "right" | "bottom";
+  side: "right" | "bottom";
   /** Accessible name of the dialog; rendered visually by the content itself. */
   title: string;
   description?: string;
+  /** Bottom sheet only: as tall as its content (up to 92% of the viewport) instead of 92%. */
+  fit?: boolean;
   children: ReactNode;
   onOpenAutoFocus?: (event: Event) => void;
   onCloseAutoFocus?: (event: Event) => void;
@@ -19,17 +21,29 @@ export interface DrawerProps {
 
 /**
  * A modal side panel or bottom sheet (Radix Dialog): focus is trapped, Escape closes,
- * the page behind is inert, and focus returns where it came from.
+ * the page behind is inert, and focus returns where it came from. Radix returns focus
+ * only to its own trigger, so the opener is remembered; a caller with its own focus
+ * handlers (the inspector) runs first and may call preventDefault to take over.
  */
-export function Drawer({ open, onOpenChange, side, title, description, children, onOpenAutoFocus, onCloseAutoFocus }: DrawerProps) {
+export function Drawer({ open, onOpenChange, side, title, description, fit = false, children, onOpenAutoFocus, onCloseAutoFocus }: DrawerProps) {
+  const opener = useRef<HTMLElement | null>(null);
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.overlay} />
         <Dialog.Content
-          className={`${styles.panel} ${styles[side]}`}
-          onOpenAutoFocus={onOpenAutoFocus}
-          onCloseAutoFocus={onCloseAutoFocus}
+          data-modal=""
+          className={[styles.panel, styles[side], fit && styles.fit].filter(Boolean).join(" ")}
+          onOpenAutoFocus={(event) => {
+            opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            onOpenAutoFocus?.(event);
+          }}
+          onCloseAutoFocus={(event) => {
+            onCloseAutoFocus?.(event);
+            if (event.defaultPrevented) return;
+            event.preventDefault();
+            opener.current?.focus();
+          }}
         >
           <Dialog.Title className="visually-hidden">{title}</Dialog.Title>
           <Dialog.Description className="visually-hidden">{description ?? title}</Dialog.Description>

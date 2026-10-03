@@ -1,75 +1,52 @@
+/* The brief: a record, not a chat response (design-direction §6.5). */
+
+/* Ledger line: the status keyword and the answer's facts, under an ink rule of authority. */
 .statusLine {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
-  min-height: var(--control-sm);
-  padding-bottom: var(--space-3);
-  border-bottom: var(--border-width) solid var(--border-default);
+  gap: var(--space-1) var(--space-4);
+  min-height: var(--control-md);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule-ink);
 }
 
 .facts {
-  composes: t-label from global;
+  composes: t-mark from global;
 
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1) var(--space-2);
-  color: var(--text-muted);
+  gap: var(--space-1) 0;
   min-width: 0;
-  margin: 0;
+  color: var(--text-secondary);
 }
 
-.fact {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  white-space: nowrap;
-}
-
-.fact + .fact::before {
-  content: "·";
-  color: var(--text-muted);
-}
-
-.status {
+.keyword {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
   color: var(--text-primary);
-  font-weight: 600;
 }
 
-.toneWarning {
-  color: var(--status-warning-text);
+.keyword[data-tone="error"] {
+  color: var(--signal-fault-text);
 }
 
-.toneInfo {
-  color: var(--status-info-text);
-}
-
-.toneError {
-  color: var(--status-error-text);
-}
-
-.statusActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  flex: none;
-}
-
-.askedAs {
-  composes: t-meta from global;
-
+/* Separators end an item, so a wrapped ledger line never starts with one. */
+.keyword:not(:last-child)::after,
+.fact:not(:last-child)::after {
+  content: "·" / "";
+  font-weight: 400;
+  padding: 0 var(--space-2);
   color: var(--text-muted);
-  margin-bottom: var(--space-2);
-  overflow-wrap: anywhere;
 }
 
-.askedAs strong {
-  font-weight: 500;
-  color: var(--text-secondary);
+.actions {
+  display: flex;
+  gap: var(--space-1);
+  margin-right: calc(-1 * var(--space-2));
 }
 
 .notices {
@@ -77,142 +54,176 @@
   gap: var(--space-2);
 }
 
-.prose {
+/* Statements ----------------------------------------------------------------------- */
+
+.statements {
   display: grid;
-  gap: var(--space-4);
-  max-width: var(--prose-measure);
+  gap: var(--space-3);
+}
+
+.statement {
+  --marker-box: var(--citation-size);
+  --margin-marker-offset: calc((var(--type-prose-line) - var(--marker-box)) / 2);
 }
 
 .lead {
-  font-size: var(--type-lead-size);
-  line-height: var(--type-lead-line);
-  font-weight: 500;
-  letter-spacing: -0.005em;
-  color: var(--text-primary);
-  text-wrap: pretty;
+  --margin-marker-offset: calc((var(--type-lead-line) - var(--marker-box)) / 2);
+
+  margin-bottom: var(--space-2);
+}
+
+/* Text first in the reading order, markers first on the page: the grid places them. */
+.statement > .claim {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.claimMargin {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+  padding-top: var(--margin-marker-offset);
+}
+
+.statement.withNotes {
+  grid-template-columns: var(--margin-col) minmax(0, var(--measure)) var(--notes-col);
+}
+
+.claim {
+  max-width: var(--measure);
   overflow-wrap: break-word;
 }
 
-.support {
-  font-size: var(--type-prose-size);
-  line-height: var(--type-prose-line);
+.leadText {
+  composes: t-lead from global;
+}
+
+.supportText {
+  composes: t-prose from global;
+
   color: var(--text-primary);
-  text-wrap: pretty;
-  overflow-wrap: break-word;
+}
+
+.claimWords {
+  border-radius: var(--radius-xs);
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition:
+    text-decoration-color var(--motion-base) var(--ease),
+    background-color var(--motion-base) var(--ease);
+}
+
+/* Linked: the exhibit (or this claim's marker) is hovered or focused. */
+.claim[data-lit] .claimWords {
+  text-decoration-color: var(--signal-provenance-mark);
+}
+
+/* One of its exhibits is open: the passage marker, as in the inspector. */
+.claim[data-open] .claimWords {
+  text-decoration-color: var(--signal-passage-fill);
+  text-decoration-thickness: 3px;
+}
+
+.sidenote {
+  composes: t-meta from global;
+
+  grid-column: 3;
+  grid-row: 1;
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--margin-marker-offset);
+  color: var(--text-muted);
+}
+
+.sidenote li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-2);
+}
+
+.sidenoteNumber {
+  grid-row: span 2;
+  color: var(--text-secondary);
+}
+
+.sidenoteRef {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidenoteDate {
+  grid-column: 2;
+}
+
+/* Unknowns and disagreement -------------------------------------------------------- */
+
+.sectionHeading {
+  composes: t-section from global;
+
+  color: var(--text-primary);
 }
 
 .unknowns {
   display: grid;
   gap: var(--space-2);
-  max-width: var(--prose-measure);
+  max-width: var(--measure);
 }
 
 .unknownList {
   display: grid;
   gap: var(--space-1);
+  color: var(--text-secondary);
 }
 
 .unknownList li {
-  display: grid;
-  grid-template-columns: var(--space-4) minmax(0, 1fr);
-  color: var(--text-secondary);
+  position: relative;
+  padding-left: var(--space-4);
 }
 
 .unknownList li::before {
-  content: "–";
+  content: "–" / "";
+  position: absolute;
+  left: 0;
   color: var(--text-muted);
 }
 
-/* Conflicts ------------------------------------------------------------------------ */
-
-.conflicts {
+.disagreements {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-8);
 }
 
-.topic {
-  composes: t-h3 from global;
-
-  overflow-wrap: anywhere;
+.positionText {
+  max-width: none;
 }
 
-.positions {
-  --rule: color-mix(in srgb, var(--status-conflict-border) 40%, transparent);
+.positionRole {
+  composes: t-small from global;
 
-  container-type: inline-size;
-  display: grid;
-  border-top: var(--border-width) solid var(--rule);
+  font-family: var(--font-interface);
+  color: var(--text-secondary);
 }
 
-.position {
-  display: grid;
-  grid-template-columns: 104px 176px minmax(0, 1fr);
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
-  border-bottom: var(--border-width) solid var(--rule);
-  align-items: baseline;
-}
-
-.neutralPositions {
-  --rule: var(--border-default);
-}
-
-.positionDate {
+.positionNumber {
   composes: t-meta from global;
-
-  color: var(--text-primary);
 }
 
-.positionSource {
-  composes: t-label from global;
-
-  color: var(--text-secondary);
-  overflow-wrap: anywhere;
-  text-transform: uppercase;
-}
-
-.positionTitle {
-  display: block;
-  margin-top: var(--space-0-5);
-  font-family: var(--font-sans);
-  font-size: var(--type-caption-size);
-  line-height: var(--type-caption-line);
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--text-secondary);
-}
-
-.positionClaim {
-  overflow-wrap: break-word;
-}
-
-.summary {
-  color: var(--text-primary);
-  max-width: var(--prose-measure);
-}
-
-.docLinks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-@media (width < 768px) {
-  /* Wrapped facts would start a line with a separator: use space instead. */
-  .facts {
-    column-gap: var(--space-3);
-  }
-
-  .fact + .fact::before {
-    content: none;
+@media (forced-colors: active) {
+  .claim[data-lit] .claimWords,
+  .claim[data-open] .claimWords {
+    text-decoration-color: Highlight;
   }
 }
 
-/* The reading column narrows with the viewport and with the docked inspector: the
-   positions respond to their own width, not the viewport's. */
-@container (width < 600px) {
-  .position {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-1);
+@media (pointer: coarse) {
+  .statement {
+    --marker-box: 24px;
   }
 }

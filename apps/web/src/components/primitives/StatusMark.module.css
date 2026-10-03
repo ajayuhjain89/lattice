@@ -1,0 +1,35 @@
+.mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mark svg {
+  flex: none;
+}
+
+.healthy {
+  color: var(--signal-healthy-text);
+}
+
+.time {
+  color: var(--signal-time-text);
+}
+
+.fault {
+  color: var(--signal-fault-text);
+}
+
+.disagreement {
+  color: var(--signal-disagreement-text);
+}
+
+.neutral {
+  color: var(--text-secondary);
+}
+
+.keyword {
+  composes: t-mark from global;
+}

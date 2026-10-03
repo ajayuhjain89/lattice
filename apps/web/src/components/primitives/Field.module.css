@@ -1,0 +1,309 @@
+.field,
+.group {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.label {
+  composes: t-section from global;
+
+  color: var(--text-primary);
+  padding: 0;
+}
+
+.hint {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.help {
+  composes: t-caption from global;
+
+  color: var(--text-secondary);
+  max-width: var(--measure);
+}
+
+.error {
+  composes: t-caption from global;
+
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  color: var(--signal-fault-text);
+  font-weight: 600;
+}
+
+.error svg {
+  flex: none;
+  margin-top: var(--space-0-5);
+}
+
+/* The control: sheet, control-boundary edge; ink on hover and focus. */
+.control {
+  width: 100%;
+  min-width: 0;
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  border: var(--border-width) solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sheet);
+  color: var(--text-primary);
+  font-family: var(--font-interface);
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  transition: border-color var(--motion-quick) var(--ease);
+}
+
+.control::placeholder {
+  color: var(--text-muted);
+}
+
+.control:hover:not(:disabled, [readonly]) {
+  border-color: var(--rule-ink);
+}
+
+.control:focus-visible {
+  border-color: var(--rule-ink);
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.control[aria-invalid="true"] {
+  border-color: var(--signal-fault-mark);
+}
+
+.control:disabled {
+  cursor: default;
+  background: var(--surface-well);
+  border-color: var(--rule);
+  color: var(--text-muted);
+}
+
+.control[readonly] {
+  background: var(--surface-well);
+}
+
+.sm {
+  height: var(--control-sm);
+  padding: 0 var(--space-2);
+  font-size: var(--type-small-size);
+}
+
+.textarea {
+  height: auto;
+  padding: var(--space-2) var(--space-3);
+  resize: vertical;
+}
+
+.date {
+  font-family: var(--font-ledger);
+  font-variant-numeric: tabular-nums;
+}
+
+.selectWrap {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.select {
+  appearance: none;
+  padding-right: var(--space-8);
+  cursor: pointer;
+}
+
+.chevron {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.searchWrap {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.search {
+  padding-left: var(--space-8);
+  padding-right: var(--space-8);
+}
+
+.search::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.searchIcon {
+  position: absolute;
+  left: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.searchSm .searchIcon {
+  left: var(--space-2);
+}
+
+.searchSm .search {
+  padding-left: var(--space-6);
+}
+
+.clear {
+  position: absolute;
+  right: var(--space-1);
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: var(--control-sm);
+  height: var(--control-sm);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+
+.clear:hover {
+  background: var(--surface-well);
+  color: var(--text-primary);
+}
+
+.searchSm .clear {
+  width: var(--control-xs);
+  height: var(--control-xs);
+}
+
+/* Choices */
+.choices {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.choice {
+  display: grid;
+  grid-template-columns: var(--icon-size) minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+}
+
+.checkbox,
+.radio {
+  appearance: none;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  margin: var(--space-0-5) 0 0;
+  border: var(--border-width) solid var(--rule-strong);
+  background: var(--surface-sheet);
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-quick) var(--ease),
+    border-color var(--motion-quick) var(--ease);
+}
+
+.checkbox {
+  border-radius: var(--radius-xs);
+}
+
+.radio {
+  border-radius: var(--radius-round);
+}
+
+.checkbox:hover:not(:disabled),
+.radio:hover:not(:disabled) {
+  border-color: var(--rule-ink);
+}
+
+.checkbox:checked {
+  background: var(--surface-inverse);
+  border-color: var(--surface-inverse);
+}
+
+.checkbox:checked::after {
+  content: "";
+  width: 9px;
+  height: 5px;
+  margin-top: -2px;
+  border: solid var(--text-inverse);
+  border-width: 0 0 2px 2px;
+  transform: rotate(-45deg);
+}
+
+.radio:checked {
+  border-color: var(--rule-ink);
+}
+
+.radio:checked::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-round);
+  background: var(--surface-inverse);
+}
+
+.checkbox:disabled,
+.radio:disabled {
+  cursor: default;
+  background: var(--surface-well);
+  border-color: var(--rule);
+}
+
+.checkbox:focus-visible,
+.radio:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .checkbox,
+  .radio {
+    appearance: auto;
+  }
+
+  .checkbox::after,
+  .radio::after {
+    content: none;
+  }
+}
+
+.choiceText {
+  display: grid;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.choiceLabel {
+  cursor: pointer;
+}
+
+.choiceHelp {
+  composes: t-caption from global;
+
+  color: var(--text-secondary);
+}
+
+/* Touch layouts: choices get a 44 px row; text inputs grow to 44 px. */
+@media (pointer: coarse) {
+  .choice {
+    min-height: var(--touch-target);
+    align-items: center;
+  }
+
+  .checkbox,
+  .radio {
+    margin-top: 0;
+  }
+
+  .control:not(.textarea) {
+    height: var(--control-lg);
+  }
+}

@@ -1,5 +1,5 @@
 /**
- * Access-page sentences, built only from what the API returned (design-system B12
+ * Access-page sentences, built only from what the API returned (design-system §5.9
  * "Access explanation": sentences, not policy objects). No counts, names or documents
  * are added here: private channels the administrator isn't in and documents they can't
  * read are acknowledged only as such -- never named, counted or identified.

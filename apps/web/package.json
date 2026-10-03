@@ -15,12 +15,13 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "screens": "playwright test --project=screens --workers=2",
+    "screens:canonical": "CANONICAL_DIR=../../docs/screens playwright test --project=screens --workers=2",
     "api:schema": "cd ../../backend && uv run --extra local python scripts/export_openapi.py ../apps/web/src/api/openapi.json",
     "api:types": "openapi-typescript src/api/openapi.json -o src/api/schema.gen.ts --default-non-nullable false && prettier --write src/api/schema.gen.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "5.104.0",
-    "geist": "1.7.2",
     "lucide-react": "1.48.0",
     "next": "16.3.6",
     "openapi-fetch": "0.17.0",

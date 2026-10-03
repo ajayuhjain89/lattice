@@ -421,9 +421,9 @@ Steps:
 11. All dates, titles, authors, authority and sensitivity displayed come from the DB
     via chunk IDs, never from model text.
 
-The web client renders claims only from this validated structure; a citation chip is
+The web client renders claims only from this validated structure; an exhibit marker is
 rendered only when its evidence ID resolves in the response's evidence map, and a
-claim whose chip cannot resolve is not rendered (client-side defense in depth).
+claim whose marker cannot resolve is not rendered (client-side defense in depth).
 
 ## 10. Freshness, supersession and potential conflicts (deterministic assembly)
 

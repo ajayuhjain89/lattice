@@ -1,0 +1,64 @@
+.band,
+.inline {
+  border: var(--border-width) dashed var(--boundary-edge);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-sheet);
+  background-image: var(--boundary-hatch);
+  color: var(--text-secondary);
+}
+
+.band {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  height: var(--type-small-line);
+  flex: none;
+  color: var(--text-primary);
+}
+
+/* The text sits on a solid ground inside the hatch so it stays legible. */
+.text {
+  min-width: 0;
+  background: var(--surface-sheet);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.edge {
+  position: relative;
+  padding-left: var(--space-4);
+}
+
+.edge::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--space-2);
+  border-right: var(--border-width) dashed var(--boundary-edge);
+  background-image: var(--boundary-hatch);
+}
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: var(--space-0-5) var(--space-2);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+}
+
+@media (forced-colors: active) {
+  .band,
+  .inline,
+  .edge::before {
+    background-image: none;
+  }
+}

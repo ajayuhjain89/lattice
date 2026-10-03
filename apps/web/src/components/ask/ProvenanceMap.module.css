@@ -1,0 +1,60 @@
+.map {
+  min-width: 0;
+}
+
+/* The lattice's row headers are claim openings: interface type, left-aligned, so the
+   eye runs from the words to their cells. */
+.map th[scope="row"] {
+  max-width: 18rem;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  font-family: var(--font-interface);
+  font-size: var(--type-caption-size);
+  font-variant-numeric: normal;
+  color: var(--text-secondary);
+}
+
+.summary {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--touch-target);
+  padding-block: var(--space-2);
+  border-block: var(--border-width) solid var(--rule);
+  text-align: left;
+}
+
+.summary svg {
+  flex: none;
+  margin-top: var(--space-0-5);
+  transition: transform var(--motion-quick) var(--ease);
+}
+
+.summary[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.summaryLabel {
+  composes: t-section from global;
+
+  display: block;
+}
+
+.summaryCounts {
+  composes: t-meta from global;
+
+  display: block;
+  color: var(--text-secondary);
+}
+
+.folded {
+  padding-top: var(--space-3);
+}
+
+@media (width < 768px) {
+  .map th[scope="row"] {
+    max-width: 10rem;
+  }
+}

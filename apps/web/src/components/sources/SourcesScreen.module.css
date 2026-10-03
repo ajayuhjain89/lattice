@@ -1,300 +1,193 @@
-.main {
-  flex: 1;
-  outline: none;
-}
-
-.column {
-  width: 100%;
-  max-width: calc(var(--admin-max) + 2 * var(--gutter));
-  padding: var(--space-8) var(--gutter) var(--space-16);
-  display: grid;
-  gap: var(--space-10);
-  min-width: 0;
-}
-
-.head {
-  display: grid;
-  gap: var(--space-3);
-  max-width: 720px;
-}
-
-.title {
-  composes: t-h1 from global;
-}
-
-.deck {
-  font-size: var(--type-prose-size);
-  line-height: var(--type-prose-line);
-  color: var(--text-secondary);
-}
-
-.section {
-  display: grid;
-  gap: var(--space-4);
-  min-width: 0;
+/* The sources register (design-direction §6.6): a ledger of rows, not a dashboard. */
+.summary {
+  margin-top: var(--space-2);
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .note {
+  max-width: var(--measure);
   color: var(--text-secondary);
-  max-width: 80ch;
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
 }
 
-.note code,
-.empty code {
+/* Source: type glyph beside a name; key and connector under it. */
+.source {
+  display: grid;
+  grid-template-columns: var(--icon-size) minmax(0, 1fr);
+  column-gap: var(--space-2);
+  min-width: 0;
+}
+
+.glyph {
+  grid-row: span 2;
+  padding-top: var(--space-0-5);
+  color: var(--text-secondary);
+}
+
+.sourceName {
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+
+.sourceMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  font-weight: 400;
+  line-height: var(--type-small-line);
+}
+
+.key {
+  font-family: var(--font-ledger);
   font-size: var(--type-meta-size);
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-xs);
-  background: var(--bg-sunken);
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.tableWrap {
-  overflow-x: auto;
-  border-bottom: var(--border-width) solid var(--border-default);
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 760px;
-}
-
-.table thead th {
-  font-family: var(--font-mono);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line);
-  font-weight: 500;
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
-  height: 32px;
-  padding: 0 var(--space-4) 0 0;
-  background: var(--bg-muted);
-  border-bottom: var(--border-width) solid var(--border-strong);
-  color: var(--text-primary);
-  text-align: left;
-  white-space: nowrap;
-}
-
-.table th:first-child,
-.table td:first-child {
-  padding-left: var(--space-4);
-}
-
-.table td,
-.table .rowHead {
-  padding: var(--space-3) var(--space-4) var(--space-3) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
-  vertical-align: top;
-  text-align: left;
-}
-
-.rowHead {
-  composes: t-body-strong from global;
-}
-
-.table tbody tr:last-child td,
-.table tbody tr:last-child .rowHead {
-  border-bottom: 0;
-}
-
-.table tbody tr:hover {
-  background: var(--bg-sunken);
-}
-
-.table .num {
-  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.table .action {
-  text-align: right;
-  white-space: nowrap;
-}
-
-.primary {
-  composes: t-body-strong from global;
-
-  display: block;
-}
-
-.secondary {
-  composes: t-meta from global;
-
-  display: block;
-  color: var(--text-muted);
-  margin-top: var(--space-0-5);
-  overflow-wrap: anywhere;
-}
-
-.mono {
-  font-family: var(--font-mono);
-  font-size: var(--type-meta-size);
-  overflow-wrap: normal;
-}
-
-.record > .mono {
-  overflow-wrap: anywhere;
-}
-
-.statusLine {
-  display: block;
-}
-
-.state {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  white-space: nowrap;
-}
-
-.ok {
-  color: var(--status-success-text);
-}
-
-.warn {
-  color: var(--status-warning-text);
-}
-
-.bad {
-  color: var(--status-error-text);
-}
-
-.off {
-  color: var(--text-muted);
-}
-
-.syncCell {
-  display: inline-grid;
-  justify-items: end;
-  gap: var(--space-1);
-}
-
-.failureGroup {
-  border-top: var(--border-width) solid var(--border-default);
-  padding: var(--space-3) 0;
-  display: grid;
-  gap: var(--space-3);
-}
-
-.failureGroup:last-child {
-  border-bottom: var(--border-width) solid var(--border-default);
-}
-
-.failureHead {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--space-4);
-}
-
-.codes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
-}
-
-.code {
-  font-family: var(--font-mono);
-}
-
-.records {
-  display: grid;
-  gap: 0;
-  border-top: var(--border-width) solid var(--border-default);
-}
-
-.record {
-  display: grid;
-  grid-template-columns: 96px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.2fr);
-  gap: var(--space-3);
-  padding: var(--space-2) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
-  align-items: baseline;
-  min-width: 0;
-}
-
-.record > * {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.record:last-child {
-  border-bottom: 0;
-}
-
-.cards {
-  display: none;
-}
-
-.card {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-4) 0;
-  border-bottom: var(--border-width) solid var(--border-default);
-}
-
-.card dl {
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  gap: var(--space-2) var(--space-3);
-}
-
-.card dt {
-  font-family: var(--font-mono);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line);
-  font-weight: 500;
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
-  color: var(--text-muted);
-  padding-top: 2px;
-}
-
-.card dd {
-  min-width: 0;
-}
-
-.card .syncCell {
-  justify-items: start;
-}
-
-.empty {
-  padding: var(--space-6) 0;
-  border-top: var(--border-width) solid var(--border-strong);
-  color: var(--text-secondary);
-  display: grid;
-  gap: var(--space-1);
-}
-
-.emptyTitle {
-  composes: t-h3 from global;
-
+.inactive {
   color: var(--text-primary);
 }
 
+.stack {
+  display: grid;
+  gap: var(--space-0-5);
+  justify-items: start;
+  min-width: 0;
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+}
+
+.when {
+  font-family: var(--font-ledger);
+  font-size: var(--type-meta-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.secondary {
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+/* Age since the last full sync: ink, or the time signal after a week (word + icon). */
+.age {
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+/* The icon leads the words on their first line, never alone on a line of its own. */
+.age svg {
+  display: inline;
+  margin-right: var(--space-1);
+  vertical-align: text-bottom;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.old,
+.old .when {
+  color: var(--signal-time-text);
+}
+
+.code {
+  font-family: var(--font-ledger);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.guard {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.failed {
+  font-weight: 600;
+}
+
+/* The disclosure sits flush with the text above it. */
+.disclosure {
+  margin-left: calc(-1 * var(--space-2));
+}
+
+.control {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  min-width: 0;
+}
+
+.job,
+.jobFailed {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-1);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.jobFailed {
+  color: var(--signal-fault-text);
+}
+
+.requestError {
+  color: var(--signal-fault-text);
+  font-size: var(--type-small-size);
+  font-weight: 600;
+  line-height: var(--type-small-line);
+}
+
+/* The inline expansion under a row with failed records. */
+.detail {
+  display: grid;
+  gap: var(--space-3);
+  margin-left: var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--signal-fault-mark);
+  background: var(--surface-sheet);
+}
+
+.codes {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.opaque {
+  display: grid;
+}
+
 @media (width < 1024px) {
-  .tableWrap {
-    display: none;
+  .detail {
+    margin-left: 0;
   }
 
-  .cards {
-    display: block;
-    border-top: var(--border-width) solid var(--border-strong);
-  }
-
-  .record {
-    grid-template-columns: auto minmax(0, 1fr);
+  .disclosure {
+    margin-left: 0;
   }
 }
 
-@media (width < 768px) {
-  .column {
-    padding-top: var(--space-5);
-    gap: var(--space-8);
-  }
-
-  .failureHead {
-    flex-direction: column;
+@media (forced-colors: active) {
+  .detail {
+    border-left-color: CanvasText;
   }
 }

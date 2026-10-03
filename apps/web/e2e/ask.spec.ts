@@ -4,14 +4,14 @@ import { AMBIGUOUS, ANSWERED, EV, EVIDENCE_ONLY, FAILED, INSUFFICIENT, UNSUPPORT
 
 import { askFor, openAsk } from "./helpers";
 
-test("Ask → answer: prose, chips, status line, trace link, session history", async ({ page }) => {
+test("Ask → answer: claims, markers, the ledger line, trace link", async ({ page }) => {
   const log = await askFor(page, ANSWERED);
   expect(log.asks).toEqual([{ question: "When will SCIM ship for Acme, and what did we tell them?", scope: {} }]);
   expect(log.headers.find((h) => h["x-lattice-request"])?.["x-lattice-request"]).toBe("1");
   await expect(page.getByTestId("answer-prose")).toContainText("SCIM general availability to December");
-  await expect(page.getByText("3 sources cited")).toBeVisible();
+  await expect(page.getByTestId("status-line")).toContainText("3 claims");
+  await expect(page.getByTestId("status-line")).toContainText("3 exhibits");
   await expect(page.getByRole("link", { name: "Trace", exact: true })).toHaveAttribute("href", `/traces/${ANSWERED.trace_id}`);
-  await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: /When will SCIM ship/ })).toBeVisible();
 });
 
 test("citation → evidence: fetched on open, never kept after close", async ({ page }) => {
@@ -21,7 +21,7 @@ test("citation → evidence: fetched on open, never kept after close", async ({ 
   const inspector = page.getByTestId("evidence-inspector");
   await expect(inspector.getByRole("heading", { name: "DR-112 · Identity roadmap decision" })).toBeVisible();
   await expect(inspector.locator("mark")).toContainText(["SCIM GA moves to December"]);
-  await expect(inspector.getByText("In this answer")).toBeVisible();
+  await expect(inspector.getByRole("heading", { name: /Cited by/ })).toBeVisible();
   await inspector.getByRole("button", { name: "Close evidence" }).click();
   await expect(inspector).toBeHidden();
   await chip.click();
@@ -40,7 +40,7 @@ test("conflicting sources: both positions, chronological, no verdict", async ({ 
   await expect(conflict).not.toContainText(/supersedes|is correct|resolved/i);
 });
 
-test("ambiguous → the chosen account is sent by key and shown as a scope chip", async ({ page }) => {
+test("ambiguous → the chosen account is sent by key and shown in the scope sentence", async ({ page }) => {
   const log = await openAsk(page, { ask: (b) => (b.scope?.account ? ANSWERED : AMBIGUOUS) });
   await page.getByRole("textbox", { name: "Question" }).fill("What did we promise Acme?");
   await page.getByRole("button", { name: "Ask", exact: true }).click();
@@ -48,7 +48,7 @@ test("ambiguous → the chosen account is sent by key and shown as a scope chip"
   await page.getByRole("group", { name: "Choices" }).getByRole("button", { name: "Acme Corp" }).click();
   await expect(page.getByTestId("answer-prose")).toBeVisible();
   expect(log.asks[1]).toEqual({ question: "What did we promise Acme?", scope: { account: "acme-corp" } });
-  await expect(page.getByRole("group", { name: "Search scope" })).toContainText("Account: Acme Corp");
+  await expect(page.getByRole("group", { name: "Search scope" }).getByRole("button", { name: "Account: Acme Corp. Change" })).toBeVisible();
 });
 
 test("evidence_only: no prose, the readable sources listed", async ({ page }) => {
@@ -73,7 +73,7 @@ test("unsupported_request: explains that Lattice doesn't act", async ({ page }) 
 test("failed → Try again resends exactly the same request", async ({ page }) => {
   let n = 0;
   const log = await openAsk(page, { ask: () => (n++ === 0 ? FAILED : ANSWERED) });
-  await page.getByRole("button", { name: "Sources" }).click();
+  await page.getByRole("button", { name: "Sources: all my sources. Change" }).click();
   await page.getByRole("checkbox", { name: "Tickets" }).check();
   await page.keyboard.press("Escape");
   await page.getByRole("textbox", { name: "Question" }).fill("When will SCIM ship?");
@@ -108,7 +108,7 @@ test("pending: the composer is busy and a second submit is ignored", async ({ pa
 
 test("the question sensitivity can only be raised, and is sent", async ({ page }) => {
   const log = await openAsk(page, { ask: () => EVIDENCE_ONLY });
-  await page.getByRole("button", { name: "Set sensitivity" }).click();
+  await page.getByRole("button", { name: "Sensitivity: default sensitivity. Change" }).click();
   await page.getByRole("radio", { name: "Confidential" }).check();
   await page.keyboard.press("Escape");
   await page.getByRole("textbox", { name: "Question" }).fill("What did Acme's CIO say?");

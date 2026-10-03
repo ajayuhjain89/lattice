@@ -1,0 +1,7 @@
+/* A workspace page that failed: the fault state at the admin width, under the masthead. */
+.inShell {
+  width: 100%;
+  max-width: calc(var(--admin-max) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding: var(--space-10) var(--gutter) var(--space-16);
+}

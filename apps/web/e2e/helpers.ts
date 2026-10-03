@@ -36,3 +36,16 @@ export async function expectNoHorizontalOverflow(page: Page) {
   });
   expect(overflow, `horizontal page overflow (px): ${culprits.join(" | ")}`).toBeLessThanOrEqual(0);
 }
+
+/** Wait for running CSS animations to settle, so contrast is measured on final colours. */
+export async function settled(page: Page) {
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity));
+}
+
+/** The platform's Jump chord as the page sees it (⌘K on Apple platforms, Ctrl K elsewhere). */
+export async function jumpChord(page: Page): Promise<string> {
+  const apple = await page.evaluate(() =>
+    /mac|iphone|ipad|ipod/i.test((navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform || navigator.platform),
+  );
+  return apple ? "Meta+k" : "Control+k";
+}

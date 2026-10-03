@@ -1,93 +1,240 @@
 /*
- * Lattice design tokens (docs/design-system.md Part B). The only file allowed to hold
- * raw colour values; components reference these custom properties only.
+ * Lattice design tokens (design-direction §4). The only file allowed to hold raw colour
+ * values. Three layers:
+ *
+ *   1. Palette   --p-*        raw ramps. Used only inside this file.
+ *   2. Semantic  --surface-*, --text-*, --rule-*, --signal-*, --boundary-*, …
+ *                             the only colour tokens components may use.
+ *   3. Component --row-*, --citation-*, layout axes … values a primitive owns.
+ *
+ * The light theme is the shipped theme. The dark map is structural only (decision 3):
+ * nothing in the product sets data-theme="dark"; the specimen route does, to check it.
+ * Both maps are verified by src/styles/tokens.test.ts (every text pair ≥ 4.5:1, every
+ * control boundary ≥ 3:1).
  */
 
+/* 1. Palette ---------------------------------------------------------------------- */
+
 :root {
-  /* B2 backgrounds */
-  --bg-canvas: #fffcf4;
-  --bg-surface: #fff;
-  --bg-sunken: #faf6ec;
-  --bg-muted: #f3eff2;
-  --bg-muted-strong: #e9e4e6;
-  --bg-inverse: #111;
-  --bg-inverse-hover: #2a2a2a;
-  --bg-inverse-active: #000;
+  /* Archival paper and blue-black ink (light) */
+  --p-paper-50: #fcfcfa;
+  --p-paper-100: #f4f3ef;
+  --p-paper-200: #ebeae4;
+  --p-paper-250: #e6e4dd;
+  --p-paper-300: #d6d4cc;
+  --p-paper-500: #878479;
+  --p-ink-600: #63666d;
+  --p-ink-700: #474a52;
+  --p-ink-900: #16181d;
+  --p-ink-950: #000;
+  --p-ink-800: #2b2e35;
 
-  /* B2 text (contrast measured on canvas / muted) */
-  --text-primary: #111;
-  --text-secondary: #4a4a4a;
-  --text-muted: #6b665f;
-  --text-inverse: #fffcf4;
-  --text-link: #4f46c8;
+  /* Night paper and chalk (dark map) */
+  --p-night-950: #121417;
+  --p-night-900: #191c20;
+  --p-night-850: #22262b;
+  --p-night-800: #2a2e34;
+  --p-night-700: #34383f;
+  --p-night-500: #7a7e85;
+  --p-chalk-400: #9fa2a7;
+  --p-chalk-300: #bdbeba;
+  --p-chalk-100: #ecebe6;
+  --p-chalk-50: #fff;
 
-  /* B2 borders */
-  --border-default: #d9d5d0;
-  --border-strong: #111;
-  --border-focus: #4f46c8;
+  /* Verdigris: provenance */
+  --p-verdigris-100: #dcedea;
+  --p-verdigris-300: #6ccbc1;
+  --p-verdigris-700: #0d6560;
+  --p-verdigris-950: #153533;
 
-  /* B2 accents: one job each */
-  --accent-lime: #e3f266;
-  --accent-lime-subtle: #f4f9c9;
-  --accent-lavender: #8e84f7;
-  --accent-lavender-subtle: #e9e7fd;
-  --accent-lavender-text: #4f46c8;
-  --accent-pink: #cd56a0;
-  --accent-pink-subtle: #f7dcec;
-  --accent-pink-text: #9e2f74;
+  /* Marker: the verified passage */
+  --p-marker-100: #fbf0c2;
+  --p-marker-300: #f6de79;
+  --p-marker-800: #5c4c10;
+  --p-marker-900: #3a3214;
+  --p-marker-50: #fbf3d2;
 
-  /* B2 status: text / background / border */
-  --status-success-text: #2f5e14;
-  --status-success-bg: #f4f9c9;
-  --status-success-border: #b9c94a;
-  --status-warning-text: #7a5000;
-  --status-warning-bg: #fbefd3;
-  --status-warning-border: #e3b85c;
-  --status-error-text: #b42318;
-  --status-error-bg: #fce4e0;
-  --status-error-border: #e8a197;
-  --status-info-text: #4f46c8;
-  --status-info-bg: #e9e7fd;
-  --status-info-border: #b5aeff;
-  --status-conflict-text: #9e2f74;
-  --status-conflict-bg: #f7dcec;
-  --status-conflict-border: #cd56a0;
+  /* Plum: disagreement */
+  --p-plum-100: #f1e4ee;
+  --p-plum-300: #dda2d3;
+  --p-plum-500: #b067a6;
+  --p-plum-700: #76336e;
+  --p-plum-950: #33202f;
 
-  --scrim: rgb(17 17 17 / 24%);
-  --shadow-overlay: 0 12px 32px rgb(17 17 17 / 12%);
+  /* Ochre: time */
+  --p-ochre-100: #f6ebd2;
+  --p-ochre-300: #e2b866;
+  --p-ochre-500: #a57a22;
+  --p-ochre-700: #7d5300;
+  --p-ochre-950: #33281a;
 
-  /* B4 typography */
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", menlo, monospace;
+  /* Vermilion: fault */
+  --p-vermilion-100: #f8e2dc;
+  --p-vermilion-300: #f19583;
+  --p-vermilion-500: #d4583f;
+  --p-vermilion-700: #b0301c;
+  --p-vermilion-950: #3a1e19;
 
-  --type-display-size: 2.5rem;
-  --type-display-line: 2.75rem;
-  --type-h1-size: 1.75rem;
-  --type-h1-line: 2.125rem;
-  --type-h2-size: 1.25rem;
-  --type-h2-line: 1.75rem;
-  --type-h3-size: 1rem;
-  --type-h3-line: 1.5rem;
-  --type-lead-size: 1.1875rem;
-  --type-lead-line: 1.875rem;
-  --type-prose-size: 1rem;
-  --type-prose-line: 1.625rem;
+  /* Moss: healthy */
+  --p-moss-100: #e5edd9;
+  --p-moss-300: #a7cb86;
+  --p-moss-500: #6b9447;
+  --p-moss-700: #3c6223;
+  --p-moss-950: #1f2a18;
+}
+
+/* 2. Semantic (light, shipped) ----------------------------------------------------- */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --surface-paper: var(--p-paper-100);
+  --surface-sheet: var(--p-paper-50);
+  --surface-well: var(--p-paper-200);
+  --surface-well-strong: var(--p-paper-250);
+  --surface-inverse: var(--p-ink-900);
+  --surface-inverse-hover: var(--p-ink-800);
+  --surface-inverse-active: var(--p-ink-950);
+  --surface-scrim: rgb(22 24 29 / 24%);
+
+  /* Text */
+  --text-primary: var(--p-ink-900);
+  --text-secondary: var(--p-ink-700);
+  --text-muted: var(--p-ink-600);
+  --text-inverse: var(--p-paper-100);
+
+  /* Rules: hairlines structure, strong rules bound controls, ink rules mark authority */
+  --rule: var(--p-paper-300);
+  --rule-strong: var(--p-paper-500);
+  --rule-ink: var(--p-ink-900);
+  --focus-ring: var(--p-verdigris-700);
+
+  /* Signals: one job each (design-direction §4.2) */
+  --signal-provenance-text: var(--p-verdigris-700);
+  --signal-provenance-mark: var(--p-verdigris-700);
+  --signal-provenance-tint: var(--p-verdigris-100);
+  --signal-passage-fill: var(--p-marker-300);
+  --signal-passage-tint: var(--p-marker-100);
+  --signal-passage-text: var(--p-ink-900);
+  --signal-disagreement-text: var(--p-plum-700);
+  --signal-disagreement-mark: var(--p-plum-500);
+  --signal-disagreement-tint: var(--p-plum-100);
+  --signal-time-text: var(--p-ochre-700);
+  --signal-time-mark: var(--p-ochre-500);
+  --signal-time-tint: var(--p-ochre-100);
+  --signal-fault-text: var(--p-vermilion-700);
+  --signal-fault-mark: var(--p-vermilion-500);
+  --signal-fault-tint: var(--p-vermilion-100);
+  --signal-healthy-text: var(--p-moss-700);
+  --signal-healthy-mark: var(--p-moss-500);
+  --signal-healthy-tint: var(--p-moss-100);
+
+  /* Boundary: a texture, never a colour (design-direction §5.4) */
+  --boundary-hatch-color: rgb(22 24 29 / 14%);
+  --boundary-edge: var(--p-paper-500);
+
+  /* Elevation: floating layers only */
+  --elevation-overlay: 0 1px 0 var(--p-paper-300), 0 12px 28px rgb(22 24 29 / 10%);
+}
+
+/* Dark map: structural only, never exposed as a preference in this overhaul. */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface-paper: var(--p-night-950);
+  --surface-sheet: var(--p-night-900);
+  --surface-well: var(--p-night-850);
+  --surface-well-strong: var(--p-night-800);
+  --surface-inverse: var(--p-chalk-100);
+  --surface-inverse-hover: var(--p-chalk-300);
+  --surface-inverse-active: var(--p-chalk-50);
+  --surface-scrim: rgb(0 0 0 / 56%);
+
+  --text-primary: var(--p-chalk-100);
+  --text-secondary: var(--p-chalk-300);
+  --text-muted: var(--p-chalk-400);
+  --text-inverse: var(--p-night-950);
+
+  --rule: var(--p-night-700);
+  --rule-strong: var(--p-night-500);
+  --rule-ink: var(--p-chalk-100);
+  --focus-ring: var(--p-verdigris-300);
+
+  --signal-provenance-text: var(--p-verdigris-300);
+  --signal-provenance-mark: var(--p-verdigris-300);
+  --signal-provenance-tint: var(--p-verdigris-950);
+  --signal-passage-fill: var(--p-marker-800);
+  --signal-passage-tint: var(--p-marker-900);
+  --signal-passage-text: var(--p-marker-50);
+  --signal-disagreement-text: var(--p-plum-300);
+  --signal-disagreement-mark: var(--p-plum-300);
+  --signal-disagreement-tint: var(--p-plum-950);
+  --signal-time-text: var(--p-ochre-300);
+  --signal-time-mark: var(--p-ochre-300);
+  --signal-time-tint: var(--p-ochre-950);
+  --signal-fault-text: var(--p-vermilion-300);
+  --signal-fault-mark: var(--p-vermilion-300);
+  --signal-fault-tint: var(--p-vermilion-950);
+  --signal-healthy-text: var(--p-moss-300);
+  --signal-healthy-mark: var(--p-moss-300);
+  --signal-healthy-tint: var(--p-moss-950);
+
+  --boundary-hatch-color: rgb(236 235 230 / 16%);
+  --boundary-edge: var(--p-night-500);
+
+  --elevation-overlay: 0 1px 0 var(--p-night-700), 0 12px 28px rgb(0 0 0 / 40%);
+}
+
+/* Theme-independent semantic and component tokens ---------------------------------- */
+
+:root {
+  /* The hatch itself, drawn in whatever --boundary-hatch-color the theme gives. */
+  --boundary-hatch: repeating-linear-gradient(135deg, var(--boundary-hatch-color) 0 1px, transparent 1px 6px);
+
+  /* Typography: three voices (design-direction §4.1). Fallback faces are metric-matched
+     in fonts.css, so the swap to the web font doesn't move text. */
+  --font-record: "Lattice Record", "Lattice Record Fallback", georgia, "Times New Roman", serif;
+  --font-interface: "Lattice Interface", "Lattice Interface Fallback", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-ledger: "Lattice Ledger", "Lattice Ledger Fallback", ui-monospace, "SF Mono", menlo, monospace;
+
+  /* Type roles: size / line-height (rem = px / 16), weight, tracking */
+  --type-display-size: 2.75rem;
+  --type-display-line: 3rem;
+  --type-display-weight: 500;
+  --type-display-tracking: -0.018em;
+  --type-title-size: 1.625rem;
+  --type-title-line: 2rem;
+  --type-title-weight: 650;
+  --type-title-tracking: -0.012em;
+  --type-subtitle-size: 1.125rem;
+  --type-subtitle-line: 1.5rem;
+  --type-subtitle-weight: 650;
+  --type-lead-size: 1.3125rem;
+  --type-lead-line: 2rem;
+  --type-lead-weight: 450;
+  --type-prose-size: 1.0625rem;
+  --type-prose-line: 1.75rem;
+  --type-heading-size: 0.9375rem;
+  --type-heading-line: 1.375rem;
   --type-body-size: 0.875rem;
   --type-body-line: 1.25rem;
   --type-small-size: 0.8125rem;
   --type-small-line: 1.125rem;
+  --type-section-size: 0.8125rem;
+  --type-section-line: 1.125rem;
   --type-caption-size: 0.75rem;
   --type-caption-line: 1rem;
-  --type-label-size: 0.6875rem;
-  --type-label-line: 1rem;
-  --type-label-tracking: 0.08em;
   --type-meta-size: 0.75rem;
   --type-meta-line: 1rem;
+  --type-mark-size: 0.6875rem;
+  --type-mark-line: 0.875rem;
+  --type-mark-tracking: 0.06em;
   --type-code-size: 0.8125rem;
   --type-code-line: 1.25rem;
 
-  /* B5 spacing (4 px base) */
+  /* Spacing: 4 px base */
   --space-0: 0;
   --space-0-5: 2px;
   --space-1: 4px;
@@ -100,75 +247,106 @@
   --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;
+  --space-20: 80px;
 
-  /* B7 control heights */
+  /* Controls and rows */
   --control-xs: 20px;
   --control-sm: 28px;
   --control-md: 36px;
   --control-lg: 44px;
-  --nav-row: 32px;
   --touch-target: 44px;
+  --row-height: 40px;
+  --row-height-dense: 32px;
+  --citation-size: 18px;
 
-  /* B8 borders, radii, z-index */
+  /* A lattice cell and the space between cells (primitives/Lattice). */
+  --lattice-cell: 22px;
+  --lattice-gap: 3px;
+  --icon-size: 16px;
+
+  /* Shape and rule (design-direction §4.4) */
   --border-width: 1px;
   --focus-width: 2px;
   --radius-none: 0;
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-full: 999px;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-round: 999px;
+
+  /* Layers */
   --z-base: 0;
   --z-sticky: 10;
-  --z-rail: 20;
+  --z-shell: 20;
   --z-drawer: 30;
   --z-dialog: 40;
   --z-popover: 50;
   --z-toast: 60;
 
-  /* B10 motion */
+  /* Motion: motion explains a relationship or it doesn't happen (§4.7) */
   --ease: cubic-bezier(0.2, 0, 0, 1);
-  --motion-fast: 120ms;
-  --motion-base: 180ms;
-  --motion-panel: 220ms;
-  --motion-result: 180ms;
+  --motion-quick: 100ms;
+  --motion-base: 160ms;
+  --motion-arrive: 180ms;
+  --motion-panel: 200ms;
+  --motion-stagger: 40ms;
 
-  /* B6 layout: the shared axes */
-  --header-height: 56px;
-  --topbar-height: 52px;
-  --sidebar-width: 240px;
-  --rail-width: 56px;
-  --gutter: 32px;
-  --reading-max: 720px;
+  /* Layout axes (§4.3): the margin column carries exhibit numbers, the notes column
+     source sidenotes; reading surfaces and admin pages share the margin's x-axis. */
+
+  /* Page gutters: 32 / 24 / 16 at ≥1280 / ≥768 / <768, never less than a device's safe
+     area (a landscape phone's notch), so content and controls stay clear of it. */
+  --gutter-base: 32px;
+  --gutter: max(var(--gutter-base), env(safe-area-inset-left), env(safe-area-inset-right));
+  --margin-col: 56px;
+  --notes-col: 220px;
+  --record-gap: var(--space-4);
+  --measure: 66ch;
+  --admin-max: 1200px;
+
+  /* The public pages' content width (landing, sign-in), the admin width's twin. */
+  --public-max: 1200px;
+
+  /* Shell geometry (§6.3): the masthead (≥768) or the phone top bar, its ink rule
+     included; the phone tab bar (without the safe area beneath it); the header row of a
+     docked panel. */
+  --masthead-height: 52px;
+  --bottom-bar-height: 56px;
+  --panel-header-height: 56px;
   --inspector-width: 400px;
-  --admin-max: 1120px;
-  --prose-measure: 68ch;
 }
 
 @media (width >= 1440px) {
   :root {
-    --reading-max: 760px;
     --inspector-width: 440px;
   }
 }
 
 @media (width < 1280px) {
   :root {
-    --gutter: 24px;
+    --gutter-base: 24px;
   }
 }
 
 @media (width < 768px) {
   :root {
-    --gutter: 16px;
+    --gutter-base: 16px;
+    --margin-col: 32px;
+    --record-gap: var(--space-3);
+    --type-display-size: 2.125rem;
+    --type-display-line: 2.5rem;
+    --type-title-size: 1.375rem;
+    --type-title-line: 1.75rem;
+    --type-lead-size: 1.1875rem;
+    --type-lead-line: 1.75rem;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --motion-fast: 0ms;
+    --motion-quick: 0ms;
     --motion-base: 0ms;
+    --motion-arrive: 0ms;
     --motion-panel: 0ms;
-    --motion-result: 0ms;
+    --motion-stagger: 0ms;
   }
 }

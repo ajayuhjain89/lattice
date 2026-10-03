@@ -1,5 +1,5 @@
 .tag {
-  composes: t-label from global;
+  composes: t-caption from global;
 
   display: inline-flex;
   align-items: center;
@@ -7,29 +7,32 @@
   height: var(--control-xs);
   max-width: 100%;
   padding: 0 var(--space-2);
-  border: var(--border-width) solid var(--border-strong);
-  border-radius: var(--radius-full);
-  background: var(--bg-canvas);
-  color: var(--text-primary);
+  border: var(--border-width) solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sheet);
+  color: var(--text-secondary);
+  font-weight: 500;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   vertical-align: middle;
   flex: none;
 }
 
-.muted {
-  background: var(--bg-muted);
-}
-
-.inverse {
-  background: var(--bg-inverse);
-  color: var(--text-inverse);
+.text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .quiet {
-  border-color: var(--border-default);
+  border-color: var(--rule);
+  background: transparent;
   color: var(--text-muted);
+}
+
+.inverse {
+  border-color: var(--surface-inverse);
+  background: var(--surface-inverse);
+  color: var(--text-inverse);
 }
 
 .icon {
@@ -38,4 +41,10 @@
   width: 12px;
   height: 12px;
   flex: none;
+}
+
+@media (forced-colors: active) {
+  .tag {
+    border-color: CanvasText;
+  }
 }

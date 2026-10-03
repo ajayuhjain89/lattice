@@ -1,0 +1,183 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  background: var(--surface-scrim);
+  animation: fade var(--motion-base) var(--ease);
+}
+
+.panel {
+  position: fixed;
+  z-index: var(--z-dialog);
+  top: min(14vh, 8rem);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  width: min(36rem, calc(100vw - 2 * var(--space-4)));
+  max-height: min(70dvh, 34rem);
+  border: var(--border-width) solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface-sheet);
+  box-shadow: var(--elevation-overlay);
+  outline: none;
+  overflow: hidden;
+  animation: fade var(--motion-base) var(--ease);
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border-bottom: var(--border-width) solid var(--rule-ink);
+  flex: none;
+}
+
+.searchIcon {
+  display: grid;
+  color: var(--text-muted);
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  height: var(--control-lg);
+  border: 0;
+  background: transparent;
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+/* The panel is the focus context; the active option shows where Enter goes. */
+.panel:has(.input:focus-visible) .inputRow {
+  box-shadow: inset 0 -2px 0 var(--focus-ring);
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+
+.section + .section {
+  margin-top: var(--space-2);
+}
+
+.groupLabel {
+  composes: t-caption from global;
+
+  display: block;
+  padding: var(--space-1) var(--space-2);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.groupList {
+  display: grid;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-md);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.option[aria-selected="true"] {
+  background: var(--surface-well-strong);
+  box-shadow: inset 2px 0 0 var(--signal-provenance-mark);
+}
+
+.optionIcon {
+  display: grid;
+  color: var(--text-secondary);
+  flex: none;
+}
+
+.optionLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionDetail {
+  composes: t-meta from global;
+
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-top: var(--border-width) solid var(--rule);
+  flex: none;
+}
+
+.status,
+.keys {
+  composes: t-caption from global;
+
+  color: var(--text-muted);
+}
+
+.keys {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .panel {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .option[aria-selected="true"] {
+    outline: 2px solid Highlight;
+  }
+}
+
+@media (width < 768px) {
+  .panel {
+    top: var(--space-4);
+    max-height: calc(100dvh - 2 * var(--space-4));
+  }
+
+  .keys {
+    display: none;
+  }
+
+  .option {
+    min-height: var(--touch-target);
+  }
+}

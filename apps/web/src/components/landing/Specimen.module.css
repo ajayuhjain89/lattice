@@ -1,0 +1,781 @@
+/* The landing page's product specimens: the brief, the answer path, two readers, the
+   evidence viewer, the disagreement axis, the egress lattice and the access ledger -- each
+   in the product's own grammar and type roles, on a sheet where the product uses one. */
+
+.label {
+  composes: t-meta from global;
+
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--text-muted);
+}
+
+.sheet,
+.egressSheet,
+.accessSheet,
+.viewer,
+.reader {
+  min-width: 0;
+  border: var(--border-width) solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface-sheet);
+}
+
+/* The hero brief -------------------------------------------------------------------- */
+
+.hero {
+  min-width: 0;
+}
+
+.sheet {
+  --margin: var(--space-8);
+
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-8) var(--space-6) var(--space-4);
+}
+
+/* Everything but the claims starts at the measure, after the margin column. */
+.question,
+.status,
+.inset,
+.exhibitsHead {
+  margin-left: calc(var(--margin) + var(--space-3));
+}
+
+.question {
+  display: grid;
+  gap: var(--space-0-5);
+}
+
+.questionLabel {
+  composes: t-caption from global;
+
+  color: var(--text-muted);
+}
+
+.questionText {
+  composes: t-heading from global;
+
+  font-weight: 500;
+}
+
+.status {
+  composes: t-mark from global;
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) 0;
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule-ink);
+  color: var(--text-secondary);
+}
+
+.keyword {
+  color: var(--text-primary);
+}
+
+/* Separators end an item, so a wrapped ledger line never starts with one. */
+.keyword:not(:last-child)::after,
+.fact:not(:last-child)::after {
+  content: "·" / "";
+  font-weight: 400;
+  padding: 0 var(--space-2);
+  color: var(--text-muted);
+}
+
+.claims {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.claimRow {
+  --line: var(--type-prose-line);
+
+  display: grid;
+  grid-template-columns: var(--margin) minmax(0, 1fr);
+  column-gap: var(--space-3);
+}
+
+.claimRow[data-role="lead"] {
+  --line: var(--type-lead-line);
+
+  margin-bottom: var(--space-1);
+}
+
+.claimRow > p {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.claimMargin {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: calc((var(--line) - var(--citation-size)) / 2);
+}
+
+.leadText {
+  composes: t-lead from global;
+
+  max-width: 36rem;
+}
+
+.supportText {
+  composes: t-prose from global;
+
+  max-width: 36rem;
+}
+
+.claimWords {
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: var(--border-width);
+  text-underline-offset: 0.22em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition:
+    text-decoration-color var(--motion-base) var(--ease),
+    text-decoration-thickness var(--motion-base) var(--ease);
+}
+
+.claimWords[data-lit] {
+  text-decoration-color: var(--signal-provenance-mark);
+}
+
+/* Its exhibit is open: the passage marker underlines the claim, as in Ask. */
+.claimWords[data-open] {
+  text-decoration-color: var(--signal-passage-fill);
+  text-decoration-thickness: 3px;
+}
+
+.exhibits {
+  display: grid;
+}
+
+.exhibitsHead {
+  composes: t-section from global;
+
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.exhibitList {
+  display: grid;
+}
+
+.exhibitOpen,
+.exhibitRow {
+  display: grid;
+  grid-template-columns: var(--margin) minmax(0, 1fr);
+  column-gap: var(--space-3);
+  padding-top: var(--space-3);
+}
+
+/* Hairlines run from the measure, like every non-prose block of the brief. */
+.exhibitBody,
+.exhibitLine {
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.exhibitRow:last-child .exhibitLine {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.exhibitNumber {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-0-5);
+}
+
+.exhibitBody {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.exhibitTitle {
+  composes: t-body-strong from global;
+
+  overflow-wrap: break-word;
+}
+
+.passage {
+  padding-left: var(--space-3);
+  border-left: var(--border-width) solid var(--rule-strong);
+  font-family: var(--font-record);
+  font-size: var(--type-heading-size);
+  line-height: var(--type-subtitle-line);
+  color: var(--text-secondary);
+}
+
+.passage mark {
+  color: var(--text-primary);
+}
+
+.exhibitLine {
+  display: grid;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.exhibitName {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.exhibitMeta {
+  composes: t-meta from global;
+
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* The answer path (the trace's own geometry) ---------------------------------------- */
+
+.path {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-6);
+}
+
+.stop {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.stop:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--control-xs) / 2);
+  left: calc(var(--control-xs) + var(--space-2));
+  right: calc(-1 * var(--space-6) + var(--space-2));
+  border-top: var(--border-width) solid var(--rule-strong);
+}
+
+.stopMark {
+  position: relative;
+  display: flex;
+  margin-bottom: var(--space-2);
+}
+
+/* The policy stop is a boundary: a hatched gate behind its marker, dashed at both ends.
+   Only what the policy allows continues past it. */
+.stop[data-boundary] .stopMark::before {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--space-1)) calc(-1 * var(--space-3)) calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+  border-inline: var(--border-width) dashed var(--boundary-edge);
+  background-image: var(--boundary-hatch);
+}
+
+.stop[data-boundary] .stopMark > * {
+  position: relative;
+}
+
+.stop[data-boundary]::after {
+  left: calc(var(--control-xs) + var(--space-4));
+}
+
+.stopName {
+  composes: t-body-strong from global;
+}
+
+.stopBody {
+  composes: t-small from global;
+
+  color: var(--text-secondary);
+}
+
+/* Two readers ------------------------------------------------------------------------ */
+
+.readers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.reader {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+}
+
+.readerHead {
+  display: grid;
+  gap: var(--space-0-5);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.readerName {
+  composes: t-body-strong from global;
+}
+
+.readerRole {
+  margin-left: var(--space-1);
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.readerFacts {
+  composes: t-small from global;
+
+  color: var(--text-secondary);
+}
+
+.found {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.foundRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: var(--space-2);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.foundTitle {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.foundMeta {
+  composes: t-meta from global;
+
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.withheld {
+  display: grid;
+  gap: var(--space-2);
+  padding-block: var(--space-1);
+}
+
+.withheldHead {
+  composes: t-caption from global;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-1);
+  font-weight: 600;
+}
+
+.withheldWhy {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.sensitivity {
+  composes: t-caption from global;
+
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.readersNote {
+  max-width: 70ch;
+  color: var(--text-secondary);
+}
+
+/* The evidence viewer ------------------------------------------------------------------ */
+
+.evidence {
+  min-width: 0;
+}
+
+.evidenceGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--space-10);
+  align-items: start;
+}
+
+.evidenceClaims {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.evidenceClaim {
+  padding-left: var(--space-4);
+  border-left: 2px solid transparent;
+  transition: border-color var(--motion-base) var(--ease);
+}
+
+.evidenceClaim[data-open] {
+  border-left-color: var(--signal-passage-fill);
+}
+
+.evidenceClaim button {
+  margin-left: var(--space-1);
+}
+
+.viewer {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6);
+}
+
+.viewerHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.viewerTitle {
+  composes: t-subtitle from global;
+
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.viewerPassage {
+  font-size: var(--type-prose-size);
+  line-height: var(--type-prose-line);
+}
+
+/* The verified quote: the passage marker sweeps in left to right (§4.7). */
+.sweep {
+  background-color: transparent;
+  background-image: linear-gradient(var(--signal-passage-tint), var(--signal-passage-tint));
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  animation: sweep var(--motion-base) var(--ease) both;
+}
+
+@keyframes sweep {
+  from {
+    background-size: 0% 100%;
+  }
+}
+
+.viewerMeta {
+  composes: t-meta from global;
+
+  color: var(--text-muted);
+}
+
+/* Disagreement ------------------------------------------------------------------------ */
+
+.axisFigure {
+  min-width: 0;
+}
+
+.axisSheet {
+  padding-top: var(--space-2);
+}
+
+/* Boundaries --------------------------------------------------------------------------- */
+
+.boundaries {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.egressFigure {
+  min-width: 0;
+}
+
+.egressSheet {
+  --lattice-cell: 40px;
+  --lattice-gap: 4px;
+
+  padding: var(--space-6);
+}
+
+.notice {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.noticeLabel {
+  composes: t-section from global;
+}
+
+.noticeNote {
+  composes: t-small from global;
+
+  max-width: 60ch;
+  color: var(--text-secondary);
+}
+
+/* Access -------------------------------------------------------------------------------- */
+
+.access {
+  margin: 0;
+}
+
+.accessSheet {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-6) var(--space-6);
+}
+
+.member {
+  display: grid;
+  gap: var(--space-0-5);
+}
+
+.memberName {
+  composes: t-subtitle from global;
+}
+
+.memberName .readerRole {
+  font-size: var(--type-body-size);
+}
+
+.memberEmail {
+  composes: t-meta from global;
+
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.accessSentence {
+  composes: t-prose from global;
+
+  max-width: 36rem;
+}
+
+.accessSentence strong {
+  font-weight: 600;
+}
+
+.ledger {
+  display: grid;
+  border-top: var(--border-width) solid var(--rule-ink);
+}
+
+.ledgerRow {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: var(--space-1) var(--space-4);
+  padding-block: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.ledgerRow dt {
+  font-weight: 600;
+}
+
+.ledgerRow dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.ledgerEffect {
+  composes: t-small from global;
+
+  color: var(--text-secondary);
+}
+
+.review {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.reviewHead {
+  composes: t-section from global;
+}
+
+.diff {
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 1fr) minmax(0, 1.3fr) auto;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--signal-provenance-mark);
+  background: var(--surface-paper);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.diffRule {
+  font-weight: 600;
+}
+
+.diffLabel {
+  composes: t-meta from global;
+
+  display: block;
+  color: var(--text-muted);
+}
+
+.diffNow {
+  color: var(--text-secondary);
+}
+
+.added {
+  color: var(--signal-provenance-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.diffWord {
+  composes: t-meta from global;
+
+  color: var(--signal-provenance-text);
+}
+
+.audit {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-0-5) var(--space-4);
+  padding-top: var(--space-3);
+  border-top: var(--border-width) solid var(--rule);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.auditTime {
+  composes: t-meta from global;
+
+  grid-row: span 2;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.auditWho {
+  color: var(--text-secondary);
+}
+
+.auditHead {
+  composes: t-section from global;
+
+  grid-column: 1 / -1;
+  margin-bottom: var(--space-1);
+}
+
+/* Widths ---------------------------------------------------------------------------------- */
+
+/* Below 1024 the answer path turns vertical: the trace's rail, one stop per row. */
+@media (width < 1024px) {
+  .evidenceGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+
+  .path {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+
+  .stop {
+    grid-template-columns: var(--control-xs) minmax(0, 1fr);
+    column-gap: var(--space-4);
+  }
+
+  .stopMark {
+    grid-row: span 2;
+    margin-bottom: 0;
+  }
+
+  .stop:not(:last-child)::after {
+    inset: calc(var(--control-xs) + var(--space-1)) auto calc(-1 * var(--space-5) + var(--space-1)) calc(var(--control-xs) / 2);
+    border-top: 0;
+    border-left: var(--border-width) solid var(--rule-strong);
+  }
+
+  .stop[data-boundary]::after {
+    top: calc(var(--control-xs) + var(--space-2));
+    left: calc(var(--control-xs) / 2);
+  }
+
+  .stop[data-boundary] .stopMark::before {
+    inset: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+    border-inline: 0;
+    border-block: var(--border-width) dashed var(--boundary-edge);
+  }
+}
+
+@media (width < 768px) {
+  .sheet {
+    --margin: var(--space-6);
+
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-4) var(--space-4) var(--space-2);
+  }
+
+  .readers {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+
+  .reader {
+    padding: var(--space-4);
+  }
+
+  .viewer,
+  .egressSheet,
+  .accessSheet {
+    padding: var(--space-4);
+  }
+
+  .ledgerRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .egressSheet {
+    --lattice-cell: 32px;
+  }
+
+  .diff {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .diffRule {
+    grid-area: 1 / 1;
+  }
+
+  .diffWord {
+    grid-area: 1 / 2;
+  }
+
+  .diffNow,
+  .diffAfter {
+    grid-column: 1 / -1;
+  }
+
+  .audit {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .auditTime {
+    grid-row: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sweep {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .sweep {
+    background-image: none;
+  }
+
+  .stop[data-boundary] .stopMark::before {
+    background-image: none;
+  }
+
+  .diff {
+    border-left-color: CanvasText;
+  }
+}
