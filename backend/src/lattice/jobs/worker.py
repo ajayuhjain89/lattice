@@ -34,6 +34,13 @@ Properties:
   permits nothing younger).
 * **Observable.** ``jobs.*`` log events with IDs and codes, ``lattice_jobs_*`` metrics,
   and each sync's own run row.
+* **Live (Phase 11).** A heartbeat -- the ``lattice_worker_heartbeat_timestamp_seconds``
+  gauge and, when configured, the modification time of ``LATTICE_WORKER_HEARTBEAT_FILE``
+  -- is renewed at every loop iteration (also while the database is unreachable: the
+  loop still runs and restarting would not help) and at every lease renewal during a
+  job. If the event loop stops making progress (the process hung, or a sync blocks the
+  loop), the heartbeat ages; the container health check compares its age with a
+  threshold (docs/deployment.md §10). It carries a timestamp only.
 """
 
 import asyncio
@@ -155,6 +162,23 @@ def source_config(row: Any) -> tuple[SourceConfig, Path]:
     return config, Path(path)
 
 
+class Heartbeat:
+    """Proof of progress: the gauge always, the file's mtime when a path is given."""
+
+    def __init__(self, path: Path | None = None) -> None:
+        self.path = path
+
+    def beat(self) -> None:
+        metrics.WORKER_HEARTBEAT.set(time.time())
+        if self.path is not None:
+            try:
+                self.path.touch()
+            except OSError as exc:  # a full or read-only /tmp must not stop the worker
+                log_event(
+                    _log, logging.WARNING, "worker.heartbeat_failed", error_type=type(exc).__name__
+                )
+
+
 class Worker:
     def __init__(
         self,
@@ -162,10 +186,12 @@ class Worker:
         *,
         embedding: EmbeddingProvider | None,
         lease_seconds: int = 300,
+        heartbeat: Heartbeat | None = None,
     ) -> None:
         self.db = db
         self.embedding = embedding
         self.lease_seconds = lease_seconds
+        self.heartbeat = heartbeat or Heartbeat()
 
     # --- queue ------------------------------------------------------------------------
 
@@ -355,6 +381,7 @@ class Worker:
                     job_id=str(job.id),
                     error_type=type(exc).__name__,
                 )
+            self.heartbeat.beat()
 
     # --- the loop ------------------------------------------------------------------------
 
@@ -364,6 +391,7 @@ class Worker:
         """Poll until ``stop`` is set; a job in progress is finished first."""
         next_maintenance = 0.0
         while not stop.is_set():
+            self.heartbeat.beat()
             try:
                 if time.monotonic() >= next_maintenance:
                     await self.cleanup()

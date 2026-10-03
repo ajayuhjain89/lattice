@@ -39,6 +39,9 @@
     lattice worker [--once]
         The background worker: runs the syncs administrators request from the web app,
         as lattice_worker (LATTICE_WORKER_DATABASE_URL).
+    lattice smoke --url ORIGIN [--instance URL ...] [--worker-metrics URL] [--ca-file F]
+                  [--production]
+        Read-only check that a deployment is usable (lattice.smoke); no database access.
 
 Ingestion commands run as lattice_owner (operator tools, through row-level security)
 and print counts and fixed codes only -- never record content, titles or filenames.
@@ -58,7 +61,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from lattice import cli_answer, cli_identity, cli_providers, cli_retrieval, cli_worker
+from lattice import cli_answer, cli_identity, cli_providers, cli_retrieval, cli_worker, smoke
 from lattice.admin_grants import apply_admin_grants, load_admin_grants
 from lattice.config import (
     ConfigurationError,
@@ -342,6 +345,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     cli_providers.add_parsers(commands)
     cli_identity.add_parsers(commands)
     cli_worker.add_parser(commands)
+    smoke.add_parser(commands)
     args = parser.parse_args(argv)
 
     if args.command == "dataset":
@@ -375,6 +379,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return asyncio.run(cli_providers.provider(args))
         if args.command == "worker":
             return asyncio.run(cli_worker.run(args))
+        if args.command == "smoke":
+            return smoke.run(args)
         if args.command in cli_identity.COMMANDS:
             return asyncio.run(cli_identity.run(args))
         return asyncio.run(_check_db_role())

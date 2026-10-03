@@ -1,8 +1,10 @@
 # ADR-016: Production topology and deployment contract
 
-Status: Accepted for Phase 11 (2026-10-03; decisions D-22–D-27). **Not yet implemented**:
-the contract is [deployment.md](../deployment.md); checkpoints P11.1–P11.7 of
-[phase-11-plan.md](../phase-11-plan.md) build it.
+Status: Accepted for Phase 11 (2026-10-03; decisions D-22–D-27). **Partly implemented**:
+P11.1 built the images, the ingress routing, the trusted-hop setting and the local
+reference stack (implementation notes below); the contract is
+[deployment.md](../deployment.md); checkpoints P11.2–P11.7 of
+[phase-11-plan.md](../phase-11-plan.md) build the rest.
 
 ## Context
 
@@ -86,6 +88,28 @@ small operational surface (product brief §7), with no hosting provider chosen.
 | A PgBouncer pooler | The connection budget fits the staging and expected production plans (deployment.md §8); revisit in Phase 14 |
 | Choosing a production provider now | Not needed to prove the contract; the staging choice is temporary and replaceable |
 | Local stack only, no real staging | Cannot prove managed-PostgreSQL privileges, managed PITR, real TLS on a public origin or real OIDC callbacks (D-22) |
+
+## Implementation notes (P11.1)
+
+Factual refinements found while building, none changing the decision:
+
+- **The trusted hop is application configuration, not a server flag.** The API reads
+  `LATTICE_TRUSTED_PROXIES` (IP addresses/CIDRs, validated, `*` refused) and installs
+  uvicorn's `ProxyHeadersMiddleware` itself; the image runs uvicorn with
+  `--no-proxy-headers`, because uvicorn's default trusts 127.0.0.1 — which, in the old
+  topology, was the Next.js server passing a client's `X-Forwarded-For` through. The same
+  flag now applies to `make api`.
+- **Next.js leaves the API path completely in production.** The rewrite is generated only
+  under `next dev`; the production build's route manifest has no rewrites, so a request
+  that reaches the web server's `/api` gets the web 404, never a proxy.
+- **One backend image is safe for every backend process**: the database roles, not the
+  image, separate their privileges, and each process gets only its own credential. The
+  image therefore has no `HEALTHCHECK`; health is declared per process (api readiness,
+  worker heartbeat).
+- **Worker liveness needed no new infrastructure or schema:** a heartbeat gauge plus a
+  file in the container's tmpfs, renewed by the loop and by lease renewals.
+- **Caddy** (reference ingress only) listens on unprivileged ports but keeps
+  `NET_BIND_SERVICE`, which its binary's file capability requires to execute.
 
 ## Reconsider when
 

@@ -9,6 +9,7 @@ pydantic's default error text echoes the input.
 """
 
 from enum import StrEnum
+from ipaddress import IPv4Network, IPv6Network, ip_network
 from pathlib import Path
 from typing import Literal, Self
 
@@ -43,6 +44,21 @@ def parse_host_port(value: str) -> tuple[str, int]:
     if not sep or not host or not port.isdigit() or not 0 < int(port) < 65536:
         raise ValueError("must be host:port, for example 127.0.0.1:9464")
     return host, int(port)
+
+
+def parse_trusted_proxies(value: str) -> list[IPv4Network | IPv6Network]:
+    """Comma-separated IP addresses or CIDR networks. A wildcard, a hostname or an empty
+    item is refused: trusting forwarding headers is an explicit list of ingress peers."""
+    networks: list[IPv4Network | IPv6Network] = []
+    for item in value.split(","):
+        item = item.strip()
+        if not item or item == "*":
+            raise ValueError("must list IP addresses or CIDR networks (never '*')")
+        try:
+            networks.append(ip_network(item, strict=False))
+        except ValueError:
+            raise ValueError("must list IP addresses or CIDR networks (never '*')") from None
+    return networks
 
 
 def _require_asyncpg_url(value: SecretStr | None) -> SecretStr | None:
@@ -93,6 +109,16 @@ class Settings(BaseSettings):
     # the web app). Unset = no listener. Bind it to an internal interface only.
     metrics_address: str | None = None
 
+    # --- Deployment (Phase 11; ADR-016, docs/deployment.md §4) -----------------------------
+    # The ingress addresses (IPs or CIDR networks, comma-separated) whose X-Forwarded-For
+    # and X-Forwarded-Proto the API accepts. Unset = no forwarding header is trusted from
+    # anyone: the client is the TCP peer. Never "*". Run uvicorn with --no-proxy-headers
+    # so the server's own default (trusting 127.0.0.1) cannot add a second, implicit hop.
+    trusted_proxies: str | None = None
+    # Test double only: seconds the fake generation provider waits before answering, to
+    # prove long Asks survive the ingress. Refused (must be 0) in production.
+    fake_generation_delay_seconds: float = Field(default=0.0, ge=0.0, le=600.0)
+
     # --- Rate limits (Phase 10; lattice.ratelimit) -----------------------------------------
     # Every limit applies to every role (administrators included) and must be at least 1:
     # none can be turned off. Asks per membership per minute / per day and in flight;
@@ -134,8 +160,20 @@ class Settings(BaseSettings):
             parse_host_port(value)
         return value
 
+    @field_validator("trusted_proxies")
+    @classmethod
+    def _check_trusted_proxies(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return ",".join(str(network) for network in parse_trusted_proxies(value))
+
     @model_validator(mode="after")
     def _enforce_environment_guards(self) -> Self:
+        if self.env is Environment.PRODUCTION and self.fake_generation_delay_seconds:
+            raise ValueError(
+                "LATTICE_FAKE_GENERATION_DELAY_SECONDS is a test setting and must be 0 when "
+                "LATTICE_ENV=production"
+            )
         if self.env is Environment.PRODUCTION and self.dev_auth_enabled:
             raise ValueError(
                 "LATTICE_DEV_AUTH_ENABLED must be false when LATTICE_ENV=production "
@@ -207,6 +245,10 @@ class WorkerSettings(BaseSettings):
     # A running job's lease; the worker renews it while the sync runs. A job whose
     # lease expired (the worker died) is retried by another poll, up to its attempts.
     worker_lease_seconds: int = Field(default=300, ge=30, le=3600)
+    # Liveness (Phase 11): a file whose modification time the worker renews at every loop
+    # iteration and lease renewal; the container health check reads its age. Unset = the
+    # heartbeat is only the metric.
+    worker_heartbeat_file: Path | None = None
     # Statement timeout for the worker's own connections (syncs write in batches).
     db_statement_timeout_ms: int = Field(default=300_000, ge=1_000, le=3_600_000)
     db_connect_timeout_seconds: float = Field(default=5.0, ge=0.5, le=60.0)

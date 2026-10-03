@@ -82,11 +82,10 @@ Rules:
 - Same-origin: `/api/*` reaches FastAPI on the web origin, so cookies stay first-party
   and no CORS is configured. Every API call is made by the browser
   (`apps/web/src/api/client.ts`); no server component or route handler calls the API.
-  **Today** the only implemented path is the Next.js rewrite in `next.config.ts` (in
-  development and in any deployment so far); it proxies with Next.js's default 30-second
-  timeout and makes the API see the web server as the client. **Target (Phase 11, P11.1,
-  ADR-016):** in deployment the ingress routes `/api/*` directly to the API and is the only
-  trusted forwarding hop; the rewrite remains for development
+  **In deployment (Phase 11, P11.1, ADR-016)** the ingress routes `/api/*` directly to the
+  API and is the only trusted forwarding hop (`LATTICE_TRUSTED_PROXIES`); the production
+  web build has no `/api` route. **In development** `next dev` proxies `/api/*` to the API
+  (`next.config.ts`, 150 s proxy timeout); the API then sees the web server as the client
   ([deployment.md](deployment.md) §4).
 - The FastAPI OpenAPI schema is the canonical HTTP contract. TypeScript types are
   generated with `openapi-typescript`, and the client uses `openapi-fetch` (both tiny,

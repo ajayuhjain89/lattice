@@ -12,14 +12,16 @@ revision -- the same checks as the API.
 
 import argparse
 import asyncio
+import logging
 import signal
 import sys
 
 from lattice import metrics
+from lattice.build import report_startup
 from lattice.config import Environment, load_provider_settings, load_worker_settings
 from lattice.db.engine import Database, create_engine
 from lattice.db.role_check import verify_runtime_role
-from lattice.jobs.worker import Worker
+from lattice.jobs.worker import Heartbeat, Worker
 from lattice.log import configure_logging, scrub_text
 from lattice.providers.factory import build_embedding_provider
 
@@ -52,11 +54,17 @@ async def run(args: argparse.Namespace) -> int:
             if settings.sync_embedding == "none"
             else build_embedding_provider(settings.sync_embedding, load_provider_settings())
         )
-        worker = Worker(db, embedding=embedding, lease_seconds=settings.worker_lease_seconds)
+        worker = Worker(
+            db,
+            embedding=embedding,
+            lease_seconds=settings.worker_lease_seconds,
+            heartbeat=Heartbeat(settings.worker_heartbeat_file),
+        )
         if args.once:
             while await worker.run_once() is not None:
                 pass
             return 0
+        report_startup("worker", logging.getLogger("lattice.jobs"))
         if settings.metrics_address:
             server = metrics.serve(settings.metrics_address)
         stop = asyncio.Event()

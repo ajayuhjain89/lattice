@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+# The local reference stack's generated CA certificate (make prod-smoke)
+deploy/.reference-ca.crt
 
 # Python
 __pycache__/

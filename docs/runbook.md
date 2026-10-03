@@ -5,7 +5,8 @@ per row; §3 (embedding) Phase 4, provider configuration Phase 6; §4 (retrieval
 §5 Phase 5 closure; §6 (answering) Phase 6; §7 (operations: health, metrics, logs, kill
 switches, limits, the worker, deployment, backups, CI) and §8 (failure drills) Phase 8;
 §9 (identity: SSO, SCIM provisioning, first administrator) and the rate limits of §7.4
-Phase 10.
+Phase 10; the images, worker liveness, trusted ingress hop, §7.9 (local reference stack)
+and the P11.1 drills of §8 Phase 11 (P11.1).
 A row marked *planned* names the phase that makes it real; do not follow planned
 procedures on a live system.
 
@@ -155,9 +156,9 @@ the provider's retention terms (security-model §6).
 
 | Process | Command | Role | Notes |
 | ------- | ------- | ---- | ----- |
-| API | `uvicorn lattice.api.app:create_app --factory --no-access-log` (`make api` in development) | `lattice_app` | One process per container (metrics are per process). Refuses to start on invalid configuration, an unsafe role, or a schema at another revision |
-| Worker | `lattice worker` (`make worker`) | `lattice_worker` | Runs requested syncs one at a time; SIGTERM/SIGINT finish the current job, then exit. `lattice worker --once` runs every due job and exits. Several workers may run: `SKIP LOCKED` hands each job to one of them |
-| Web | `next start` (`make web` in development) | — | **Today** its Next.js rewrite proxies `/api/*` to the API (30 s default timeout; the API sees the web server as the client). **Target (P11.1):** in deployment the ingress routes `/api/*` straight to the API ([deployment.md](deployment.md) §4) |
+| API | the `lattice-backend` image's default command: `uvicorn lattice.api.app:create_app --factory --host 0.0.0.0 --port 8000 --no-access-log --no-proxy-headers --timeout-graceful-shutdown 150` (`make api` in development) | `lattice_app` | One process per container (metrics are per process). Refuses to start on invalid configuration, an unsafe role, or a schema at another revision. SIGTERM: in-flight requests (an Ask: up to the 120 s generation deadline) get up to 150 s; give the container a stop grace of at least 160 s |
+| Worker | `lattice worker` in the same image (`make worker`) | `lattice_worker` | Runs requested syncs one at a time; SIGTERM/SIGINT finish the current job, then exit. `lattice worker --once` runs every due job and exits. Several workers may run: `SKIP LOCKED` hands each job to one of them. Liveness: the heartbeat (§7.2) |
+| Web | the `lattice-web` image: `node server.js` on `0.0.0.0:3000` (`make web` = `next dev` in development) | — | Holds no secret. The production build has no `/api` route: the ingress routes `/api/*` straight to the API ([deployment.md](deployment.md) §4). Only `next dev` proxies `/api/*` (to `LATTICE_API_URL`, 150 s proxy timeout) |
 | Migrations | `alembic upgrade head` (`make migrate`) | `lattice_owner` | Run **before** starting a new build: the API and worker refuse an older schema, and an older build refuses a newer one |
 
 ### 7.2 Health and readiness
@@ -170,7 +171,13 @@ the provider's retention terms (security-model §6).
 
 All three are unauthenticated and return states only (`ok`, `ready`, 503 `service_unavailable`
 with `Retry-After`): never versions, revisions, hosts, counts or error text.
-The worker has no HTTP endpoint; watch `lattice_worker_polls_total` and `lattice_jobs_waiting`.
+The worker has no HTTP endpoint. **Liveness (P11.1):** its heartbeat — the gauge
+`lattice_worker_heartbeat_timestamp_seconds` and, with `LATTICE_WORKER_HEARTBEAT_FILE`, that
+file's modification time — is renewed at every loop iteration (also while the database is
+down) and at every lease renewal during a job; a container health check fails when the file
+is older than 300 s (dead, frozen or blocked worker). `lattice smoke --worker-metrics`
+checks the gauge. For throughput watch `lattice_worker_polls_total` and
+`lattice_jobs_waiting`.
 
 ### 7.3 Metrics and logs
 
@@ -238,13 +245,14 @@ user report with its `X-Request-ID` header, then the trace ID in `answer.complet
 
 Fixed windows: a burst of up to twice a limit can straddle a window boundary. The
 per-process limits multiply by the number of API processes. The client address is the
-peer the API sees. **Today** that peer is the Next.js server whenever requests go through
-the web app's `/api` rewrite, so every browser counts as one client, and Next.js forwards
-a client-supplied `X-Forwarded-For` unchanged: do not set `--forwarded-allow-ips` to the
-web server's address. **Target (P11.1/P11.4, D-24):** the ingress is the only trusted hop
-(`--proxy-headers --forwarded-allow-ips=<ingress addresses>`), and both per-process limits
-become shared in PostgreSQL ([deployment.md](deployment.md) §4, §12). Provider quotas and
-the kill switches above still bound cost.
+client the API derives (P11.1): the TCP peer, unless that peer is listed in
+`LATTICE_TRUSTED_PROXIES` (the ingress), in which case the right-most untrusted address of
+`X-Forwarded-For`. Set it to the ingress addresses only (never the web server's: under
+`next dev` the web server is the peer and every browser is one client), and keep uvicorn's
+`--no-proxy-headers`. **Still per process until P11.4 (D-24):** the in-flight and
+pre-authentication limits, so with two API instances each per-client limit is reached at
+twice its value ([deployment.md](deployment.md) §12). Provider quotas and the kill
+switches above still bound cost.
 
 ### 7.5 The worker
 
@@ -272,12 +280,12 @@ addition, before a first deployment:
    `lattice_security_invariant_violations_total > 0`, readiness failures,
    `lattice_dependency_failures_total`, and a growing `lattice_jobs_waiting`.
 4. Identity: connect each organization's OIDC provider and SCIM (§9); set
-   `LATTICE_PUBLIC_URL`; keep `LATTICE_OIDC_SECRET_*` in the secret store. The trusted
-   proxy setting depends on the ingress, which is not built yet (§7.4).
-5. Container images / infrastructure, retention jobs and alerting (Phase 11) are
-   **not built**: the slice runs as documented in the README only. The target production
-   contract (images, ingress, deployment order, backups) is
-   [deployment.md](deployment.md); it describes Phase 11 targets, not current behaviour.
+   `LATTICE_PUBLIC_URL`; keep `LATTICE_OIDC_SECRET_*` in the secret store; set
+   `LATTICE_TRUSTED_PROXIES` to the ingress addresses (§7.4).
+5. Images and the local reference stack exist (P11.1, §7.9); publishing, the production
+   migration flow and staging (P11.2), retention (P11.4), backups (P11.5) and alerting
+   (P11.6) are **not built**. The production contract is [deployment.md](deployment.md),
+   which marks each item built or target.
 
 ### 7.7 Backups, recovery and migrations
 
@@ -319,6 +327,24 @@ Remove a row as soon as its condition no longer holds.
 | --- | --- | --- | --- |
 | GHSA-vfj7-8cjw-p6xm (CVE-2026-93687, high), accepted 2026-10-03 | `braces` ≤3.0.3, via `micromatch` on two dev-only paths: `eslint-config-next` › `@next/eslint-plugin-next` › `fast-glob` › `micromatch`, and `stylelint` (directly and through `globby` › `fast-glob`) › `micromatch` (re-checked 2026-10-03) | No patched release exists. Dev lint tooling only, never in the production bundle; already on `main` before the design overhaul (the advisory record was updated 2026-10-02) | A patched `braces` reaches that chain, or `braces` leaves the lockfile |
 
+### 7.9 Local reference stack — *implemented (P11.1)*
+
+The production topology on one machine ([deployment.md](deployment.md) §15):
+`compose.production.yaml`, Compose project `lattice-reference` (never the development
+database). Stop the development database first on the reference machine (`make db-down`;
+Docker has 3 GB).
+
+| Situation | Action |
+| --------- | ------ |
+| Build the images | `make prod-build` (labels them with the current git revision) |
+| Start / check / stop | `make prod-up` (waits for every health check), `make prod-smoke`, `make prod-ps`, `make prod-down`; `make prod-destroy` deletes its volumes |
+| Open it | `https://localhost:8443` (Caddy's internal CA: the browser warns). `http://localhost:8080` redirects |
+| Sign in as a persona / run an Ask | `make prod-up VERIFY=1 [FAKE_DELAY=40]`: test env, development sign-in, fake providers (deploy/compose.verify.yaml). Seed and sync with `docker compose --env-file deploy/.env.reference -f compose.production.yaml -f deploy/compose.verify.yaml run --rm ops seed --manifest /srv/lattice/data/synthetic/halden/org.yaml …` (exports are mounted at `/srv/lattice/data`) |
+| A container is `unhealthy` | `make prod-ps`; `docker logs lattice-reference-<service>-1`. api: readiness (database or schema). worker: heartbeat older than 300 s (frozen or blocked). web: `GET /` failing |
+| Changed `deploy/caddy/Caddyfile` | Recreate Caddy (`… up -d --force-recreate caddy`): it is a single-file bind mount, so an editor that replaces the file leaves the container on the old one |
+| `lattice smoke` cannot read the CA | It runs as uid 10001; `make prod-smoke` copies only Caddy's public root certificate to `deploy/.reference-ca.crt` (git-ignored) and mounts it |
+| Passwords | `deploy/.env.reference` (git-ignored, generated once by `make prod-env`); each service receives only its own credential |
+
 ## 8. Failure drills — *run for Phase 8 (2026-09-29)*
 
 Run against the real API and worker on the development database (fake generation
@@ -340,6 +366,26 @@ provider recorded for Halden, fake embeddings), and as automated tests
 | Worker crash / busy source | tests | lease expiry → retried, then `job_abandoned` after 3 attempts; the interrupted run recorded `aborted`; `source_busy` → retried after 60 s |
 | Client retry | Sync now twice; Ask repeated | the second sync request returns the same job (200); each Ask is independent (a new trace) and read-only apart from it |
 | Oversized / pathological requests | 2,001-character question, 200-character account key, `limit=100000`, `before=not-a-uuid`, 70 KB body, 20 concurrent Asks | 422 naming the field (never its value) ×4, 413 `request_too_large`, 20 × 200 (max 1.6 s) |
+
+**P11.1 drills (2026-10-03), local reference stack** (two API instances behind Caddy,
+fake providers where an Ask was needed):
+
+| Drill | How | Observed |
+| ----- | --- | -------- |
+| Clean start | first `make prod-up` on empty volumes | PostgreSQL, migrations 0001–0013, api1, api2, worker, web, Caddy healthy in 35 s; `make prod-smoke` 10/10 |
+| Both instances serve | 20 × `GET /api/v1/health/live` through Caddy | 10 to api1, 10 to api2 (their own request logs) |
+| No `/api` on the web server | `GET http://web:3000/api/v1/health/live` from the private network | the web server's 404 (no proxy) |
+| Spoofed `X-Forwarded-For` through the ingress | 70 OIDC starts from the host, each with a different `X-Forwarded-For` | one client: 60 allowed (30 per API process), 10 `rate_limited` |
+| A real second client | 10 OIDC starts from another container through Caddy | all allowed: counted as a different client |
+| Spoofing directly at an API instance | 31 OIDC starts to `api1:8000` from inside the network, each spoofing a different `X-Forwarded-For` | one client: 30 allowed, the 31st `rate_limited` |
+| Long Ask | Maya, `FAKE_DELAY=40`, through `https://localhost:8443/api/v1/ask` | HTTP 200 `answered` after 40.4 s (2 claims, 12 evidence) — past Next.js's old 30 s cut |
+| API SIGTERM during an Ask | api2 stopped; a 40 s Ask started on api1; `docker compose stop api1` 5 s later | the Ask completed (200 `answered`, 40.3 s); the stop took 36 s; clean shutdown (pool disposed) |
+| API restart under traffic | 60 readiness requests over 30 s through Caddy while api1 restarts | 60 × 200; both instances healthy again |
+| Worker SIGTERM during a job | a requested sync held inside its job by a table lock; `docker compose stop worker` | the worker finished the job (`succeeded`, 1 attempt) and exited after 17 s |
+| Worker SIGKILL during a job | the same, `docker kill -s KILL` | job stayed `running`; the restarted worker (healthy at once) re-ran it after the 30 s lease: `succeeded`, 2 attempts; no job left running |
+| Frozen worker | SIGSTOP the worker process | `lattice smoke` worker check fails at once (its metrics listener stops answering); Docker health `unhealthy` after 5 min 47 s (300 s + 3 checks); SIGCONT → healthy in 15 s |
+| Request bodies | 70 KB and 2 MB `POST /api/v1/ask` through Caddy | both the API's typed 413 `request_too_large` (it refuses on `Content-Length`) |
+| Exposure | host ports 8000, 9464, 9465, 3000, 5432, 2019; `/metrics`, `/api/metrics` through Caddy | all refused / 404; only 8443 and 8080 published, on 127.0.0.1 |
 
 **Performance sanity (M1 8 GB, heavily swapped, dev data, fake providers).** Ask p50
 0.26 s over 8 requests (the first, cold, 11 s); `GET /v1/sources` p50 43 ms,

@@ -1168,8 +1168,8 @@ platform; no Phase 12–15 scope.
 
 | Step | Scope | Status |
 | ---- | ----- | ------ |
-| P11.0 | Decisions, deployment contract, staging-provider comparison, ADR-016, documentation corrections | Delivered (documentation only); awaiting review |
-| P11.1 | Packaging and runtime: images, web standalone on `0.0.0.0`, ingress routing and single trusted hop, uvicorn production command, worker heartbeat, build info, local reference stack (api ×2, Caddy), `lattice smoke` | Not started |
+| P11.0 | Decisions, deployment contract, staging-provider comparison, ADR-016, documentation corrections | Approved (4990064) |
+| P11.1 | Packaging and runtime: images, web standalone on `0.0.0.0`, ingress routing and single trusted hop, uvicorn production command, worker heartbeat, build info, local reference stack (api ×2, Caddy), `lattice smoke` | Delivered; awaiting review (plan §25.2) |
 | P11.2 | Deployment and migrations: migrate job and pre-flight, lock timeout, migration headers, production bootstrap, privilege snapshot and `check-deployment`, GHCR `images` job, scripted deploy/rollback, first staging deployment | Not started |
 | P11.3 | Identity and session operations: sessions record their SSO connection, disable revokes them, `sso enable/update`, audited `member suspend/reinstate`, `org suspend/reactivate`, `session revoke`, clock skew, verification IdP, the identity test matrix (plan §15.3) | Not started |
 | P11.4 | Shared in-flight and pre-authentication limits in PostgreSQL; retention classes with database-enforced floors | Not started |

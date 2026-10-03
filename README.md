@@ -337,17 +337,42 @@ procedures: [runbook §2 and §9](docs/runbook.md); decisions: D-1, D-19, D-20 a
 before Phase 10 needs `make migrate` (0013); `make audit` checks the locked dependencies
 for known vulnerabilities.
 
+## How deployment works (Phase 11, in progress)
+
+Lattice ships as two images ([ADR-016](docs/decisions/016-production-topology.md),
+[deployment contract](docs/deployment.md)): `lattice-backend`, one image that runs the
+API, the worker, migrations and operator commands, and `lattice-web`, the Next.js
+standalone server. In deployment an ingress terminates TLS and sends `/api/*` straight to
+the API (two or more instances) and everything else to the web server; it is the only
+hop whose forwarding headers the API trusts (`LATTICE_TRUSTED_PROXIES`). Built in P11.1
+and runnable locally:
+
+```
+make db-down        # one PostgreSQL at a time on a small machine
+make prod-build     # lattice-backend:local and lattice-web:local
+make prod-up        # PostgreSQL, migrations, api ×2, worker, web, Caddy (https://localhost:8443)
+make prod-smoke     # lattice smoke: ingress, both API instances, readiness, worker heartbeat
+make prod-down
+```
+
+`lattice smoke --url <origin>` is the read-only "is this deployment usable?" check, for
+the reference stack now and staging later. Publishing, the production migration flow and
+staging (P11.2), identity operations (P11.3), shared limits and retention (P11.4),
+backups (P11.5) and alerts (P11.6) follow ([plan](docs/phase-11-plan.md)).
+
 ## Repository layout
 
 ```
-backend/            FastAPI app (src/lattice), Alembic migrations, tests
-apps/web/           Next.js web app (src/: app routes, components, API client; e2e/: Playwright)
-infra/postgres/     superuser bootstrap: roles, databases, extensions
+backend/            FastAPI app (src/lattice), Alembic migrations, tests, Dockerfile
+apps/web/           Next.js web app (src/: app routes, components, API client; e2e/: Playwright), Dockerfile
+infra/postgres/     superuser bootstrap: roles, databases, extensions (also copied into the backend image)
 data/synthetic/     synthetic organizations: manifests, raw source exports, ground truth
                     (see data/synthetic/README.md)
 evals/golden/       golden question set (evals/reports/: evaluation output, not committed)
 docs/               product, architecture, security and design documentation
-compose.yaml        local Postgres only
+compose.yaml        local Postgres only (development)
+compose.production.yaml  production-shaped local reference stack (Phase 11; make prod-*)
+deploy/             reference ingress (Caddy) and the stack's verification overlay
 Makefile            developer commands (thin wrappers; read before running)
 ```
 

@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -80,7 +80,7 @@ check-db-role: ## Verify the runtime role cannot bypass row-level security
 
 api: ## Run the API on http://127.0.0.1:8000 with reload
 	$(UV_RUN) uvicorn lattice.api.app:create_app --factory --reload \
-	  --host 127.0.0.1 --port 8000 --no-access-log
+	  --host 127.0.0.1 --port 8000 --no-access-log --no-proxy-headers
 
 worker: ## Run the background worker (the syncs requested from the Sources page) as lattice_worker
 	$(UV_RUN) lattice worker
@@ -128,3 +128,52 @@ web-e2e: ## Browser tests against the production build, API mocked (run `make we
 
 api-contract: ## Re-export the OpenAPI schema and regenerate the web app's TypeScript types
 	$(WEB) pnpm api:schema && pnpm api:types
+
+# --- Production-shaped local reference stack (Phase 11, P11.1; docs/deployment.md) -------
+# Its own Compose project (lattice-reference): it never touches the development database.
+# Stop the development database first on a small machine (`make db-down`).
+# VERIFY=1 adds deploy/compose.verify.yaml (test env, persona sign-in, fake providers);
+# FAKE_DELAY=<seconds> makes the fake model wait (long-Ask proof).
+REFERENCE_ENV := deploy/.env.reference
+VERIFY ?=
+FAKE_DELAY ?= 0
+PROD_COMPOSE := FAKE_DELAY=$(FAKE_DELAY) docker compose --env-file $(REFERENCE_ENV) \
+  -f compose.production.yaml $(if $(VERIFY),-f deploy/compose.verify.yaml)
+REVISION := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
+
+prod-env: ## Generate deploy/.env.reference: random local-only database passwords (git-ignored)
+	@if [ ! -f $(REFERENCE_ENV) ]; then \
+	  umask 077; \
+	  for name in POSTGRES_PASSWORD LATTICE_OWNER_PASSWORD LATTICE_APP_PASSWORD LATTICE_WORKER_PASSWORD; do \
+	    echo "$$name=$$(openssl rand -hex 24)"; \
+	  done > $(REFERENCE_ENV); \
+	  echo "wrote $(REFERENCE_ENV)"; \
+	fi
+
+prod-build: ## Build lattice-backend:local and lattice-web:local, labelled with the git revision
+	docker build -f backend/Dockerfile --build-arg LATTICE_BUILD_REVISION=$(REVISION) -t lattice-backend:local .
+	docker build -f apps/web/Dockerfile --build-arg LATTICE_BUILD_REVISION=$(REVISION) -t lattice-web:local apps/web
+
+prod-up: prod-env ## Start the reference stack: PostgreSQL, migrations, api x2, worker, web, Caddy
+	$(PROD_COMPOSE) up -d --wait postgres
+	$(PROD_COMPOSE) run --rm migrate
+	$(PROD_COMPOSE) up -d --wait api1 api2 worker web caddy
+
+REFERENCE_CA := deploy/.reference-ca.crt
+
+prod-smoke: ## lattice smoke against the reference stack, from inside its private network
+	@# Only the internal CA's public root certificate leaves the Caddy container.
+	$(PROD_COMPOSE) cp caddy:/data/caddy/pki/authorities/local/root.crt $(REFERENCE_CA)
+	$(PROD_COMPOSE) run --rm -v $(CURDIR)/$(REFERENCE_CA):/srv/reference-ca.crt:ro ops \
+	  smoke --url https://caddy:8443 --ca-file /srv/reference-ca.crt \
+	  --instance http://api1:8000 --instance http://api2:8000 \
+	  --worker-metrics http://worker:9465/metrics $(if $(VERIFY),,--production)
+
+prod-ps: ## Show the reference stack's containers and health
+	$(PROD_COMPOSE) ps
+
+prod-down: ## Stop the reference stack (volumes kept)
+	$(PROD_COMPOSE) down
+
+prod-destroy: ## DELETE the reference stack and its volumes
+	$(PROD_COMPOSE) down -v

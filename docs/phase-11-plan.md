@@ -1,9 +1,8 @@
 # Phase 11 — Production Deployment, Identity Operations & Reliability: plan
 
 Status: **Approved (2026-10-03) with decisions D-22 to D-27 and the product owner's
-amendments (§21). P11.0 delivered (documentation only): [deployment.md](deployment.md)
-with the staging comparison (Appendix A), [ADR-016](decisions/016-production-topology.md)
-and the documentation corrections of §23; awaiting review. P11.1–P11.7 not started.** Each checkpoint (§25) stops for review; P11.0
+amendments (§21). P11.0 approved (4990064). P11.1 (images and runtime) delivered;
+awaiting review (§25.2). P11.2–P11.7 not started.** Each checkpoint (§25) stops for review; P11.0
 starts only after the product owner approves this revision. Branch
 `phase/11-production-operations` from `main` 27da421.
 
@@ -432,8 +431,8 @@ trust class or approval. Backups hold hashes and references, never values (verif
 ## 14. Worker and job operational model
 
 One worker instance by default (more are safe: `SKIP LOCKED`). Unchanged semantics. New:
-heartbeat file (liveness), `lattice_jobs_oldest_waiting_seconds`,
-`lattice_worker_last_poll_timestamp_seconds`, the retention tasks of §12 in the
+heartbeat file and `lattice_worker_heartbeat_timestamp_seconds` (liveness, built in
+P11.1), `lattice_jobs_oldest_waiting_seconds`, the retention tasks of §12 in the
 maintenance loop. Source exports come from a mounted volume (ADR-013: the worker reads
 only what the operator's last `lattice sync` recorded). Least privilege unchanged except
 the age-gated DELETE policies and the pre-auth cleanup function.
@@ -489,7 +488,7 @@ Existing metrics (runbook §7.3) stay. Additions, closed labels, no content:
 | ------ | ------- |
 | `lattice_build_info{revision,version,schema_revision}` | release identification (internal) |
 | `lattice_clock_skew_seconds` | clock skew vs DB |
-| `lattice_jobs_oldest_waiting_seconds`, `lattice_worker_last_poll_timestamp_seconds` | backlog, stuck worker |
+| `lattice_jobs_oldest_waiting_seconds`; `lattice_worker_heartbeat_timestamp_seconds` (built in P11.1) | backlog, stuck worker |
 | `lattice_maintenance_last_success_timestamp_seconds{task}`, `lattice_maintenance_failures_total{task}` | retention health |
 | `lattice_member_lifecycle_total{change,actor_kind}` (`created/suspended/reactivated/removed` × `scim/administrator/operator`) | provisioning bursts (F15) |
 | `lattice_sessions_revoked_total{reason}` | revocation visibility |
@@ -716,6 +715,23 @@ infrastructure change**, and no cloud resource created.
    `make web-check` unaffected (no code touched); links in changed documents resolve.
 8. Committed locally on `phase/11-production-operations` (not pushed), then **stop for the
    product owner's review** of the staging choice and the contract before P11.1.
+
+### 25.2 P11.1 — as built (2026-10-03)
+
+| Planned (§25 row P11.1) | As built |
+| ----------------------- | -------- |
+| Dockerfiles, `.dockerignore` | `backend/Dockerfile` (+ `Dockerfile.dockerignore`, root context, allow-list) and `apps/web/Dockerfile` (+ `.dockerignore`); base images pinned by digest; non-root (uid 10001 / `node`); no `HEALTHCHECK` in the images (per-process checks in Compose) |
+| Web standalone, `0.0.0.0`, dev `proxyTimeout` (F1, F11) | `output: "standalone"` only when `LATTICE_WEB_STANDALONE=1` (the image build), so local `next start` is unchanged; the image's `node server.js` binds `0.0.0.0:3000`; the `/api` rewrite is generated only under `next dev`, with `experimental.proxyTimeout` 150 s; the production build has none |
+| Ingress routing and trusted hop (F2, F3) | `deploy/caddy/Caddyfile`; new setting `LATTICE_TRUSTED_PROXIES` (validated IPs/CIDRs, `*` refused) installs uvicorn's `ProxyHeadersMiddleware` inside the app; uvicorn runs with `--no-proxy-headers` (also `make api`) |
+| uvicorn production command | the backend image's default command (graceful timeout 150 s) |
+| Worker heartbeat (F9) | `lattice_worker_heartbeat_timestamp_seconds` + `LATTICE_WORKER_HEARTBEAT_FILE`; no migration |
+| `lattice_build_info` (F14) | `lattice.build`: build-argument revision/version → metric and `startup` log line |
+| Reference stack (api ×2, Caddy) | `compose.production.yaml`, `deploy/compose.verify.yaml`, `make prod-*` |
+| `lattice smoke` | `lattice.smoke`: web, API liveness/readiness through the ingress, authentication enforced, production surface, each API instance, worker heartbeat; an authenticated Ask waits for P11.3's verification IdP |
+| Test-only long-Ask mechanism | `LATTICE_FAKE_GENERATION_DELAY_SECONDS` on the fake provider (refused in production) |
+| Metrics address required in production | **Deferred to P11.6** (with the monitoring contract): every deployment sets it, but making it mandatory now would change every production configuration and the test harness for no P11.1 benefit |
+| GHSA re-check | still unpatched; `pnpm-workspace.yaml` comment corrected to both chains |
+| Staging database | the 2 GiB DigitalOcean plan (product owner, 2026-10-03); Appendix A re-costed |
 
 ## 26. Phase 11 acceptance criteria
 

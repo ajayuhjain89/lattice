@@ -363,6 +363,17 @@ MAINTENANCE_ROWS = Counter(
     ["task"],
     registry=REGISTRY,
 )
+WORKER_HEARTBEAT = Gauge(
+    "lattice_worker_heartbeat_timestamp_seconds",
+    "Unix time of the worker's last heartbeat (each loop iteration and lease renewal).",
+    registry=REGISTRY,
+)
+BUILD_INFO = Gauge(
+    "lattice_build_info",
+    "Always 1; the labels identify the running build (internal listener only).",
+    ["revision", "version", "schema_revision"],
+    registry=REGISTRY,
+)
 
 
 def serve(address: str) -> tuple[object, object]:

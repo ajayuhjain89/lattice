@@ -1,0 +1,203 @@
+# Lattice production-shaped local reference stack (Phase 11, P11.1; ADR-016,
+# docs/deployment.md). Separate from compose.yaml (development PostgreSQL only) and its
+# own Compose project, so it never touches the development database.
+#
+#   make prod-env     generate deploy/.env.reference (random local passwords, git-ignored)
+#   make prod-build   build lattice-backend:local and lattice-web:local
+#   make prod-up      PostgreSQL → migrations → api ×2, worker, web, Caddy (waits for health)
+#   make prod-smoke   lattice smoke from inside the private network
+#   make prod-down    stop (data kept)        make prod-destroy   remove volumes too
+#
+# Browser entry: https://localhost:8443 (Caddy's internal CA; the browser will warn).
+# Only Caddy publishes ports, on 127.0.0.1. Defaults are production settings
+# (LATTICE_ENV=production): see deploy/compose.verify.yaml for the verification overlay.
+name: lattice-reference
+
+x-hardened: &hardened
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  restart: unless-stopped
+
+x-backend: &backend
+  <<: *hardened
+  image: ${LATTICE_BACKEND_IMAGE:-lattice-backend:local}
+  networks:
+    - private
+
+x-api-environment: &api-environment
+  LATTICE_ENV: ${LATTICE_STACK_ENV:-production}
+  LATTICE_DATABASE_URL: postgresql+asyncpg://lattice_app:${LATTICE_APP_PASSWORD:?run make prod-env}@postgres:5432/lattice
+  LATTICE_PUBLIC_URL: https://localhost:8443
+  LATTICE_SESSION_COOKIE_SECURE: "true"
+  LATTICE_DEV_AUTH_ENABLED: "false"
+  LATTICE_QUERY_EMBEDDING: none
+  LATTICE_METRICS_ADDRESS: 0.0.0.0:9464
+  # Caddy's fixed address on the private network: the only trusted forwarding hop.
+  LATTICE_TRUSTED_PROXIES: 172.31.250.10
+  # Two API processes share the database: a small pool each (docs/deployment.md §8).
+  LATTICE_DB_POOL_SIZE: "3"
+
+x-api: &api
+  <<: *backend
+  environment:
+    <<: *api-environment
+  # uvicorn waits up to 150 s for in-flight requests (an Ask) after SIGTERM.
+  stop_grace_period: 160s
+  depends_on:
+    postgres:
+      condition: service_healthy
+  healthcheck:
+    # Readiness (database + schema revision): what decides whether traffic may come.
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/health/ready', timeout=3)"]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 20s
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.1-pg16@sha256:33198da2828a14c30348d2ccb4750833d5ed9a44c88d840a0e523d7417120337
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run make prod-env}
+      POSTGRES_DB: postgres
+      # infra/postgres/initdb.sh runs the bootstrap on an empty volume (superuser; the
+      # managed-PostgreSQL variant is P11.2, docs/deployment.md §7).
+      LATTICE_OWNER_PASSWORD: ${LATTICE_OWNER_PASSWORD:?run make prod-env}
+      LATTICE_APP_PASSWORD: ${LATTICE_APP_PASSWORD:?run make prod-env}
+      LATTICE_WORKER_PASSWORD: ${LATTICE_WORKER_PASSWORD:?run make prod-env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres:/bootstrap:ro
+      - ./infra/postgres/initdb.sh:/docker-entrypoint-initdb.d/10-lattice-bootstrap.sh:ro
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d lattice"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # One-off: migrations as lattice_owner (P11.2 adds the production migration flow).
+  migrate:
+    <<: *backend
+    restart: "no"
+    profiles: [tools]
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      LATTICE_MIGRATION_DATABASE_URL: postgresql+asyncpg://lattice_owner:${LATTICE_OWNER_PASSWORD:?run make prod-env}@postgres:5432/lattice
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # One-off operator commands (`lattice …`) as lattice_owner, with the source exports
+  # mounted read-only (`make prod-smoke` adds the reference CA's public certificate).
+  ops:
+    <<: *backend
+    restart: "no"
+    profiles: [tools]
+    entrypoint: ["lattice"]
+    command: ["--help"]
+    environment:
+      LATTICE_ENV: ${LATTICE_STACK_ENV:-production}
+      LATTICE_MIGRATION_DATABASE_URL: postgresql+asyncpg://lattice_owner:${LATTICE_OWNER_PASSWORD:?run make prod-env}@postgres:5432/lattice
+      LATTICE_PUBLIC_URL: https://localhost:8443
+    volumes:
+      - ./data:/srv/lattice/data:ro
+
+  api1:
+    <<: *api
+  api2:
+    <<: *api
+
+  worker:
+    <<: *backend
+    command: ["lattice", "worker"]
+    environment:
+      LATTICE_ENV: ${LATTICE_STACK_ENV:-production}
+      LATTICE_WORKER_DATABASE_URL: postgresql+asyncpg://lattice_worker:${LATTICE_WORKER_PASSWORD:?run make prod-env}@postgres:5432/lattice
+      LATTICE_SYNC_EMBEDDING: none
+      LATTICE_METRICS_ADDRESS: 0.0.0.0:9465
+      LATTICE_WORKER_HEARTBEAT_FILE: /tmp/lattice-worker-heartbeat
+    volumes:
+      # The worker syncs only the export path the operator's last `lattice sync` recorded.
+      - ./data:/srv/lattice/data:ro
+    # SIGTERM: finish the current job, then exit. A job still running when the grace
+    # ends is killed and recovered by its lease (LATTICE_WORKER_LEASE_SECONDS).
+    stop_grace_period: 120s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Liveness: the heartbeat (renewed every loop iteration and lease renewal) is
+      # younger than 300 s (> the 100 s lease-renewal interval while a job runs).
+      test: ["CMD", "python", "-c", "import os, sys, time; sys.exit(0 if time.time() - os.stat('/tmp/lattice-worker-heartbeat').st_mtime < 300 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  web:
+    <<: *hardened
+    image: ${LATTICE_WEB_IMAGE:-lattice-web:local}
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  caddy:
+    <<: *hardened
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    # The caddy binary carries the cap_net_bind_service file capability; without it in the
+    # bounding set the kernel refuses to exec it. Nothing else is granted.
+    cap_add:
+      - NET_BIND_SERVICE
+    ports:
+      - "127.0.0.1:8443:8443"
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      private:
+        ipv4_address: 172.31.250.10
+    depends_on:
+      api1:
+        condition: service_healthy
+      api2:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+networks:
+  private:
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24
+
+volumes:
+  pgdata:
+  caddy-data:
+  caddy-config:

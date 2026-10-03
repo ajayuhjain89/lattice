@@ -1,0 +1,75 @@
+# Lattice reference ingress (Phase 11, P11.1; docs/deployment.md §4). LOCAL ONLY.
+#
+# It plays the production ingress's role in the local reference stack: TLS termination,
+# /api/* straight to the API pool, everything else to the web server, and the only
+# trusted forwarding hop (the API trusts X-Forwarded-* from this container's fixed
+# address alone, LATTICE_TRUSTED_PROXIES). Its certificate comes from Caddy's internal
+# CA and is trusted by nothing: it is not a stand-in for the public staging certificate.
+#
+# Forwarding: with no `trusted_proxies` here, Caddy discards any X-Forwarded-For /
+# X-Forwarded-Proto a client sends and sets them from the connection it accepted, so a
+# client cannot choose the address the API sees.
+{
+	admin localhost:2019
+	# The ports the host publishes, so redirects and URLs carry the right port.
+	http_port 8080
+	https_port 8443
+	servers {
+		timeouts {
+			# Time to receive a request; responses are bounded per upstream below.
+			read_header 10s
+			read_body 30s
+			idle 2m
+		}
+	}
+}
+
+https://localhost:8443, https://caddy:8443 {
+	tls internal
+
+	# The API's own 64 KiB cap (LATTICE_MAX_REQUEST_BYTES, 413 request_too_large) is the
+	# authoritative limit; this only stops oversized uploads at the edge. No route needs
+	# more than 64 KiB.
+	request_body {
+		max_size 1MB
+	}
+
+	# /api/* → the API pool, prefix stripped (/api/v1/ask → /v1/ask). Two instances,
+	# round robin, a request moved to the other instance if one refuses the connection,
+	# and only instances whose readiness passes receive traffic.
+	handle_path /api/* {
+		reverse_proxy api1:8000 api2:8000 {
+			lb_policy round_robin
+			lb_try_duration 5s
+			health_uri /v1/health/ready
+			health_interval 5s
+			health_timeout 3s
+			health_status 200
+			fail_duration 10s
+			transport http {
+				dial_timeout 5s
+				# An Ask may spend LATTICE_GENERATION_DEADLINE_SECONDS (120 s) generating
+				# plus retrieval: the contract asks for at least 150 s.
+				response_header_timeout 180s
+			}
+		}
+	}
+
+	# Every other path → the web server (no /api route exists there in production).
+	handle {
+		reverse_proxy web:3000 {
+			health_uri /
+			health_interval 10s
+			health_timeout 5s
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 30s
+			}
+		}
+	}
+}
+
+# Plain HTTP only redirects (explicit, so the redirect keeps the published port).
+http://localhost:8080, http://caddy:8080 {
+	redir https://{host}:8443{uri} 308
+}

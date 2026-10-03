@@ -1,11 +1,16 @@
 # Lattice — Deployment Contract
 
-Status: **P11.0 (2026-10-03). This is the provider-independent production contract that
-Phase 11 builds towards; most of it is not built yet.** Every section says what exists
-**today** and what is the **target** and in which checkpoint it lands
-([phase-11-plan.md](phase-11-plan.md) §25). Nothing marked *target* may be relied on
-until its checkpoint is approved. Decision record: [ADR-016](decisions/016-production-topology.md);
-decisions D-22–D-27 in [implementation-plan.md](implementation-plan.md) §7.
+Status: **P11.1 (2026-10-03).** This is the provider-independent production contract that
+Phase 11 builds towards. **Built in P11.1:** the two images, the ingress routing and the
+single trusted hop, the API's trusted-proxy setting, worker liveness, graceful shutdown,
+build identification, `lattice smoke` and the local reference stack (§15). **Not built
+yet:** publishing, the migration flow and staging (P11.2), identity operations (P11.3),
+shared limits and retention (P11.4), backups (P11.5), alerts (P11.6). Every section says
+what exists **today** and what is a **target** and in which checkpoint it lands
+([phase-11-plan.md](phase-11-plan.md) §25); nothing marked *target* may be relied on
+until its checkpoint is approved. Decision record:
+[ADR-016](decisions/016-production-topology.md); decisions D-22–D-27 in
+[implementation-plan.md](implementation-plan.md) §7.
 
 Appendix A (the staging-provider comparison) is the only provider-specific part. The
 application must never depend on it.
@@ -33,11 +38,11 @@ application must never depend on it.
                PostgreSQL 16 + pgvector (managed, PITR, TLS, private)
 ```
 
-| | Today | Target |
-| - | ----- | ------ |
-| `/api/*` routing | The web server's Next.js rewrite proxies `/api/*` to `LATTICE_API_URL` (`apps/web/next.config.ts`); there is no ingress configuration in the repository | The ingress routes `/api/*` straight to the API; Next.js is not on the API path in production (P11.1). The rewrite remains for local development only |
-| API instances | One process (`make api`) | Two or more in staging/production and always two in the local reference stack (P11.1) |
-| Packaging | Processes run on the host from the source tree | Two images (§3) (P11.1) |
+| | Today (P11.1) | Target |
+| - | ------------- | ------ |
+| `/api/*` routing | The ingress routes `/api/*` straight to the API (reference stack: Caddy, `deploy/caddy/Caddyfile`). The production web build has **no** `/api` route: the Next.js rewrite exists only under `next dev` (`apps/web/next.config.ts`), with a 150 s proxy timeout | unchanged; staging/production use their own ingress under §4 (P11.2) |
+| API instances | Two in the reference stack (`api1`, `api2`); one under `make api` in development | ≥ 2 in staging and production |
+| Packaging | `lattice-backend` and `lattice-web` images (§3), built locally (`make prod-build`) | published to GHCR (P11.2) |
 
 The web server never calls the API server-side: every API call is the browser's,
 same-origin, to `/api` (`apps/web/src/api/client.ts`). That is why the ingress can send
@@ -45,13 +50,17 @@ same-origin, to `/api` (`apps/web/src/api/client.ts`). That is why the ingress c
 
 ## 2. Processes
 
-| Process | Command (target, inside the image) | Database role | Instances | Today |
-| ------- | ---------------------------------- | ------------- | --------- | ----- |
-| **api** | `uvicorn lattice.api.app:create_app --factory --host 0.0.0.0 --port 8000 --no-access-log --proxy-headers --forwarded-allow-ips=<ingress addresses> --timeout-graceful-shutdown 150` | `lattice_app` | ≥ 2 | `make api` (127.0.0.1, `--reload`, no proxy headers) |
+| Process | Command inside the image (P11.1) | Database role | Instances | Development |
+| ------- | -------------------------------- | ------------- | --------- | ----------- |
+| **api** | the image's default: `uvicorn lattice.api.app:create_app --factory --host 0.0.0.0 --port 8000 --no-access-log --no-proxy-headers --timeout-graceful-shutdown 150` | `lattice_app` | ≥ 2 | `make api` (127.0.0.1, `--reload`, `--no-proxy-headers`) |
 | **worker** | `lattice worker` | `lattice_worker` | 1 (more are safe: `SKIP LOCKED`) | `make worker` |
-| **web** | `node server.js` (Next.js standalone) on `0.0.0.0:3000` | none | ≥ 1 | `next start --hostname 127.0.0.1` (unreachable in a container; P11.1) |
-| **migrate** | `alembic upgrade head` (one-off job) | `lattice_owner` | one at a time | `make migrate` |
+| **web** | the image's default: `node server.js` (Next.js standalone) on `0.0.0.0:3000` | none | ≥ 1 | `make web` (`next dev`, 127.0.0.1) |
+| **migrate** | `alembic upgrade head` (one-off job; the production flow is P11.2) | `lattice_owner` | one at a time | `make migrate` |
 | **operator** | `lattice <command>` (one-off) | `lattice_owner` | ad hoc | `uv run lattice …` on the host |
+
+`--no-proxy-headers` matters: uvicorn's own default trusts forwarding headers from
+127.0.0.1. Forwarding headers are trusted only through `LATTICE_TRUSTED_PROXIES`, inside
+the application (§4), whatever command starts it.
 
 ## 3. Images (D-27)
 
@@ -67,32 +76,42 @@ same-origin, to `/api` (`apps/web/src/api/client.ts`). That is why the ingress c
   (`…@sha256:…`), recorded in the deploy log.
 - **Semantics:** an image from `main` is a *staging candidate*; an image from a `v*` tag is
   a *release artifact*. Only these may be deployed.
-- **Metadata (target, P11.1):** OCI labels `org.opencontainers.image.source`, `.revision`,
-  `.version`, `.created`; build arguments baked into the environment as
-  `LATTICE_BUILD_REVISION` / `LATTICE_BUILD_VERSION`; exposed only as
-  `lattice_build_info{revision,version,schema_revision}` on the internal metrics listener
-  and in one `startup` log line. Public endpoints never expose a version (Phase 8 rule).
-  *Today* nothing records a revision (`FastAPI(version="0.1.0")` is a constant).
+- **Metadata (P11.1):** OCI labels `org.opencontainers.image.title`, `.source`,
+  `.revision`, `.version`; build arguments `LATTICE_BUILD_REVISION` /
+  `LATTICE_BUILD_VERSION` baked into the environment (`make prod-build` passes the git
+  revision). Reported only as `lattice_build_info{revision,version,schema_revision}` on
+  the internal metrics listener and in one `startup` log line per api and worker process
+  (`lattice.build`); unset or malformed values read `unknown`. Public endpoints never
+  expose a version (Phase 8 rule; tested). `.created` is left to the P11.2 publishing job.
+- **As built (P11.1):** `backend/Dockerfile` (context: the repository root, limited by
+  `backend/Dockerfile.dockerignore` to `backend/` sources, Alembic and the bootstrap SQL):
+  a build stage with uv 0.12.19 and the locked dependencies, a runtime stage with only the
+  virtual environment, `alembic/`, `alembic.ini` and `infra/postgres/*.sql`; user
+  `lattice` (uid/gid 10001); about 566 MB, most of it the ONNX runtime and NumPy.
+  `apps/web/Dockerfile` (context `apps/web`, `apps/web/.dockerignore`): `pnpm install
+  --frozen-lockfile` and `next build` with `LATTICE_WEB_STANDALONE=1` in a build stage; the
+  runtime stage holds only `.next/standalone`, `.next/static` and `public/`, root-owned and
+  run as `node` (uid 1000); about 406 MB, mostly the Node.js base image. Neither image has
+  a `HEALTHCHECK`: the backend image runs several processes with different health
+  signals, so each deployment declares them per process (§10).
 - **Never in an image:** secrets, `.env`, `data/synthetic`, test fixtures, model weights.
 
 ## 4. Ingress contract
 
-| Requirement | Contract |
-| ----------- | -------- |
-| Routes | `/api/*` → api, with the `/api` prefix stripped (`/api/v1/ask` → `/v1/ask`; SCIM at `/api/scim/v2/…` → `/scim/v2/…`); every other path → web. Metrics ports are never routed |
-| TLS | HTTPS only at the public origin, HTTP redirected; HSTS is sent by the applications in production. The origin equals `LATTICE_PUBLIC_URL` exactly (scheme, host, port) |
-| OIDC callback origin | `LATTICE_PUBLIC_URL` + `/api/v1/auth/oidc/<login key>/callback` must reach the API unchanged (path and query) |
-| Client address | The ingress is the **only** trusted forwarding boundary. It **appends** the peer address it saw to `X-Forwarded-For` and sets `X-Forwarded-Proto`. The API trusts forwarding headers only from the ingress addresses (`--forwarded-allow-ips`) and takes the right-most address added by the trusted hop. A client-supplied `X-Forwarded-For` therefore never decides the client key. Where a platform edge stands in front of the routing layer, the routing layer derives the client address from that edge's documented header and is itself the only peer the API trusts (Appendix A notes which platforms need this) |
-| Timeouts | Upstream read timeout to the API **≥ 150 s** (an Ask may spend `LATTICE_GENERATION_DEADLINE_SECONDS`, default 120 s, in generation plus retrieval). Connect timeout short (≤ 5 s) |
-| Body size | Ingress limit ≥ 64 KiB (the API's own cap, `LATTICE_MAX_REQUEST_BYTES`, answers 413 `request_too_large`; the ingress must not cut first with a different error) and ≤ 10 MiB |
-| Health routing | The ingress (or platform) probes each api instance at `/v1/health/ready` on the instance port, not through the public route. Liveness `/v1/health/live`. The public `https://<origin>/api/v1/health/ready` is used only by the external availability probe |
-| Maintenance | During a migrating release (§9.2) the ingress answers `/api/*` with 503 and `Retry-After` |
+| Requirement | Contract | Reference stack (P11.1, `deploy/caddy/Caddyfile`) |
+| ----------- | -------- | ------------------------------------------------- |
+| Routes | `/api/*` → api, with the `/api` prefix stripped (`/api/v1/ask` → `/v1/ask`; SCIM at `/api/scim/v2/…` → `/scim/v2/…`); every other path → web. Metrics, admin and database ports are never routed | `handle_path /api/*` → `api1:8000 api2:8000`, round robin, readiness-gated (`health_uri /v1/health/ready` every 5 s), a refused connection retried on the other instance for up to 5 s; `handle` → `web:3000`. The production web build has no `/api` route at all (a request reaching it directly gets the web 404) |
+| TLS | HTTPS only at the public origin, HTTP redirected; HSTS is sent by the applications in production. The origin equals `LATTICE_PUBLIC_URL` exactly (scheme, host, port) | Caddy's internal CA (`tls internal`), on `https://localhost:8443` (and `https://caddy:8443` inside the network for `lattice smoke`); `http://localhost:8080` redirects (308) keeping the port. **Not** equivalent to a public certificate: browsers warn, nothing trusts it |
+| OIDC callback origin | `LATTICE_PUBLIC_URL` + `/api/v1/auth/oidc/<login key>/callback` must reach the API unchanged (path and query) | `LATTICE_PUBLIC_URL=https://localhost:8443` |
+| Client address | The ingress is the **only** trusted forwarding boundary. It discards any client-supplied `X-Forwarded-For`/`-Proto` (or appends to them) and states the peer it accepted. The API accepts forwarding headers only from `LATTICE_TRUSTED_PROXIES` (IP addresses or CIDR networks; never `*`), applied inside the application by uvicorn's `ProxyHeadersMiddleware`, which takes the right-most address not belonging to a trusted hop; from any other peer the TCP address is the client. Where a platform edge stands in front of the routing layer, the routing layer derives the client from that edge's documented header and is itself the only peer the API trusts (Appendix A) | Caddy has a fixed address (172.31.250.10) on the private network; `LATTICE_TRUSTED_PROXIES=172.31.250.10`. Caddy has no `trusted_proxies`, so it replaces client-supplied forwarding headers with the connection it accepted |
+| Timeouts | Upstream response timeout to the API **≥ 150 s** (an Ask may spend `LATTICE_GENERATION_DEADLINE_SECONDS`, default 120 s, in generation plus retrieval). Connect timeout ≤ 5 s | `response_header_timeout 180s`, `dial_timeout 5s`; request header/body read 10 s / 30 s; web upstream 30 s |
+| Body size | The API's own cap, `LATTICE_MAX_REQUEST_BYTES` (64 KiB, 413 `request_too_large`), is authoritative. The ingress may only stop larger uploads, above that cap and ≤ 10 MiB, so it never answers first for a body the API would accept. No route needs more than 64 KiB | `request_body max_size 1MB`: bodies between 64 KiB and 1 MB get the API's typed 413 |
+| Health routing | The ingress (or platform) probes each api instance at `/v1/health/ready` on the instance port, not through the public route. Liveness `/v1/health/live`. The public `https://<origin>/api/v1/health/ready` is for the external availability probe | as stated; container health checks per process (§10) |
+| Maintenance | During a migrating release (§9.2) the ingress answers `/api/*` with 503 and `Retry-After` | target, P11.2 |
 
-**Today (incorrect for production; fixed in P11.1):** the only implemented path is the
-Next.js rewrite, which (a) proxies with Next.js's default `proxyTimeout` of 30 s, below the
-Ask deadline, and (b) makes the API see the Next.js server as the caller, while Next.js
-passes an incoming `X-Forwarded-For` through unchanged. The runbook's advice to trust "the
-proxy" therefore names the wrong hop until P11.1.
+**Development only:** `next dev` keeps proxying `/api/*` to `LATTICE_API_URL` (the
+Next.js server is then the API's peer, and `make api` trusts no forwarding header), with
+`experimental.proxyTimeout` 150 s so a long Ask is not cut at Next.js's 30 s default.
 
 ## 5. Configuration
 
@@ -116,7 +135,7 @@ secret). Only settings that exist today are listed unless marked *target*.
 | `LATTICE_GENERATION_DEADLINE_SECONDS` | config | 120 (the ingress timeout depends on it) |
 | `LATTICE_MAX_REQUEST_BYTES` | config | 65536 |
 | `LATTICE_DB_STATEMENT_TIMEOUT_MS` / `_CONNECT_TIMEOUT_SECONDS` / `_POOL_SIZE` | config | 30000 / 5 / per §8 |
-| `LATTICE_METRICS_ADDRESS` | deployment | `0.0.0.0:9464` on the private interface (optional today; required in production as of P11.1) |
+| `LATTICE_METRICS_ADDRESS` | deployment | `0.0.0.0:9464` on the private interface. Optional in configuration today; every deployment sets it (making it mandatory in production moves to P11.6 with the monitoring contract) |
 | `LATTICE_RATE_LIMIT_*` (six) | config | defaults (§12) |
 | `LATTICE_OIDC_HTTP_TIMEOUT_SECONDS` | config | 5 |
 | `LATTICE_OIDC_SECRET_<NAME>` | secret | one per confidential OIDC client; referenced from the database as `env:LATTICE_OIDC_SECRET_<NAME>` |
@@ -124,8 +143,9 @@ secret). Only settings that exist today are listed unless marked *target*.
 | `LATTICE_GEMINI_API_KEY` / `GEMINI_API_KEY` / `LATTICE_OPENAI_API_KEY` | secret | legacy process-wide keys for query embedding only; avoid in production |
 | `LATTICE_MODEL_DIR`, `LATTICE_LOCAL_EMBEDDING_MODEL`, `LATTICE_LOCAL_EMBEDDING_THREADS` | config | only with `local` embeddings; the model directory is a read-only volume filled by `lattice models fetch` |
 | `LATTICE_CLIENT_KEY_SECRET` | secret | **target, P11.4:** ≥ 32 random bytes, identical on every api instance; HMAC key for the shared pre-authentication counters (§12). Rotation resets those counters only |
-| `LATTICE_BUILD_REVISION` / `LATTICE_BUILD_VERSION` | deployment | **target, P11.1:** baked into the image at build |
-| trusted ingress addresses | deployment | uvicorn `--forwarded-allow-ips` (command line, not a `LATTICE_*` setting) |
+| `LATTICE_BUILD_REVISION` / `LATTICE_BUILD_VERSION` | deployment | baked into the image at build (P11.1); never set by hand |
+| `LATTICE_TRUSTED_PROXIES` | deployment | **P11.1:** the ingress addresses or networks (comma-separated IPs/CIDRs; `*` refused); unset = trust no forwarding header. Run uvicorn with `--no-proxy-headers` (the image does) |
+| `LATTICE_FAKE_GENERATION_DELAY_SECONDS` | config | test double only: refused (must be 0) in production; the verification overlay uses it for the long-Ask proof |
 
 ### 5.2 worker (`WorkerSettings`)
 
@@ -135,8 +155,9 @@ secret). Only settings that exist today are listed unless marked *target*.
 | `LATTICE_WORKER_DATABASE_URL` | secret | `lattice_worker` credential; the worker refuses an unsafe role |
 | `LATTICE_SYNC_EMBEDDING` | config | the provider the corpus was embedded with (production refuses `fake`) |
 | `LATTICE_WORKER_POLL_SECONDS` / `_LEASE_SECONDS` | config | 2 / 300 |
+| `LATTICE_WORKER_HEARTBEAT_FILE` | deployment | **P11.1:** e.g. `/tmp/lattice-worker-heartbeat` (a writable tmpfs); the container health check reads its age (§10) |
 | `LATTICE_DB_STATEMENT_TIMEOUT_MS` / `_CONNECT_TIMEOUT_SECONDS` | config | 300000 / 5 |
-| `LATTICE_METRICS_ADDRESS` | deployment | `0.0.0.0:9465` private (required in production as of P11.1) |
+| `LATTICE_METRICS_ADDRESS` | deployment | `0.0.0.0:9465` private (carries the heartbeat gauge `lattice smoke` reads) |
 | provider keys / `LATTICE_PROVIDER_SECRET_*`, model settings | secret / config | as the api, only for the embedding provider the worker uses |
 
 ### 5.3 migrate and operator commands (`MigrationSettings`)
@@ -235,10 +256,14 @@ connections (`max_overflow = pool_size`, `lattice/db/engine.py`): api `LATTICE_D
 | **Total at peak** | ≤ 31 | ≤ 21 |
 | Required headroom | ≥ 10 below the usable limit | ≥ 1 at absolute peak (peaks are not simultaneous: migrate runs only with api and worker stopped, so the realistic peak is ≤ 20) |
 
-A plan with ~22 usable backend connections (the smallest DigitalOcean plan, Appendix A)
-fits only with `LATTICE_DB_POOL_SIZE=3` and is tight; the 2 GiB plan (47) and a plan with
-~100 (Render) fit the defaults. No pooler is added (Phase 14 revisits). `lattice check-deployment` will compute this against
-`SHOW max_connections` (**target, P11.2**).
+A plan with ~22 usable backend connections (the smallest DigitalOcean plan) fits only
+with `LATTICE_DB_POOL_SIZE=3` and leaves almost no operational headroom, so **staging uses
+the 2 GiB plan (47 usable connections; D-22 as accepted for P11.1)**, which fits the
+defaults with room for operators and drills; a plan with ~100 (Render) also fits. The
+reference stack runs `LATTICE_DB_POOL_SIZE=3` per API instance on its own PostgreSQL
+(default `max_connections` 100). No pooler is added (Phase 14 revisits).
+`lattice check-deployment` will compute this against `SHOW max_connections` (**target,
+P11.2**).
 
 ## 9. Deployment
 
@@ -284,16 +309,23 @@ time, which loses every write after it; state that window before choosing it.
 
 ## 10. Health, startup and shutdown
 
-| Contract | Today | Target |
-| -------- | ----- | ------ |
-| Startup (api, worker) | Refuse to start on invalid configuration, unsafe role, schema at another revision, unreachable database: exit 1 with a one-line reason | unchanged; platform restarts with back-off |
-| Liveness (api) | `GET /v1/health/live` — no dependency | unchanged |
-| Readiness (api) | `GET /v1/health/ready` — database answers and schema revision equals the build's; 503 + `Retry-After` otherwise; states only | unchanged |
-| Liveness (worker) | **none** (no HTTP; metrics listener optional) | heartbeat file touched every poll, checked by the platform; metrics listener required (**P11.1**) |
-| Graceful api shutdown | uvicorn's default on SIGTERM | `--timeout-graceful-shutdown 150` and platform stop grace ≥ 160 s (**P11.1**) |
-| Worker shutdown | SIGTERM/SIGINT: finish the current job, then exit | unchanged; stop grace per platform; a killed job's lease (300 s, renewed every 100 s) expires and another poll retries it (3 attempts, then `job_abandoned`); the interrupted run is recorded `aborted` by the next sync |
-| Database failure | api: 503 `service_unavailable` + `Retry-After: 5` within the connect timeout; readiness fails, liveness passes; recovers without restart. worker: keeps polling with back-off | unchanged |
-| Schema mismatch | api readiness 503 (`check="schema_revision"` metric); a starting api/worker exits 1 | unchanged; alert (P11.6) |
+| Contract | As built (P11.1 and earlier) | Reference-stack health check |
+| -------- | ---------------------------- | ---------------------------- |
+| Startup (api, worker) | Refuse to start on invalid configuration, unsafe role, schema at another revision, unreachable database: exit 1 with a one-line reason; the platform restarts with back-off. On a successful start each logs one `startup` event (process, revision, version, schema revision) | `restart: unless-stopped` |
+| Liveness (api) | `GET /v1/health/live` — no dependency | — |
+| Readiness (api) | `GET /v1/health/ready` — database answers and schema revision equals the build's; 503 + `Retry-After` otherwise; states only | `GET /v1/health/ready` every 10 s (Python's `urllib`, no extra tool in the image); Caddy also gates traffic on it |
+| Liveness (worker, **P11.1**) | A heartbeat renewed at every loop iteration (every `LATTICE_WORKER_POLL_SECONDS`, also while the database is unreachable: the loop is alive and a restart would not help) and at every lease renewal while a job runs (every lease/3, 100 s by default): the gauge `lattice_worker_heartbeat_timestamp_seconds` and, with `LATTICE_WORKER_HEARTBEAT_FILE`, that file's modification time. A dead, frozen or event-loop-blocked worker stops renewing it. Carries a timestamp only | the heartbeat file is younger than 300 s (> the 100 s renewal interval during a job); `lattice smoke --worker-metrics` reads the gauge |
+| Web | The landing page (`GET /`) — public, no API call | `GET /` every 10 s; Caddy gates traffic on it too |
+| PostgreSQL | — | `pg_isready` |
+| Ingress | — | Caddy's admin endpoint (`127.0.0.1:2019`, inside its container only) |
+| Graceful api shutdown (**P11.1**) | SIGTERM: uvicorn stops accepting connections, waits up to 150 s (`--timeout-graceful-shutdown 150`) for in-flight requests (an Ask runs up to the 120 s generation deadline), then runs the application shutdown (database pool disposed) | `stop_grace_period: 160s` — **required: a platform stop grace of at least 160 s** |
+| Worker shutdown | SIGTERM/SIGINT: claim nothing new, finish the current job, close the database pool, exit. A job still running when the grace ends is killed; its lease (`LATTICE_WORKER_LEASE_SECONDS`, 300 s, renewed every 100 s) expires and another poll retries it (3 attempts, then `job_abandoned`); a sync run it had opened is recorded `aborted` by the next sync of that source | `stop_grace_period: 120s` (longer if syncs are long; a shorter grace only delays the job by one lease) |
+| Database failure | api: 503 `service_unavailable` + `Retry-After: 5` within the connect timeout; readiness fails, liveness passes; recovers without restart. worker: keeps polling with back-off | — |
+| Schema mismatch | api readiness 503 (`check="schema_revision"` metric); a starting api/worker exits 1 | — (alert: P11.6) |
+
+Signals: the reference stack runs every process under Docker's `init` (tini), which
+forwards SIGTERM; uvicorn and `lattice worker` install their own handlers. Platforms that
+start the container's command as PID 1 are also safe for these two processes.
 
 ## 11. Backups, PITR and restore
 
@@ -361,8 +393,33 @@ below the floor (phase-11-plan §12.2).
 
 | Volume | Needed by | Rule |
 | ------ | --------- | ---- |
-| Source exports | worker (read-only), operator `lattice sync` (writes the configuration that names the path) | Required while connectors read local exports (all three today). The worker syncs only the path the operator's last `lattice sync` recorded (ADR-013), so operator and worker must see the **same path**. Staging handling: open item for P11.2 (Appendix A) |
+| Source exports | worker (read-only), operator `lattice sync` (writes the configuration that names the path) | Required while connectors read local exports (all three today). The worker syncs only the path the operator's last `lattice sync` recorded (ADR-013), so operator and worker must see the **same path**. Reference stack: `./data` mounted read-only at `/srv/lattice/data` in `worker` and `ops`. Staging handling: P11.2 |
 | Model cache | api and worker, only with `local` embeddings | read-only, filled and verified by `lattice models fetch` |
+
+## 15. Local reference stack (P11.1)
+
+`compose.production.yaml` (Compose project `lattice-reference`, separate from the
+development `compose.yaml`) runs the production topology on one machine: PostgreSQL,
+`api1` and `api2` (one backend image), `worker` (the same image), `web`, and Caddy as the
+ingress, on one private network; only Caddy publishes ports, on 127.0.0.1 (8443 HTTPS,
+8080 redirect). `migrate` and `ops` are one-off services. Every application container runs
+read-only with a `/tmp` tmpfs, all capabilities dropped (Caddy keeps
+`NET_BIND_SERVICE`, which its binary's file capability requires), `no-new-privileges`, no
+host network, no Docker socket and no privileged mode. Database passwords are generated
+into the git-ignored `deploy/.env.reference` and handed to each service as only the
+credential it needs (the owner credential reaches `migrate` and `ops` only).
+
+| Command | What it does |
+| ------- | ------------ |
+| `make prod-build` | build `lattice-backend:local` and `lattice-web:local` with the git revision |
+| `make prod-up` | PostgreSQL (bootstrap on first start) → `alembic upgrade head` → api ×2, worker, web, Caddy, waiting for every health check |
+| `make prod-smoke` | `lattice smoke` from inside the private network (copies only Caddy's public root certificate out) |
+| `make prod-ps`, `prod-down`, `prod-destroy` | status; stop (volumes kept); stop and delete volumes |
+| `VERIFY=1 [FAKE_DELAY=s]` | adds `deploy/compose.verify.yaml`: `LATTICE_ENV=test`, development sign-in, fake providers, a 30 s worker lease — the same images and topology, for proofs that need a signed-in member before P11.3's verification identity provider exists. Not a production configuration |
+
+It runs the production defaults (`LATTICE_ENV=production`, `LATTICE_QUERY_EMBEDDING=none`,
+no development sign-in). It is a verification environment, not a deployment recipe: its
+PostgreSQL bootstrap still assumes a superuser (P11.2) and it has no backups (P11.5).
 
 ---
 
@@ -401,7 +458,7 @@ limitation · **N** not supported · **U** unknown / requires validation.
 | Backups | S (daily logical exports kept 7 days) | S (rolling, 10 days) | S | S (daily, 7 days) |
 | PITR | **L**: Hobby workspace 3 days, Pro 7 days; not within 10 minutes of now; restore creates a new instance | S (new cluster; window ends at the last commit — idle clusters do not extend it) | S (clone to a new instance; window configurable) | S (7 days; restore creates a new cluster; destroying a cluster destroys its backups) |
 | Restore | new instance, then repoint services | new cluster | new instance | new cluster, then repoint |
-| Connection limits | S: 100 below 8 GB RAM | U (PgBouncer in front by default) | S | **L**: 22 usable at 1 GiB, 47 at 2 GiB → `LATTICE_DB_POOL_SIZE=3` for 1 GiB (§8) |
+| Connection limits | S: 100 below 8 GB RAM | U (PgBouncer in front by default) | S | **S** on the 2 GiB plan (47 usable; accepted); **L** at 1 GiB (22 usable, too tight) |
 | HTTPS / custom origin | S | S | L (custom origin + path routing need a global external Application Load Balancer, ~$18/month for its forwarding rule) | S (Caddy, Let's Encrypt) |
 | `/api/*` → API, rest → web on one origin | **L**: no path routing between services; needs our own Caddy web service in front (extra service) | **L**: no path routing; needs a Caddy app | L: load balancer URL map (above) | S (Caddy, as the local stack) |
 | Stable OIDC callback URL | S | S | S | S |
@@ -415,8 +472,8 @@ limitation · **N** not supported · **U** unknown / requires validation.
 | Health checks | S | S | S | L (Docker healthchecks; no platform health routing) |
 | Export volume shared by operator and worker | L: a disk attaches to one service and disables zero-downtime deploys; one-off jobs cannot see disks | L (volume per machine) | L (no shared volume without extra storage) | S (host directory) |
 | CLI / API deploy | S | S | S | S (ssh + compose) |
-| Cost if left running (approx.) | **≈ $42/month**: 5 Starter instances (Caddy, api ×2, web, worker) × $7 + Postgres Basic-256mb $6 + storage $0.30/GB *(instance and Postgres prices from a third-party July 2026 summary; storage price from Render's own article)* | **≈ $59/month**: MPG Basic $38 + 5 × shared-cpu-1x 512 MB $3.69 + IPv4 $2 + storage $0.28/GB | **≈ $50–70/month**: load balancer ≈ $18 + Cloud SQL `db-f1-micro` ≈ $9–13 *(third-party)* + storage/backups + api min-instances and worker pool billed continuously | **≈ $27/month**: Droplet 2 GiB $12 + Managed PostgreSQL 1 GiB $15 (10 GiB storage included) |
-| Phase 11 window (≈ 3 deployment windows totalling ~7 days, database kept for ~1 month so PITR history survives) | ≈ $12–15 | ≈ $45 (MPG minimum dominates) | ≈ $30–40 | **≈ $18–20** (database ~$15 for the month, Droplet ~$3, a restored cluster for a few hours < $1) |
+| Cost if left running (approx.) | **≈ $42/month**: 5 Starter instances (Caddy, api ×2, web, worker) × $7 + Postgres Basic-256mb $6 + storage $0.30/GB *(instance and Postgres prices from a third-party July 2026 summary; storage price from Render's own article)* | **≈ $59/month**: MPG Basic $38 + 5 × shared-cpu-1x 512 MB $3.69 + IPv4 $2 + storage $0.28/GB | **≈ $50–70/month**: load balancer ≈ $18 + Cloud SQL `db-f1-micro` ≈ $9–13 *(third-party)* + storage/backups + api min-instances and worker pool billed continuously | **≈ $42/month**: Droplet 2 GiB $12 + Managed PostgreSQL **2 GiB $30.45** (30 GiB storage included; the 1 GiB plan, $15.15, was rejected for connection headroom) |
+| Phase 11 window (≈ 3 deployment windows totalling ~7 days, database kept for ~1 month so PITR history survives) | ≈ $12–15 | ≈ $45 (MPG minimum dominates) | ≈ $30–40 | **≈ $34–36** (2 GiB database ~$30.45 for the month, Droplet ~$3, a restored cluster for a few hours ≈ $1) |
 | Unavoidable minimums | none (Hobby workspace $0); paid Postgres needed for PITR | MPG plan $38/month | load balancer forwarding rule | Droplet per second (60 s minimum); database hourly (1 h minimum) |
 | Backup/PITR cost | included in the Postgres plan | included; storage $0.28/GB | separate backup and WAL storage charges | included in the plan |
 | Free-tier limitations | free Postgres has no PITR/backups; Hobby: 3-day PITR, 7-day logs, 5 GB bandwidth | none relevant | free tier covers small request volumes, not min instances or the load balancer | none |
@@ -449,9 +506,9 @@ What it still fails or compromises:
 - **No platform log retention or managed rollout:** logs stay on the VM (`docker logs`);
   rolling replacement and rollback are our scripted procedure (§9), which is also what
   P11.2 must prove anyway.
-- **22 usable connections on the 1 GiB plan**: run with `LATTICE_DB_POOL_SIZE=3` (§8), or
-  choose the 2 GiB database plan (47 connections) at a higher cost (not priced here; check
-  before creating).
+- **Connections:** the 1 GiB plan (22 usable) is too tight for two API instances plus
+  operators; **the 2 GiB plan (47 usable, $30.45/month) is the accepted staging choice**
+  (product owner, 2026-10-03), doubling the database cost.
 - Destroying the database cluster destroys its backups: keep the cluster for the whole
   Phase 11 period, tear down only the Droplet between windows.
 - Validation still owed in P11.2: every bootstrap statement of §7 against `doadmin`,
@@ -464,12 +521,14 @@ the free Hobby workspace, a second hop (Render edge → our Caddy service) befor
 no metrics scraping, and disks that cannot be shared between the operator job and the
 worker.
 
-**Estimated Phase 11 staging cost: ≈ $18–20** (database kept ~1 month, Droplet only during
-P11.2, P11.5 and P11.7 windows); ≈ $27/month if everything is left running.
+**Estimated Phase 11 staging cost: ≈ $34–36** with the accepted 2 GiB database (database
+kept ~1 month, Droplet only during the P11.2, P11.5 and P11.7 windows); ≈ $42/month if
+everything is left running. Nothing exists yet: the account and resources are created in
+P11.2.
 
 **You would need to create or configure manually** (Claude creates nothing):
 1. A DigitalOcean account and payment method; a project for Lattice staging.
-2. A Managed PostgreSQL 16 cluster (1 GiB or 2 GiB, one node, same region as the Droplet),
+2. A Managed PostgreSQL 16 cluster (**2 GiB**, one node, same region as the Droplet),
    with "trusted sources" limited to the Droplet.
 3. A Droplet (2 GiB, Ubuntu LTS) with an SSH key you control, and the DigitalOcean cloud
    firewall allowing only 22 (your address), 80 and 443.
@@ -512,6 +571,7 @@ P11.2, P11.5 and P11.7 windows); ≈ $27/month if everything is left running.
   [Supported extensions](https://docs.digitalocean.com/products/databases/postgresql/details/supported-extensions/),
   [Limits (connections)](https://docs.digitalocean.com/products/databases/postgresql/details/limits/),
   [Database pricing](https://docs.digitalocean.com/products/databases/postgresql/details/pricing/),
+  [Managed database plans (2 GiB $30.45, retrieved 2026-10-03)](https://www.digitalocean.com/pricing/managed-databases),
   [Modify user privileges (`doadmin` attributes)](https://docs.digitalocean.com/products/databases/postgresql/how-to/modify-user-privileges/),
   [Droplet pricing](https://www.digitalocean.com/pricing/droplets),
   [App Platform limits](https://docs.digitalocean.com/products/app-platform/details/limits/),
