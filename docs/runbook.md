@@ -300,6 +300,16 @@ dependency-audit job (Phase 10) runs `make audit` (pip-audit over the locked bac
 with hashes, `pnpm audit` over the web lockfile). A new advisory fails only that job:
 upgrade the package (or document why it does not apply) in a reviewed commit.
 
+**Audit exceptions.** When no fix exists, an advisory may be accepted, one at a time and
+by its GHSA identifier only, in `apps/web/pnpm-workspace.yaml` (`auditConfig.ignoreGhsas`)
+with a row here; `src/test/audit-exceptions.test.ts` fails if the two disagree or the
+audit command is weakened (`--ignore-unfixable`, a higher `--audit-level`, `ignoreCves`).
+Remove a row as soon as its condition no longer holds.
+
+| Advisory | Package and path | Why accepted | Remove when |
+| --- | --- | --- | --- |
+| GHSA-vfj7-8cjw-p6xm (CVE-2026-93687, high), accepted 2026-10-03 | `braces` ≤3.0.3, via `eslint-config-next` › `@next/eslint-plugin-next` › `fast-glob` › `micromatch` | No patched release exists. Dev lint tooling only, never in the production bundle; already on `main` before the design overhaul (the advisory record was updated 2026-10-02) | A patched `braces` reaches that chain, or `braces` leaves the lockfile |
+
 ## 8. Failure drills — *run for Phase 8 (2026-09-29)*
 
 Run against the real API and worker on the development database (fake generation
