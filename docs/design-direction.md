@@ -1,14 +1,13 @@
 # Lattice — Design Direction (product-design overhaul)
 
-Status: **Accepted (D0, 2026-10-02)** — the locked direction for this overhaul and the
-source of truth for its implementation (D1–D7). It is not reopened while the overhaul is in
-progress; the system is judged and refined only once it is implemented across the product.
-On completion (D7), `design-system.md` is rewritten as v2 to describe the implemented system,
-and Parts C–F of the old system are retired.
+Status: **Implemented (D7, 2026-10-03) — the overhaul is complete, pending the product
+owner's closure approval.** This document is now the historical record: the proposal
+(§1–§9) as accepted at D0 (2026-10-02), the decisions (§10) and the D1–D7 implementation
+log (§11), deviations and reasoning included. The proposal is left as written; where the
+build differs, the log says so and why. **The current design reference is
+[design-system.md](design-system.md) v2**, which replaced design v1 at D7.
 Scope: the web app (`apps/web`) and a new public landing page. Frontend only — no API,
-schema or authorization change; if an existing API deficiency makes an approved UX
-impossible, implementation stops and reports it instead of inventing frontend data.
-Phase 11 is not started.
+schema or authorization change. Phase 11 is not started.
 Owner: Product design / product engineering. Drafted: 2026-10-02.
 
 ---
@@ -1358,3 +1357,133 @@ updated, with two more `/sso` `next` cases. A test-only manifest of long names
 boundaries, administrators, closing and footer; production sign-in (initial, error, rate
 limited, `next`), development sign-in (initial, `next`, failed, rate limited, long names);
 phone views of both. No backend, API or shared contract changed, so backend CI was not run.
+
+### D7 — Product-wide verification, polish, design-system v2 and closure (2026-10-03, `phase/design-overhaul`)
+
+**Scope.** No new surface. The product was reviewed as one system from `/` to AI
+providers; genuine defects were fixed, leftovers removed, the screen harness rebuilt and
+the canonical screenshots committed, and the documentation made to match the build.
+Frontend only, apart from one CI line (below).
+
+**Defects found and fixed.**
+- **Separators that began a wrapped line.** Provenance trails ("› ✓ quote verified"), the
+  brief's and the trace's status lines ("· NEWEST 18 SEP"), the trace's scope sentence and
+  Ask's scope tokens ("· as default sensitivity") drew their separator *before* each item,
+  so a wrap started a line with it. They now end the previous item.
+- **Dates broke across lines** ("28 Sep / 2026" in the Sources permissions column at 1024
+  px). Every `<time>` is now one unbreakable word.
+- **The AI-provider ledger was crushed at 1024 px** (seven columns in 976 px; the trust
+  class ran one word per line). Purpose now sits in the provider cell, as the lattice
+  above already groups by it.
+- **Dialog actions below the fold.** In the change review at 768 × 900 the *Apply change*
+  row sat at the end of the scrolling body. Dialog action rows are now sticky at its foot,
+  and dialog bodies keep scroll padding so a focused field is never under them.
+- **One status word, three spellings.** The Ask desk set a recent question's status in
+  tracked uppercase (`PARTIAL`) where Activity and Jump say "Partial"; uppercase is reserved
+  for the status line. Sentence case now, everywhere outside a status line.
+- **"Doc" and "Document"** named the same source type on different surfaces. "Document"
+  everywhere.
+- **No error boundary.** An uncaught render failure fell to Next.js's generic screen (see
+  below).
+- **The D6 `production` Playwright project never ran in CI or `make web-e2e`** (both listed
+  only desktop and mobile). Added to both; `.github/workflows/ci.yml` is the only file
+  outside `apps/web` and `docs` this step changes.
+- **Screen-harness artifacts** (the D3 note). Full-page captures stitched sticky and fixed
+  elements: the docked inspector stopped at the first 900 px, phone bars could sit
+  mid-image. Captures are now real windows as tall as the page, photographed at the top;
+  drawers, sheets and dialogs at the device's height. Motion reduced, focus cleared
+  (no skip link), caret hidden, clock fixed.
+
+**Global error handling — decision.** Two boundaries, no `global-error`.
+`app/(workspace)/error.tsx` keeps the shell (navigation stays) and `app/error.tsx` catches
+the public pages and a failing workspace frame under the public masthead. Both render
+`PageFault`: the fault family, "This page couldn't be shown", nothing from the error (no
+message, no stack), Next.js's digest as the only reference (it exists only for a
+server-side failure and is logged under the same value; nothing is invented for a browser
+failure), *Try again* (a reload — the failure may sit in data already in memory) and a way
+back (Ask, or the start page). Focus moves to the state; the tab title says what happened.
+`global-error.tsx` was built and removed: the root layout only sets the document and
+preloads fonts, so it has nothing to throw, and the boundary would have added a second
+≈ 8 KB chunk to every page.
+
+**Production sign-in bundle — decision.** Fixed. `/sign-in` is now production only and
+imports nothing of the persona picker; development sign-in moved to its own route,
+`/sign-in/development`, which `src/proxy.ts` serves at the address `/sign-in` (a rewrite,
+the URL unchanged) when `LATTICE_WEB_DEV_SIGN_IN=true`, and which is an ordinary 404
+otherwise. Gating is unchanged (the same server flag; the API still refuses dev sign-in
+outside development and test). Production `/sign-in` script: **192.6 → 148.5 KB** on the
+wire; a test asserts the picker's code is never downloaded there.
+
+**Removed (dead or duplicated).** The hand-built loading rules of seven pages (trace,
+evidence page, inspector, AI providers, audit, member, Activity) → one `RuleSkeleton`
+primitive (prose and ledger variants, one status, rules hidden from assistive tech); the
+sign-in message styles that duplicated Callout → `Callout` without a label; dead exports
+(`SyncRun`, `ANSWER_STATUSES`, `shortId`, `syncStatusLabel`); `Page width="reading"` and
+`--reading-max` (no caller). The v1 sweep found no remaining lime, lavender, pink, Geist,
+v1 type classes, sidebar, citation chips, session history or old scope controls; every
+CSS-module class is referenced. Kept knowingly: `Stack`, `Cluster`, `Inline`, `Split`
+and `MarginGrid` — no product surface adopted them (pages own their grids) but the
+specimen uses them 74 times; design-system v2 says so. `--signal-healthy-tint`,
+`--radius-none` and `--z-base` complete their scales.
+
+**Component consolidation.** `RuleSkeleton` (new); `Callout` gains the label-less message
+form; `Lattice` size is a component token (D6). Nothing else met the bar of clear
+evidence.
+
+| Planned (§8, D7 brief) | As built | Why |
+| ---------------------- | -------- | --- |
+| Global error page | Two segment boundaries, no `global-error` | Above |
+| README screenshots | A curated canonical set in `docs/screens/` (30 JPEG captures, 4.6 MB, indexed) | The harness's 270 PNGs stay git-ignored |
+| §6.4 rules as tests | Already tests from D2–D6; D7 adds the route sweep | — |
+| Collapse the layout primitives | Kept, documented | Used by the specimen; removing them was churn without a product gain |
+
+**Accessibility.** New `e2e/closure.spec.ts`: on 14 routes (landing, sign-in, Ask,
+evidence, trace, Sources, Activity, organization runs, Access, a member, audit, AI
+providers, not available, not found) — a "… · Lattice" title, one `main`, one `h1`, the
+skip link as the first stop, axe (WCAG 2.2 AA) at rest and again in forced colours with
+reduced motion (no running animation), and reflow at 320 px and at 200 % zoom with no page
+scroll; no focusable element hidden on five busy pages; one status vocabulary. With the
+existing suites (states, overlays and focus return, Jump, lattice keyboard, tables, Sync
+now, access writes, audit paging, landing, both sign-ins, error states) every
+representative state is audited. Result: no violations, no regressions.
+
+**Responsive.** Reviewed at 1440, 1280, 1024, 768, 390 (and 320 / 200 % by test) with the
+rebuilt harness, giving the earlier problem widths the most attention: 1024 tables (the
+provider fix above), 768 navigation and dialogs, the phone tab bar at the end of long
+pages, docked vs drawer inspector, the provider lattice's scroll region, member tables,
+long source, organization and persona names. No page-level horizontal scroll anywhere.
+
+**Security and privacy.** The full frontend safety suite passed unchanged (unreadable =
+nonexistent, no enumeration, D-8, D-13, D-14, D-15, D-17, D-18, trace re-authorization,
+lifecycle, admin ≠ content, generic production auth failures, no open redirect, dev auth
+gating, zero API requests from the landing page). The new error boundaries show nothing of
+the error; the sign-in split adds a 404 for the dev route where it is off. No
+authorization logic was added to the client.
+
+**Bundles** (script on the wire, compressed, production build, first load):
+
+| Route | Script | CSS | HTML |
+| ----- | ------ | --- | ---- |
+| `/` | 154.3 KB | 21.0 KB | 18.3 KB |
+| `/sign-in` (production) | 148.5 KB | 23.0 KB | 5.4 KB |
+| `/ask` | 261.4 KB | 26.4 KB | 5.0 KB |
+| `/sources` | 243.9 KB | 26.0 KB | 5.0 KB |
+| `/activity` | 238.7 KB | 24.5 KB | 5.0 KB |
+| `/access` | 242.7 KB | 24.5 KB | 5.0 KB |
+| `/settings/providers` | 244.6 KB | 24.5 KB | 5.0 KB |
+
+The landing page rose from 145.6 KB (D6) to 154.3 KB: the root error boundary now loads with
+every page. Workspace routes share one shell (query client, Radix overlays, Jump); no
+duplicated providers, heavy dependency or needless client boundary was found.
+
+**Documentation.** `design-system.md` rewritten as v2 (foundations, typography, signature
+language, components, patterns, responsive behaviour, accessibility, security-sensitive UI
+rules, anti-patterns, how to work on it); this document marked implemented; README (status,
+how the web app works, test commands, docs index), `retrieval-design.md` ("exhibit marker"),
+and a historical note on the Phase 7 plan. Code comments now cite v2 sections.
+
+**Verification.** Sequential local gate: lint, typecheck, 207 unit tests, production
+build, Playwright desktop + mobile + production 290 passed (52 skipped by project, 0
+failed), the screen harness 270 passed, the canonical set 30 passed, and the screenshots
+reviewed. No backend, API, schema or shared contract changed; backend CI was not run.
+

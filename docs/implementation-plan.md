@@ -758,6 +758,10 @@ rejected value could occur by chance inside the random request ID), since fixed.
 
 ### Phase 7 — Web app: Ask, evidence, inspector
 
+> Historical plan. The interface described here (sidebar shell, citation chips, the v1
+> palette and Geist) was replaced by the design overhaul before Phase 11; the current
+> reference is [design-system.md](design-system.md) v2.
+
 **Deliverables.** Next.js (App Router, TS strict) app; tokens.css; primitives;
 Radix-based overlays; dev login screen (persona picker, dev only); shell + sidebar;
 Ask page with composer, scope chips, progress stages (SSE — decision D-6), answer
