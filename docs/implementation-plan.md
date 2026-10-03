@@ -7,18 +7,17 @@ of Phase 3). Phase 3 approved and merged to `main`. Phase 4 approved and merged 
 **Phase 5 approved and merged to `main`** (78e5640, 2026-09-29; branch
 `phase/5-retrieval` kept for reference). **Phase 6** (dc0973c) and **Phase 7** (5fe873f)
 are merged, and **Phase 8** (9fed350) is merged. **Phase 9 (access management and audit
-events) is implemented on `phase/9-access-management` and awaits review** (not merged);
-its plan and as-built notes follow Phase 8 below. The Phase 5 closure added a local model, Gemini and the provider invocation
+events)** was built on `phase/9-access-management`, reviewed and merged (8d3af3b); its plan
+and as-built notes follow Phase 8 below. The Phase 5 closure added a local model, Gemini and the provider invocation
 rule, and decided and implemented D-13 and D-14. The final closure (2026-09-29)
 removed the rejected cross-encoder experiment, resolved D-15 (deployment trust
 classes, migration 0007) and decided D-16's timing, and it froze retrieval.
 Phase 5 engineering and security are **complete** (every security metric 0, final
 verification passed). The product objective Recall@10 ≥ 0.90 is **not yet achieved**:
-best real result is Gemini 0.726, local 0.695 (evaluation-plan §12). **Phase 6 is
-implemented on `phase/6-generation` and awaits review** (not merged): engineering and
-security verification complete; the real-model answer-quality evaluation was **not run**
-(reference hardware constraint, M1 8 GB; ADR-012). (Historical note: Phase 6 was merged
-after that review.)
+best real result is Gemini 0.726, local 0.695 (evaluation-plan §12). **Phase 6** was
+built on `phase/6-generation`, reviewed and merged (dc0973c): engineering and security
+verification complete; the real-model answer-quality evaluation was **not run**
+(reference hardware constraint, M1 8 GB; ADR-012).
 
 **Current state (2026-10-03).** Phases 1–10 are approved and merged (Phase 9: 8d3af3b;
 Phase 10: 8e26522), and the frontend product-design overhaul (D0–D7) is approved and
@@ -1147,6 +1146,41 @@ still confined them to the organization); a90f505 adds the tests that catch them
 all seven are caught. GitHub CI green (backend, dependency-audit, web; no annotations).
 Secret scan of every commit on the branch: no key patterns; the real `.env` key appears
 nowhere. The development database was migrated to 0013 (no data change).
+
+---
+
+### Phase 11 — Production Deployment, Identity Operations & Reliability
+
+§4 "Later phases" row 11. The approved plan is [phase-11-plan.md](phase-11-plan.md)
+(2026-10-03); the provider-independent contract is [deployment.md](deployment.md) and the
+topology decision [ADR-016](decisions/016-production-topology.md). Decisions D-22–D-27 (§7).
+
+**Objective.** Prove that what Phases 1–10 built operates correctly as a production
+system: immutable images (one backend image for API, worker, migrations and operator
+commands; one web image), the ingress routing `/api/*` straight to the API, shared limits
+in PostgreSQL, safe migrations, backups with **tested** restore and PITR, enforced
+retention, actionable alerts, audited operator procedures, and drills — on a local
+production-shaped stack with two API instances, plus one real staging deployment before
+closure. No Redis, Kubernetes, broker, pooler, secrets product or new observability
+platform; no Phase 12–15 scope.
+
+**Checkpoints** (each stops for review; plan §25):
+
+| Step | Scope | Status |
+| ---- | ----- | ------ |
+| P11.0 | Decisions, deployment contract, staging-provider comparison, ADR-016, documentation corrections | Delivered (documentation only); awaiting review |
+| P11.1 | Packaging and runtime: images, web standalone on `0.0.0.0`, ingress routing and single trusted hop, uvicorn production command, worker heartbeat, build info, local reference stack (api ×2, Caddy), `lattice smoke` | Not started |
+| P11.2 | Deployment and migrations: migrate job and pre-flight, lock timeout, migration headers, production bootstrap, privilege snapshot and `check-deployment`, GHCR `images` job, scripted deploy/rollback, first staging deployment | Not started |
+| P11.3 | Identity and session operations: sessions record their SSO connection, disable revokes them, `sso enable/update`, audited `member suspend/reinstate`, `org suspend/reactivate`, `session revoke`, clock skew, verification IdP, the identity test matrix (plan §15.3) | Not started |
+| P11.4 | Shared in-flight and pre-authentication limits in PostgreSQL; retention classes with database-enforced floors | Not started |
+| P11.5 | Backups, PITR and restore verified locally and on staging; measured RPO/RTO | Not started |
+| P11.6 | Metrics, alert rules with tests, a runbook action per alert | Not started |
+| P11.7 | Deployed authorization suite, failure drills, final staging verification, closure | Not started |
+
+**Roadmap disposition recorded with Phase 11** (§4 table): scoped Ask already shipped
+(Phase 9); account administration → Phase 12; account timeline workspace → post-v1 unless
+deliberately pulled forward; next connectors → evaluated in Phase 12; retrieval and answer
+quality → Phase 13; enterprise hardening and scale → Phase 14; GA/v1 closure → Phase 15.
 
 ---
 

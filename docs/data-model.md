@@ -755,5 +755,8 @@ organization deleted ─► status=deleting; sessions revoked; purge by organiza
 Because vectors and lexical entries are columns of `chunks`, there is no separate
 index to reconcile and no orphaned vector state is possible.
 
-Retention (defaults, org-configurable later): traces 90 days; sync runs 180 days;
-sync failures 30 days after resolution. Retention jobs are Phase 11.
+Retention (defaults, org-configurable later): traces 90 days; sync runs 180 days, with
+their record failures deleted together with the run (the schema has no notion of a
+failure being resolved; the earlier "30 days after resolution" had no column to act on).
+**Today** only finished jobs are deleted (30 days); the rest is Phase 11 (P11.4), with the
+classes and open durations in [deployment.md](deployment.md) §13.

@@ -1,7 +1,9 @@
 # Phase 11 — Production Deployment, Identity Operations & Reliability: plan
 
 Status: **Approved (2026-10-03) with decisions D-22 to D-27 and the product owner's
-amendments (§21). Not yet implemented.** Each checkpoint (§25) stops for review; P11.0
+amendments (§21). P11.0 delivered (documentation only): [deployment.md](deployment.md)
+with the staging comparison (Appendix A), [ADR-016](decisions/016-production-topology.md)
+and the documentation corrections of §23; awaiting review. P11.1–P11.7 not started.** Each checkpoint (§25) stops for review; P11.0
 starts only after the product owner approves this revision. Branch
 `phase/11-production-operations` from `main` 27da421.
 
@@ -381,15 +383,15 @@ it. Autovacuum defaults; retention deletes in batches; `ANALYZE` after large pur
 | ----- | ---- | ---- | -------------- | ----------- |
 | **Durable security record** | `audit_events` | never by retention; governed by its own durability requirements (append-only; removed only with its organization, Phase 12) | no DELETE privilege for any runtime role; UPDATE refused by trigger | nobody |
 | **Identity and configuration tombstones** | `directory_identities`, removed memberships, `scim_tokens`, `oidc_connections`, `provider_credentials` history | kept for the life of the organization | — | nobody |
-| **User history (content-bearing)** | `query_traces` | `LATTICE_TRACE_RETENTION_DAYS`, default 90 (setting refuses < 30), whole row | 30 days | worker |
+| **User history (content-bearing)** | `query_traces` | `LATTICE_TRACE_RETENTION_DAYS`, default 90 (decided: data-model, security-model §8), whole row | proposed 30 days — to confirm in P11.4 | worker |
 | **Operational history** | `jobs` (finished) | 30 days (exists) | 30 days | worker |
 | | `source_sync_runs` (+ their `sync_record_failures`, cascade) | 180 days, always keeping each source's latest run | 180 days | worker |
-| **Transient security state** | `sessions` | 30 days after `expires_at` or `revoked_at` | 1 day after end | worker |
-| | `oidc_login_attempts` | 1 day after expiry or consumption | after expiry | worker (the per-organization cleanup at start is kept) |
+| **Transient security state** | `sessions` | proposed: 30 days after `expires_at` or `revoked_at` — duration not decided in the canonical docs; to decide in P11.4 | never before the session ended | worker |
+| | `oidc_login_attempts` | proposed: 1 day after expiry or consumption — to decide in P11.4 | after expiry | worker (the per-organization cleanup at start is kept) |
 | | `rate_limit_counters` | window ended > 2 days ago | 2 days | worker |
 | | `pre_auth_rate_limits` | window ended > 2 days ago | 2 days | worker, through a `lattice_auth` function |
 | | `ask_slots` | lease expired > 1 hour ago | expired | worker |
-| **Logs** | stdout JSON | platform retention, 30 days recommended | — | platform |
+| **Logs** | stdout JSON | platform retention; duration to decide with the platform (30 days suggested) | — | platform |
 
 The data-model sentence "sync failures 30 days after resolution" is replaced: the schema
 has no resolution; failures live and die with their run.

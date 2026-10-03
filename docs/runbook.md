@@ -63,7 +63,7 @@ fails even for the owner). In a new migration, as `lattice_owner`:
 | A sync run is `partial` or `failed` | **As built (Phase 8):** Sources page (administrators) → the source's last sync and failure codes → *Show records*: stage, fixed code, safe parameters, and the record's identifier only if you can read its document (otherwise `rec_…`). `access_unmappable:account` shows the unmapped external account reference: map it in the source configuration, then *Sync now* (or `lattice sync <source>`). `source_unavailable:*` → check the export path and its mount. The raw identifier behind a `rec_…` is available to infrastructure operators only, with database access: `sync_record_failures.external_id` / `location` | 4 / 8 |
 | Re-sync a source now | Sources page → *Sync now* (administrators; queued for the worker, one per source at a time), or `lattice sync --org … --sources … --source <key>` as an operator. Both take the same per-source lock; a request that meets a running CLI sync is retried after a backoff | 8 |
 | Deletion guard tripped | Inspect export completeness; if the deletions are genuine, re-run with `--allow-mass-deletion` after confirming with the source owner. A sync requested from the web app never overrides the guard | 4 |
-| Urgently revoke a person's access | **Works today (Phase 2), without a UI:** set the member's `status: suspended` in the org manifest and `make seed`, or as `lattice_owner` with the organization bound: `UPDATE memberships SET status = 'suspended', authz_updated_at = now() WHERE id = …`. Sessions are rejected and no authorization context can be resolved on the very next request. Narrower changes (account assignment, department, group membership, grant) are single-row writes with the same immediacy. No re-index, re-embed or cache flush exists or is needed. **Admin UI (Phase 9):** Access → the member → *Suspend*, with a reason; the preview states what they lose among documents you can read; audited. Another administrator must do it for your own membership. Note that `make seed` makes members match the manifest again (recording `operator:seed` events), so a suspension done in the UI must also be made in the manifest to last. **Provisioned members (Phase 10):** suspend or remove them in the identity provider (SCIM pushes it; sessions are revoked in the same transaction); the Access page refuses lifecycle changes for them. If the provider itself is the problem: `lattice scim token revoke` and `lattice sso disable` (§9), then the owner-role `UPDATE` above | 2 / 9 / 10 |
+| Urgently revoke a person's access | **Works today (Phase 2), without a UI:** set the member's `status: suspended` in the org manifest and `make seed`, or as `lattice_owner` with the organization bound: `UPDATE memberships SET status = 'suspended', authz_updated_at = now() WHERE id = …`. Sessions are rejected and no authorization context can be resolved on the very next request. Narrower changes (account assignment, department, group membership, grant) are single-row writes with the same immediacy. No re-index, re-embed or cache flush exists or is needed. **Admin UI (Phase 9):** Access → the member → *Suspend*, with a reason; the preview states what they lose among documents you can read; audited. Another administrator must do it for your own membership. Note that `make seed` makes members match the manifest again (recording `operator:seed` events), so a suspension done in the UI must also be made in the manifest to last. **Provisioned members (Phase 10):** suspend or remove them in the identity provider (SCIM pushes it; sessions are revoked in the same transaction); the Access page refuses lifecycle changes for them. If the provider itself is the problem: `lattice scim token revoke` and `lattice sso disable` (§9), then the owner-role `UPDATE` above. **The owner-role `UPDATE` is not audited** (it bypasses the access-audit triggers, which apply to the API role); record the reason in your incident log. Phase 11 (P11.3, D-26) replaces it with the audited `lattice member suspend` | 2 / 9 / 10 |
 | "Why can't Maya see the Kestrel tickets?" | Access → Maya: the sentence states her scope, clearance, departments, groups and grants. *Check a document* explains one document you can read (the reasons that decide). If you can't read the document yourself, you can't inspect it: the rules (her accounts, clearance, departments) answer the question; ask an administrator who can read it, or Leadership for restricted content | 9 |
 | Change a member's access, or grant one document | Access → the member → *Change access* (clearance, account scope, accounts, departments, administrator-defined groups) or *Grant a document* (one document you can read). Each shows a preview (counts only among documents you can read), needs a reason, and fails with 409 if someone changed the member meanwhile: reload and review again. Private channels and source grants follow their source and can't be changed here | 9 |
 | Review who changed access, and why | Access → *Audit log*: every access and AI-provider change, newest first, with actor, reason and effects. Events about documents you can't read aren't listed (D-18): ask an administrator who can read the document, or, as an operator: `SELECT created_at, actor, action, target, before, after, reason FROM audit_events ORDER BY created_at DESC` (organization bound). Events can't be edited or deleted | 9 |
@@ -75,7 +75,7 @@ fails even for the owner). In a new migration, as `lattice_owner`:
 | Provider outage | **As built (Phase 6, bounded in Phase 8):** Ask returns HTTP 200 with status `failed` / `provider_unavailable` and the evidence list, within `LATTICE_GENERATION_DEADLINE_SECONDS` (default 120 s for both attempts together); the trace's `error_code` says why (`generation_failed:timeout`, `rate_limited`, `deadline_exceeded`, …) and `lattice_generation_calls_total{outcome}` counts it. Query embedding degrades to exact + lexical after 5 s (`lattice_retrieval_semantic_total{outcome="provider_failed"}`). Switch provider with `lattice provider configure` if an approved alternative exists; or stop generation (§7.4) and keep serving evidence | 6 / 8 |
 | Database outage | The API answers 503 `service_unavailable` with `Retry-After: 5` within `LATTICE_DB_CONNECT_TIMEOUT_SECONDS` (default 5 s) instead of hanging; `/v1/health/ready` fails (take the instance out of rotation), `/v1/health/live` stays up (do not restart for it). The worker keeps polling with back-off and resumes by itself. Nothing is retried on the user's behalf: Ask is safe to retry (a new trace each time) | 8 |
 | Change embedding model or provider | `lattice reindex --reembed --embedding <provider>` per source (the new model is a new embedding space; old vectors are replaced, never mixed). For an external provider, estimate volume first (§5). Set `LATTICE_SYNC_EMBEDDING` for the worker to the same provider | 4 / 8 |
-| Organization deletion | *Planned:* set status `deleting`; purge job; run verification query (0 rows per table for org) | 11 |
+| Organization deletion | *Planned for Phase 12* (D-26): set status `deleting`; purge job; run verification query (0 rows per table for org). Not available today. For an incident, Phase 11 (P11.3) adds the audited `lattice org suspend` / `reactivate`; until then there is no supported organization stop besides suspending its members | 12 |
 
 ## 3. Model-provider configuration — *Phase 4 (embedding), Phase 5 closure (approval), Phase 6 (generation, credentials, audit)*
 
@@ -157,7 +157,7 @@ the provider's retention terms (security-model §6).
 | ------- | ------- | ---- | ----- |
 | API | `uvicorn lattice.api.app:create_app --factory --no-access-log` (`make api` in development) | `lattice_app` | One process per container (metrics are per process). Refuses to start on invalid configuration, an unsafe role, or a schema at another revision |
 | Worker | `lattice worker` (`make worker`) | `lattice_worker` | Runs requested syncs one at a time; SIGTERM/SIGINT finish the current job, then exit. `lattice worker --once` runs every due job and exits. Several workers may run: `SKIP LOCKED` hands each job to one of them |
-| Web | `next start` behind the reverse proxy (`make web` in development) | — | Proxies `/api/*` to the API only |
+| Web | `next start` (`make web` in development) | — | **Today** its Next.js rewrite proxies `/api/*` to the API (30 s default timeout; the API sees the web server as the client). **Target (P11.1):** in deployment the ingress routes `/api/*` straight to the API ([deployment.md](deployment.md) §4) |
 | Migrations | `alembic upgrade head` (`make migrate`) | `lattice_owner` | Run **before** starting a new build: the API and worker refuse an older schema, and an older build refuses a newer one |
 
 ### 7.2 Health and readiness
@@ -238,9 +238,13 @@ user report with its `X-Request-ID` header, then the trace ID in `answer.complet
 
 Fixed windows: a burst of up to twice a limit can straddle a window boundary. The
 per-process limits multiply by the number of API processes. The client address is the
-peer the API sees: behind a reverse proxy run uvicorn with `--proxy-headers
---forwarded-allow-ips=<proxy address>`, otherwise every client shares the proxy's
-address (and its limit). Provider quotas and the kill switches above still bound cost.
+peer the API sees. **Today** that peer is the Next.js server whenever requests go through
+the web app's `/api` rewrite, so every browser counts as one client, and Next.js forwards
+a client-supplied `X-Forwarded-For` unchanged: do not set `--forwarded-allow-ips` to the
+web server's address. **Target (P11.1/P11.4, D-24):** the ingress is the only trusted hop
+(`--proxy-headers --forwarded-allow-ips=<ingress addresses>`), and both per-process limits
+become shared in PostgreSQL ([deployment.md](deployment.md) §4, §12). Provider quotas and
+the kill switches above still bound cost.
 
 ### 7.5 The worker
 
@@ -268,16 +272,21 @@ addition, before a first deployment:
    `lattice_security_invariant_violations_total > 0`, readiness failures,
    `lattice_dependency_failures_total`, and a growing `lattice_jobs_waiting`.
 4. Identity: connect each organization's OIDC provider and SCIM (§9); set
-   `LATTICE_PUBLIC_URL`; run the API with `--proxy-headers --forwarded-allow-ips=<proxy>`
-   behind the reverse proxy (§7.4); keep `LATTICE_OIDC_SECRET_*` in the secret store.
+   `LATTICE_PUBLIC_URL`; keep `LATTICE_OIDC_SECRET_*` in the secret store. The trusted
+   proxy setting depends on the ingress, which is not built yet (§7.4).
 5. Container images / infrastructure, retention jobs and alerting (Phase 11) are
-   **not built**: the slice runs as documented in the README only.
+   **not built**: the slice runs as documented in the README only. The target production
+   contract (images, ingress, deployment order, backups) is
+   [deployment.md](deployment.md); it describes Phase 11 targets, not current behaviour.
 
 ### 7.7 Backups, recovery and migrations
 
 Everything Lattice holds is in PostgreSQL (ADR-002): no second store to back up.
-Managed PostgreSQL with point-in-time recovery is the target (Phase 11, not built). For
-a self-managed database:
+Managed PostgreSQL with point-in-time recovery is the target (Phase 11, P11.5; not
+built — no backup is configured anywhere today). The procedures below assume a
+**superuser** (the bootstrap does too); managed PostgreSQL usually has none, so they will
+change for the selected platform in P11.2/P11.5 ([deployment.md](deployment.md) §7, §11).
+For a self-managed database today:
 
 | Task | Procedure |
 | ---- | --------- |
@@ -308,7 +317,7 @@ Remove a row as soon as its condition no longer holds.
 
 | Advisory | Package and path | Why accepted | Remove when |
 | --- | --- | --- | --- |
-| GHSA-vfj7-8cjw-p6xm (CVE-2026-93687, high), accepted 2026-10-03 | `braces` ≤3.0.3, via `eslint-config-next` › `@next/eslint-plugin-next` › `fast-glob` › `micromatch` | No patched release exists. Dev lint tooling only, never in the production bundle; already on `main` before the design overhaul (the advisory record was updated 2026-10-02) | A patched `braces` reaches that chain, or `braces` leaves the lockfile |
+| GHSA-vfj7-8cjw-p6xm (CVE-2026-93687, high), accepted 2026-10-03 | `braces` ≤3.0.3, via `micromatch` on two dev-only paths: `eslint-config-next` › `@next/eslint-plugin-next` › `fast-glob` › `micromatch`, and `stylelint` (directly and through `globby` › `fast-glob`) › `micromatch` (re-checked 2026-10-03) | No patched release exists. Dev lint tooling only, never in the production bundle; already on `main` before the design overhaul (the advisory record was updated 2026-10-02) | A patched `braces` reaches that chain, or `braces` leaves the lockfile |
 
 ## 8. Failure drills — *run for Phase 8 (2026-09-29)*
 
@@ -353,6 +362,6 @@ records an audit event (no secret or secret reference in it). URLs are printed f
 | Give the organization its first administrator | After the person is provisioned: `lattice member admin --org <slug> --email <e-mail> --grant --reason "…"`. `--revoke` takes it away. Administration grants no access to content (SEC-15). This is the only way to change the capability |
 | What a new member can read | Least access: clearance Internal, account scope "assigned" with no accounts, no departments, groups or grants — so documents that are Internal, not account-specific and not department-restricted. Everything else is granted on the Access page (previewed, audited) |
 | Rotate or revoke a SCIM token | `lattice scim token create` (new), update the provider, then `lattice scim token revoke --org <slug> --id <token id> --reason "…"` (`lattice scim token list` shows IDs and states, never values). A leaked token: revoke first. A token is per organization and connection; it cannot reach another organization |
-| Stop SSO for an organization | `lattice sso disable --org <slug> --reason "…"`: sign-in through it fails at once and its SCIM tokens stop working. Existing sessions continue until they expire or the members are suspended; suspend them (provider, or the owner-role `UPDATE` of §2) when the provider is compromised |
-| A person was re-hired after removal | Removal is terminal: SCIM cannot re-provision over it (409). Provision them under a new `externalId`, or ask an operator to restore the old membership deliberately (owner-role `UPDATE`, audited by hand) |
+| Stop SSO for an organization | `lattice sso disable --org <slug> --reason "…"`: sign-in through it fails at once and its SCIM tokens stop working. Existing sessions continue until they expire or the members are suspended; suspend them (provider, or the owner-role `UPDATE` of §2) when the provider is compromised. **Today disabling is one-way:** there is no command to re-enable a connection or change its client ID or secret reference, and `lattice sso add` creates a *new* connection whose directory identities start empty, so the organization's provisioned members cannot sign in through it (re-provisioning them collides on e-mail, 409). Disable only when you intend to stop SSO. Phase 11 (P11.3, D-25) adds revocation of the connection's sessions on disable, `sso enable` and `sso update` |
+| A person was re-hired after removal | Removal is terminal: SCIM cannot re-provision over it (409). Provision them under a new `externalId`, or ask an operator to restore the old membership deliberately (owner-role `UPDATE`, audited by hand — no audit event is written; P11.3 replaces this with the audited `lattice member reinstate`) |
 | Members created by the manifest | `make seed` organizations keep the development persona sign-in; SCIM never touches members it did not provision, and the manifest never touches provisioned ones |
