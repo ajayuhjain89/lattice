@@ -20,6 +20,12 @@ security verification complete; the real-model answer-quality evaluation was **n
 (reference hardware constraint, M1 8 GB; ADR-012). (Historical note: Phase 6 was merged
 after that review.)
 
+**Current state (2026-10-03).** Phases 1–10 are approved and merged (Phase 9: 8d3af3b;
+Phase 10: 8e26522), and the frontend product-design overhaul (D0–D7) is approved and
+merged (27da421); `design-system.md` v2 is canonical. The paragraph above is the
+historical status log. **Next: Phase 11 — Production Deployment, Identity Operations &
+Reliability** (§4 "Later phases").
+
 ---
 
 ## 1. Requirements register
@@ -1150,10 +1156,13 @@ nowhere. The development database was migrated to 0013 (no data change).
 | ----- | ----- | ----- |
 | 9 | Access management UX + audit events | **Built and merged** (8d3af3b; Phase 9 section above). Explanations, change previews (counts only over admin-readable documents), admin grants, full `audit_events` (the provider and AI egress settings UI is Phase 7, D-16) |
 | 10 | OIDC SSO + hardening | **Built, verified and approved** (Phase 10 section above; decisions D-1, D-19 revised, D-20 and D-21 accepted 2026-10-02): OIDC (D-1), SCIM provisioning (D-20), rate limits (D-21), database-enforced access audit, security headers review, dependency audit, threat-model review, pen-test style review of isolation |
-| — | Product-design overhaul (frontend only) | **Direction accepted 2026-10-02 (D0)**: `design-direction.md` is the locked source of truth; steps D1–D7 run in order on `phase/design-overhaul`, each reviewed before the next. Inserted before Phase 11 |
-| 11 | Deployment + operations | Container images, single-region deploy, backups/PITR, migrations in CI/CD, retention jobs, alerting on `security_invariant_violated` |
-| 12 | Accounts workspace | Account timeline + scoped Ask (AM workflow) |
-| 13 | Next connectors | Call transcripts, CRM notes, GitHub issues, release notes |
+| — | Product-design overhaul (frontend only) | **Closed and merged** (27da421, 2026-10-03): D0–D7 complete and approved; `design-direction.md` is the historical record, `design-system.md` v2 is canonical. Inserted before Phase 11 |
+| 11 | Production Deployment, Identity Operations & Reliability | **Next.** Production deployment (images, single region, migrations in CI/CD, rollback), production identity and session operations, shared limits, jobs and retention, backups/PITR with tested restore, observability and actionable alerts (including `security_invariant_violated`), production runbooks and drills |
+| 12 | Customer onboarding | Customer-facing organization onboarding, SSO and SCIM setup, source/integration and provider (BYOK) setup, zero-to-first-question |
+| 13 | Retrieval and answer quality | Retrieval and answer-quality improvement |
+| 14 | Enterprise-scale hardening | Large-scale, load and adversarial hardening |
+| 15 | GA / v1 closure | Final general-availability closure |
+| — | Not yet scheduled (were rows 12 and 13 before 2026-10-03) | Accounts workspace (account timeline + scoped Ask, AM workflow); next connectors (call transcripts, CRM notes, GitHub issues, release notes). Placement is the product owner's |
 | — | Only if evals demand | HNSW tuning, model reranker (a local cross-encoder was measured and rejected in Phase 5, evaluation-plan §11), query rewriting, simple-config tsvector |
 
 ## 5. Local development

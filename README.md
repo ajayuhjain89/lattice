@@ -5,11 +5,12 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–10 are implemented and merged; a frontend product-design overhaul
-(`phase/design-overhaul`, [design direction](docs/design-direction.md)) is complete and
-awaiting review before Phase 11.** What runs today: a FastAPI backend with typed
-fail-fast configuration, PostgreSQL 16 + pgvector with forced row-level security for
-organization isolation, server-side revocable sessions with a development-only persona
+**Status: Phases 1–10 are implemented and merged, and the frontend product-design
+overhaul (D0–D7, [design direction](docs/design-direction.md)) is approved and merged;
+[design system v2](docs/design-system.md) is canonical. The next phase is Phase 11 —
+Production Deployment, Identity Operations & Reliability.** What runs today: a FastAPI
+backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced
+row-level security for organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
 for the synthetic organizations, CI — (Phase 2) the authorization core: access
 groups and grants, a deterministic reference policy, its SQL predicate for retrieval,

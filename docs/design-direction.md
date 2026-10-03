@@ -1,13 +1,14 @@
 # Lattice — Design Direction (product-design overhaul)
 
-Status: **Implemented (D7, 2026-10-03) — the overhaul is complete, pending the product
-owner's closure approval.** This document is now the historical record: the proposal
-(§1–§9) as accepted at D0 (2026-10-02), the decisions (§10) and the D1–D7 implementation
-log (§11), deviations and reasoning included. The proposal is left as written; where the
-build differs, the log says so and why. **The current design reference is
+Status: **Closed (2026-10-03).** Steps D0–D7 are complete; the product owner approved
+the overhaul and it is merged to `main` (27da421). This document is now the historical
+record: the proposal (§1–§9) as accepted at D0 (2026-10-02), the decisions (§10) and the
+D1–D7 implementation log (§11), deviations and reasoning included. The proposal is left
+as written; where the build differs, the log says so and why. **The current design reference is
 [design-system.md](design-system.md) v2**, which replaced design v1 at D7.
 Scope: the web app (`apps/web`) and a new public landing page. Frontend only — no API,
-schema or authorization change. Phase 11 is not started.
+schema or authorization change. The next phase is Phase 11 — Production Deployment,
+Identity Operations & Reliability.
 Owner: Product design / product engineering. Drafted: 2026-10-02.
 
 ---
