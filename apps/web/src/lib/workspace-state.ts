@@ -38,6 +38,8 @@ export interface InspectorContext {
 
 export interface InspectorState {
   evidenceId: string | null;
+  /** The statement whose marker (or lattice cell) opened it, when one did. */
+  claim?: string | null;
   /** The element to return focus to when the inspector closes. */
   returnFocus: HTMLElement | null;
   context: InspectorContext | null;

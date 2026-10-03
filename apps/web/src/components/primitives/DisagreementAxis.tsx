@@ -5,7 +5,7 @@
  * "Lattice can't confirm which is current" -- is the only verdict, unchanged.
  *
  * Positions are spaced evenly (a proportional scale would turn dates into distances and
- * imply weight); below 768 px the axis turns vertical. `superseded` is the neutral form,
+ * imply weight); below 768 px, or with more than three positions, the axis turns vertical. `superseded` is the neutral form,
  * used only when a source records the replacement.
  */
 import { GitCompare, GitFork } from "lucide-react";
@@ -34,7 +34,7 @@ function interval(from: string | null, to: string | null): string | null {
   const days = Math.round((Date.parse(to) - Date.parse(from)) / DAY);
   if (!Number.isFinite(days) || days < 0) return null;
   if (days === 0) return "Same day";
-  return `${days} ${days === 1 ? "day" : "days"} later`;
+  return `${days.toLocaleString("en-GB")} ${days === 1 ? "day" : "days"} later`;
 }
 
 export function DisagreementAxis({
@@ -58,7 +58,7 @@ export function DisagreementAxis({
   const headingId = id ? `${id}-heading` : undefined;
   return (
     <section
-      className={[styles.axis, kind === "superseded" && styles.superseded]
+      className={[styles.axis, kind === "superseded" && styles.superseded, positions.length > 3 && styles.vertical]
         .filter(Boolean)
         .join(" ")}
       aria-labelledby={headingId}
@@ -78,6 +78,7 @@ export function DisagreementAxis({
           </>
         )}
       </Heading>
+      {positions.length > 0 && (
       <ol className={styles.positions}>
         {positions.map((p, i) => {
           const later = i > 0 ? interval(positions[i - 1]!.at, p.at) : null;
@@ -95,6 +96,7 @@ export function DisagreementAxis({
           );
         })}
       </ol>
+      )}
       <div className={styles.conclusion}>{conclusion}</div>
       {actions && <div className={styles.actions}>{actions}</div>}
     </section>

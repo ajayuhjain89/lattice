@@ -41,7 +41,7 @@ test("answer with the docked inspector open", async ({ page }) => {
 test("trace (asker) and trace (operational)", async ({ page }) => {
   await mockApi(page, { me: ME_LENA });
   await page.goto(`/traces/${TRACE.other}`);
-  await expect(page.getByText("Operational view")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Operational trace" })).toBeVisible();
   await audit(page);
   await page.goto(`/traces/${TRACE.answered}`);
   await expect(page.getByRole("heading", { name: "Pipeline", exact: true })).toBeVisible();
@@ -51,7 +51,7 @@ test("trace (asker) and trace (operational)", async ({ page }) => {
 test("evidence page and its not-available state", async ({ page }) => {
   await mockApi(page);
   await page.goto(`/evidence/${EV.decision}`);
-  await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await audit(page);
   await page.goto(`/evidence/${EV.missing}`);
   await expect(page.getByRole("heading", { name: "This evidence isn't available" })).toBeVisible();

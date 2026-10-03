@@ -1,0 +1,75 @@
+.heading {
+  composes: t-subtitle from global;
+
+  text-wrap: balance;
+}
+
+.message {
+  color: var(--text-secondary);
+}
+
+/* What was searched: a ledger, so the reader sees exactly the scope that was sent. */
+.searched {
+  display: grid;
+  gap: var(--space-1);
+  padding-block: var(--space-2);
+  border-block: var(--border-width) solid var(--rule);
+}
+
+.searched > div {
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.searched dt  {
+  font-family: var(--font-interface);
+  font-size: var(--type-section-size);
+  line-height: var(--type-section-line);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.searched dd  {
+  font-family: var(--font-ledger);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line);
+  font-variant-numeric: tabular-nums;
+  align-self: center;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.tips {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.tips li {
+  display: grid;
+  grid-template-columns: var(--space-4) minmax(0, 1fr);
+}
+
+.tips li::before {
+  content: "–" / "";
+  color: var(--text-muted);
+}
+
+.ambiguous {
+  display: grid;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+}
+
+.question {
+  composes: t-subtitle from global;
+
+  text-wrap: balance;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}

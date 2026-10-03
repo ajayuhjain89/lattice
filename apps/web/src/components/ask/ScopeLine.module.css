@@ -1,0 +1,42 @@
+.help {
+  composes: t-caption from global;
+
+  color: var(--text-secondary);
+}
+
+.error {
+  composes: t-caption from global;
+
+  color: var(--signal-fault-text);
+}
+
+.dates {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  composes: t-section from global;
+
+  padding: 0;
+  margin-bottom: var(--space-2);
+}
+
+.dateFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+/* A long account list scrolls inside the popover, never the page. */
+.accountList {
+  display: grid;
+  gap: var(--space-2);
+  max-height: 16rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}

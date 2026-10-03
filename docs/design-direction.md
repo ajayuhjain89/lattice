@@ -861,3 +861,148 @@ Modal and Drawer mark their content `data-modal`.
   (desktop, phone and the screen harness) run with one worker.
 - Harness note for D7: full-page captures of a scrolled page stitch the sticky masthead
   mid-image; D7's captures should scroll to the top or capture the viewport.
+
+### D4 — Ask, evidence and trace (2026-10-03, `phase/design-overhaul`)
+
+**Built.** The question → answer → evidence → trace experience, rebuilt on the D1–D3
+system. Frontend only: no API, schema or authorization change.
+
+- **Record grammar** (`components/record`): one page container and two edges shared by
+  Ask, the trace and the evidence page — `[margin 56][measure 36rem][notes 220]`. Prose
+  keeps the measure; the composer, ledger line and exhibit list run from the measure to
+  the notes column's far edge; markers sit in the margin. `--record-gap` is a layout token.
+- **Desk** (`AskDesk`): a one-line serif heading and deck (no hero), the composer, then
+  **Your reach** (each readable source from `/v1/sources` — type glyph, "N documents you
+  can read", last successful sync — and the accounts from `/v1/accounts`) beside **Your
+  recent questions** (five, from `/v1/activity`; each opens its trace, or *Ask again* puts
+  it back in the box, unsent and focused). The empty knowledge base is a quiet state and
+  disables the composer.
+- **Composer and scope** (`Composer`, `ScopeLine`): a sheet whose edge turns ink on focus;
+  the box grows to eight lines; Enter asks, Shift+Enter adds a line, `/` focuses. The scope
+  is one sentence of D2 filter tokens — *Search all my sources · any account · any date · as
+  default sensitivity* — each opening the D2 field primitives (checkboxes, radios with help,
+  date fields, a filter for ≥ 7 accounts). A narrowed token has its own clear button. An
+  invalid date range is caught before sending, in words, on the token and under the box.
+  The question survives every recoverable failure. *New question* (phone top bar) clears
+  and focuses the box.
+- **Progress** (`AskProgress`): the brief's own ledger line (`ASKING`, elapsed seconds),
+  one sentence naming how many readable sources are searched, and a rule skeleton of the
+  claims' geometry. No stages, no percentages, nothing loops.
+- **Brief** (`AnswerView`, `Brief`): the ledger line (`ANSWERED · 3 CLAIMS · 3 EXHIBITS ·
+  NEWEST … · 4.2 S`, *Copy* · *Trace*; answered has no icon or colour), API notices in API
+  order (stale is the one tinted line, the AI-policy notice the hatched edge), then one row
+  per claim — lead in the record voice at 21 px, supporting at 17 px — with its exhibit
+  markers in the margin aligned to the first line, and at ≥1440 px with nothing docked a
+  sidenote naming its exhibits. Then disagreement, what the evidence doesn't establish,
+  the lattice when it adds information, and the exhibits. The brief arrives status line →
+  claims → rest, 4 px and 40 ms apart (none under reduced motion). *Copy* puts the claims
+  with their `[n]` numbers and the exhibit list on the clipboard.
+- **Claim ↔ exhibit** (`answer-context` pointer store, `Markers`): hovering or focusing a
+  marker points at one relationship (its claim, its exhibit row and its lattice cell light
+  together); hovering a claim's words, an exhibit row or a lattice column lights everything
+  linked to it. Opening an exhibit selects every marker of it and underlines the claims that
+  cite it in the marker colour. The keyboard reaches every relationship through the markers,
+  rows and lattice cells; hover only adds emphasis.
+- **Lattice gate** (`ProvenanceMap`): rows are the claims, columns the exhibits they cite —
+  built from `answer.claims × answer.evidence` and nothing else. It renders only when some
+  claim cites two exhibits or some exhibit backs two claims (and there are ≥ 2 of each).
+  Row headers are the claims' opening words; cells are named "Claim 4 cites exhibit 1, DR-112"
+  (empty ones "doesn't cite"). Activating a cell opens that exhibit. On phones it starts
+  folded to "Claims and exhibits · 4 claims · 4 exhibits".
+- **Exhibits** (`Exhibits`): ruled rows on the sheet with the marker in the margin, type
+  glyph, title (two lines at most), a ledger line of source facts (D-8: an account only when
+  the API supplies one), the excerpt in the record voice with the first verified quote in
+  marker tint, and notes only from fields: sensitivity, "Cited by N claims", "In a potential
+  conflict", "Replaced by / Replaces …, as recorded by the source". Undated items show
+  "Updated <date>" rather than passing the update date off as the source's own. Readable
+  evidence the AI data policy kept from the model is one group under one hatched edge;
+  "Also retrieved" stays collapsed.
+- **Inspector** (`EvidenceInspector`, `ExhibitViewer`): header (marker, type, "2 of 6",
+  ←/→, close), the provenance trail `source › reference › section › v1 › chars 743–768 ›
+  ✓ quote verified` (verified only when this answer's quote is found in the text), the
+  title, the passage on the sheet with each quoting paragraph barred in verdigris and the
+  first quote scrolled into view inside the panel, *Cited by* (every citing claim, each with
+  *Show* back to its marker), source details as a two-column ledger, *Open in source* /
+  *Copy link*. `[`, `]`, `Esc`; focus moves in on open and back on close. Docked ≥1280 px
+  (no page scroll on open), drawer 768–1279, bottom sheet on phones; *Show* from a drawer
+  closes it and lands on the marker.
+- **Disagreement**: potential conflicts use the D2 `DisagreementAxis` with every position
+  at equal width and the API's summary as the only conclusion; supersession is the neutral
+  form, built from the conflict's recorded link and the two documents' own dates, with
+  *Inspect earlier* / *Inspect replacement*. The axis primitive now omits an empty axis and
+  goes vertical beyond three positions (and on phones); intervals use grouped digits
+  ("1,308 days later").
+- **States**: every status keeps its logic and copy, in the §6.10 families — insufficient
+  and unsupported are quiet (with the searched scope as a ledger), the policy case of
+  evidence-only is a plain statement over the hatched group, failed and request errors are
+  faults with references and *Try again*, and a rate limit is a **wait** (`role="status"`,
+  "Try again in 30 seconds", question kept).
+- **Trace** (`TraceScreen`): the question as the title with the brief's ledger line; the
+  scope sent as a sentence; the pipeline as numbered stops on one rule (vertical below
+  1024 px; skipped stops hatched, failed ones in fault), rejection codes as a ledger; the
+  answer as recorded through the brief's own components (markers open the inspector); the
+  exhibits by title, each a separate re-authorized `GET /v1/evidence/{id}` — one no longer
+  readable shows a uniform "This evidence isn't available now." row; run details; the raw
+  record. The administrator's view shows only the operational stops under a hatched band
+  "Question, answer and evidence aren't visible to administrators" and fetches no evidence.
+- **Evidence page**: the viewer as a page (h1 title, trail, passage, details) on the sheet
+  under an ink rule, with the back trail. Not available stays identical for nonexistent,
+  unreadable and malformed IDs, and nothing echoes the requested ID.
+
+**Removed (v1):** `AskIntro` (the three principles), `AskPage.module.css`, `Citations`
+(chip and claim span), `EvidenceList`, `StateBlocks`, `States.module.css`, `RequestError`
+(now in `AnswerStates`), `ScopeControls` (the scope chips), `EvidenceBody`, `scopeLine` and
+its tests, the trace's ID-only reference list and its stage list. The raw-px Stylelint rule
+now covers `ask`, `evidence`, `trace` and `record`.
+
+| Planned (§5–§6.5) | As built | Why |
+| ----------------- | -------- | ------- |
+| Lattice "under the status line" | After the claims, disagreement and unknowns, directly above the exhibits it maps | The reader meets the answer first; the grid then bridges the two sections it relates |
+| Lattice rows "Lead", "1", "2" | Row headers are the claims' opening words | Bare numbers forced a lookup; claims have no visible numbers elsewhere |
+| Inline markers after each sentence *and* margin markers | One set: margin at ≥768 px, inline after the claim on phones; one claim per row | Two buttons per relationship doubled Tab stops and cluttered the prose |
+| Scope token "as **Internal**" | "as **default sensitivity**" | `/v1/me` doesn't return the organization's default level; the UI doesn't guess |
+| Progress line names the sources | Names how many readable sources are searched | Listing names again duplicates *Your reach* on a screen that just showed it |
+| Exhibit viewer "metadata as a two-column ledger" | Plus *Cited by* with *Show* back to each claim's marker | The inspector→claim direction of the provenance chain |
+| Trace exhibits (IDs only today) | Titles from each exhibit's own re-authorized read | The stored answer carries IDs only; each read is the same one opening it would make |
+| Hatched egress state callout + hatched rows | One hatch per boundary: the withheld group's edge (and the notice's edge) | Repeated hatching read as decoration |
+
+**Accessibility.** Every relationship is reachable without hover (markers, rows, lattice
+cells); markers are 24 px on touch with 6 px gaps; the lattice is one Tab stop with arrow,
+Home and End keys and named cells; status changes are announced once ("Answer ready:
+Answered, 3 claims."), the rate limit as a status, failures as alerts; reduced motion
+removes the arrival and the quote sweep; forced colours keep the dashed boundary edge and
+the selected marker; 200 % zoom (640 CSS px) and 320 px reflow without page scroll.
+
+**Security invariants checked.** Lattice cells, markers and rows come only from the
+response (no marker, cell or row for absent evidence — e2e); D-8 (no account row or trail
+segment when the API omits it, even if the text names the account); D-13 (the question's
+sensitivity is only raised, and shown); hatching only for readable evidence policy kept
+from the model and the not-available state; nonexistent = unauthorized for evidence and
+traces (unchanged tests, plus the inspector); trace re-authorization unchanged (the hidden
+answer is never refilled from the Ask page; revoked trace evidence shows one uniform row);
+the administrator's trace fetches no evidence.
+
+**Defects found by the new tests and review, and fixed:**
+- A rate limit (and any failed request) was announced twice: by the page's live region
+  and by its own state block. The block now speaks alone.
+- Tabular figures in the ledger voice carry tabular punctuation, so lattice row headers
+  read "June , Halden"; claim openings now use proportional punctuation.
+- Undated sources showed their last-update date as if it were the source's date; rows now
+  say "Updated …".
+- The policy state drew three hatches (state, group, every row); now one per boundary.
+- `composes` inside descendant or grouped selectors broke the production build (CSS
+  Modules allow it only on a single class); replaced with explicit role declarations.
+
+**Verification.** Local gate, run sequentially: lint (ESLint + Stylelint), typecheck,
+128 unit tests, production build, and the full Playwright run with one worker (368 passed,
+45 skipped by project: desktop-only / phone-only), including the new `brief.spec.ts`
+(desk, keyboard scope, date validation, partial, insufficient, withheld, no-model,
+rate limit, supersession, conflicts, one-to-one vs many-to-many lattice, claim → exhibit
+and exhibit → claim, inspector keyboard and *Show*, long answers at 1440–320 px, 200 %
+zoom, reduced motion, forced colours, trace, revoked trace evidence, evidence page, D-8)
+and `ask-mobile.spec.ts` (inline markers, folded lattice, vertical axis, sheet inspector,
+*Show* from the sheet, 320 px), plus the existing safety, keyboard, axe and shell suites. Reviewed at
+1440/1280/1024/768/390: desk, pending, answered, many-to-many, inspector (docked, drawer,
+long exhibit), conflicts, many exhibits, partial, evidence-only, rate limit, supersession,
+failed, insufficient, ambiguous, unsupported, trace (asker, administrator, hidden),
+evidence and not-available.

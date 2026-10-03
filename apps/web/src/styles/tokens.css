@@ -294,6 +294,7 @@
   --gutter: max(var(--gutter-base), env(safe-area-inset-left), env(safe-area-inset-right));
   --margin-col: 56px;
   --notes-col: 220px;
+  --record-gap: var(--space-4);
   --measure: 66ch;
   --admin-max: 1200px;
 
@@ -324,6 +325,7 @@
   :root {
     --gutter-base: 16px;
     --margin-col: 32px;
+    --record-gap: var(--space-3);
     --type-display-size: 2.125rem;
     --type-display-line: 2.5rem;
     --type-title-size: 1.375rem;

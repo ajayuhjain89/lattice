@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
+import { markerId } from "@/components/ask/answer-context";
 import { Drawer } from "@/components/primitives/Drawer";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { BREAKPOINTS, useMinWidth } from "@/lib/use-media";
+import type { RenderClaim } from "@/lib/answer-model";
 import { useStore } from "@/lib/store";
 import { CLOSED_INSPECTOR } from "@/lib/workspace-state";
 
@@ -37,8 +39,28 @@ export function InspectorHost({ className }: { className?: string }) {
   }, [state.inspector, docked]);
 
   const navigate = useCallback(
-    (id: string) => state.inspector.set((s) => ({ ...s, evidenceId: id })),
+    (id: string) => state.inspector.set((s) => ({ ...s, evidenceId: id, claim: null })),
     [state.inspector],
+  );
+
+  // "Show" beside a citing claim: back to that claim's marker in the answer. Docked, the
+  // panel stays open; as a drawer or sheet it closes first, and focus lands on the marker.
+  const showClaim = useCallback(
+    (claim: RenderClaim) => {
+      const { evidenceId: id, context: ctx } = state.inspector.get();
+      const n = id ? ctx?.numberOf.get(id) : undefined;
+      const marker = n !== undefined ? document.getElementById(markerId(claim.key, n)) : null;
+      if (!marker) return;
+      if (docked) {
+        marker.scrollIntoView({ block: "center" });
+        marker.focus({ preventScroll: true });
+        state.inspector.set((s) => ({ ...s, claim: claim.key, returnFocus: marker }));
+      } else {
+        pendingFocus.current = marker;
+        state.inspector.set(CLOSED_INSPECTOR);
+      }
+    },
+    [state.inspector, docked],
   );
 
   // A new page closes the inspector: its context belongs to the previous page.
@@ -49,7 +71,7 @@ export function InspectorHost({ className }: { className?: string }) {
   if (!evidenceId) return null;
 
   const inspector = (
-    <EvidenceInspector evidenceId={evidenceId} context={context} onClose={close} onNavigate={navigate} focusOnOpen />
+    <EvidenceInspector evidenceId={evidenceId} context={context} onClose={close} onNavigate={navigate} onShowClaim={showClaim} focusOnOpen />
   );
 
   if (docked) {

@@ -124,8 +124,8 @@ test("a revoked capability shows the same page", async ({ page }) => {
 test("the Ask account picker lists only the member's accounts", async ({ page }) => {
   const log = await mockApi(page, { ask: () => ({ status: 422, body: { error: { code: "validation_failed", message: "The request is invalid.", request_id: "r" } } }) });
   await page.goto("/ask");
-  await expect(page.getByTestId("scope-line")).toHaveText("You can search 2 sources · Acme Corp, Northpeak Logistics");
-  await page.getByRole("button", { name: "Set account" }).click();
+  await expect(page.getByTestId("your-reach")).toContainText("Acme Corp, Northpeak Logistics");
+  await page.getByRole("button", { name: "Account: any account. Change" }).click();
   await expect(page.getByRole("radio")).toHaveCount(2);
   await page.getByRole("radio", { name: "Northpeak Logistics" }).check();
   await page.keyboard.press("Escape");

@@ -9,6 +9,10 @@ import { test, type Page } from "@playwright/test";
 import {
   AMBIGUOUS,
   ANSWERED,
+  CONFLICTS,
+  MANY_EXHIBITS,
+  MANY_TO_MANY,
+  RATE_LIMITED,
   EV,
   EVIDENCE_ONLY,
   FAILED,
@@ -30,7 +34,7 @@ const only = process.env.SCREENS?.split(",");
 const widths = process.env.SCREEN_WIDTHS ? process.env.SCREEN_WIDTHS.split(",").map(Number) : [...WIDTHS];
 
 // Overlays (drawers, sheets) are fixed to the viewport: full-page captures distort them.
-const OVERLAYS = new Set(["ask-inspector", "access-change"]);
+const OVERLAYS = new Set(["ask-inspector", "ask-inspector-long", "access-change"]);
 
 // SCREENS_DIR writes elsewhere (e.g. a review folder) without touching the harness output.
 const DIR = process.env.SCREENS_DIR ?? "e2e/screens";
@@ -63,7 +67,7 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
     await openAsk(page, { ask: () => ANSWERED, askDelay: 60_000 });
     await page.getByRole("textbox", { name: "Question" }).fill("When will SCIM ship for Acme, and what did we tell them?");
     await page.getByRole("textbox", { name: "Question" }).press("Enter");
-    await page.getByText("Searching, drafting, verifying citations").waitFor();
+    await page.getByTestId("ask-progress").waitFor();
   },
   "ask-answered": async (page) => {
     await askFor(page, ANSWERED);
@@ -72,6 +76,26 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
     await askFor(page, ANSWERED);
     await page.getByRole("button", { name: /^Citation 1:/ }).first().click();
     await page.getByTestId("evidence-inspector").getByRole("heading", { level: 2 }).waitFor();
+  },
+  "ask-many-to-many": async (page) => {
+    await askFor(page, MANY_TO_MANY);
+  },
+  "ask-conflicts": async (page) => {
+    await askFor(page, CONFLICTS, "How big is Acme's pilot, and how fast must Support respond?");
+  },
+  "ask-many-exhibits": async (page) => {
+    await askFor(page, MANY_EXHIBITS, "What does the SCIM rollout plan say about scope, dates and support?");
+  },
+  "ask-inspector-long": async (page) => {
+    await askFor(page, MANY_EXHIBITS, "What does the SCIM rollout plan say about scope, dates and support?");
+    await page.getByRole("button", { name: /^Citation 1:/ }).first().click();
+    await page.getByTestId("evidence-inspector").getByRole("heading", { level: 2 }).first().waitFor();
+  },
+  "ask-rate-limited": async (page) => {
+    await openAsk(page, { ask: () => RATE_LIMITED });
+    await page.getByRole("textbox", { name: "Question" }).fill("When will SCIM ship for Acme?");
+    await page.getByRole("textbox", { name: "Question" }).press("Enter");
+    await page.getByRole("heading", { name: "Too many questions in a row" }).waitFor();
   },
   "ask-partial": async (page) => {
     await askFor(page, PARTIAL);
@@ -119,7 +143,7 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
   "trace-admin": async (page) => {
     await mockApi(page, { me: ME_LENA });
     await page.goto(`/traces/${TRACE.other}`);
-    await page.getByText("Operational view").waitFor();
+    await page.getByRole("heading", { name: "Operational trace" }).waitFor();
   },
   "trace-missing": async (page) => {
     await mockApi(page);
@@ -129,7 +153,7 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
   evidence: async (page) => {
     await mockApi(page);
     await page.goto(`/evidence/${EV.decision}`);
-    await page.getByRole("heading", { name: /Identity roadmap decision/, level: 2 }).waitFor();
+    await page.getByRole("heading", { name: /Identity roadmap decision/, level: 1 }).waitFor();
   },
   "evidence-missing": async (page) => {
     await mockApi(page);

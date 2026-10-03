@@ -70,7 +70,11 @@
       "files": [
         "src/components/brand/**/*.css",
         "src/components/layout/**/*.css",
-        "src/components/specimen/**/*.css"
+        "src/components/specimen/**/*.css",
+        "src/components/ask/**/*.css",
+        "src/components/evidence/**/*.css",
+        "src/components/trace/**/*.css",
+        "src/components/record/**/*.css"
       ],
       "rules": {
         "declaration-property-unit-disallowed-list": {

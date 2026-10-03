@@ -1,0 +1,80 @@
+.page {
+  display: grid;
+  align-content: start;
+  gap: 0;
+}
+
+.composer {
+  position: relative;
+}
+
+.result {
+  margin-top: var(--space-8);
+  min-width: 0;
+}
+
+/* Progress: the brief's own ledger line and rules, filled as the answer arrives. */
+.progress {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.progressLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: var(--control-md);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule-ink);
+}
+
+.progressKeyword {
+  composes: t-mark from global;
+}
+
+.elapsed {
+  composes: t-meta from global;
+
+  color: var(--text-secondary);
+}
+
+.progressNote {
+  color: var(--text-secondary);
+}
+
+.skeleton {
+  display: grid;
+  gap: var(--space-5);
+  margin-top: var(--space-8);
+}
+
+.skeletonMarker {
+  justify-self: end;
+  width: var(--citation-size);
+  height: var(--citation-size);
+  margin-top: var(--space-1);
+  border: var(--border-width) dashed var(--rule-strong);
+  border-radius: var(--radius-xs);
+}
+
+.skeletonRules {
+  display: grid;
+  gap: var(--space-4);
+  max-width: var(--measure);
+  padding-top: var(--space-3);
+}
+
+.skeletonRules span {
+  display: block;
+  border-top: var(--border-width) solid var(--rule);
+}
+
+.skeletonRules span:last-child {
+  width: 62%;
+}
+
+.skeletonRow[data-row="lead"] .skeletonRules {
+  gap: var(--space-6);
+  padding-top: var(--space-4);
+}

@@ -1,0 +1,68 @@
+/*
+ * The record grammar (design-direction §4.3) shared by Ask, the trace and the evidence
+ * page, so they align like pages of one book:
+ *
+ *   [margin][measure][notes]
+ *
+ * Exhibit markers sit in the margin; prose keeps the measure; sidenotes take the notes
+ * column at ≥1440 px when nothing is docked beside the page. Blocks that aren't prose
+ * (the composer, status line, exhibit list) start at the measure and run to the notes
+ * column's far edge, so every left edge on the page is one of two x positions.
+ */
+.page {
+  /* The record's measure, sized for the 17 px record voice (≈ 66 characters). */
+  --measure: 36rem;
+
+  width: 100%;
+  max-width: calc(var(--margin-col) + var(--measure) + var(--notes-col) + 2 * var(--record-gap) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-block: var(--space-8) var(--space-16);
+}
+
+/* A block that starts at the measure (no marker of its own). */
+.text {
+  margin-left: calc(var(--margin-col) + var(--record-gap));
+  min-width: 0;
+}
+
+/* A row with its own marker in the margin. */
+.row {
+  display: grid;
+  grid-template-columns: var(--margin-col) minmax(0, 1fr);
+  column-gap: var(--record-gap);
+  align-items: start;
+  min-width: 0;
+}
+
+.margin {
+  display: flex;
+  flex-wrap: wrap;
+  place-content: flex-start flex-end;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+@media (width < 1280px) {
+  .page {
+    padding-top: var(--space-6);
+  }
+}
+
+/* Phones: one column; markers move inline and the margin is given back to the text. */
+@media (width < 768px) {
+  .page {
+    padding-top: var(--space-4);
+  }
+
+  .text {
+    margin-left: 0;
+  }
+
+  .row {
+    grid-template-columns: var(--control-sm) minmax(0, 1fr);
+  }
+
+  .margin {
+    justify-content: flex-start;
+  }
+}

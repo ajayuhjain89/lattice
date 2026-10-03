@@ -49,6 +49,10 @@ export interface AnswerModel {
   cited: readonly string[];
   /** evidence_id → the claims that cite it, in reading order */
   citedBy: ReadonlyMap<string, readonly RenderClaim[]>;
+  /** claim key → the evidence IDs it cites (statements and conflict positions) */
+  cites: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Evidence cited by a position of a potential conflict (never a supersession). */
+  disputed: ReadonlySet<string>;
   /** How many claims or positions were dropped because a citation was unavailable. */
   dropped: number;
 }
@@ -66,6 +70,8 @@ export function buildAnswerModel(source: Source, available: ReadonlySet<string>)
   const numberOf = new Map<string, number>();
   const cited: string[] = [];
   const citedBy = new Map<string, RenderClaim[]>();
+  const cites = new Map<string, Set<string>>();
+  const disputed = new Set<string>();
   let dropped = 0;
 
   const number = (claim: Claim, key: string): RenderClaim => {
@@ -83,6 +89,7 @@ export function buildAnswerModel(source: Source, available: ReadonlySet<string>)
         return { ...c, number: n };
       }),
     };
+    cites.set(key, new Set(claim.citations.map((c) => c.evidence_id)));
     for (const id of new Set(claim.citations.map((c) => c.evidence_id))) {
       const list = citedBy.get(id) ?? [];
       list.push(rendered);
@@ -121,6 +128,7 @@ export function buildAnswerModel(source: Source, available: ReadonlySet<string>)
     });
     // A conflict needs two positions to mean anything; a supersession needs its link.
     if (conflict.kind === "superseded" ? conflict.supersession !== null : positions.length >= 2) {
+      if (conflict.kind === "potential_conflict") for (const p of positions) for (const c of p.claim.citations) disputed.add(c.evidence_id);
       conflicts.push({
         key: `conflict-${i}`,
         kind: conflict.kind,
@@ -132,7 +140,7 @@ export function buildAnswerModel(source: Source, available: ReadonlySet<string>)
     }
   });
 
-  return { lead, supporting, conflicts, numberOf, cited, citedBy, dropped };
+  return { lead, supporting, conflicts, numberOf, cited, citedBy, cites, disputed, dropped };
 }
 
 /** Oldest first, undated last; stable. Order is chronology, never a verdict. */
@@ -239,4 +247,65 @@ export function excerpt(
     quote: clean(text.slice(quote.start, quote.end)),
     after: clean(text.slice(quote.end, to)).trimEnd() + (to < text.length ? "…" : ""),
   };
+}
+
+/** The answer's statements in reading order: direct answers, then supporting claims. */
+export function statements(model: AnswerModel): RenderClaim[] {
+  return [...model.lead, ...model.supporting];
+}
+
+/**
+ * The provenance lattice's data (design-direction §5.3): rows are the statements, columns
+ * the exhibits they cite, a cell where a statement cites an exhibit. Built only from the
+ * answer on screen; conflict positions are not rows (the disagreement axis shows them).
+ */
+export function provenanceCells(model: AnswerModel): {
+  rows: RenderClaim[];
+  cols: string[];
+  cells: Map<string, "filled">;
+} {
+  const rows = statements(model);
+  const cells = new Map<string, "filled">();
+  const used = new Set<string>();
+  for (const claim of rows) {
+    for (const id of model.cites.get(claim.key) ?? []) {
+      cells.set(`${claim.key}|${id}`, "filled");
+      used.add(id);
+    }
+  }
+  return { rows, cols: model.cited.filter((id) => used.has(id)), cells };
+}
+
+/** A claim shortened at a word boundary, for a lattice row header. */
+export function snippet(text: string, max = 44): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,;:.–—-]+$/, "")}…`;
+}
+
+/**
+ * The passage split into paragraphs (blank lines) with its marked ranges, so the viewer
+ * can draw a margin bar beside each paragraph holding a verified quote. Offsets stay those
+ * of the original text.
+ */
+export function paragraphs(text: string, ranges: readonly { start: number; end: number }[]): { segments: Segment[]; cited: boolean }[] {
+  const out: { segments: Segment[]; cited: boolean }[] = [];
+  const re = /\n[ \t]*\n+/g;
+  let at = 0;
+  const push = (start: number, end: number) => {
+    if (end <= start) return;
+    const local = ranges
+      .filter((r) => r.end > start && r.start < end)
+      .map((r) => ({ start: Math.max(r.start, start) - start, end: Math.min(r.end, end) - start }));
+    const segments = markRanges(text.slice(start, end), local);
+    out.push({ segments, cited: segments.some((s) => s.marked) });
+  };
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    push(at, m.index);
+    at = m.index + m[0].length;
+  }
+  push(at, text.length);
+  return out;
 }

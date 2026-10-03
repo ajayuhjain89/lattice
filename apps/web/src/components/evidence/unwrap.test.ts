@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { unwrap } from "./EvidenceBody";
+import { unwrap } from "./ExhibitViewer";
 
 describe("unwrap", () => {
   it("joins hard-wrapped lines, keeps paragraphs, lists and headings, and preserves length", () => {

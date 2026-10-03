@@ -1,16 +1,27 @@
-.main {
-  flex: 1;
-  outline: none;
-}
-
-.column {
-  width: 100%;
-  max-width: calc(var(--reading-max) + 2 * var(--gutter));
-  margin: 0 auto;
-  padding: var(--space-8) var(--gutter) var(--space-16);
+/* The trace: the technical record of how an answer was built, in the brief's grammar. */
+.trace {
   display: grid;
   gap: var(--space-10);
+  margin-top: var(--space-5);
   min-width: 0;
+}
+
+.loading {
+  margin-top: var(--space-6);
+}
+
+.ruleSkeleton {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.ruleSkeleton span {
+  display: block;
+  border-top: var(--border-width) solid var(--rule);
+}
+
+.ruleSkeleton span:last-child {
+  width: 60%;
 }
 
 .head {
@@ -26,51 +37,75 @@
 
 .title {
   composes: t-title from global;
+
+  max-width: var(--measure);
+  overflow-wrap: anywhere;
+}
+
+/* The ledger line, as on the brief. */
+.statusLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule-ink);
+}
+
+.facts {
+  composes: t-mark from global;
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) 0;
+  color: var(--text-secondary);
+}
+
+.keyword {
+  color: var(--text-primary);
+}
+
+.keyword[data-failed] {
+  color: var(--signal-fault-text);
+}
+
+.fact::before {
+  content: "·" / "";
+  padding: 0 var(--space-2);
+  color: var(--text-muted);
 }
 
 .id {
   composes: t-meta from global;
 
-  color: var(--text-secondary);
-  overflow-wrap: anywhere;
-}
-
-.facts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-top: var(--border-width) solid var(--rule-ink);
-  border-bottom: var(--border-width) solid var(--rule);
-  overflow: hidden;
-}
-
-.fact {
-  display: grid;
-  gap: var(--space-1);
-  align-content: start;
-  padding: var(--space-3) var(--space-4) var(--space-3) 0;
-  border-bottom: var(--border-width) solid var(--rule);
-  margin-bottom: -1px;
-  min-width: 0;
-}
-
-.fact dt {
-  font-size: var(--type-section-size);
-  line-height: var(--type-section-line);
-  font-weight: 600;
   color: var(--text-muted);
-}
-
-.fact dd {
-  font-family: var(--font-ledger);
-  font-size: var(--type-meta-size);
-  line-height: var(--type-meta-line);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-primary);
   overflow-wrap: anywhere;
 }
 
-.factDetail {
-  display: block;
+.scope {
+  composes: t-small from global;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) 0;
+  color: var(--text-secondary);
+}
+
+.scopeLead {
+  margin-right: var(--space-2);
+}
+
+.scopePart {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.scopePart + .scopePart::before {
+  content: "·" / "";
+  padding: 0 var(--space-2);
+  font-weight: 400;
   color: var(--text-muted);
 }
 
@@ -80,150 +115,253 @@
   min-width: 0;
 }
 
-.question {
-  font-size: var(--type-subtitle-size);
-  line-height: var(--type-subtitle-line);
-  font-weight: 500;
-  overflow-wrap: anywhere;
-  max-width: var(--measure);
-}
-
-.scope {
-  composes: t-meta from global;
+.sectionHeading {
+  composes: t-section from global;
 
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.sectionHeading h2 {
+  font: inherit;
+}
+
+.sectionMeta {
+  composes: t-meta from global;
+
+  font-weight: 400;
   color: var(--text-muted);
 }
 
-.stages {
-  display: grid;
+.subHeading {
+  composes: t-section from global;
+
+  color: var(--text-secondary);
 }
 
-.stage {
-  display: grid;
-  grid-template-columns: var(--control-xs) minmax(0, 1fr) auto;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
-  border-bottom: var(--border-width) solid var(--rule);
+.quiet {
+  color: var(--text-secondary);
+}
+
+/* Pipeline: numbered stops on one rule, left to right (top to bottom when narrow). */
+.pipeline {
   position: relative;
-}
-
-.stage:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  left: 9.5px;
-  top: calc(var(--space-3) + var(--control-xs));
-  bottom: calc(-1 * var(--space-3));
-  border-left: var(--border-width) solid var(--rule);
-}
-
-.stageBody {
   display: grid;
-  gap: var(--space-1);
+  grid-template-columns: repeat(var(--stops), minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.stop {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "mark mark"
+    "name duration"
+    "summary summary";
+  align-content: start;
+  gap: var(--space-1) var(--space-2);
   min-width: 0;
 }
 
-.stageName {
-  composes: t-body-strong from global;
-
-  line-height: var(--control-xs);
+/* The connector to the next stop. */
+.stop:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--control-xs) / 2);
+  left: calc(var(--control-xs) + var(--space-2));
+  right: calc(-1 * var(--space-4) + var(--space-2));
+  border-top: var(--border-width) solid var(--rule-strong);
 }
 
-.stageSummary {
+.stop[data-state="skipped"]:not(:last-child)::after,
+.stop[data-state="skipped"] + .stop::before {
+  border-top-style: dashed;
+}
+
+.stopMark {
+  grid-area: mark;
+  display: flex;
+  margin-bottom: var(--space-1);
+}
+
+.stopName {
+  composes: t-body-strong from global;
+
+  grid-area: name;
+}
+
+.stop[data-state="skipped"] .stopName {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.stop[data-state="failed"] .stopName {
+  color: var(--signal-fault-text);
+}
+
+.stopDuration {
+  composes: t-meta from global;
+
+  grid-area: duration;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.stopSummary {
+  composes: t-small from global;
+
+  grid-area: summary;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
 
-.stageSkipped .stageName {
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.stageDuration {
-  composes: t-meta from global;
-
-  color: var(--text-muted);
-  line-height: var(--control-xs);
-  text-align: right;
-  white-space: nowrap;
+.rejections {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
 }
 
 .codes {
   display: grid;
-  gap: var(--space-0-5);
-  margin-top: var(--space-1);
+  border-top: var(--border-width) solid var(--rule);
 }
 
 .code {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(8rem, auto) minmax(0, 1fr) auto;
   gap: var(--space-3);
-  font-size: var(--type-small-size);
-  line-height: var(--type-small-line);
+  padding-block: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule);
   color: var(--text-secondary);
 }
 
 .codeName {
   composes: t-meta from global;
 
+  align-self: center;
   color: var(--text-primary);
 }
 
 .codeCount {
   composes: t-meta from global;
+
+  align-self: center;
+  color: var(--text-primary);
 }
 
-.refs {
-  border-top: var(--border-width) solid var(--rule);
+.codeText {
+  composes: t-small from global;
 }
 
-.ref {
+/* Run details: a ledger of the trace's own fields. */
+.details {
   display: grid;
-  grid-template-columns: var(--control-sm) minmax(0, 1fr) auto;
-  gap: var(--space-3);
-  align-items: center;
-  min-height: 44px;
-  padding: var(--space-1) 0;
-  border-bottom: var(--border-width) solid var(--rule);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
+  gap: var(--space-4) var(--space-6);
 }
 
-.refNumber {
-  composes: t-meta from global;
-
+.detail {
   display: grid;
-  place-items: center;
-  height: var(--control-xs);
-  border-radius: var(--radius-xs);
-  background: var(--signal-provenance-tint);
-  color: var(--signal-provenance-text);
-  font-size: var(--type-section-size);
+  gap: var(--space-0-5);
+  min-width: 0;
 }
 
-.refNumberNone {
-  background: transparent;
+.detail dt  {
+  font-family: var(--font-interface);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
   color: var(--text-muted);
 }
 
-.refId {
-  composes: t-meta from global;
+.detail dd  {
+  font-family: var(--font-ledger);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
 
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.detailNote {
+  display: block;
+  color: var(--text-muted);
 }
 
 .answer {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-6);
   min-width: 0;
 }
 
-.message {
+/* Exhibits: the brief's rows, without excerpts (the stored answer carries IDs only). */
+.exhibits {
+  border-top: var(--border-width) solid var(--rule);
+}
+
+.exhibit {
+  width: 100%;
+  min-height: var(--touch-target);
+  padding-block: var(--space-3);
+  border-bottom: var(--border-width) solid var(--rule);
+  background: var(--surface-sheet);
+  text-align: left;
+  transition: background-color var(--motion-quick) var(--ease);
+}
+
+.exhibit:hover,
+.exhibit[aria-current="true"] {
+  background: var(--surface-well);
+}
+
+.exhibit:focus-visible {
+  outline-offset: -2px;
+}
+
+.exhibitMarker {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.exhibitBody {
+  display: grid;
+  gap: var(--space-0-5);
+  min-width: 0;
+  padding-right: var(--space-3);
+}
+
+.exhibitTitle {
+  composes: t-heading from global;
+
+  display: grid;
+  grid-template-columns: var(--icon-size) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.exhibitTitle svg {
+  align-self: center;
   color: var(--text-secondary);
-  max-width: var(--measure);
+}
+
+.exhibitMeta {
+  composes: t-meta from global;
+
+  padding-left: calc(var(--icon-size) + var(--space-2));
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.exhibitSkeleton {
+  display: block;
+  width: 60%;
+  margin-top: var(--space-3);
+  border-top: var(--border-width) solid var(--rule);
 }
 
 .raw {
@@ -253,39 +391,70 @@
 .codeBlock {
   margin: 0;
   padding: var(--space-4);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--surface-inverse);
   color: var(--text-inverse);
   font-family: var(--font-ledger);
   font-size: var(--type-code-size);
   line-height: var(--type-code-line);
   overflow: auto;
-  max-height: 480px;
+  max-height: 30rem;
   white-space: pre;
 }
 
-.operational {
-  max-width: var(--measure);
-}
-
+/* Narrow: the trail runs top to bottom, the connector down the marker column. */
 @media (width < 1024px) {
-  .facts {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .pipeline {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+
+  .stop {
+    grid-template-columns: var(--control-xs) minmax(0, 1fr) auto;
+    grid-template-areas:
+      "mark name duration"
+      ". summary summary";
+    column-gap: var(--space-3);
+  }
+
+  .stopMark {
+    margin-bottom: 0;
+  }
+
+  .stop:not(:last-child)::after {
+    inset: calc(var(--control-xs) + var(--space-1)) auto calc(-1 * var(--space-4) + var(--space-1)) calc(var(--control-xs) / 2);
+    border-top: 0;
+    border-left: var(--border-width) solid var(--rule-strong);
+  }
+
+  .stop[data-state="skipped"]:not(:last-child)::after {
+    border-left-style: dashed;
   }
 }
 
 @media (width < 768px) {
-  .column {
-    padding-top: var(--space-5);
+  .trace {
     gap: var(--space-8);
   }
 
-  .facts {
+  .exhibitTitle {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .fact {
-    grid-template-columns: 112px minmax(0, 1fr);
-    padding-right: 0;
+  .exhibitTitle svg {
+    display: none;
+  }
+
+  .exhibitMeta {
+    padding-left: 0;
+  }
+
+  .code {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .codeText {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 }

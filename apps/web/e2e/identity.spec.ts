@@ -109,7 +109,8 @@ test("an Ask over the member's limit says when to try again and keeps the questi
   const box = page.getByRole("textbox", { name: "Question" });
   await box.fill("What changed in the Acme renewal?");
   await box.press("Enter");
-  const alert = page.getByRole("alert").filter({ hasText: "Too many questions in a row" });
+  // A limit is a wait (a status, ochre), not a fault.
+  const alert = page.getByRole("status").filter({ hasText: "Too many questions in a row" });
   await expect(alert).toBeVisible();
   await expect(alert).toContainText("Try again in 30 seconds");
   await expect(box).toHaveValue("What changed in the Acme renewal?");

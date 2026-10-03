@@ -1,9 +1,10 @@
+/* The inspector panel: the exhibit viewer on the reading sheet, under a header of authority. */
 .panel {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--surface-paper);
+  background: var(--surface-sheet);
   outline: none;
 }
 
@@ -28,6 +29,14 @@
   overflow: hidden;
 }
 
+.position {
+  composes: t-meta from global;
+
+  font-weight: 400;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .tools {
   display: flex;
   align-items: center;
@@ -36,6 +45,9 @@
 }
 
 .scroll {
+  /* The passage measure inside a panel is the panel. */
+  --measure: none;
+
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -48,6 +60,36 @@
   gap: var(--space-6);
 }
 
+.ruleSkeleton {
+  display: grid;
+  gap: var(--space-5);
+  padding-top: var(--space-2);
+}
+
+.ruleSkeleton span {
+  display: block;
+  border-top: var(--border-width) solid var(--rule);
+}
+
+.ruleSkeleton span:first-child {
+  width: 70%;
+}
+
+.ruleSkeleton span:last-child {
+  width: 55%;
+}
+
+.keys {
+  composes: t-meta from global;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-8);
+  color: var(--text-muted);
+}
+
 @media (width < 768px) {
   .header {
     padding-left: var(--space-4);
@@ -56,25 +98,6 @@
   .scroll {
     padding: var(--space-4) var(--space-4) var(--space-10);
   }
-}
-
-.keys {
-  composes: t-meta from global;
-
-  margin-top: var(--space-6);
-  color: var(--text-muted);
-}
-
-.keys kbd {
-  display: inline-grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 var(--space-1);
-  border: var(--border-width) solid var(--rule);
-  border-radius: var(--radius-xs);
-  font-family: inherit;
-  color: var(--text-secondary);
 }
 
 @media (pointer: coarse) {

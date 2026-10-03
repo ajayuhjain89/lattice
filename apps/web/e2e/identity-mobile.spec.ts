@@ -23,7 +23,8 @@ test("the rate-limit callout fits a phone", async ({ page }) => {
   const box = page.getByRole("textbox", { name: "Question" });
   await box.fill("What changed?");
   await box.press("Enter");
-  await expect(page.getByRole("alert").filter({ hasText: "Try again in 12 seconds" })).toBeVisible();
+  // A limit is a wait (a status), not a fault.
+  await expect(page.getByRole("status").filter({ hasText: "Try again in 12 seconds" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
 

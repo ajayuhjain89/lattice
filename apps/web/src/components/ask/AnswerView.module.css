@@ -1,0 +1,53 @@
+/* The record's vertical rhythm: blocks, not cards, separated by space and rules. */
+.answer {
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.head {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.askedAs {
+  composes: t-small from global;
+
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.askedQuestion {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.note {
+  color: var(--text-secondary);
+}
+
+/* The brief arrives: status line, then claims, then the rest -- 4 px, 40 ms apart. */
+.answer > * {
+  animation: arrive var(--motion-arrive) var(--ease) both;
+}
+
+.answer > :nth-child(3) {
+  animation-delay: var(--motion-stagger);
+}
+
+.answer > :nth-child(n + 4) {
+  animation-delay: calc(2 * var(--motion-stagger));
+}
+
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .answer > * {
+    animation: none;
+  }
+}

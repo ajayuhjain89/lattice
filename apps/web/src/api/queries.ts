@@ -9,6 +9,7 @@ import {
   QueryClient,
   useInfiniteQuery,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type QueryClientConfig,
@@ -65,6 +66,20 @@ export function useEvidence(id: string | null) {
     queryFn: ({ signal }) => api.evidence(id as string, signal),
     enabled: id !== null,
     ...REAUTHORIZED,
+  });
+}
+
+/**
+ * Several evidence items at once (a trace's exhibits). Each is a separate, re-authorized
+ * read of GET /v1/evidence/{id}, exactly as opening it would be.
+ */
+export function useEvidenceList(ids: readonly string[]) {
+  return useQueries({
+    queries: ids.map((id) => ({
+      queryKey: queryKeys.evidence(id),
+      queryFn: ({ signal }: { signal: AbortSignal }) => api.evidence(id, signal),
+      ...REAUTHORIZED,
+    })),
   });
 }
 

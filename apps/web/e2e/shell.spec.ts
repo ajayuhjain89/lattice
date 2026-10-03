@@ -357,16 +357,21 @@ test.describe("canvas geometry", () => {
     expect(Math.round(inspector.y + inspector.height)).toBe(900);
   });
 
-  test("composer, answer and evidence share the reading column's edges", async ({ page }) => {
+  test("composer, ledger line, claims and exhibits share the record's two edges", async ({ page }) => {
     await askFor(page, ANSWERED);
     const composer = await box(page, "form[aria-label='Ask Lattice']");
-    const status = await box(page, "[data-testid='answer'] > div");
-    const evidence = await box(page, "[data-testid='evidence']");
-    for (const b of [status, evidence]) {
-      expect(Math.abs(b.x - composer.x)).toBeLessThanOrEqual(1);
-      expect(Math.abs(b.x + b.width - (composer.x + composer.width))).toBeLessThanOrEqual(1);
-    }
-    expect(composer.width).toBeLessThanOrEqual(760);
+    const status = await box(page, "[data-testid='status-line']");
+    const heading = await box(page, "#evidence-label");
+    const claim = await box(page, "[data-testid='answer-prose'] [data-claim] p");
+    const evidence = await box(page, "[data-testid='evidence'] ol");
+    // One text edge: the composer, the ledger line, the claims and the exhibits heading.
+    for (const b of [status, heading, claim]) expect(Math.abs(b.x - composer.x)).toBeLessThanOrEqual(1);
+    // One far edge for the full-width blocks; exhibit rows start at the margin column.
+    expect(Math.abs(status.x + status.width - (composer.x + composer.width))).toBeLessThanOrEqual(1);
+    expect(Math.abs(evidence.x + evidence.width - (composer.x + composer.width))).toBeLessThanOrEqual(1);
+    expect(composer.x - evidence.x).toBeGreaterThanOrEqual(56);
+    // Claims keep a reading measure.
+    expect(claim.width).toBeLessThanOrEqual(600);
   });
 
   test("the docked inspector keeps the reading column at least 520 px wide", async ({ page }) => {

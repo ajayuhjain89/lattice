@@ -1,0 +1,149 @@
+/* The Ask desk (design-direction §6.5): compact, and useful before the first question. */
+.heading {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+
+.display {
+  composes: t-display from global;
+
+  font-size: var(--type-title-size);
+  line-height: var(--type-title-line);
+}
+
+.deck {
+  max-width: var(--measure);
+  color: var(--text-secondary);
+  font-size: var(--type-heading-size);
+  line-height: var(--type-heading-line);
+}
+
+/* Reach and recent questions: two ledgers side by side where there is room. */
+.context {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: var(--space-6) var(--space-8);
+  margin-top: var(--space-8);
+}
+
+.panel {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.panelHeading {
+  composes: t-section from global;
+
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.panelCount {
+  composes: t-meta from global;
+
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.rows {
+  display: grid;
+}
+
+.source {
+  display: grid;
+  grid-template-columns: var(--icon-size) minmax(0, 1fr);
+  column-gap: var(--space-2);
+  padding-block: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.glyph {
+  grid-row: span 2;
+  padding-top: var(--space-0-5);
+  color: var(--text-secondary);
+}
+
+.sourceName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.sourceMeta {
+  composes: t-meta from global;
+
+  color: var(--text-muted);
+}
+
+.skeletonRow {
+  height: calc(var(--type-body-line) + var(--type-meta-line) + 2 * var(--space-2));
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.accounts {
+  composes: t-small from global;
+
+  padding-top: var(--space-1);
+  color: var(--text-secondary);
+}
+
+.accountsLabel {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.quiet {
+  composes: t-small from global;
+
+  color: var(--text-secondary);
+}
+
+.recent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "status date again"
+    "question question again";
+  align-items: center;
+  column-gap: var(--space-3);
+  padding-block: var(--space-2);
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.recentStatus {
+  composes: t-mark from global;
+
+  grid-area: status;
+  color: var(--text-secondary);
+}
+
+.recentQuestion {
+  grid-area: question;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.recentQuestion:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.recentDate {
+  composes: t-meta from global;
+
+  grid-area: date;
+  color: var(--text-muted);
+}
+
+.recent > button {
+  grid-area: again;
+}
