@@ -1174,8 +1174,8 @@ platform; no Phase 12–15 scope.
 | P11.2 | Deployment and migrations: `lattice migrate` (lock, connection fence, pre-flight, exact verification), migration headers, managed-PostgreSQL bootstrap (verified locally against a CREATEROLE/CREATEDB administrator), privilege snapshot and `check-deployment`, `check-config`, GHCR `images` job, `deploy/deploy.sh` releases and rollbacks, two web instances (staging deferred, D-22 amended) | Delivered (ae03445 + fd0d1bc; plan §25.3) |
 | P11.3 | Identity and session operations: sessions record their SSO connection, disable revokes them, `sso enable/update`, audited `member suspend/reinstate`, `org suspend/reactivate`, `session revoke`, clock skew, verification IdP, the identity test matrix (plan §15.3) | Delivered (1c68ed5; plan §25.4; 42/42 on the stack) |
 | P11.4 | Shared in-flight and pre-authentication limits in PostgreSQL; retention classes with database-enforced floors | Delivered (9a50e27; plan §25.5) |
-| P11.5 | Backups and restore verified locally with measured local durations (managed PITR and cloud RPO/RTO deferred, D-22 amended) | Delivered (plan §25.6) |
-| P11.6 | Metrics, alert rules with tests, a runbook action per alert | Not started |
+| P11.5 | Backups and restore verified locally with measured local durations (managed PITR and cloud RPO/RTO deferred, D-22 amended) | Delivered (0b7fe76; plan §25.6) |
+| P11.6 | Metrics, alert rules with tests, a runbook action per alert | Delivered (plan §25.7) |
 | P11.7 | Deployed authorization suite and failure drills on the local stack, closure (staging deferred) | Not started |
 
 **Roadmap disposition recorded with Phase 11** (§4 table): scoped Ask already shipped

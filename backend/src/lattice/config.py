@@ -242,6 +242,11 @@ class Settings(BaseSettings):
                 "LATTICE_SESSION_IDLE_TIMEOUT_MINUTES must not exceed "
                 "LATTICE_SESSION_ABSOLUTE_TIMEOUT_MINUTES"
             )
+        if self.env is Environment.PRODUCTION and not self.metrics_address:
+            raise ValueError(
+                "LATTICE_METRICS_ADDRESS (a private host:port) is required when "
+                "LATTICE_ENV=production: alerting reads the API's metrics (deployment.md §16)"
+            )
         if self.env is Environment.PRODUCTION and self.client_key_secret is None:
             raise ValueError(
                 "LATTICE_CLIENT_KEY_SECRET (at least 32 bytes) is required when "
@@ -324,6 +329,11 @@ class WorkerSettings(BaseSettings):
 
     @model_validator(mode="after")
     def _enforce_environment_guards(self) -> Self:
+        if self.env is Environment.PRODUCTION and not self.metrics_address:
+            raise ValueError(
+                "LATTICE_METRICS_ADDRESS (a private host:port) is required when "
+                "LATTICE_ENV=production: liveness and alerting read the worker's metrics"
+            )
         if self.env is Environment.PRODUCTION and self.sync_embedding == "fake":
             raise ValueError(
                 "LATTICE_SYNC_EMBEDDING=fake is a test double and is refused when "

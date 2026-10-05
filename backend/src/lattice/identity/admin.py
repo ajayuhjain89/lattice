@@ -32,6 +32,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lattice import metrics
 from lattice.access.audit import MEMBER_CHANGED, record_event
 from lattice.access.directory import access_snapshot
 from lattice.identity.sessions import CONNECTION_LOCK_SQL
@@ -198,6 +199,7 @@ async def disable_connection(
         text("UPDATE oidc_connections SET status = 'disabled' WHERE id = :c"), {"c": found.id}
     )
     revoked = await _revoke_connection_sessions(session, org, found.id)
+    metrics.sessions_revoked("sso_disabled", revoked)
     await record_event(
         session,
         org,
@@ -350,6 +352,7 @@ async def update_connection(
             "claim name has an invalid form)"
         ) from exc
     revoked = await _revoke_connection_sessions(session, org, found.id) if identity_shape else 0
+    metrics.sessions_revoked("sso_identity_changed", revoked)
 
     def shown(values: Any) -> dict[str, Any]:
         return {
@@ -558,6 +561,7 @@ async def _set_member_status(
         ),
         {"s": status, "o": org, "m": member.membership_id},
     )
+    metrics.member_changed(member.status, status, "operator")
     await record_event(
         session,
         org,
@@ -583,7 +587,9 @@ async def suspend_member(
     if member.status == "suspended":
         return None
     await _set_member_status(session, org, member, "suspended", reason=reason, actor=actor)
-    return member, await _revoke_member_sessions(session, org, member.user_id)
+    revoked = await _revoke_member_sessions(session, org, member.user_id)
+    metrics.sessions_revoked("member_suspended", revoked)
+    return member, revoked
 
 
 async def reinstate_member(
@@ -626,6 +632,7 @@ async def revoke_sessions(
         )
         revoked = len(rows.all())
         target = {"scope": "organization"}
+    metrics.sessions_revoked("operator_revoke", revoked)
     await record_event(
         session,
         org,
@@ -667,6 +674,7 @@ async def set_organization_status(
             {"o": org},
         )
         revoked = len(rows.all())
+        metrics.sessions_revoked("organization_suspended", revoked)
     await record_event(
         session,
         org,

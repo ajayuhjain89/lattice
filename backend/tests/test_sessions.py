@@ -15,7 +15,7 @@ from lattice.db.engine import Database
 from lattice.identity.dev_provider import DevAuthDisabledError, DevIdentityProvider
 from lattice.identity.sessions import SessionPolicy, SessionService
 
-from .conftest import APP_URL, CSRF, AppFactory
+from .conftest import APP_URL, CSRF, AppFactory, free_metrics_address
 from .factories import Member, create_member, create_org, login
 
 COOKIE = "lattice_session"
@@ -244,6 +244,7 @@ async def test_dev_login_is_not_mounted_in_production(app_client: AppFactory, ma
         session_cookie_secure=True,
         public_url="https://lattice.example.com",
         client_key_secret="k" * 32,
+        metrics_address=free_metrics_address(),
     ) as prod:
         response = await login(prod, maya.email)
     assert response.status_code == 404

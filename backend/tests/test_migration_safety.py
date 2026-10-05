@@ -346,6 +346,7 @@ def test_create_app_refuses_the_owner_credential_in_production(
         session_cookie_secure=True,
         public_url="https://lattice.example.com",
         client_key_secret="k" * 32,
+        metrics_address="127.0.0.1:9464",
     )
     with pytest.raises(ConfigurationError, match="LATTICE_OWNER_PASSWORD"):
         create_app(settings)
@@ -360,6 +361,7 @@ def _production_api_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LATTICE_DEV_AUTH_ENABLED", "false")
     monkeypatch.setenv("LATTICE_SESSION_COOKIE_SECURE", "true")
     monkeypatch.setenv("LATTICE_CLIENT_KEY_SECRET", "k" * 32)
+    monkeypatch.setenv("LATTICE_METRICS_ADDRESS", "127.0.0.1:9464")
 
 
 def test_check_config_accepts_a_valid_production_api(
@@ -403,6 +405,7 @@ def test_check_config_worker_refuses_the_owner_credential(
 ) -> None:
     monkeypatch.setenv("LATTICE_ENV", "production")
     monkeypatch.setenv("LATTICE_WORKER_DATABASE_URL", WORKER_URL)
+    monkeypatch.setenv("LATTICE_METRICS_ADDRESS", "127.0.0.1:9465")
     monkeypatch.setenv("POSTGRES_PASSWORD", "x")
     assert main(["check-config", "worker"]) == 2
     monkeypatch.delenv("POSTGRES_PASSWORD")

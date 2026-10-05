@@ -353,6 +353,7 @@ def test_production_requires_a_client_key_secret() -> None:
         "dev_auth_enabled": False,
         "session_cookie_secure": True,
         "public_url": "https://lattice.example.com",
+        "metrics_address": "127.0.0.1:9464",
     }
     with pytest.raises(ValueError, match="LATTICE_CLIENT_KEY_SECRET"):
         make_settings(**production)

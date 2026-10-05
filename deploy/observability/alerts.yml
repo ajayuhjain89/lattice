@@ -1,0 +1,180 @@
+# Lattice alert rules (Phase 11, P11.6; phase-11-plan §17, runbook §10).
+#
+# Prometheus rule file; routing (pager, ticket queue) belongs to the platform's
+# Alertmanager. Every alert carries `severity` (page | ticket) and a `runbook` annotation.
+# Tested by deploy/observability/alerts.test.yml (`make alerts-test`; CI: promtool from a
+# pinned image).
+#
+# Scrape contract (deployment.md §16): every API instance's LATTICE_METRICS_ADDRESS as
+# job "lattice-api", the worker's as job "lattice-worker" (both on the private network,
+# never routed publicly), and an external black-box probe of
+# https://<public origin>/api/v1/health/ready as job "lattice-probe" (blackbox_exporter's
+# probe_success / probe_ssl_earliest_cert_expiry). Storage thresholds are absolute: set
+# them to 80 % / 90 % of the database's provisioned storage (here: a 10 GiB volume).
+#
+# Not rules here (no metric Lattice can export honestly): the platform's backup/PITR
+# window and "restore drill overdue" -- calendar controls in runbook §10.4.
+groups:
+  - name: lattice-availability
+    rules:
+      - alert: LatticeServiceUnavailable
+        # Suppress with a silence during a declared migrating release (deployment.md §9.2).
+        expr: probe_success{job="lattice-probe"} == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: The public readiness probe has failed for 2 minutes.
+          runbook: docs/runbook.md#101-service-unavailable
+      - alert: LatticeHigh5xxRatio
+        expr: |
+          sum(rate(lattice_http_requests_total{job="lattice-api",status=~"5.."}[5m]))
+            / sum(rate(lattice_http_requests_total{job="lattice-api"}[5m])) > 0.05
+        for: 10m
+        labels: {severity: page}
+        annotations:
+          summary: More than 5 % of API responses are server errors.
+          runbook: docs/runbook.md#102-high-5xx-ratio
+      - alert: LatticeDatabaseUnavailable
+        expr: sum(rate(lattice_dependency_failures_total{dependency="database"}[2m])) > 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: API or worker calls to PostgreSQL keep failing.
+          runbook: docs/runbook.md#1010-database-unavailable
+      - alert: LatticeSchemaMismatch
+        expr: |
+          sum(increase(lattice_dependency_failures_total{dependency="database",check="schema_revision"}[5m])) > 0
+        for: 10m
+        labels: {severity: page}
+        annotations:
+          summary: API readiness reports a schema revision this build does not expect.
+          runbook: docs/runbook.md#103-schema-mismatch
+      - alert: LatticeClockSkew
+        expr: max(abs(lattice_clock_skew_seconds)) > 5
+        for: 10m
+        labels: {severity: ticket}
+        annotations:
+          summary: A Lattice process's clock differs from the database's by more than 5 s.
+          runbook: docs/runbook.md#108-clock-skew
+      - alert: LatticeTlsCertificateExpiring
+        expr: probe_ssl_earliest_cert_expiry{job="lattice-probe"} - time() < 14 * 86400
+        for: 1h
+        labels: {severity: ticket}
+        annotations:
+          summary: The public TLS certificate expires within 14 days.
+          runbook: docs/runbook.md#109-tls-certificate-expiring
+
+  - name: lattice-worker
+    rules:
+      - alert: LatticeWorkerStopped
+        expr: |
+          (absent(up{job="lattice-worker"} == 1))
+            or (time() - max(lattice_worker_heartbeat_timestamp_seconds) > 300)
+        for: 5m
+        labels: {severity: page}
+        annotations:
+          summary: The worker is not scraped or has not made progress for 5 minutes.
+          runbook: docs/runbook.md#1011-worker-stopped-or-backlog
+      - alert: LatticeJobBacklog
+        expr: max(lattice_jobs_oldest_waiting_seconds) > 900
+        for: 5m
+        labels: {severity: ticket}
+        annotations:
+          summary: A requested sync has been waiting for more than 15 minutes.
+          runbook: docs/runbook.md#1011-worker-stopped-or-backlog
+      - alert: LatticeJobsAbandoned
+        expr: sum(increase(lattice_jobs_total{outcome="abandoned"}[1h])) > 0
+        labels: {severity: ticket}
+        annotations:
+          summary: A job ran out of attempts (job_abandoned) in the last hour.
+          runbook: docs/runbook.md#1011-worker-stopped-or-backlog
+      - alert: LatticeRepeatedSyncFailures
+        expr: sum(increase(lattice_sync_runs_total{status="failed"}[6h])) >= 3
+        labels: {severity: ticket}
+        annotations:
+          summary: Three or more sync runs failed in 6 hours.
+          runbook: docs/runbook.md#1012-repeated-sync-failures
+      - alert: LatticeRetentionFailing
+        expr: time() - min(lattice_maintenance_last_success_timestamp_seconds) > 3 * 3600
+        for: 15m
+        labels: {severity: ticket}
+        annotations:
+          summary: A retention task has not succeeded for 3 hours.
+          runbook: docs/runbook.md#106-retention-failing
+
+  - name: lattice-data
+    rules:
+      - alert: LatticeWalArchiveFailing
+        expr: max(lattice_wal_archive_failing) == 1
+        for: 10m
+        labels: {severity: page}
+        annotations:
+          summary: PostgreSQL's last WAL archive attempt failed and none succeeded since.
+          runbook: docs/runbook.md#104-backups-and-wal-archiving
+      - alert: LatticeStorageHigh
+        expr: max(lattice_database_size_bytes) > 8 * 1024 * 1024 * 1024
+        for: 30m
+        labels: {severity: ticket}
+        annotations:
+          summary: The database is above 80 % of its provisioned storage.
+          runbook: docs/runbook.md#107-storage-high
+      - alert: LatticeStorageCritical
+        expr: max(lattice_database_size_bytes) > 9 * 1024 * 1024 * 1024
+        for: 10m
+        labels: {severity: page}
+        annotations:
+          summary: The database is above 90 % of its provisioned storage.
+          runbook: docs/runbook.md#107-storage-high
+
+  - name: lattice-security
+    rules:
+      - alert: LatticeSecurityInvariantViolation
+        expr: sum(increase(lattice_security_invariant_violations_total[5m])) > 0
+        labels: {severity: page}
+        annotations:
+          summary: A security invariant check failed (unreadable evidence or a bad citation).
+          runbook: docs/runbook.md#1013-security-invariant-violation
+      - alert: LatticeProvisioningBurst
+        # Baseline (runbook §8 P11.3/P11.4 drills): at most 4 SCIM lifecycle changes in 10
+        # minutes; a real offboarding wave of 20+ is rare and worth a human look.
+        expr: |
+          sum(increase(lattice_member_lifecycle_total{actor_kind="scim",change=~"suspended|removed"}[10m])) > 20
+            or sum(increase(lattice_member_lifecycle_total{actor_kind="scim",change="created"}[10m])) > 100
+        labels: {severity: page, team: security}
+        annotations:
+          summary: The identity provider suspended, removed or created members in a burst.
+          runbook: docs/runbook.md#105-provisioning-burst
+      - alert: LatticeAuthenticationFailures
+        # Baseline: the identity drill produced 6 refused sign-ins and 6 SCIM 401s in a few
+        # minutes; 50 in 10 minutes is sustained guessing or a broken integration.
+        expr: |
+          (
+            sum(increase(lattice_sso_sign_ins_total{outcome=~"token_invalid|invalid_state"}[10m]) or vector(0))
+            + sum(increase(lattice_scim_operations_total{operation="unauthenticated"}[10m]) or vector(0))
+            + sum(increase(lattice_rate_limited_total{bucket="sign_in"}[10m]) or vector(0))
+          ) > 50
+        labels: {severity: ticket}
+        annotations:
+          summary: Failed sign-ins, SCIM authentication failures or pre-auth refusals above baseline.
+          runbook: docs/runbook.md#1014-authentication-failures
+      - alert: LatticeRateLimitPressure
+        # Baseline: the limit drills refuse 10 requests in one minute, once; refusals that
+        # last half an hour mean a client is stuck or the limit is wrong for real use.
+        expr: sum by (bucket) (rate(lattice_rate_limited_total[5m])) * 60 > 30
+        for: 30m
+        labels: {severity: ticket}
+        annotations:
+          summary: A rate limit has refused more than 30 requests a minute for 30 minutes.
+          runbook: docs/runbook.md#1015-rate-limit-pressure
+
+  - name: lattice-providers
+    rules:
+      - alert: LatticeProviderFailureSurge
+        expr: |
+          sum(rate(lattice_generation_calls_total{outcome!="ok"}[10m]))
+            / sum(rate(lattice_generation_calls_total[10m])) > 0.5
+        for: 10m
+        labels: {severity: ticket}
+        annotations:
+          summary: More than half of the model-provider calls fail.
+          runbook: docs/runbook.md#1016-provider-failure-surge

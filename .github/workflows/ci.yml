@@ -78,6 +78,10 @@ jobs:
       - name: Dataset lint (synthetic data + golden set; no database, no model)
         run: uv run lattice dataset lint
 
+      - name: Alert rules check and unit tests (promtool, pinned image; Phase 11)
+        working-directory: .
+        run: make alerts-test
+
       - name: Production bootstrap as a non-superuser platform administrator (Phase 11)
         # The managed-PostgreSQL path creates the roles and the `lattice` database with
         # CREATEROLE + CREATEDB only. template1's vector stands in for a platform's

@@ -167,11 +167,12 @@ recovery_target_action = 'promote'"
     -e LATTICE_DATABASE_URL="postgresql+asyncpg://lattice_app:${app}@postgres:5432/lattice"
     -e LATTICE_PUBLIC_URL=https://localhost:8443 -e LATTICE_SESSION_COOKIE_SECURE=true
     -e LATTICE_DEV_AUTH_ENABLED=false -e LATTICE_QUERY_EMBEDDING=none
-    -e LATTICE_CLIENT_KEY_SECRET="$key")
+    -e LATTICE_CLIENT_KEY_SECRET="$key" -e LATTICE_METRICS_ADDRESS=127.0.0.1:9464)
   "${run[@]}" "${api_env[@]}" --entrypoint lattice "$backend" check-db-role || fail "check-db-role"
   say "PASS  check-db-role (lattice_app) against the restored copy"
   "${run[@]}" -e LATTICE_ENV=production \
     -e LATTICE_WORKER_DATABASE_URL="postgresql+asyncpg://lattice_worker:${worker}@postgres:5432/lattice" \
+    -e LATTICE_METRICS_ADDRESS=127.0.0.1:9465 \
     --entrypoint lattice "$backend" worker --once || fail "worker --once"
   say "PASS  worker --once against the restored copy"
   docker run -d --name lattice-restore-api --network "$restore_net" --read-only --tmpfs /tmp \

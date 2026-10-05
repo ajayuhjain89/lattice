@@ -1,0 +1,426 @@
+# promtool rule tests for deploy/observability/alerts.yml (Phase 11, P11.6).
+# Every alert has a case that fires (with its labels and annotations) and one that stays
+# quiet. Run: make alerts-test (promtool from a pinned image; also in CI).
+rule_files:
+- alerts.yml
+evaluation_interval: 1m
+tests:
+- interval: 1m
+  input_series:
+  - series: probe_success{job="lattice-probe",instance="public"}
+    values: 1 1 0x8
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: LatticeServiceUnavailable
+    exp_alerts:
+    - exp_labels:
+        severity: page
+        job: lattice-probe
+        instance: public
+      exp_annotations:
+        summary: The public readiness probe has failed for 2 minutes.
+        runbook: docs/runbook.md#101-service-unavailable
+- interval: 1m
+  input_series:
+  - series: probe_success{job="lattice-probe",instance="public"}
+    values: 1x10
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: LatticeServiceUnavailable
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_http_requests_total{job="lattice-api",status="500",route="/v1/ask",method="POST"}
+    values: 0+10x30
+  - series: lattice_http_requests_total{job="lattice-api",status="200",route="/v1/ask",method="POST"}
+    values: 0+100x30
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: LatticeHigh5xxRatio
+    exp_alerts:
+    - exp_labels:
+        severity: page
+      exp_annotations:
+        summary: More than 5 % of API responses are server errors.
+        runbook: docs/runbook.md#102-high-5xx-ratio
+- interval: 1m
+  input_series:
+  - series: lattice_http_requests_total{job="lattice-api",status="500",route="/v1/ask",method="POST"}
+    values: 0+1x30
+  - series: lattice_http_requests_total{job="lattice-api",status="200",route="/v1/ask",method="POST"}
+    values: 0+100x30
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: LatticeHigh5xxRatio
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_dependency_failures_total{job="lattice-api",dependency="database",check="ready"}
+    values: 0+5x10
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: LatticeDatabaseUnavailable
+    exp_alerts:
+    - exp_labels:
+        severity: page
+      exp_annotations:
+        summary: API or worker calls to PostgreSQL keep failing.
+        runbook: docs/runbook.md#1010-database-unavailable
+- interval: 1m
+  input_series:
+  - series: lattice_dependency_failures_total{job="lattice-api",dependency="database",check="ready"}
+    values: 5x10
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: LatticeDatabaseUnavailable
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_dependency_failures_total{job="lattice-api",dependency="database",check="schema_revision"}
+    values: 0+1x30
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: LatticeSchemaMismatch
+    exp_alerts:
+    - exp_labels:
+        severity: page
+      exp_annotations:
+        summary: API readiness reports a schema revision this build does not expect.
+        runbook: docs/runbook.md#103-schema-mismatch
+- interval: 1m
+  input_series:
+  - series: lattice_dependency_failures_total{job="lattice-api",dependency="database",check="schema_revision"}
+    values: 3x30
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: LatticeSchemaMismatch
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_clock_skew_seconds{job="lattice-api",instance="api1"}
+    values: -7x20
+  alert_rule_test:
+  - eval_time: 15m
+    alertname: LatticeClockSkew
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+      exp_annotations:
+        summary: A Lattice process's clock differs from the database's by more than 5 s.
+        runbook: docs/runbook.md#108-clock-skew
+- interval: 1m
+  input_series:
+  - series: lattice_clock_skew_seconds{job="lattice-api",instance="api1"}
+    values: 1x20
+  alert_rule_test:
+  - eval_time: 15m
+    alertname: LatticeClockSkew
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: probe_ssl_earliest_cert_expiry{job="lattice-probe",instance="public"}
+    values: 864000x80
+  alert_rule_test:
+  - eval_time: 70m
+    alertname: LatticeTlsCertificateExpiring
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+        job: lattice-probe
+        instance: public
+      exp_annotations:
+        summary: The public TLS certificate expires within 14 days.
+        runbook: docs/runbook.md#109-tls-certificate-expiring
+- interval: 1m
+  input_series:
+  - series: probe_ssl_earliest_cert_expiry{job="lattice-probe",instance="public"}
+    values: 2592000x80
+  alert_rule_test:
+  - eval_time: 70m
+    alertname: LatticeTlsCertificateExpiring
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: up{job="lattice-worker",instance="worker"}
+    values: '0x10'
+  alert_rule_test:
+  - eval_time: 7m
+    alertname: LatticeWorkerStopped
+    exp_alerts:
+    - exp_labels:
+        severity: page
+      exp_annotations:
+        summary: The worker is not scraped or has not made progress for 5 minutes.
+        runbook: docs/runbook.md#1011-worker-stopped-or-backlog
+- interval: 1m
+  input_series:
+  - series: up{job="lattice-worker",instance="worker"}
+    values: 1x10
+  - series: lattice_worker_heartbeat_timestamp_seconds{job="lattice-worker",instance="worker"}
+    values: 0+60x10
+  alert_rule_test:
+  - eval_time: 7m
+    alertname: LatticeWorkerStopped
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_jobs_oldest_waiting_seconds{job="lattice-worker"}
+    values: 1000x10
+  alert_rule_test:
+  - eval_time: 7m
+    alertname: LatticeJobBacklog
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+      exp_annotations:
+        summary: A requested sync has been waiting for more than 15 minutes.
+        runbook: docs/runbook.md#1011-worker-stopped-or-backlog
+- interval: 1m
+  input_series:
+  - series: lattice_jobs_oldest_waiting_seconds{job="lattice-worker"}
+    values: 60x10
+  alert_rule_test:
+  - eval_time: 7m
+    alertname: LatticeJobBacklog
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_jobs_total{job="lattice-worker",kind="source_sync",outcome="abandoned"}
+    values: 0 0 1 1 1
+  alert_rule_test:
+  - eval_time: 4m
+    alertname: LatticeJobsAbandoned
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+      exp_annotations:
+        summary: A job ran out of attempts (job_abandoned) in the last hour.
+        runbook: docs/runbook.md#1011-worker-stopped-or-backlog
+- interval: 1m
+  input_series:
+  - series: lattice_jobs_total{job="lattice-worker",kind="source_sync",outcome="abandoned"}
+    values: '0x5'
+  alert_rule_test:
+  - eval_time: 4m
+    alertname: LatticeJobsAbandoned
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_sync_runs_total{job="lattice-worker",mode="full",status="failed"}
+    values: 0 1 2 3 4 4
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: LatticeRepeatedSyncFailures
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+      exp_annotations:
+        summary: Three or more sync runs failed in 6 hours.
+        runbook: docs/runbook.md#1012-repeated-sync-failures
+- interval: 1m
+  input_series:
+  - series: lattice_sync_runs_total{job="lattice-worker",mode="full",status="failed"}
+    values: 0 1 1 1 1 1
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: LatticeRepeatedSyncFailures
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_maintenance_last_success_timestamp_seconds{job="lattice-worker",task="sessions"}
+    values: '0x220'
+  alert_rule_test:
+  - eval_time: 210m
+    alertname: LatticeRetentionFailing
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+      exp_annotations:
+        summary: A retention task has not succeeded for 3 hours.
+        runbook: docs/runbook.md#106-retention-failing
+- interval: 1m
+  input_series:
+  - series: lattice_maintenance_last_success_timestamp_seconds{job="lattice-worker",task="sessions"}
+    values: 0+60x220
+  alert_rule_test:
+  - eval_time: 210m
+    alertname: LatticeRetentionFailing
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_wal_archive_failing{job="lattice-worker"}
+    values: 1x20
+  alert_rule_test:
+  - eval_time: 12m
+    alertname: LatticeWalArchiveFailing
+    exp_alerts:
+    - exp_labels:
+        severity: page
+      exp_annotations:
+        summary: PostgreSQL's last WAL archive attempt failed and none succeeded since.
+        runbook: docs/runbook.md#104-backups-and-wal-archiving
+- interval: 1m
+  input_series:
+  - series: lattice_wal_archive_failing{job="lattice-worker"}
+    values: '0x20'
+  alert_rule_test:
+  - eval_time: 12m
+    alertname: LatticeWalArchiveFailing
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_database_size_bytes{job="lattice-worker"}
+    values: 9000000000x40
+  alert_rule_test:
+  - eval_time: 35m
+    alertname: LatticeStorageHigh
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+      exp_annotations:
+        summary: The database is above 80 % of its provisioned storage.
+        runbook: docs/runbook.md#107-storage-high
+- interval: 1m
+  input_series:
+  - series: lattice_database_size_bytes{job="lattice-worker"}
+    values: 5000000000x40
+  alert_rule_test:
+  - eval_time: 35m
+    alertname: LatticeStorageHigh
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_database_size_bytes{job="lattice-worker"}
+    values: 10000000000x20
+  alert_rule_test:
+  - eval_time: 15m
+    alertname: LatticeStorageCritical
+    exp_alerts:
+    - exp_labels:
+        severity: page
+      exp_annotations:
+        summary: The database is above 90 % of its provisioned storage.
+        runbook: docs/runbook.md#107-storage-high
+- interval: 1m
+  input_series:
+  - series: lattice_database_size_bytes{job="lattice-worker"}
+    values: 9000000000x20
+  alert_rule_test:
+  - eval_time: 15m
+    alertname: LatticeStorageCritical
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_security_invariant_violations_total{job="lattice-api",check="retrieval"}
+    values: 0 0 1
+  alert_rule_test:
+  - eval_time: 2m
+    alertname: LatticeSecurityInvariantViolation
+    exp_alerts:
+    - exp_labels:
+        severity: page
+      exp_annotations:
+        summary: A security invariant check failed (unreadable evidence or a bad citation).
+        runbook: docs/runbook.md#1013-security-invariant-violation
+- interval: 1m
+  input_series:
+  - series: lattice_security_invariant_violations_total{job="lattice-api",check="retrieval"}
+    values: 0 0 0
+  alert_rule_test:
+  - eval_time: 2m
+    alertname: LatticeSecurityInvariantViolation
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_member_lifecycle_total{job="lattice-api",change="suspended",actor_kind="scim"}
+    values: 0+5x12
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: LatticeProvisioningBurst
+    exp_alerts:
+    - exp_labels:
+        severity: page
+        team: security
+      exp_annotations:
+        summary: The identity provider suspended, removed or created members in a burst.
+        runbook: docs/runbook.md#105-provisioning-burst
+- interval: 1m
+  input_series:
+  - series: lattice_member_lifecycle_total{job="lattice-api",change="suspended",actor_kind="scim"}
+    values: 0+1x12
+  - series: lattice_member_lifecycle_total{job="lattice-api",change="suspended",actor_kind="administrator"}
+    values: 0+50x12
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: LatticeProvisioningBurst
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_sso_sign_ins_total{job="lattice-api",outcome="token_invalid"}
+    values: 0+10x12
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: LatticeAuthenticationFailures
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+      exp_annotations:
+        summary: Failed sign-ins, SCIM authentication failures or pre-auth refusals above baseline.
+        runbook: docs/runbook.md#1014-authentication-failures
+- interval: 1m
+  input_series:
+  - series: lattice_sso_sign_ins_total{job="lattice-api",outcome="token_invalid"}
+    values: 0+2x12
+  - series: lattice_sso_sign_ins_total{job="lattice-api",outcome="succeeded"}
+    values: 0+100x12
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: LatticeAuthenticationFailures
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_rate_limited_total{job="lattice-api",instance="api1",bucket="sign_in"}
+    values: 0+60x60
+  alert_rule_test:
+  - eval_time: 45m
+    alertname: LatticeRateLimitPressure
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+        bucket: sign_in
+      exp_annotations:
+        summary: A rate limit has refused more than 30 requests a minute for 30 minutes.
+        runbook: docs/runbook.md#1015-rate-limit-pressure
+- interval: 1m
+  input_series:
+  - series: lattice_rate_limited_total{job="lattice-api",instance="api1",bucket="sign_in"}
+    values: 0+10x60
+  alert_rule_test:
+  - eval_time: 45m
+    alertname: LatticeRateLimitPressure
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: lattice_generation_calls_total{job="lattice-api",provider="fake",outcome="timeout"}
+    values: 0+6x40
+  - series: lattice_generation_calls_total{job="lattice-api",provider="fake",outcome="ok"}
+    values: 0+2x40
+  alert_rule_test:
+  - eval_time: 30m
+    alertname: LatticeProviderFailureSurge
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+      exp_annotations:
+        summary: More than half of the model-provider calls fail.
+        runbook: docs/runbook.md#1016-provider-failure-surge
+- interval: 1m
+  input_series:
+  - series: lattice_generation_calls_total{job="lattice-api",provider="fake",outcome="timeout"}
+    values: 0+1x40
+  - series: lattice_generation_calls_total{job="lattice-api",provider="fake",outcome="ok"}
+    values: 0+9x40
+  alert_rule_test:
+  - eval_time: 30m
+    alertname: LatticeProviderFailureSurge
+    exp_alerts: []

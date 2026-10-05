@@ -5,7 +5,7 @@ amendments (§21). P11.0 approved (4990064). P11.1 approved (b07ac8d). D-22 amen
 2026-10-05 (§21.1): zero paid infrastructure — Phase 11 closes on full local
 production-shaped verification; real external staging validation is deferred and gates
 Phase 15 (v1 GA). P11.2–P11.7 authorized to run in sequence without a review stop per
-checkpoint. P11.2 delivered as ae03445 + test fix fd0d1bc (§25.3). P11.3 delivered as 1c68ed5 (§25.4). P11.4 delivered as 9a50e27 (§25.5). P11.5 delivered (§25.6).** Branch `phase/11-production-operations` from `main` 27da421.
+checkpoint. P11.2 delivered as ae03445 + test fix fd0d1bc (§25.3). P11.3 delivered as 1c68ed5 (§25.4). P11.4 delivered as 9a50e27 (§25.5). P11.5 delivered as 0b7fe76 (§25.6). P11.6 delivered (§25.7).** Branch `phase/11-production-operations` from `main` 27da421.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 11. Phase 12
 owns customer-facing onboarding (organization, SSO, SCIM, sources/integrations,
@@ -830,6 +830,18 @@ refuses non-https providers anyway, so the verification provider uses TLS.
 | 5. Secret scan | none of the 9 configured values in the base backup, the WAL archive or the copy; the scanner finds a planted known string (not vacuous) |
 | 6. Measured durations | backup 0.9 s (60 MB), recovery 2.4 s, verification ≈ 7 s — local only, never presented as cloud RPO/RTO |
 | Not done | managed backup/PITR verification and cloud RPO/RTO (deferred, §21.1) |
+
+
+### 25.7 P11.6 — as built (2026-10-05)
+
+| Planned (§16, §17, §25 row P11.6) | As built |
+| --------------------------------- | -------- |
+| New metrics (§16, F15) | `lattice_member_lifecycle_total{change,actor_kind}` (SCIM, Access page, operator commands), `lattice_sessions_revoked_total{reason}` (logout, sign-in rotation, suspension, removal, SSO disable/identity change, operator, organization stop), `lattice_jobs_oldest_waiting_seconds`, `lattice_database_size_bytes`, `lattice_wal_archive_failing` / `_last_success_timestamp_seconds` (the worker reads `pg_stat_archiver`; no exporter added). Already built: `lattice_build_info`, heartbeat (P11.1), clock skew (P11.3), maintenance metrics (P11.4). Closed label sets; no identifier as a label |
+| Metrics address required in production | done (deferred from P11.1): api and worker refuse to start in production without `LATTICE_METRICS_ADDRESS` |
+| `alerts.yml` + promtool tests | `deploy/observability/alerts.yml`: 19 rules in 5 groups; `alerts.test.yml`: a firing and a quiet case for each (38 cases); `make alerts-test` with `prom/prometheus:v3.5.0` pinned by digest, also a step of the CI backend job. A raised threshold fails the tests (mutation checked by hand). The security-invariant alert fires on a synthetic violation series |
+| Runbook §10 per alert | §10.1–§10.16; every rule's `runbook` annotation resolves to its section (checked) |
+| Thresholds from baselines | provisioning burst > 20 suspensions/removals or > 100 creations in 10 min (drills: ≤ 4); authentication failures > 50 in 10 min (drill: ≈ 6 of each kind); rate-limit pressure > 30/min for 30 min (drill: one 10-request burst); recorded as *baseline* in runbook §10 for retuning on real traffic |
+| Not rules | the platform's backup/PITR window and the restore-drill cadence (calendar control, runbook §10.4) — no honest in-application metric; TLS expiry and availability use the black-box probe the contract requires (deployment.md §16) |
 
 
 ## 26. Phase 11 acceptance criteria

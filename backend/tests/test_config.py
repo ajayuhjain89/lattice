@@ -75,6 +75,7 @@ def test_production_requires_an_https_public_url(public_url: str | None) -> None
             database_url=APP_URL,
             public_url="https://lattice.example.com/",
             client_key_secret="k" * 32,
+            metrics_address="127.0.0.1:9464",
         ).web_origin
         == "https://lattice.example.com"
     )

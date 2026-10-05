@@ -104,7 +104,15 @@ _RETRY_SQL = text(
     "run_after = now() + make_interval(secs => :delay) "
     "WHERE id = :id AND status = 'running' AND attempts = :attempt"
 )
-_WAITING_SQL = text("SELECT count(*) FROM jobs WHERE status = 'queued' AND run_after <= now()")
+_WAITING_SQL = text(
+    "SELECT count(*), coalesce(extract(epoch FROM now() - min(run_after)), 0) "
+    "FROM jobs WHERE status = 'queued' AND run_after <= now()"
+)
+# Database-wide health the worker can see without any tenant data (P11.6): size, and the
+# WAL archiver's state (PostgreSQL's own statistics; a platform may hide it).
+_DATABASE_SIZE_SQL = text("SELECT pg_database_size(current_database())")
+_ARCHIVER_SQL = text("SELECT last_archived_time, last_failed_time FROM pg_stat_archiver")
+STATS_INTERVAL_SECONDS: Final = 60.0
 _SOURCE_SQL = text(
     "SELECT key, connector_type, name, config, default_sensitivity, account_scoped, authority, "
     "status FROM sources WHERE organization_id = :o AND id = :s"
@@ -218,9 +226,22 @@ class Worker:
         return ClaimedJob(*row)
 
     async def waiting(self) -> int:
+        """Due queued jobs; also sets the oldest one's age."""
         async with self.db.unscoped_transaction() as s:
-            waiting: int = (await s.execute(_WAITING_SQL)).scalar_one()
-        return waiting
+            waiting, oldest = (await s.execute(_WAITING_SQL)).one()
+        metrics.JOBS_OLDEST_WAITING.set(float(oldest))
+        return int(waiting)
+
+    async def database_stats(self) -> None:
+        """Database size and WAL-archiver health gauges (alerts, runbook §10)."""
+        async with self.db.unscoped_transaction() as s:
+            metrics.DATABASE_SIZE.set((await s.execute(_DATABASE_SIZE_SQL)).scalar_one())
+            archived, failed = (await s.execute(_ARCHIVER_SQL)).one()
+        if archived is not None:
+            metrics.WAL_ARCHIVE_LAST_SUCCESS.set(archived.timestamp())
+        if archived is not None or failed is not None:
+            failing = failed is not None and (archived is None or failed > archived)
+            metrics.WAL_ARCHIVE_FAILING.set(1 if failing else 0)
 
     async def cleanup(self) -> dict[str, int | None]:
         """Retention (P11.4): every class's expired rows, in bounded batches, as far as
@@ -387,12 +408,16 @@ class Worker:
     ) -> None:
         """Poll until ``stop`` is set; a job in progress is finished first."""
         next_maintenance = 0.0
+        next_stats = 0.0
         while not stop.is_set():
             self.heartbeat.beat()
             try:
                 if time.monotonic() >= next_maintenance:
                     await self.cleanup()
                     next_maintenance = time.monotonic() + maintenance_seconds
+                if time.monotonic() >= next_stats:
+                    await self.database_stats()
+                    next_stats = time.monotonic() + STATS_INTERVAL_SECONDS
                 metrics.JOBS_WAITING.set(await self.waiting())
                 metrics.CLOCK_SKEW.set(await self.db.clock_skew())
                 if await self.run_once() is not None:

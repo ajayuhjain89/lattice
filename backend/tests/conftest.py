@@ -14,6 +14,7 @@ which also proves the migration chain applies to a clean database.
 
 import asyncio
 import os
+import socket
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
@@ -118,6 +119,13 @@ async def clean_tables(owner_db: Database) -> None:
 
 
 AppFactory = Callable[..., AbstractAsyncContextManager[httpx.AsyncClient]]
+
+
+def free_metrics_address() -> str:
+    """A loopback host:port nobody listens on: production processes must serve metrics."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return f"127.0.0.1:{probe.getsockname()[1]}"
 
 
 @pytest.fixture

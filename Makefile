@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits prod-backup privilege-snapshot
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits prod-backup alerts-test privilege-snapshot
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -74,6 +74,15 @@ dataset-lint: ## Validate the synthetic dataset and golden set (no database, no 
 
 dataset-generate: ## Regenerate the deterministic bulk distractor tickets
 	$(UV) lattice dataset generate
+
+# Prometheus rules (P11.6): `promtool check rules` and the rule unit tests, from a pinned
+# image (no local Prometheus needed).
+PROMTOOL_IMAGE := prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+alerts-test: ## Check deploy/observability/alerts.yml and run its promtool unit tests
+	docker run --rm -v "$(CURDIR)/deploy/observability:/rules:ro" -w /rules --entrypoint promtool \
+	  $(PROMTOOL_IMAGE) check rules alerts.yml
+	docker run --rm -v "$(CURDIR)/deploy/observability:/rules:ro" -w /rules --entrypoint promtool \
+	  $(PROMTOOL_IMAGE) test rules alerts.test.yml
 
 privilege-snapshot: ## Regenerate the committed privilege snapshot from the freshly migrated test database
 	cd backend && uv run --extra local --env-file ../.env sh -c \

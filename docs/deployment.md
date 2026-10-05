@@ -1,6 +1,6 @@
 # Lattice — Deployment Contract
 
-Status: **P11.5 (2026-10-05).** This is the provider-independent production contract that
+Status: **P11.6 (2026-10-05).** This is the provider-independent production contract that
 Phase 11 builds towards. **Built in P11.1:** the two images, the ingress routing and the
 single trusted hop, the API's trusted-proxy setting, worker liveness, graceful shutdown,
 build identification, `lattice smoke` and the local reference stack (§15). **Built in
@@ -11,7 +11,8 @@ pre-flight, migration headers, `lattice check-deployment` with the privilege sna
 `images` job (§3). **Built in P11.3:** sessions recording their SSO connection, the
 connection lifecycle and the audited incident commands (runbook §2, §9), the clock-skew
 gauge, and the verification identity provider for the reference stack (§15). **Not built
-yet:** alerts (P11.6). **Built in P11.5:** WAL archiving, base backups, restore and
+yet:** nothing of Phase 11 (P11.7 is verification and closure). **Built in P11.6:**
+metrics, alert rules with tests and the monitoring contract (§16). **Built in P11.5:** WAL archiving, base backups, restore and
 `lattice verify-restore` on the reference stack (§11). **Built in P11.4:** every rate limit shared in
 PostgreSQL (§12) and retention with database floors (§13). Every section says
 what exists **today** and what is a **target** and in which checkpoint it lands
@@ -166,7 +167,7 @@ secret). Only settings that exist today are listed unless marked *target*.
 | `LATTICE_GENERATION_DEADLINE_SECONDS` | config | 120 (the ingress timeout depends on it) |
 | `LATTICE_MAX_REQUEST_BYTES` | config | 65536 |
 | `LATTICE_DB_STATEMENT_TIMEOUT_MS` / `_CONNECT_TIMEOUT_SECONDS` / `_POOL_SIZE` | config | 30000 / 5 / per §8 |
-| `LATTICE_METRICS_ADDRESS` | deployment | `0.0.0.0:9464` on the private interface. Optional in configuration today; every deployment sets it (making it mandatory in production moves to P11.6 with the monitoring contract) |
+| `LATTICE_METRICS_ADDRESS` | deployment | `0.0.0.0:9464` on the private interface; **required in production** (P11.6) — scraped as job `lattice-api` (§16) |
 | `LATTICE_RATE_LIMIT_*` (six) | config | defaults (§12) |
 | `LATTICE_OIDC_HTTP_TIMEOUT_SECONDS` | config | 5 |
 | `LATTICE_OIDC_SECRET_<NAME>` | secret | one per confidential OIDC client; referenced from the database as `env:LATTICE_OIDC_SECRET_<NAME>` |
@@ -189,7 +190,7 @@ secret). Only settings that exist today are listed unless marked *target*.
 | `LATTICE_WORKER_HEARTBEAT_FILE` | deployment | **P11.1:** e.g. `/tmp/lattice-worker-heartbeat` (a writable tmpfs); the container health check reads its age (§10) |
 | `LATTICE_DB_STATEMENT_TIMEOUT_MS` / `_CONNECT_TIMEOUT_SECONDS` | config | 300000 / 5 |
 | `LATTICE_TRACE_RETENTION_DAYS` | config | **P11.4:** 90 (minimum 90; the database floor, §13) |
-| `LATTICE_METRICS_ADDRESS` | deployment | `0.0.0.0:9465` private (carries the heartbeat gauge `lattice smoke` reads) |
+| `LATTICE_METRICS_ADDRESS` | deployment | `0.0.0.0:9465` private, **required in production** (P11.6); scraped as job `lattice-worker`; carries the heartbeat gauge `lattice smoke` reads |
 | provider keys / `LATTICE_PROVIDER_SECRET_*`, model settings | secret / config | as the api, only for the embedding provider the worker uses |
 
 ### 5.3 migrate and operator commands (`MigrationSettings`)
@@ -554,6 +555,26 @@ reversible or irreversible drill revision numbered one above the image's head, a
 becomes ready, a production API that serves `/docs`, an invalid baked-in setting); they
 exist only for the drills of runbook §8, CI never builds them and no release contains
 them.
+
+## 16. Monitoring and alerting (P11.6)
+
+**Scrape (required).** `LATTICE_METRICS_ADDRESS` is **required in production** for the api
+and the worker (the processes refuse to start without it, P11.6) and is bound to the
+private network only. The platform's Prometheus-compatible scraper collects every api
+instance as job `lattice-api` and the worker as job `lattice-worker`, and runs an external
+black-box probe of `https://<public origin>/api/v1/health/ready` as job `lattice-probe`
+(`probe_success`, `probe_ssl_earliest_cert_expiry`). Routing (pager, tickets) is the
+platform's Alertmanager.
+
+**Rules.** `deploy/observability/alerts.yml` (19 rules; runbook §10 has a section per
+alert); `make alerts-test` runs `promtool check rules` and the rule unit tests in
+`alerts.test.yml` (a firing and a quiet case for every alert) from a pinned Prometheus
+image, also in CI. Storage thresholds are absolute: set them per deployment.
+
+**Platform signals the contract also requires** (not Lattice metrics): container up and
+restarts, readiness failures, database CPU, connections and storage, the platform's
+backup and PITR status, and log collection (no content in logs). The local reference
+stack has no Prometheus: its proofs are the rule tests and the drills of runbook §8.
 
 ---
 

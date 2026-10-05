@@ -212,6 +212,9 @@ ever a label (`lattice.metrics`, tested).
 | `lattice_sso_sign_ins_total{outcome}` | OIDC sign-ins: `started`, `succeeded` and fixed failure outcomes (§2) |
 | `lattice_scim_operations_total{operation,status}` | SCIM requests by operation and status class; `unauthenticated` for bad tokens |
 | `lattice_clock_skew_seconds` (P11.3) | this process's clock minus the database's, refreshed by each API readiness check and each worker poll; OIDC token times have 60 s of leeway and sessions expire on the API's clock, so keep hosts on NTP and investigate anything beyond a few seconds |
+| `lattice_member_lifecycle_total{change,actor_kind}` (P11.6) | membership created / suspended / reactivated / removed by `scim`, `administrator` or `operator`: provisioning bursts (§10.5) |
+| `lattice_sessions_revoked_total{reason}` (P11.6) | revocations by cause: `logout`, `sign_in_rotation`, `member_suspended`, `member_removed`, `sso_disabled`, `sso_identity_changed`, `operator_revoke`, `organization_suspended` |
+| `lattice_jobs_oldest_waiting_seconds`, `lattice_database_size_bytes`, `lattice_wal_archive_failing`, `lattice_wal_archive_last_success_timestamp_seconds` (P11.6, worker) | backlog age; database size (once a minute); WAL archiver health from `pg_stat_archiver` |
 | `process_*`, `python_gc_*` | memory and CPU per process |
 
 **Logs** are JSON lines on stdout (architecture §8): one `http.request` per request
@@ -566,3 +569,136 @@ records an audit event (no secret or secret reference in it). URLs are printed f
 | All administrators lost (left, removed or locked out) | `lattice member admin --org <slug> --email <e-mail> --grant --reason "…"` for a person who still has an active membership (reinstate first if needed). Administration grants no access to content |
 | Identity provider lost or compromised | Compromised: `lattice scim token revoke` (every token), `lattice sso disable` (revokes its sessions), review the audit log for provisioning changes. Unavailable: existing sessions keep working (server-side sessions do not depend on the provider); new sign-ins fail as `sso_unavailable` until it returns. There is no break-glass sign-in (Phase 11 non-goal); manifest members of a seeded organization keep the development sign-in only outside production |
 | Members created by the manifest | `make seed` organizations keep the development persona sign-in; SCIM never touches members it did not provision, and the manifest never touches provisioned ones |
+
+## 10. Alert responses — *implemented (P11.6)*
+
+The rules are `deploy/observability/alerts.yml` (Prometheus; tested by `make
+alerts-test`, also in CI); what must be scraped is in [deployment.md](deployment.md) §16.
+`page` = act now; `ticket` = act within a working day. Every alert names its section
+below. Thresholds marked *baseline* come from the Phase 11 drills (§8) and are expected to
+be retuned after real traffic.
+
+### 10.1 Service unavailable
+
+`LatticeServiceUnavailable` (page): the external probe of `/api/v1/health/ready` failed for
+2 minutes. Silence it for the duration of a declared migrating release (§7.10: the ingress
+answers 503 by design). Otherwise: `lattice smoke` from the private network says which
+layer fails — ingress, both API instances, or only the public path. All instances not
+ready + `database` failures → §10.10; `schema_revision` → §10.3; instances ready but the
+probe fails → ingress or TLS (§10.9). Restarting an instance whose readiness fails on the
+database or the schema does not help.
+
+### 10.2 High 5xx ratio
+
+`LatticeHigh5xxRatio` (page): more than 5 % of API responses are 5xx for 10 minutes.
+`lattice_http_requests_total{status=~"5.."}` by `route` shows where; the `http.request`
+log events carry the request IDs, `http.unhandled_exception` the exception type. 503
+`service_unavailable` with `Retry-After` is the database (§10.10); 500
+`security_invariant_violated` is §10.13. Roll back a release that introduced it
+(§7.10, no migration: zero downtime).
+
+### 10.3 Schema mismatch
+
+`LatticeSchemaMismatch` (page): an API instance's readiness reports a schema revision its
+build does not expect, for 10 minutes — a release stopped half-way, or a build deployed
+against the wrong database. `lattice migrate --status` and `deploy/deploy.sh status`:
+finish the release (roll forward) or roll back per §7.10 / deployment.md §9. Never edit
+`alembic_version`.
+
+### 10.4 Backups and WAL archiving
+
+`LatticeWalArchiveFailing` (page): PostgreSQL's last WAL archive attempt failed and none
+has succeeded since (`lattice_wal_archive_failing`, read by the worker from
+`pg_stat_archiver`). Unarchived WAL accumulates on the database's disk and the recovery
+point stops advancing: `SELECT * FROM pg_stat_archiver` for `last_failed_wal`, then fix the
+archive destination (space, permissions, the platform's backup service) — §7.7.
+**Not alert rules** (no honest metric from inside Lattice): the platform's backup and PITR
+window (watch the platform's own backup status) and the **restore drill**, which is a
+calendar control: run §7.7's restore drill at least every 35 days and record it in §8;
+an overdue drill is a ticket for the operator on duty.
+
+### 10.5 Provisioning burst
+
+`LatticeProvisioningBurst` (page, security): the identity provider suspended or removed
+more than 20 members, or created more than 100, within 10 minutes (*baseline*: ≤ 4 in the
+drills). It may be a legitimate re-organisation — or a compromised provider or SCIM token
+(threat T23). Check with the organization's identity administrator first. If it is not
+expected: `lattice scim token revoke` (every token, `lattice scim token list`), then
+`lattice sso disable` (revokes the sessions it issued), review the audit log
+(`actor scim:<token>`), and restore access with the audited commands (§9).
+
+### 10.6 Retention failing
+
+`LatticeRetentionFailing` (ticket): a retention task has not succeeded for 3 hours (it runs
+hourly). `lattice_maintenance_failures_total{task}` and the `maintenance.retention_failed`
+log event name the task and the error type; §7.5 "Retention failing".
+
+### 10.7 Storage high
+
+`LatticeStorageHigh` (ticket, 80 %) and `LatticeStorageCritical` (page, 90 %): the database
+is approaching its provisioned storage (thresholds are absolute in the rule file — set them
+for the deployment). Check retention is running (§10.6), the WAL archive (§10.4: a failing
+archive keeps WAL on disk), and growth by table; then grow the volume through the platform.
+PostgreSQL stops accepting writes when its disk is full.
+
+### 10.8 Clock skew
+
+`LatticeClockSkew` (ticket): a process's clock differs from the database's by more than 5 s
+for 10 minutes (`lattice_clock_skew_seconds`). OIDC accepts ID tokens with 60 s of leeway,
+and sessions expire on the API's clock: fix the host's time synchronisation (NTP) before
+the skew approaches a minute.
+
+### 10.9 TLS certificate expiring
+
+`LatticeTlsCertificateExpiring` (ticket): the public certificate expires within 14 days.
+Renew it through the platform's ingress or certificate manager; a lapsed certificate
+breaks the web app, SCIM and every OIDC callback at once.
+
+### 10.10 Database unavailable
+
+`LatticeDatabaseUnavailable` (page): API or worker calls to PostgreSQL keep failing for 2
+minutes. The API answers 503 with `Retry-After` and readiness fails; the worker backs off
+and resumes by itself (§2 "Database outage"). Check the platform's database status,
+connections against the budget (`lattice check-deployment`), and credentials (a rotated
+password not yet in the secret store).
+
+### 10.11 Worker stopped or backlog
+
+`LatticeWorkerStopped` (page): the worker is not scraped or its heartbeat is older than 5
+minutes; `LatticeJobBacklog` (ticket): a sync has waited more than 15 minutes;
+`LatticeJobsAbandoned` (ticket): a job ran out of attempts. §7.5: restart a hung worker
+(a killed job is retried after its lease), look at `jobs.error` / `jobs.abandoned`, and run
+the source with `lattice sync` to see the failure directly.
+
+### 10.12 Repeated sync failures
+
+`LatticeRepeatedSyncFailures` (ticket): three or more sync runs failed in 6 hours. §2 "A
+sync run is partial or failed": the Sources page or `sync_record_failures` give the codes;
+`source_unavailable:*` is the export mount, `source_config:*` the operator's `sources.yaml`.
+
+### 10.13 Security invariant violation
+
+`LatticeSecurityInvariantViolation` (page, immediately): retrieval returned evidence the
+asker may not read, or an answer cited evidence it did not carry. Treat as an incident:
+§2 `security_invariant_violated` (stop generation, capture the request and trace IDs,
+compare `policy_version`, add a regression test before re-enabling).
+
+### 10.14 Authentication failures
+
+`LatticeAuthenticationFailures` (ticket): more than 50 refused sign-ins (`token_invalid`,
+`invalid_state`), SCIM authentication failures and pre-authentication refusals in 10
+minutes (*baseline*: about 6 of each in the identity drill). A broken integration (a
+rotated client secret or SCIM token not updated — §9) or guessing; the shared
+pre-authentication limit already slows the latter.
+
+### 10.15 Rate-limit pressure
+
+`LatticeRateLimitPressure` (ticket): a limit has refused more than 30 requests a minute for
+30 minutes (`bucket` label; *baseline*: a 10-request burst in the drills). A stuck client
+or script retrying, or a limit too low for real use (§2 "A member gets 429").
+
+### 10.16 Provider failure surge
+
+`LatticeProviderFailureSurge` (ticket): more than half of the model-provider calls fail for
+10 minutes. §2 "Provider outage": answers degrade to evidence; switch to an approved
+alternative or stop generation (§7.4).

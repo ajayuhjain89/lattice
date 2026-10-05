@@ -174,13 +174,14 @@ class SessionService:
                 )
         return principal
 
-    async def revoke(self, principal: Principal) -> None:
+    async def revoke(self, principal: Principal, *, reason: str = "logout") -> None:
         async with self._db.tenant_transaction(principal.organization_id) as db_session:
-            await db_session.execute(
+            ended = await db_session.execute(
                 update(Session)
                 .where(Session.id == principal.session_id, Session.revoked_at.is_(None))
                 .values(revoked_at=self._clock())
             )
+        metrics.sessions_revoked(reason, getattr(ended, "rowcount", 0))
         log_event(
             logger, logging.INFO, "auth.session.revoked", session_id=str(principal.session_id)
         )
@@ -191,7 +192,7 @@ class SessionService:
             principal = await self.authenticate(token)
         except LatticeError:
             return
-        await self.revoke(principal)
+        await self.revoke(principal, reason="sign_in_rotation")
 
     def _reject(self, reason: str, session_id: uuid.UUID | None = None) -> NoReturn:
         metrics.AUTH_REJECTED.labels(reason=metrics.bounded(reason, metrics.AUTH_REJECTIONS)).inc()
