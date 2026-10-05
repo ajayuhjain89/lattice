@@ -15,6 +15,15 @@ until its checkpoint is approved. Decision record:
 Appendix A (the staging-provider comparison) is the only provider-specific part. The
 application must never depend on it.
 
+> **Zero paid infrastructure (D-22 amended 2026-10-05).** No cloud resource exists or is
+> created in Phase 11. Every "staging" step in this contract is verified on the local
+> reference stack (§15) only. Deferred because no deployment budget is currently
+> available, and **not** claimed done: real cloud staging deployment; managed PostgreSQL
+> privilege verification; managed backup/PITR verification; public TLS/origin validation;
+> real external OIDC callback validation; provider-specific deploy/rollback validation;
+> cloud RPO/RTO measurement. These are a release gate for Phase 15 (v1 GA)
+> ([phase-11-plan.md](phase-11-plan.md) §21.1).
+
 ---
 
 ## 1. Topology
@@ -343,7 +352,7 @@ configured secret value (expected: none, §6); record measured RPO/RTO.
 
 | | Documented capability | Provisional assumption (to be replaced by P11.5 measurements) |
 | - | --------------------- | ------------------------------------------------------------ |
-| Selected staging platform (Appendix A: DigitalOcean Managed PostgreSQL) | daily full backups, WAL kept for restore "to any point-in-time within the previous seven days"; restore creates a new cluster | RPO: minutes (WAL-based), not measured; RTO: the time to create and verify a restored cluster plus a connection-string switch — expected tens of minutes to hours for staging-sized data, not measured |
+| Candidate staging platform (Appendix A: DigitalOcean Managed PostgreSQL; **not provisioned or tested**) | daily full backups, WAL kept for restore "to any point-in-time within the previous seven days"; restore creates a new cluster | RPO: minutes (WAL-based), not measured; RTO: the time to create and verify a restored cluster plus a connection-string switch — expected tens of minutes to hours for staging-sized data, not measured |
 | Local reference stack (P11.5) | PostgreSQL's own `archive_command` + `pg_basebackup`, `recovery_target_time` | none until measured |
 
 **Logical export** (`pg_dump`) is optional: it needs a role that bypasses RLS (a dump as
@@ -424,6 +433,11 @@ PostgreSQL bootstrap still assumes a superuser (P11.2) and it has no backups (P1
 ---
 
 ## Appendix A — Staging provider selection (D-22)
+
+> **Status (2026-10-05): DigitalOcean is the selected candidate for future staging
+> validation; not provisioned or tested.** Nothing below has been created or verified;
+> every capability is the provider's documentation, not an observation. Prices were
+> retrieved 2026-10-03 and must be re-checked when a budget exists.
 
 Researched 2026-10-03 from the providers' current official documentation (sources at the
 end; where only a non-official source gave a number, it is marked). Requirements are those

@@ -41,10 +41,12 @@ small operational surface (product brief §7), with no hosting provider chosen.
 5. **Two API instances** in the production-shaped local reference stack (and at least two
    in staging and production), so multi-process behaviour is exercised on every drill.
    Caddy is the reference stack's ingress only.
-6. **A temporary real staging deployment** of the same images under the same contract is
-   required before Phase 11 closes (D-22). The provider is chosen by comparison
-   (deployment.md Appendix A) and stays outside the application: nothing in the code knows
-   where it runs.
+6. **A real staging deployment** of the same images under the same contract was required
+   before Phase 11 closed (D-22). **Amended 2026-10-05 (zero paid infrastructure):** it is
+   deferred, with the rest of the external validation (phase-11-plan §21.1), and becomes a
+   release gate for Phase 15 (v1 GA). The provider comparison (deployment.md Appendix A)
+   stays as the selected candidate for future staging validation — not provisioned or
+   tested — and stays outside the application: nothing in the code knows where it runs.
 7. **The exact schema-revision guard is retained** (D-23). Releases with a schema change use
    **controlled downtime**: stop API traffic, stop every API instance and the worker, prove
    no application connection remains, migrate, start the new build, wait for readiness,
@@ -70,8 +72,9 @@ small operational surface (product brief §7), with no hosting provider chosen.
 - The ingress must be configured correctly (routes, prefix stripping, appended
   `X-Forwarded-For`, ≥ 150 s read timeout); the contract and the smoke test make that
   checkable.
-- Staging costs a little money for a few weeks; the local stack carries the repeatable
-  verification.
+- The local stack carries the verification. Without a funded staging environment
+  (D-22 amended), managed-PostgreSQL privileges, managed PITR, public TLS and external
+  OIDC callbacks remain unproven until Phase 15's release gate.
 - Managed PostgreSQL usually has no superuser: the bootstrap gains a production variant
   (P11.2); the startup role checks stay the authority on role safety.
 
@@ -87,7 +90,7 @@ small operational surface (product brief §7), with no hosting provider chosen.
 | Kubernetes | One API deployment, one worker and one web server need no orchestrator; it would dominate the operational surface |
 | A PgBouncer pooler | The connection budget fits the staging and expected production plans (deployment.md §8); revisit in Phase 14 |
 | Choosing a production provider now | Not needed to prove the contract; the staging choice is temporary and replaceable |
-| Local stack only, no real staging | Cannot prove managed-PostgreSQL privileges, managed PITR, real TLS on a public origin or real OIDC callbacks (D-22) |
+| Local stack only, no real staging | Cannot prove managed-PostgreSQL privileges, managed PITR, real TLS on a public origin or real OIDC callbacks (D-22). **Adopted for Phase 11 by necessity on 2026-10-05** (no deployment budget); those proofs move to the Phase 15 release gate rather than being dropped |
 
 ## Implementation notes (P11.1)
 

@@ -1,10 +1,11 @@
 # Phase 11 — Production Deployment, Identity Operations & Reliability: plan
 
 Status: **Approved (2026-10-03) with decisions D-22 to D-27 and the product owner's
-amendments (§21). P11.0 approved (4990064). P11.1 (images and runtime) delivered;
-awaiting review (§25.2). P11.2–P11.7 not started.** Each checkpoint (§25) stops for review; P11.0
-starts only after the product owner approves this revision. Branch
-`phase/11-production-operations` from `main` 27da421.
+amendments (§21). P11.0 approved (4990064). P11.1 approved (b07ac8d). D-22 amended
+2026-10-05 (§21.1): zero paid infrastructure — Phase 11 closes on full local
+production-shaped verification; real external staging validation is deferred and gates
+Phase 15 (v1 GA). P11.2–P11.7 authorized to run in sequence without a review stop per
+checkpoint.** Branch `phase/11-production-operations` from `main` 27da421.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 11. Phase 12
 owns customer-facing onboarding (organization, SSO, SCIM, sources/integrations,
@@ -209,14 +210,15 @@ instances, revocation) is exercised. Sized for the reference machine (M1 8 GB, D
 3 GB): one PostgreSQL at a time, the development database stopped while it runs, no test
 suite in parallel.
 
-### 6.5 Staging deployment (D-22)
+### 6.5 Staging deployment (D-22, amended 2026-10-05)
 
-One real cloud staging deployment of the same images under the same contract, selected in
-P11.0 (§21, D-22) and **performed before P11.7 closes**: first deployed at the end of
-P11.2, used for the restore drill in P11.5, and for the final verification in P11.7. It
-need not stay online afterwards. The product owner creates the account and any payment
-method; credentials reach the deployment through the platform's secret store, never
-through chat or the repository.
+**Deferred.** The original plan was one real cloud staging deployment of the same images
+under the same contract before P11.7 closed. On 2026-10-05 the product owner stated that
+no budget for paid infrastructure exists (§21.1): no cloud resource is created in Phase 11,
+and every step below that names staging runs on the local reference stack only. The
+external validation list in §21.1 stays open and is a **release gate for Phase 15**. The
+DigitalOcean option of deployment.md Appendix A is the *selected candidate for future
+staging validation; not provisioned or tested*.
 
 ## 7. CI/CD sequence (D-27)
 
@@ -226,7 +228,7 @@ No second CI system, no new workflow file, no duplicate test runs.
 | ------- | ---- |
 | Every push (as today) | backend, web, dependency-audit — unchanged, plus three cheap checks inside existing jobs: migration headers (§8), privilege snapshot compared with the committed one (§15.1), alert-rule tests (`promtool test rules`, pinned image) |
 | Push to `main`, tag `v*`, manual dispatch | + `images`: `needs: [backend, web, dependency-audit]` in the **same** run (the tests that gate it are the ones already running; nothing is re-run); builds both images (buildx, GHA cache), starts the reference stack headless and runs `lattice smoke` against it (container-level checks the test jobs cannot do), pushes to GHCR (`packages: write` on this job only), writes digests and tags to the job summary |
-| Deploy | Scripted operator procedure (§6.3), run against staging from P11.2 on. `main` images are staging candidates; `v*` images are release artifacts. Automating deploy as a dispatch job is left for when a production target exists |
+| Deploy | Scripted operator procedure (§6.3), rehearsed on the local reference stack from P11.2 on (staging deferred, §21.1). `main` images are staging candidates; `v*` images are release artifacts. Automating deploy as a dispatch job is left for when a production target exists |
 
 Branch pushes build no images. Rollback:
 - Release without a migration: redeploy the previous digest (rolling, zero downtime).
@@ -448,7 +450,7 @@ connection budget; schema revision. Plus black-box `lattice smoke` against the p
 health, headers, 401s, CSP, metrics unreachable publicly, SCIM 401 on a bad token, OIDC
 start redirect.
 
-### 15.2 Authorization suite (local stack every checkpoint; staging in P11.7)
+### 15.2 Authorization suite (local stack; staging deferred, §21.1)
 Synthetic organizations (`data_origin: synthetic`) seeded from the manifests and linked to
 the verification IdP (a small OIDC provider built from the existing in-process test IdP;
 verification profile only, never in production images). Personas sign in through real
@@ -461,7 +463,7 @@ D-8; hidden groups/accounts (D-18); suspended/deactivated users with a live sess
 request 401 everywhere); and the `lattice eval retrieval` / `eval answer` security gates run
 inside the stack as an operator job (every security count 0).
 
-### 15.3 Identity verification (P11.3; repeated on staging in P11.7)
+### 15.3 Identity verification (P11.3; local stack; staging deferred, §21.1)
 
 | Case | Expected |
 | ---- | -------- |
@@ -527,7 +529,7 @@ routing is the platform's. Every alert names a runbook section (new runbook §10
 
 N/M/X are set from drill baselines in P11.6 and recorded.
 
-## 18. Failure drills (local stack; the starred ones repeated on staging in P11.7)
+## 18. Failure drills (local stack; the starred ones were to be repeated on staging — deferred, §21.1)
 
 | Drill | Expected |
 | ----- | -------- |
@@ -596,7 +598,8 @@ Approved shape (§4). Changes relative to the plan proposed on 2026-10-03, all i
    `sessions.oidc_connection_id`.
 3. **Stop-the-world order for migrating releases** with a migration pre-flight that
    refuses while application connections are open (D-23).
-4. **A real cloud staging deployment** (D-22), provider chosen in P11.0 by comparison.
+4. ~~A real cloud staging deployment~~ (D-22): **deferred** by the 2026-10-05 amendment
+   (§21.1); the provider comparison stays as the candidate for future validation.
 5. **`images` job depends on the existing test jobs in the same run** and publishes by
    digest (D-27).
 
@@ -617,6 +620,34 @@ observability platform, service decomposition.
 | D-26 | **Organization purge deferred to Phase 12**; Phase 11 adds audited `org suspend/reactivate` and replaces unaudited owner SQL in incident procedures with audited commands | §9.3 |
 | D-27 | **One gated image path:** `main` and `v*` tags (and manual dispatch) publish to GHCR from the same CI run after the existing jobs pass; digests immutable; revision/version visible at runtime internally; no images on development pushes; no duplicate test runs | §7 |
 
+### 21.1 D-22 amendment (product owner, 2026-10-05): zero paid infrastructure
+
+No budget is currently available for paid deployment or cloud infrastructure. Phase 11
+therefore creates and requires **no** paid resource: no DigitalOcean (or other) account
+resources, paid database, VM, domain, monitoring or backup service.
+
+- **Phase 11 closes on full local production-shaped verification**: the reference stack
+  (Caddy, web, two API instances, worker, PostgreSQL, the production images, fake AI
+  providers, synthetic Halden/Veridian data only) carries every deployment, identity,
+  limit, retention, backup/restore, alert and drill proof.
+- **Deferred external validation** — reason: *Deferred because no deployment budget is
+  currently available.* None of these is claimed as done:
+  1. real cloud staging deployment;
+  2. managed PostgreSQL privilege verification (the bootstrap against a provider's
+     administrative role);
+  3. managed backup/PITR verification;
+  4. public TLS/origin validation;
+  5. real external OIDC callback validation;
+  6. provider-specific deploy/rollback validation;
+  7. cloud RPO/RTO measurement.
+- **Release gate:** Lattice must complete real external staging validation before Phase 15
+  can declare v1 GA / production-ready. Until then Lattice is not described as
+  production-proven.
+- DigitalOcean (deployment.md Appendix A) remains documented as the **selected candidate
+  for future staging validation; not provisioned or tested**.
+- Everything in this plan that says "on staging" is read as "deferred (§21.1)" unless a
+  later amendment funds it.
+
 ## 22. Test strategy
 
 - Unit/integration (pytest, real PostgreSQL) for every new behaviour: `ask_slots` and
@@ -629,8 +660,8 @@ observability platform, service decomposition.
 - Image tests: contents (no `.env`, fixtures, manifests), non-root, read-only FS, startup
   refusal on bad configuration, every command's `--help`.
 - Alert rules: `promtool test rules` for every alert.
-- Deployed suites: §15 on the local stack each checkpoint that touches them, and on staging
-  in P11.7. Drills: §18.
+- Deployed suites: §15 on the local stack each checkpoint that touches them (staging
+  deferred, §21.1). Drills: §18.
 - All existing suites stay green; mutation check by hand at closure (not committed).
 
 ## 23. Documentation and runbooks
@@ -669,10 +700,10 @@ evidence for a checkpoint, or the staging deployment needing published images fr
 | ---- | ----- | ------------- |
 | **P11.0** Decisions, contract and staging selection | §25.1 | §25.1 |
 | **P11.1** Packaging and runtime | Dockerfiles, `.dockerignore`; web standalone, `0.0.0.0`, dev `proxyTimeout` (F1, F11); ingress routing and trusted-hop configuration (F2, F3); uvicorn production command (proxy headers, graceful timeout); worker heartbeat (F9); `lattice_build_info` and build arguments (F14); metrics address required in production; `deploy/` reference stack with api ×2 and Caddy; `lattice smoke`; image tests; GHSA re-check | `make prod-up prod-smoke` green; an Ask lasting > 30 s succeeds through the ingress; client address correct and unspoofable through the stack; all existing suites green |
-| **P11.2** Deployment, migrations, CI images, first staging deploy | `migrate` job; migration pre-flight (open application connections) and `lock_timeout`; migration headers + test; seeded-data migration check; production bootstrap variant verified against the selected platform (F10); privilege snapshot + `check-deployment`; `images` job (D-27); scripted deploy and rollback (§6.3, §7); **first staging deployment** | Migrating and non-migrating deploys and a no-migration rollback rehearsed on the local stack, unavailable interval measured; staging serves the release by digest and passes `smoke` and `check-deployment` |
+| **P11.2** Deployment, migrations, CI images (staging deploy deferred, §21.1) | `migrate` job; migration pre-flight (open application connections) and `lock_timeout`; migration headers + test; seeded-data migration check; production bootstrap variant verified against the selected platform (F10); privilege snapshot + `check-deployment`; `images` job (D-27); scripted deploy and rollback (§6.3, §7); **first staging deployment** | Migrating and non-migrating deploys and a no-migration rollback rehearsed on the local stack, unavailable interval measured; staging serves the release by digest and passes `smoke` and `check-deployment` |
 | **P11.3** Identity and session operations | `sessions.oidc_connection_id`; `sso disable` revokes (D-25); `sso enable/update`, guarded `sso add`; `member suspend/reinstate`, `org suspend/reactivate`, `session revoke` (D-26, F12); clock-skew gauge; verification IdP; rotation runbooks | Every §15.3 case passes on the local stack across both API instances |
 | **P11.4** Shared limits, jobs, retention | `ask_slots`; shared pre-auth limit (§10.2) with `LATTICE_CLIENT_KEY_SECRET`; retention classes and safeguards (§12); job/maintenance metrics | Limit and retention tests green; §10.1 table true and documented; no process-local security limit left; worker drills pass |
-| **P11.5** Backups, PITR, restore | Backup model; WAL archiving in the local stack; `verify-restore`; restores per §11.3 on the local stack and staging; secret-free backup scan; measured RPO/RTO | All six items of §11.3 met with recorded evidence; no RPO/RTO claimed beyond the platform's capability |
+| **P11.5** Backups, PITR, restore | Backup model; WAL archiving in the local stack; `verify-restore`; restores per §11.3 on the local stack (staging deferred, §21.1); secret-free backup scan; measured local backup/restore durations | All six items of §11.3 met with recorded evidence; no RPO/RTO claimed beyond the platform's capability |
 | **P11.6** Observability, alerts, runbooks | New metrics (§16, F15); `alerts.yml` + promtool tests; runbook §10 per alert; thresholds from baselines | Every alert fires in a rule test and maps to a runbook action |
 | **P11.7** Drills and closure | §15.2 suite and §18 drills on the local stack; final staging deployment with §15.2–§15.3 and the starred drills; clean-clone verification; docs/README; mutation check; GHSA re-check; flaky-test record; push, CI, closure report; staging may then be torn down | §26 all met |
 
@@ -753,14 +784,17 @@ infrastructure change**, and no cloud resource created.
 7. Retention deletes exactly the documented data per class, never audit events or
    tombstones; the database refuses deletions younger than each floor; retention is safe
    under retry and observable.
-8. P11.5 closure (§11.3) met on the local stack and staging, with measured RPO/RTO no
-   stronger than the platform supports.
+8. P11.5 closure (§11.3) met on the local stack, with local backup/restore durations
+   measured and never presented as cloud RPO/RTO (managed PITR and cloud RPO/RTO deferred,
+   §21.1).
 9. Every alert has a passing rule test and a runbook action; the security-invariant alert
    fires on a synthetic violation.
-10. §15.2 and §15.3 pass on the local stack and on staging; `check-deployment` reports no
-    drift; eval security gates report 0.
-11. Every §18 drill is run and recorded in runbook §8 (starred ones also on staging).
-12. One real staging deployment was performed and verified before closure.
+10. §15.2 and §15.3 pass on the local stack; `check-deployment` reports no drift; eval
+    security gates report 0.
+11. Every §18 drill is run on the local stack and recorded in runbook §8.
+12. ~~One real staging deployment was performed and verified before closure.~~ Replaced
+    (2026-10-05, §21.1): the deferred external-validation list is recorded explicitly and
+    carried as a Phase 15 release gate.
 13. All existing suites stay green (backend, web unit, Playwright desktop/mobile/production,
     dependency audit with only GHSA-vfj7-8cjw-p6xm excepted); flaky-test occurrences
     recorded; no infrastructure beyond §20.
