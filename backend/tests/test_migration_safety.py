@@ -154,9 +154,10 @@ async def test_migrate_refuses_while_an_application_session_is_open(
 
 
 async def test_migrate_applies_pending_revisions_and_verifies(quiet_database: None) -> None:
-    previous = migration_headers()[SCHEMA_REVISION]
-    assert previous.reversible is False  # 0013 cannot be downgraded safely in production
-    await asyncio.to_thread(command.downgrade, alembic_config(), "0012")
+    head = migration_headers()[SCHEMA_REVISION]
+    assert head.reversible is False  # the head cannot be downgraded safely in production
+    below = f"{int(SCHEMA_REVISION) - 1:04d}"
+    await asyncio.to_thread(command.downgrade, alembic_config(), below)
     try:
         status, _, _ = await database_status(OWNER_URL)
         assert (status.state, status.pending) == ("pending", (SCHEMA_REVISION,))
@@ -164,7 +165,11 @@ async def test_migrate_applies_pending_revisions_and_verifies(quiet_database: No
         outcome = await migrate(OWNER_URL, lock_wait_seconds=1, report=lines.append)
     finally:
         await asyncio.to_thread(command.upgrade, alembic_config(), "head")
-    assert (outcome.before, outcome.after, outcome.applied) == ("0012", "0013", ("0013",))
+    assert (outcome.before, outcome.after, outcome.applied) == (
+        below,
+        SCHEMA_REVISION,
+        (SCHEMA_REVISION,),
+    )
     assert lines[0] == "lock: acquired"
     assert "fence: lifted" in lines
     assert any(line.startswith("verify:") for line in lines)

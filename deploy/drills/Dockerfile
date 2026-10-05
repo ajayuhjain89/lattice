@@ -5,10 +5,10 @@
 #
 #   relabel              the same code under another revision (a release without a
 #                        schema change: rolling deploy, rollback)
-#   schema               adds revision 0014 (no DDL, two seconds, declared reversible)
-#                        and expects it: a migrating release (stop-the-world)
+#   schema               adds the next revision (head + 1: no DDL, two seconds, declared
+#                        reversible) and expects it: a migrating release (stop-the-world)
 #   schema-irreversible  the same revision declared irreversible: rollback is refused
-#   failing-migration    revision 0014 fails inside its transaction
+#   failing-migration    that revision fails inside its transaction
 #   wrong-port           the API listens on 8001: configuration valid, readiness never
 #   public-docs          production serves /docs: ready, but the smoke check fails
 #   bad-config           an invalid setting baked in: check-config refuses the release
@@ -25,7 +25,7 @@ LABEL org.opencontainers.image.revision="${LATTICE_BUILD_REVISION}" \
 ENV LATTICE_BUILD_REVISION=${LATTICE_BUILD_REVISION} \
     LATTICE_DRILL_API_PORT=8000
 USER root
-COPY 0014_drill.py /tmp/0014_drill.py
+COPY drill_revision.py /tmp/drill_revision.py
 RUN set -eu; \
     site="$(python -c 'import lattice, os; print(os.path.dirname(lattice.__file__))')"; \
     case "${DRILL}" in \
@@ -33,10 +33,13 @@ RUN set -eu; \
       schema|schema-irreversible|failing-migration) \
         reversible="yes (the downgrade changes nothing)"; \
         [ "${DRILL}" = schema ] || reversible="no (declared irreversible for the drill)"; \
-        sed "s/@REVERSIBLE@/${reversible}/" /tmp/0014_drill.py > alembic/versions/0014_drill.py; \
-        [ "${DRILL}" != failing-migration ] || sed -i 's/^FAIL = False/FAIL = True/' alembic/versions/0014_drill.py; \
-        sed -i 's/^SCHEMA_REVISION: Final = "0013"$/SCHEMA_REVISION: Final = "0014"/' "${site}/db/schema.py"; \
-        grep -q 'SCHEMA_REVISION: Final = "0014"' "${site}/db/schema.py" ;; \
+        head="$(python -c 'from lattice.db.schema import SCHEMA_REVISION as r; print(r)')"; \
+        next="$(printf '%04d' "$((10#${head} + 1))")"; \
+        sed -e "s/@REVERSIBLE@/${reversible}/" -e "s/@REVISION@/${next}/" -e "s/@DOWN@/${head}/" \
+          /tmp/drill_revision.py > "alembic/versions/${next}_drill.py"; \
+        [ "${DRILL}" != failing-migration ] || sed -i 's/^FAIL = False/FAIL = True/' "alembic/versions/${next}_drill.py"; \
+        sed -i "s/^SCHEMA_REVISION: Final = \"${head}\"\$/SCHEMA_REVISION: Final = \"${next}\"/" "${site}/db/schema.py"; \
+        grep -q "SCHEMA_REVISION: Final = \"${next}\"" "${site}/db/schema.py" ;; \
       public-docs) \
         sed -i -e 's/docs_url=None if production else "\/docs"/docs_url="\/docs"/' \
           -e 's/openapi_url=None if production else "\/openapi.json"/openapi_url="\/openapi.json"/' \
@@ -45,7 +48,7 @@ RUN set -eu; \
       *) echo "unknown drill ${DRILL}"; exit 1 ;; \
     esac; \
     find "${site}" -name '*.pyc' -delete; python -m compileall -q "${site}" alembic; \
-    rm /tmp/0014_drill.py
+    rm /tmp/drill_revision.py
 USER 10001:10001
 CMD ["sh", "-c", "exec uvicorn lattice.api.app:create_app --factory --host 0.0.0.0 --port \"${LATTICE_DRILL_API_PORT}\" --no-access-log --no-proxy-headers --timeout-graceful-shutdown 150"]
 

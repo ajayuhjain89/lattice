@@ -140,6 +140,28 @@ removal revoke sessions in the same transaction and take effect on the next requ
 everywhere (sessions, Ask, retrieval, traces, Access views). Identical requests are
 no-ops; `If-Match` supported; every change audited (actor `scim:<token>`).
 
+**Connection lifecycle and incident controls (Phase 11, P11.3; D-25, D-26).** A session
+records the OIDC connection whose sign-in created it (`sessions.oidc_connection_id`, NULL
+for development sign-in). `lattice sso disable` revokes every unrevoked session of the
+connection in the same transaction as the status change. The race with a sign-in in
+flight is closed by a per-connection advisory lock: session creation for an OIDC sign-in
+holds it *shared* while it re-reads the connection's status (`lattice_app` may read only
+`id`, `organization_id` and `status` of its own organization's connections, migration
+0014) and inserts the session; the disable (and an identity-shape `sso update`) holds it
+*exclusively*, so a sign-in either commits first and is revoked, or waits and sees
+`disabled`. `sso enable` re-activates the same connection (same directory identities);
+`sso update` changes the client ID or secret reference in place without touching
+sessions, and the issuer or identifying claim only with the operator's explicit
+`--subjects-unchanged` assertion (then revoking the connection's sessions). `sso add`
+refuses to start a new identity namespace while a disabled connection still has
+provisioned members, unless told so. Operator incident commands replace owner-role SQL:
+`lattice member suspend|reinstate`, `lattice session revoke`, `lattice org
+suspend|reactivate` — each one transaction with one audit event (`operator:<user>`, a
+reason, no secret or reference). A suspended organization's sessions are revoked, its
+sign-in and SCIM fail (the pre-auth lookups require an active organization), and the
+worker runs none of its syncs. Verified in-process across two API applications and on
+the reference stack across both API instances (runbook §8, P11.3).
+
 CSRF (implemented): every non-GET/HEAD/OPTIONS request must send
 `X-Lattice-Request: 1`, and requests marked `Sec-Fetch-Site: cross-site` are rejected
 even with the header. It applies to all routes, including sign-in (login CSRF) and

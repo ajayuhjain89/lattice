@@ -36,6 +36,19 @@ logger = logging.getLogger(__name__)
 
 _RESOLVE_SESSION_SQL = text("SELECT * FROM lattice_resolve_session(:token_hash)")
 
+# One advisory lock per OIDC connection (D-25): an OIDC sign-in holds it shared while it
+# checks the connection and creates the session; `lattice sso disable` (and an
+# identity-shape `sso update`) hold it exclusively while they change the connection and
+# revoke its sessions. So no sign-in can create a session for a connection that is being
+# disabled: it either commits first (and is revoked) or waits and sees `disabled`.
+CONNECTION_LOCK_CLASS = int.from_bytes(b"LATT", "big")
+_CONNECTION_LOCK_KEY = f"{CONNECTION_LOCK_CLASS}, hashtext(CAST(:c AS uuid)::text)"
+CONNECTION_LOCK_SHARED_SQL = text(f"SELECT pg_advisory_xact_lock_shared({_CONNECTION_LOCK_KEY})")
+CONNECTION_LOCK_SQL = text(f"SELECT pg_advisory_xact_lock({_CONNECTION_LOCK_KEY})")
+_CONNECTION_STATUS_SQL = text(
+    "SELECT status FROM oidc_connections WHERE organization_id = :o AND id = :c"
+)
+
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
@@ -75,12 +88,27 @@ class SessionService:
         self._clock = clock
 
     async def create(
-        self, *, user_id: uuid.UUID, organization_id: uuid.UUID
+        self,
+        *,
+        user_id: uuid.UUID,
+        organization_id: uuid.UUID,
+        oidc_connection_id: uuid.UUID | None = None,
     ) -> tuple[str, Principal]:
-        """Create a new session. Returns the raw token (for the cookie only)."""
+        """Create a new session. Returns the raw token (for the cookie only).
+        ``oidc_connection_id``: the connection whose sign-in this is (recorded, so that
+        disabling the connection revokes the session); it must still be active."""
         token = new_session_token()
         now = self._clock()
         async with self._db.tenant_transaction(organization_id) as db_session:
+            if oidc_connection_id is not None:
+                await db_session.execute(CONNECTION_LOCK_SHARED_SQL, {"c": oidc_connection_id})
+                status = (
+                    await db_session.execute(
+                        _CONNECTION_STATUS_SQL, {"o": organization_id, "c": oidc_connection_id}
+                    )
+                ).scalar_one_or_none()
+                if status != "active":
+                    raise LatticeError(ErrorCode.AUTHENTICATION_FAILED)
             row = Session(
                 token_hash=hash_session_token(token),
                 user_id=user_id,
@@ -88,6 +116,7 @@ class SessionService:
                 created_at=now,
                 last_seen_at=now,
                 expires_at=now + self._policy.absolute_timeout,
+                oidc_connection_id=oidc_connection_id,
             )
             db_session.add(row)
             await db_session.flush()

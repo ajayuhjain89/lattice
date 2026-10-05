@@ -161,6 +161,11 @@ const ACTIONS: Record<string, string> = {
   "access.identity_changed": "Profile updated",
   "sso.connection_created": "Sign-in connection added",
   "sso.connection_disabled": "Sign-in connection disabled",
+  "sso.connection_enabled": "Sign-in connection re-enabled",
+  "sso.connection_updated": "Sign-in connection updated",
+  "session.revoked": "Sessions ended",
+  "organization.suspended": "Organization suspended",
+  "organization.reactivated": "Organization reactivated",
   "scim.token_created": "Provisioning token created",
   "scim.token_revoked": "Provisioning token revoked",
 };

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { MemberAccess } from "@/api/types";
 import { AUDIT, MEMBER_MAYA } from "@/test/fixtures";
 
-import { accessSummary, actorLabel, auditPhrase, decidingReasons, groupOrigin, previewSentence, type Part } from "./copy";
+import { accessSummary, actionLabel, actorLabel, auditPhrase, decidingReasons, groupOrigin, previewSentence, type Part } from "./copy";
 
 const text = (sentences: Part[][]) => sentences.map((s) => s.map((p) => (typeof p === "string" ? p : p.strong)).join("")).join(" ");
 
@@ -55,6 +55,14 @@ describe("change copy", () => {
     expect(actorLabel(AUDIT.items[1]!)).toBe("admin-grants.yaml");
     expect(actorLabel(AUDIT.items[2]!)).toBe("Your identity provider (SCIM)");
     expect(actorLabel({ ...AUDIT.items[0]!, actor: { kind: "member", name: null, operator: null } })).toBe("A former member");
+  });
+
+  it("names the operator's identity and incident actions", () => {
+    expect(actionLabel("sso.connection_enabled")).toBe("Sign-in connection re-enabled");
+    expect(actionLabel("sso.connection_updated")).toBe("Sign-in connection updated");
+    expect(actionLabel("session.revoked")).toBe("Sessions ended");
+    expect(actionLabel("organization.suspended")).toBe("Organization suspended");
+    expect(actionLabel("organization.reactivated")).toBe("Organization reactivated");
   });
 
   it("says where a visible group comes from", () => {

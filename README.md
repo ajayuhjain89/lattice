@@ -362,8 +362,12 @@ rollback by image ID), and `lattice check-deployment` compares a database with w
 build requires, including a committed privilege snapshot. CI publishes images to GHCR
 only from `main`, `v*` tags and manual dispatch. No cloud staging exists: real external
 validation is deferred for lack of a deployment budget and gates v1 GA
-([plan](docs/phase-11-plan.md) §21.1). Identity operations (P11.3), shared limits and
-retention (P11.4), backups (P11.5) and alerts (P11.6) follow.
+([plan](docs/phase-11-plan.md) §21.1). P11.3 added identity operations: SSO disable
+revokes the connection's sessions, the connection can be re-enabled and updated in place,
+and suspension, reinstatement, session revocation and an organization stop are audited
+operator commands (runbook §2, §9), verified across both API instances with a
+verification identity provider (`make prod-up IDP=1 && make prod-identity`). Shared limits
+and retention (P11.4), backups (P11.5) and alerts (P11.6) follow.
 
 ## Repository layout
 
@@ -377,7 +381,7 @@ evals/golden/       golden question set (evals/reports/: evaluation output, not 
 docs/               product, architecture, security and design documentation
 compose.yaml        local Postgres only (development)
 compose.production.yaml  production-shaped local reference stack (Phase 11; make prod-*)
-deploy/             reference ingress (Caddy) and the stack's verification overlay
+deploy/             reference ingress (Caddy), deploy.sh, drills, verification overlays and identity provider
 Makefile            developer commands (thin wrappers; read before running)
 ```
 

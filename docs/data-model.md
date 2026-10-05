@@ -122,7 +122,7 @@ Tenant tables, forced RLS (migration 0013; ADR-015).
 
 | Table | Fields | Notes |
 | ----- | ------ | ----- |
-| `oidc_connections` | `id, organization_id, login_key, issuer, client_id, client_secret_ref, subject_claim, status (active/disabled)`, timestamps | One active per organization. `login_key` opaque (22–64 URL-safe characters, globally unique): the sign-in URL names it, never the organization. `client_secret_ref` only `env:LATTICE_OIDC_SECRET_<NAME>`. Operator-written; the API reads it only through `lattice_oidc_connection(login_key)` (owned by `lattice_auth`) |
+| `oidc_connections` | `id, organization_id, login_key, issuer, client_id, client_secret_ref, subject_claim, status (active/disabled)`, timestamps | One active per organization. `login_key` opaque (22–64 URL-safe characters, globally unique): the sign-in URL names it, never the organization. `client_secret_ref` only `env:LATTICE_OIDC_SECRET_<NAME>`. Operator-written (`lattice sso add/disable/enable/update`, audited); the API reads the configuration only through `lattice_oidc_connection(login_key)` (owned by `lattice_auth`), and since 0014 may read `id, organization_id, status` of its own organization's connections (the session-creation check, D-25) |
 | `oidc_login_attempts` | `id, organization_id, connection_id, state_hash, binding_hash, nonce, code_verifier, return_to, created_at, expires_at, consumed_at` | One authorization-code flow: SHA-256 of `state` and of the browser-binding cookie, ten minutes, consumed once (`consumed_at`). The API inserts, consumes and deletes finished ones (restrictive policy: only consumed or expired) |
 | `directory_identities` | `id, organization_id, connection_id, membership_id, external_id, user_name, given_name, family_name, version`, timestamps | The provider's person: UQ `(connection_id, external_id)` (the OIDC claim value), UQ `(organization_id, membership_id)`, UQ `(connection_id, lower(user_name))`. Written by SCIM as the API role (no DELETE; `external_id` and `membership_id` not updatable). Its `id` is the SCIM resource ID. A membership with a directory identity is *provisioned*: its lifecycle belongs to the provider |
 | `scim_tokens` | `id, organization_id, connection_id, token_hash, created_at, revoked_at` | SHA-256 of `lsc_…` tokens; operator-written; resolved through `lattice_resolve_scim_token(hash)` only while the token, its connection and its organization are active |
@@ -145,12 +145,15 @@ Server-side, opaque (ADR-005). Stored so they can be revoked immediately.
 | user_id         | uuid FK     |       |                                                 |
 | organization_id | uuid FK     | ISO   | The session's active org. Switching org = new session |
 | created_at, last_seen_at, expires_at, revoked_at | timestamptz | | Idle timeout 12 h, absolute 7 d (configurable) |
+| oidc_connection_id | uuid FK, nullable | | The OIDC connection whose sign-in created the session (0014, D-25); NULL for development sign-in. `lattice sso disable` revokes the connection's sessions (partial index on live ones) |
 
 Constraints (implemented): composite FK `(organization_id, user_id)` →
 `memberships(organization_id, user_id)` — a session can exist only for a real
 membership in its organization; `token_hash` must be exactly 32 bytes;
-`expires_at > created_at`. The runtime role may insert sessions and update only
-`last_seen_at` and `revoked_at`.
+`expires_at > created_at`; composite FK `(organization_id, oidc_connection_id)` →
+`oidc_connections(organization_id, id)` (a session cannot name another organization's
+connection). The runtime role may insert sessions and update only `last_seen_at` and
+`revoked_at`.
 
 ### memberships
 

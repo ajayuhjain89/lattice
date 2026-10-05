@@ -5,7 +5,7 @@ amendments (§21). P11.0 approved (4990064). P11.1 approved (b07ac8d). D-22 amen
 2026-10-05 (§21.1): zero paid infrastructure — Phase 11 closes on full local
 production-shaped verification; real external staging validation is deferred and gates
 Phase 15 (v1 GA). P11.2–P11.7 authorized to run in sequence without a review stop per
-checkpoint. P11.2 delivered (§25.3).** Branch `phase/11-production-operations` from `main` 27da421.
+checkpoint. P11.2 delivered as ae03445 + test fix fd0d1bc (§25.3). P11.3 delivered (§25.4).** Branch `phase/11-production-operations` from `main` 27da421.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 11. Phase 12
 owns customer-facing onboarding (organization, SSO, SCIM, sources/integrations,
@@ -778,6 +778,32 @@ infrastructure change**, and no cloud resource created.
 | Additions found necessary | `lattice check-config`, `lattice version`, `lattice smoke --instance-metrics/--expect-revision`; production api/worker refuse the owner credential in their environment; ingress maintenance switch; **two web instances** (a single one cannot be replaced without a gap — measured); `lattice seed --require-synthetic` and `make prod-seed` (synthetic-only bootstrap); `deploy/drills/` |
 | First staging deploy | **Deferred** (D-22 amended, §21.1) |
 | Evidence | runbook §8 "P11.2 drills": every refusal and flow above, 0 failed requests over rolling releases and rollbacks, 19 s unavailable for a migrating release |
+
+Commits: ae03445; fd0d1bc fixed three tests found by the full suite (the authz boundary
+test forbids `lattice.authz.models` in `db/models_registry.py` — now the public package —
+and two production-mode app tests now run without the owner credential that `make test`
+loads from `.env`, through a shared `production_runtime_environ` fixture; the startup
+refusal is unchanged).
+
+### 25.4 P11.3 — as built (2026-10-05)
+
+| Planned (§9, §15.3, §25 row P11.3) | As built |
+| ----------------------------------- | -------- |
+| `sessions.oidc_connection_id` | migration 0014 (`Reversible: no`): nullable column, composite FK to `oidc_connections (organization_id, id)`, partial index on live sessions; `lattice_app` gains `SELECT (id, organization_id, status)` on `oidc_connections` (tenant RLS as before) — the privilege snapshot records it |
+| `sso disable` revokes (D-25) | in the transaction of the status change, under the connection's advisory lock held **exclusively**; OIDC session creation holds it **shared**, re-reads the status and refuses a non-active connection (`LatticeError` → `sso_failed`/`inactive`), so a sign-in racing a disable either commits first and is revoked or creates nothing. The count is in the event and printed |
+| `sso enable/update`, guarded `sso add` | `sso list`; `sso enable [--connection-id]` (the same connection, refused while another is active); `sso update` (`--client-id`, `--client-secret-ref` / `--no-client-secret`, `--issuer` / `--subject-claim` only with `--subjects-unchanged`, which revokes the connection's sessions); `sso add` refused while a disabled connection has provisioned, non-removed members unless `--new-identity-namespace` |
+| `member suspend/reinstate`, `org suspend/reactivate`, `session revoke` (D-26, F12) | `lattice.identity.admin` + `cli_identity`; one transaction, one audit event each (`access.member_changed` with before/after snapshots, `session.revoked`, `organization.suspended`/`reactivated`); suspension and organization suspension revoke sessions; reinstatement revives none; the worker fails a suspended organization's jobs with `organization_suspended`. Runbook §2 and §9 no longer contain owner-role SQL for any incident procedure |
+| Clock skew | `lattice_clock_skew_seconds` (app clock − database `clock_timestamp()`, round-trip midpoint): API readiness and every worker poll; never a readiness condition |
+| Verification IdP | `deploy/verification/idp.py` (stdlib HTTPS server in the backend image, mounted, never built in): discovery, JWKS with a per-start key ID, PKCE S256, client_secret_basic with several secrets per client (rotation overlap), RS256 ID tokens, a bearer-protected `PUT /admin/state` for clients and `iat`/`exp` offsets. `deploy/compose.idp.yaml` (`IDP=1`): its own throwaway CA (`make-certs.sh`), `SSL_CERT_FILE` in the API instances, the `env:` secret references, per-instance metrics on 127.0.0.1 |
+| Identity matrix (§15.3) | in-process `tests/identity/test_two_instances.py` (two applications, one database, one cookie jar: 21 cases incl. the disable race and the expiry edges) and `tests/identity/test_lifecycle.py` (11: audit events, refusals, every command through `lattice …`); on the stack `make prod-identity` — **42/42** across api1/api2 in production mode, `check-deployment` 7/7, smoke 13/13 (runbook §8) |
+| Rotation runbooks | runbook §9: client secret (same reference with the provider's two-secret overlap and a rolling restart; new reference), client ID, issuer/claim, SCIM token, "all administrators lost", "identity provider lost" |
+| Web | audit-log labels for the new actions (`sso.connection_enabled/updated`, `session.revoked`, `organization.suspended/reactivated`) |
+| Not done here | the stack-level race (in-process only: it needs a held transaction); the issuer rename on the stack (the verification provider's issuer is fixed; in-process covers it); real external OIDC callback validation stays deferred (§21.1) |
+
+Found and fixed on the way: `deploy/drills/` hard-coded 0013/0014 and now numbers its
+drill revision one above the base image's head; the previous session's relaxation of
+`_check_issuer` (http for any host in development/test) was removed — the stack's API
+refuses non-https providers anyway, so the verification provider uses TLS.
 
 ## 26. Phase 11 acceptance criteria
 

@@ -1,6 +1,6 @@
 # Lattice — Deployment Contract
 
-Status: **P11.2 (2026-10-05).** This is the provider-independent production contract that
+Status: **P11.3 (2026-10-05).** This is the provider-independent production contract that
 Phase 11 builds towards. **Built in P11.1:** the two images, the ingress routing and the
 single trusted hop, the API's trusted-proxy setting, worker liveness, graceful shutdown,
 build identification, `lattice smoke` and the local reference stack (§15). **Built in
@@ -8,8 +8,10 @@ P11.2:** the managed-PostgreSQL bootstrap (§7), `lattice migrate` with its lock
 pre-flight, migration headers, `lattice check-deployment` with the privilege snapshot
 (§8), `lattice check-config` and `lattice version`, the scripted deployment and rollback
 (§9, `deploy/deploy.sh`), the ingress maintenance switch, two web instances, and the GHCR
-`images` job (§3). **Not built yet:** identity operations (P11.3), shared limits and
-retention (P11.4), backups (P11.5), alerts (P11.6). Every section says
+`images` job (§3). **Built in P11.3:** sessions recording their SSO connection, the
+connection lifecycle and the audited incident commands (runbook §2, §9), the clock-skew
+gauge, and the verification identity provider for the reference stack (§15). **Not built
+yet:** shared limits and retention (P11.4), backups (P11.5), alerts (P11.6). Every section says
 what exists **today** and what is a **target** and in which checkpoint it lands
 ([phase-11-plan.md](phase-11-plan.md) §25); nothing marked *target* may be relied on
 until its checkpoint is approved. Decision record:
@@ -232,7 +234,7 @@ secret**: session tokens are random and stored as SHA-256 hashes.
 | `lattice_app` password | platform/DB administrator | api | as above | rolling api restart | no (verifier only) |
 | `lattice_worker` password | platform/DB administrator | worker | as above | worker restart | no (verifier only) |
 | Platform admin DB credential | platform owner | bootstrap, restore, logical export | per platform policy | — | no |
-| `LATTICE_OIDC_SECRET_<NAME>` (OIDC client secret) | organization's IdP administrator + operator | api (token exchange) | IdP-driven; same reference with new value (rolling restart), or a new reference via `lattice sso update` (**target, P11.3**; today a reference can only be set when the connection is added) | yes, for a new value | no: the database holds only the reference `env:…` |
+| `LATTICE_OIDC_SECRET_<NAME>` (OIDC client secret) | organization's IdP administrator + operator | api (token exchange) | IdP-driven (runbook §9): same reference with a new value — the provider keeps both secrets during the switch, rolling api restart, then the old one is removed at the provider; or a new reference — the variable into every api instance first (rolling restart), then `lattice sso update --client-secret-ref` (P11.3), then the old variable removed. No session impact | yes, for a new value | no: the database holds only the reference `env:…` |
 | SCIM bearer tokens | operator (`lattice scim token create`) | the organization's IdP | create new → switch the IdP → `lattice scim token revoke` | no | hash only (SHA-256) |
 | `LATTICE_PROVIDER_SECRET_<NAME>` (BYOK) | organization administrator via operator | api, worker | add new variable → rolling restart → `lattice provider credential set` (revokes the old reference) → remove old variable | yes, to add a variable | no: reference only |
 | `LATTICE_CLIENT_KEY_SECRET` (**target, P11.4**) | operator | api | replace + rolling restart (resets pre-auth counters) | yes | no |
@@ -482,7 +484,7 @@ below the floor (phase-11-plan §12.2).
 | Source exports | worker (read-only), operator `lattice sync` (writes the configuration that names the path) | Required while connectors read local exports (all three today). The worker syncs only the path the operator's last `lattice sync` recorded (ADR-013), so operator and worker must see the **same path**. Reference stack: `./data` mounted read-only at `/srv/lattice/data` in `worker` and `ops`. Staging handling: P11.2 |
 | Model cache | api and worker, only with `local` embeddings | read-only, filled and verified by `lattice models fetch` |
 
-## 15. Local reference stack (P11.1, P11.2)
+## 15. Local reference stack (P11.1, P11.2, P11.3)
 
 `compose.production.yaml` (Compose project `lattice-reference`, separate from the
 development `compose.yaml`) runs the production topology on one machine: PostgreSQL,
@@ -512,12 +514,14 @@ administrative role and extension allow-list. The `bootstrap` job then runs
 | `make prod-seed VERIFY=1` | the synthetic-only bootstrap: `lattice seed --require-synthetic` (refuses any manifest not declaring `data_origin: synthetic`; seeding is refused in production anyway), syncs with fake embeddings, admin grants |
 | `make prod-ps`, `prod-down`, `prod-destroy` | status; stop (volumes kept); stop and delete volumes |
 | `VERIFY=1 [FAKE_DELAY=s]` | adds `deploy/compose.verify.yaml`: `LATTICE_ENV=test`, development sign-in, fake providers, a 30 s worker lease — the same images and topology, for proofs that need a signed-in member. Not a production configuration |
+| `IDP=1` (P11.3) | adds `deploy/compose.idp.yaml`: the verification OIDC provider (`deploy/verification/idp.py`, run from the backend image with the script mounted; HTTPS from a throwaway CA made by `deploy/verification/make-certs.sh` into the git-ignored `deploy/.verification/`), the API instances trusting that CA alone (`SSL_CERT_FILE`) and holding the connection's secret reference, and each API instance's metrics listener published on 127.0.0.1 (19464, 19465) so the verification browser can see which instance served a step. The stack itself stays in production mode. Not a production configuration |
+| `make prod-identity IDP=1` | the identity verification of plan §15.3 (`deploy/verification/identity_check.py`, on the host): seeds Halden (an explicit test-mode operator run), connects it to the verification provider, provisions run-unique personas over SCIM through the ingress, and checks sign-in across both instances, replay, ID-token time boundaries, logout, operator suspension/reinstatement, SCIM deactivation/removal and token rotation, provider outage, SSO disable/enable, client-ID update and both secret rotations, and the clock-skew gauge (runbook §8) |
 
 It runs the production defaults (`LATTICE_ENV=production`, `LATTICE_QUERY_EMBEDDING=none`,
 no development sign-in). It is a verification environment, not a deployment recipe, and
 has no backups yet (P11.5). `deploy/drills/` builds deliberately broken or different
 releases on top of a real backend image (a relabelled build, a migrating build with a
-reversible or irreversible drill revision 0014, a failing migration, an API that never
+reversible or irreversible drill revision numbered one above the image's head, a failing migration, an API that never
 becomes ready, a production API that serves `/docs`, an invalid baked-in setting); they
 exist only for the drills of runbook §8, CI never builds them and no release contains
 them.

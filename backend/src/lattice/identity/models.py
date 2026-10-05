@@ -90,6 +90,18 @@ class Session(Base):
             ["memberships.organization_id", "memberships.user_id"],
             ondelete="CASCADE",
         ),
+        # The OIDC connection whose sign-in created the session (0014, D-25).
+        ForeignKeyConstraint(
+            ["organization_id", "oidc_connection_id"],
+            ["oidc_connections.organization_id", "oidc_connections.id"],
+            name="fk_sessions_oidc_connection",
+        ),
+        Index(
+            "ix_sessions_oidc_connection_live",
+            "organization_id",
+            "oidc_connection_id",
+            postgresql_where=sql_text("revoked_at IS NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_DEFAULT)
@@ -100,6 +112,8 @@ class Session(Base):
     last_seen_at: Mapped[datetime] = mapped_column(server_default=func.now())
     expires_at: Mapped[datetime]
     revoked_at: Mapped[datetime | None]
+    # NULL: development sign-in, or a session from before 0014.
+    oidc_connection_id: Mapped[uuid.UUID | None]
 
 
 class OidcConnection(Base):

@@ -163,6 +163,24 @@
    "privilege": "INSERT"
   },
   {
+   "column": "id",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "organization_id",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "status",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
    "column": "consumed_at",
    "grantee": "lattice_app",
    "name": "oidc_login_attempts",

@@ -1,0 +1,63 @@
+# Identity verification overlay for the reference stack (Phase 11, P11.3). NOT a
+# production configuration. Used with or without the VERIFY overlay:
+#
+#   make prod-up IDP=1        then   make prod-identity
+#
+# Adds the verification OIDC provider (deploy/verification/idp.py, run from the backend
+# image -- never part of an image) over TLS from a throwaway local CA
+# (deploy/verification/make-certs.sh), and lets the API instances trust that CA alone
+# (SSL_CERT_FILE replaces the public CA bundle: in this overlay the instances call no
+# other TLS service). The connection's client secret reaches the instances as the env:
+# reference LATTICE_OIDC_SECRET_VERIFY (and _NEXT, for the new-reference rotation drill).
+#
+# Published on 127.0.0.1 only, for the verification browser on the host
+# (deploy/verification/identity_check.py): the provider's authorization endpoint, and
+# each API instance's internal metrics listener (to prove which instance served a step).
+services:
+  idp:
+    image: ${LATTICE_BACKEND_IMAGE:-lattice-backend:local}
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    entrypoint: ["python", "/srv/verification/idp.py"]
+    environment:
+      IDP_ISSUER: https://idp:9443
+      IDP_BROWSER_ORIGIN: https://localhost:9443
+      IDP_CLIENT_ID: lattice-verify
+      IDP_CLIENT_SECRET: ${VERIFY_OIDC_CLIENT_SECRET:?run make prod-env}
+      IDP_ADMIN_TOKEN: ${VERIFY_IDP_ADMIN_TOKEN:?run make prod-env}
+      IDP_CERT: /srv/verification-tls/idp.crt
+      IDP_KEY: /srv/verification-tls/idp.key
+    volumes:
+      - ./deploy/verification/idp.py:/srv/verification/idp.py:ro
+      - ./deploy/.verification:/srv/verification-tls:ro
+    ports:
+      - "127.0.0.1:9443:9443"
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD", "python", "-c", "import ssl, urllib.request; urllib.request.urlopen('https://localhost:9443/healthz', timeout=3, context=ssl.create_default_context(cafile='/srv/verification-tls/ca.crt'))"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api1:
+    environment: &idp-api
+      SSL_CERT_FILE: /srv/verification-tls/ca.crt
+      LATTICE_OIDC_SECRET_VERIFY: ${VERIFY_OIDC_CLIENT_SECRET:?run make prod-env}
+      LATTICE_OIDC_SECRET_VERIFY_NEXT: ${VERIFY_OIDC_CLIENT_SECRET_NEXT:-}
+    volumes: &idp-api-volumes
+      - ./deploy/.verification/ca.crt:/srv/verification-tls/ca.crt:ro
+    ports:
+      - "127.0.0.1:19464:9464"
+  api2:
+    environment: *idp-api
+    volumes: *idp-api-volumes
+    ports:
+      - "127.0.0.1:19465:9464"

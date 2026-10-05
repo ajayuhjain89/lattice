@@ -4,6 +4,8 @@
 !.env.example
 # The local reference stack's generated CA certificate (make prod-smoke)
 deploy/.reference-ca.crt
+# The verification identity provider's throwaway CA and certificate (P11.3)
+deploy/.verification/
 
 # Python
 __pycache__/

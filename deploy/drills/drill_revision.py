@@ -1,7 +1,8 @@
 """Deployment drill revision (deploy/drills; the local reference stack only, never released).
+The Dockerfile numbers it one above the base image's head.
 
-Revision ID: 0014
-Revises: 0013
+Revision ID: @REVISION@
+Revises: @DOWN@
 Create Date: 2026-10-05
 Reversible: @REVERSIBLE@
 Locks: none (no DDL)
@@ -13,8 +14,8 @@ with a real migration in it. The ``failing-migration`` drill makes it fail after
 
 from alembic import op
 
-revision = "0014"
-down_revision = "0013"
+revision = "@REVISION@"
+down_revision = "@DOWN@"
 branch_labels = None
 depends_on = None
 

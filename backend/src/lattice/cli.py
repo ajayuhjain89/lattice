@@ -38,6 +38,8 @@
     lattice org egress --org SLUG [--external-level L] [--organization-controlled-level L]
         Organization provider configuration and AI egress ceilings (administrative;
         each change needs --reason and is recorded in audit_events).
+    lattice sso|scim|member|session ..., lattice org suspend|reactivate --org SLUG
+        Identity and incident controls (lattice.cli_identity; audited).
     lattice worker [--once]
         The background worker: runs the syncs administrators request from the web app,
         as lattice_worker (LATTICE_WORKER_DATABASE_URL).
@@ -397,6 +399,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return asyncio.run(cli_retrieval.eval_retrieval(args))
         if args.command == "models":
             return cli_providers.models(args)
+        if args.command == "org" and args.org_command in ("suspend", "reactivate"):
+            return asyncio.run(cli_identity.run(args))
         if args.command in ("provider", "org"):
             return asyncio.run(cli_providers.provider(args))
         if args.command == "worker":

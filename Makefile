@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed privilege-snapshot
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity privilege-snapshot
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -139,20 +139,24 @@ api-contract: ## Re-export the OpenAPI schema and regenerate the web app's TypeS
 # Stop the development database first on a small machine (`make db-down`).
 # VERIFY=1 adds deploy/compose.verify.yaml (test env, persona sign-in, fake providers);
 # FAKE_DELAY=<seconds> makes the fake model wait (long-Ask proof).
+# IDP=1 adds deploy/compose.idp.yaml: the verification OIDC provider (P11.3).
 REFERENCE_ENV := deploy/.env.reference
 # The images deploy/deploy.sh last deployed (by immutable ID), when there are any.
 DEPLOYED_IMAGES := $(wildcard deploy/state/images.env)
 VERIFY ?=
+IDP ?=
 FAKE_DELAY ?= 0
 PROD_COMPOSE := FAKE_DELAY=$(FAKE_DELAY) docker compose --env-file $(REFERENCE_ENV) \
   $(if $(DEPLOYED_IMAGES),--env-file $(DEPLOYED_IMAGES)) \
-  -f compose.production.yaml $(if $(VERIFY),-f deploy/compose.verify.yaml)
+  -f compose.production.yaml $(if $(VERIFY),-f deploy/compose.verify.yaml) \
+  $(if $(IDP),-f deploy/compose.idp.yaml)
 REVISION := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 
-prod-env: ## Generate deploy/.env.reference: random local-only database passwords (git-ignored)
+prod-env: ## Generate deploy/.env.reference: random local-only passwords and drill secrets (git-ignored)
 	@umask 077; touch $(REFERENCE_ENV); \
 	for name in POSTGRES_PASSWORD PLATFORM_ADMIN_PASSWORD LATTICE_OWNER_PASSWORD \
-	  LATTICE_APP_PASSWORD LATTICE_WORKER_PASSWORD; do \
+	  LATTICE_APP_PASSWORD LATTICE_WORKER_PASSWORD VERIFY_OIDC_CLIENT_SECRET \
+	  VERIFY_OIDC_CLIENT_SECRET_NEXT VERIFY_IDP_ADMIN_TOKEN; do \
 	  grep -q "^$$name=" $(REFERENCE_ENV) || { echo "$$name=$$(openssl rand -hex 24)" >> $(REFERENCE_ENV); \
 	    echo "added $$name to $(REFERENCE_ENV)"; }; \
 	done
@@ -165,7 +169,8 @@ prod-up: prod-env ## Start the reference stack: PostgreSQL, bootstrap, migration
 	$(PROD_COMPOSE) up -d --wait postgres
 	$(PROD_COMPOSE) run --rm bootstrap
 	$(PROD_COMPOSE) run --rm migrate
-	$(PROD_COMPOSE) up -d --wait api1 api2 worker web1 web2 caddy
+	$(if $(IDP),deploy/verification/make-certs.sh)
+	$(PROD_COMPOSE) up -d --wait api1 api2 worker web1 web2 caddy $(if $(IDP),idp)
 
 prod-migrate: ## Status of the reference database against the deployed build (read-only)
 	$(PROD_COMPOSE) run --rm --no-deps ops migrate --status
@@ -202,6 +207,16 @@ prod-smoke: ## lattice smoke against the reference stack, from inside its privat
 	  --instance-metrics http://api1:9464/metrics --instance-metrics http://api2:9464/metrics \
 	  --expect-revision $$($(PROD_COMPOSE) run --rm --no-deps -T ops version --json | \
 	    python3 -c 'import json, sys; print(json.load(sys.stdin)["revision"])')
+
+# The identity verification of plan §15.3 against the running stack (IDP=1): personas
+# provisioned over SCIM sign in through the verification provider across both API
+# instances; operator commands, rotation, outage and time-boundary cases. The synthetic
+# organization is seeded first by an explicit test-mode operator run (seeding is refused
+# in production; this is a verification stack).
+prod-identity: ## Identity verification against the stack (needs `make prod-up IDP=1`)
+	@[ -n "$(IDP)" ] || { echo "prod-identity needs IDP=1"; exit 2; }
+	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
+	  ../deploy/verification/identity_check.py
 
 prod-ps: ## Show the reference stack's containers and health
 	$(PROD_COMPOSE) ps

@@ -58,7 +58,8 @@ TENANT_TABLES = (
     "scim_tokens",
     "rate_limit_counters",
 )
-# Tables the runtime role may not read at all (written and read by operator tools).
+# Tables the runtime role may not read (written and read by operator tools; of
+# oidc_connections it reads only id, organization_id and status since 0014).
 RUNTIME_UNREADABLE = frozenset({"audit_events", "oidc_connections", "scim_tokens"})
 GLOBAL_TABLES = ("organizations", "users", "external_identities")
 ALL_TABLES = (*GLOBAL_TABLES, *TENANT_TABLES)
@@ -434,7 +435,10 @@ async def test_cannot_update_another_organizations_sessions(
         # Phase 10: identity provider configuration is the operator's.
         "INSERT INTO oidc_connections (organization_id, login_key, issuer, client_id) VALUES "
         "(lattice_current_org_id(), 'kkkkkkkkkkkkkkkkkkkkkk', 'https://i.example', 'c')",
-        "SELECT 1 FROM oidc_connections",
+        # 0014: only id, organization_id and status (the session-creation check, D-25).
+        "SELECT client_id FROM oidc_connections",
+        "SELECT issuer, client_secret_ref, login_key FROM oidc_connections",
+        "SELECT * FROM oidc_connections",
         "SELECT 1 FROM scim_tokens",
         "UPDATE scim_tokens SET revoked_at = NULL",
         "UPDATE directory_identities SET external_id = 'x'",

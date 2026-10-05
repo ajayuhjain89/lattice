@@ -112,6 +112,8 @@ _SOURCE_SQL = text(
     "SELECT key, connector_type, name, config, default_sensitivity, account_scoped, authority, "
     "status FROM sources WHERE organization_id = :o AND id = :s"
 )
+# An organization suspended by an operator (``lattice org suspend``, D-26) runs no sync.
+_ORGANIZATION_STATUS_SQL = text("SELECT status FROM organizations WHERE id = :o")
 
 
 @dataclass(frozen=True)
@@ -316,9 +318,14 @@ class Worker:
         if job.kind != "source_sync":
             raise _Unrunnable("job_kind_unsupported")
         async with self.db.tenant_transaction(job.organization_id) as s:
+            organization = (
+                await s.execute(_ORGANIZATION_STATUS_SQL, {"o": job.organization_id})
+            ).scalar_one_or_none()
             row = (
                 await s.execute(_SOURCE_SQL, {"o": job.organization_id, "s": job.source_id})
             ).one_or_none()
+        if organization != "active":
+            raise _Unrunnable("organization_suspended")
         if row is None:
             raise _Unrunnable("source_config:source_missing")
         if row.status != "active":
@@ -397,6 +404,7 @@ class Worker:
                     await self.cleanup()
                     next_maintenance = time.monotonic() + maintenance_seconds
                 metrics.JOBS_WAITING.set(await self.waiting())
+                metrics.CLOCK_SKEW.set(await self.db.clock_skew())
                 if await self.run_once() is not None:
                     continue  # there may be more due; poll again at once
             except Exception as exc:

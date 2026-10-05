@@ -368,6 +368,11 @@ WORKER_HEARTBEAT = Gauge(
     "Unix time of the worker's last heartbeat (each loop iteration and lease renewal).",
     registry=REGISTRY,
 )
+CLOCK_SKEW = Gauge(
+    "lattice_clock_skew_seconds",
+    "This process's clock minus the database's clock (API readiness checks, worker polls).",
+    registry=REGISTRY,
+)
 BUILD_INFO = Gauge(
     "lattice_build_info",
     "Always 1; the labels identify the running build (internal listener only).",

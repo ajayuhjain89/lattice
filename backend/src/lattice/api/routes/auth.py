@@ -182,14 +182,17 @@ async def oidc_callback(
         if previous:
             await sessions.revoke_token_if_valid(previous)
         token, principal = await sessions.create(
-            user_id=signed.user_id, organization_id=signed.organization_id
+            user_id=signed.user_id,
+            organization_id=signed.organization_id,
+            oidc_connection_id=signed.connection_id,
         )
     except RateLimited:
         return _oidc_failed(settings, "rate_limited", "rate_limited")
     except OidcFailure as failure:
         return _oidc_failed(settings, failure.public_error, failure.outcome)
     except LatticeError:
-        # The membership stopped being active between mapping and session creation.
+        # The membership stopped being active between mapping and session creation, or
+        # the connection was disabled meanwhile (D-25).
         return _oidc_failed(settings, "sso_failed", "inactive")
     metrics.SSO_SIGN_INS.labels(outcome="succeeded").inc()
     log_event(
