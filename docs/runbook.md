@@ -304,23 +304,28 @@ addition, before a first deployment:
 
 ### 7.7 Backups, recovery and migrations
 
-Everything Lattice holds is in PostgreSQL (ADR-002): no second store to back up.
-Managed PostgreSQL with point-in-time recovery is the target (Phase 11, P11.5; not
-built — no backup is configured anywhere today). The procedures below assume a
-**superuser** (the bootstrap does too); managed PostgreSQL usually has none, so they will
-change for the selected platform in P11.2/P11.5 ([deployment.md](deployment.md) §7, §11).
-For a self-managed database today:
+Everything Lattice holds is in PostgreSQL (ADR-002): no second store to back up. A
+production platform must provide continuous WAL archiving / PITR and daily base backups
+([deployment.md](deployment.md) §11); the platform restores, Lattice verifies. On the
+local reference stack PostgreSQL's own tools do both (`deploy/backup.sh`, P11.5).
+Managed-platform backups and cloud RPO/RTO are **not verified** (deferred, no budget;
+phase-11-plan §21.1).
 
 | Task | Procedure |
 | ---- | --------- |
-| Back up | `pg_dump --format=custom --no-owner lattice > lattice-<date>.dump` as a superuser or a role that bypasses RLS (a dump as `lattice_owner` or a runtime role sees no tenant rows) |
-| Restore | Bootstrap an empty server (`bootstrap.sql`), `pg_restore --no-owner --role=lattice_owner -d lattice lattice-<date>.dump`, then `make check-db-role` and `lattice worker --once` (both verify roles and the schema revision) |
+| Back up (reference stack) | `deploy/backup.sh backup`: `pg_basebackup` into the `pgbackups` volume + a row-count manifest in `deploy/state/backups/`; WAL is archived continuously (`archive_timeout` 60 s). `deploy/backup.sh manifest <name>` records a manifest of the live database now (a recovery point to verify against) |
+| Back up (managed platform) | The platform's automated backups and PITR. Before relying on a recovery point, take a manifest: `lattice verify-restore --write-manifest > manifest-<time>.json` as `lattice_owner` |
+| Restore | Restore into a **new** instance on an isolated network (platform: "restore to a new cluster" at a time; reference stack: `deploy/backup.sh restore <id> [--target-time '<ISO time>'] [--manifest <file>]`). Never overwrite the primary. Then, before any traffic: `lattice verify-restore --manifest <file>` (owner), `lattice check-db-role` (app), `lattice worker --once` (worker), an api instance to readiness, and a scan for configured secret values — the script runs all of them and prints the recovery time. Then point the deployment at the restored instance and deploy as for a migrating release (§7.10) |
+| `verify-restore` fails `row counts` | The copy does not hold what the manifest counted: a wrong recovery target (earlier or later than the manifest), or missing WAL. The difference names the organization and table; pick the right manifest or target. Never serve a copy that fails |
+| `verify-restore` fails `audit integrity` / `privilege snapshot` | A trigger, policy or grant differs from the build's: the backup is from another schema state, or someone changed privileges by hand. Do not serve it; investigate |
+| WAL archiving failing | `SELECT archived_count, failed_count, last_failed_wal, last_failed_time FROM pg_stat_archiver` (reference stack); platform: its backup status. PostgreSQL keeps unarchived WAL, so the disk fills: fix the archive destination first |
+| Restore drill | Monthly at least (alert "restore drill overdue", §10): restore the latest backup to a point in time, verify, discard (`deploy/backup.sh discard-restore`), record the date and durations in §8 |
 | Migrate | Take a backup; stop every api instance and the worker (stop-the-world, D-23); run **`lattice migrate`** with the new image as `lattice_owner` (lock, fence, pre-flight, one transaction, exact verification — deployment.md §9.2); start the new build. `deploy/deploy.sh release --allow-migration` does all of it (§7.10). Never `alembic upgrade` by hand in a deployment, never edit `alembic_version` |
 | `lattice migrate` refused: `application sessions are still connected (lattice_app/lattice-api xN, …)` | An api instance or the worker is still running against the database. Stop it (every replica) and run again; nothing was changed |
 | `lattice migrate` refused: `another migration holds the migration lock` | Another `lattice migrate` is running (`lattice migrate --status` shows `migration_running: True`). Wait for it; never run two |
 | api/worker fail with `permission denied for database "lattice"`; `check-deployment` says `a migration fence was left in place` | A migration was killed after fencing (its transaction rolled back). Run `lattice migrate --status`, then `lattice migrate` (finishes and lifts the fence) or `lattice migrate --release-fence` |
 | `lattice migrate` failed (`FAILED: …`) | Its transaction rolled back: the schema is the old revision. Restart the previous build (the script does); fix forward |
-| Downgrade | Only `deploy/deploy.sh rollback --allow-downgrade`, and only when every revision being undone declares `Reversible: yes` (`lattice migrate --downgrade-to <rev> --check` decides; of 0001–0013 only 0002, 0010, 0012 do). Otherwise roll forward or restore |
+| Downgrade | Only `deploy/deploy.sh rollback --allow-downgrade`, and only when every revision being undone declares `Reversible: yes` (`lattice migrate --downgrade-to <rev> --check` decides; of 0001–0015 only 0002, 0010, 0012 do). Otherwise roll forward or restore |
 | Check a deployment's database | `lattice check-deployment [--api-instances N --api-pool-size N]` as `lattice_owner`: exact schema and no model drift, safe roles, forced RLS, no PUBLIC access or fence, privilege snapshot, connection budget. A privilege-snapshot difference after a migration that changed privileges: `make privilege-snapshot` and review the diff; anywhere else it is drift — find who granted what |
 | Rebuild derived data | Chunks, vectors and the lexical index are derived from the sources: `lattice reindex` rebuilds them without deleting documents |
 
@@ -518,6 +523,23 @@ instance's own metrics read for every step). **10/10 passed**, then `check-deplo
 | Worker killed mid-job | the source's row held so the sync blocked at its last statement; `docker kill` with the job `running:1`; worker restarted; the job was reclaimed when its 30 s lease expired and finished `succeeded:2`; the interrupted run was recorded `aborted` by the retry |
 | Worker stopped (SIGTERM) mid-job | `running:1` when stopped; the worker finished the job (`succeeded:1`) before exiting |
 
+
+**P11.5 backup and restore drill (2026-10-05)**, local reference stack in production mode
+(Halden and Veridian synthetic data, 60 MB; `deploy/backup.sh`):
+
+| Step | Observed |
+| ---- | -------- |
+| WAL archiving | `archive_mode=on`, segments in `pgarchive`, `pg_stat_archiver` 0 failures |
+| Base backup | `pg_basebackup` 0.9 s (60 MB) + manifest (2 organizations, 1,966 tenant rows) |
+| Changes after the recovery point | manifest `before-activity` (10:43:51); `lattice session revoke --all` (17 sessions) and `lattice member suspend` (2 audit events); manifest `after-activity` (10:44:00) |
+| Restore to the latest WAL | recovered in 2.4 s; `verify-restore` 9/9 (row counts equal `after-activity`: 1,968 rows); `check-db-role`, `worker --once`, api readiness PASS; secret scan: none of 9 configured values in the backup, the archive or the copy |
+| Restore to a point in time (10:43:52.5) | recovered in 2.4 s; 9/9 with row counts equal `before-activity` (the two later audit events absent); the same startup checks and scan PASS |
+| Sensitivity | the point-in-time copy checked against `after-activity` FAILS `row counts` (`halden.audit_events: 28 rows, expected 30`); the scanner finds a planted known string in 4 files of the copy (so "none found" is meaningful); in tests, a disabled audit trigger fails `audit integrity` |
+| After | `discard-restore`, `make prod-up`, smoke 13/13 |
+
+These are local durations on one laptop with the backups on the same disk. They are
+**not** an RPO/RTO for any deployment; managed backup/PITR and cloud RPO/RTO remain
+deferred (phase-11-plan §21.1).
 
 ## 9. Identity: SSO, SCIM provisioning and administrators — *implemented (Phase 10; lifecycle and incident commands P11.3)*
 

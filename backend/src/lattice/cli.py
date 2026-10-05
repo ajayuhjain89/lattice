@@ -415,6 +415,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return asyncio.run(cli_deploy.migrate_command(args))
         if args.command == "check-deployment":
             return asyncio.run(cli_deploy.check_deployment_command(args))
+        if args.command == "verify-restore":
+            return asyncio.run(cli_deploy.verify_restore_command(args))
         if args.command in cli_identity.COMMANDS:
             return asyncio.run(cli_identity.run(args))
         return asyncio.run(_check_db_role())

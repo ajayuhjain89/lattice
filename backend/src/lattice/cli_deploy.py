@@ -21,8 +21,12 @@
     lattice check-deployment [--api-instances N] [--api-pool-size N] [--worker-instances N]
                              [--write-privilege-snapshot PATH]
         Read-only database checks (lattice.db.deployment); exit 1 on any failure.
+    lattice verify-restore [--manifest FILE] | --write-manifest
+        P11.5: a restored copy passes every check-deployment check, audit integrity and
+        (with a manifest) per-organization row counts (lattice.db.restore).
+        --write-manifest prints the live database's row-count manifest as JSON.
 
-``migrate`` and ``check-deployment`` use the migration credential
+``migrate``, ``check-deployment`` and ``verify-restore`` use the migration credential
 (``LATTICE_MIGRATION_DATABASE_URL``).
 """
 
@@ -52,6 +56,7 @@ from lattice.db.migrate import (
     release_fence,
     undo_plan,
 )
+from lattice.db.restore import Manifest, verify_restore, write_manifest
 from lattice.log import scrub_text
 
 PROCESSES = ("api", "worker", "migrate")
@@ -89,6 +94,15 @@ def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]")
         "--write-privilege-snapshot",
         type=Path,
         help="write this database's privilege snapshot to PATH instead of checking",
+    )
+
+    restore = commands.add_parser(
+        "verify-restore", help="Verify a restored database (read-only), or write a manifest"
+    )
+    which = restore.add_mutually_exclusive_group()
+    which.add_argument("--manifest", type=Path, help="row-count manifest taken at backup time")
+    which.add_argument(
+        "--write-manifest", action="store_true", help="print this database's manifest (JSON)"
     )
 
 
@@ -198,6 +212,20 @@ async def check_deployment_command(args: argparse.Namespace) -> int:
         worker_instances=args.worker_instances,
     )
     checks = await check_deployment(url, plan)
+    for check in checks:
+        print(f"{'PASS' if check.ok else 'FAIL'}  {check.name}: {check.detail}")
+    failed = sum(not c.ok for c in checks)
+    print(f"{len(checks) - failed}/{len(checks)} checks passed")
+    return 1 if failed else 0
+
+
+async def verify_restore_command(args: argparse.Namespace) -> int:
+    url = _owner_url()
+    if args.write_manifest:
+        print((await write_manifest(url)).to_json())
+        return 0
+    manifest = Manifest.from_json(args.manifest.read_text()) if args.manifest else None
+    checks = await verify_restore(url, manifest, Plan())
     for check in checks:
         print(f"{'PASS' if check.ok else 'FAIL'}  {check.name}: {check.detail}")
     failed = sum(not c.ok for c in checks)

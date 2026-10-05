@@ -74,8 +74,26 @@ services:
       # platform's administrative role (CREATEROLE, CREATEDB; no superuser). The Lattice
       # roles and database come from the `bootstrap` job, as on a managed platform.
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:?run make prod-env}
+    # Continuous WAL archiving (P11.5; deployment.md §11): every completed WAL segment is
+    # copied to the `pgarchive` volume, and a segment is closed at least every 60 s, so at
+    # most a minute of committed work is outside the archive. Physical base backups
+    # (deploy/backup.sh, pg_basebackup over the local socket) go to `pgbackups`. Both
+    # directories are prepared as root before the image's entrypoint drops to postgres.
+    entrypoint: ["sh", "-c", "install -d -o postgres -g postgres -m 700 /archive /backups && exec docker-entrypoint.sh \"$$@\"", "--"]
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=test ! -f /archive/%f && cp %p /archive/%f
+      - -c
+      - archive_timeout=60
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - pgarchive:/archive
+      - pgbackups:/backups
       - ./deploy/postgres/initdb-platform.sh:/docker-entrypoint-initdb.d/10-platform.sh:ro
     security_opt:
       - no-new-privileges:true
@@ -245,5 +263,7 @@ networks:
 
 volumes:
   pgdata:
+  pgarchive:
+  pgbackups:
   caddy-data:
   caddy-config:

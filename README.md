@@ -366,8 +366,11 @@ validation is deferred for lack of a deployment budget and gates v1 GA
 revokes the connection's sessions, the connection can be re-enabled and updated in place,
 and suspension, reinstatement, session revocation and an organization stop are audited
 operator commands (runbook §2, §9), verified across both API instances with a
-verification identity provider (`make prod-up IDP=1 && make prod-identity`). Shared limits
-and retention (P11.4), backups (P11.5) and alerts (P11.6) follow.
+verification identity provider (`make prod-up IDP=1 && make prod-identity`). P11.4 made
+every rate limit shared in PostgreSQL and added retention with database-enforced floors;
+P11.5 added WAL archiving, base backups and verified restores on the reference stack
+(`deploy/backup.sh`, `lattice verify-restore`) — local durations only, managed PITR
+unverified. Alerts (P11.6) follow.
 
 ## Repository layout
 

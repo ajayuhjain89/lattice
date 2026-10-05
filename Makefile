@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits privilege-snapshot
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits prod-backup privilege-snapshot
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -224,6 +224,10 @@ prod-limits: ## Shared-limit, retention and worker drills (needs VERIFY=1 IDP=1,
 	@[ -n "$(VERIFY)" ] && [ -n "$(IDP)" ] || { echo "prod-limits needs VERIFY=1 IDP=1"; exit 2; }
 	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
 	  ../deploy/verification/limits_check.py
+
+# Backups (P11.5): restore and verification with deploy/backup.sh restore <id> [...].
+prod-backup: ## Base backup of the reference database + row-count manifest (deploy/backup.sh)
+	deploy/backup.sh backup
 
 prod-ps: ## Show the reference stack's containers and health
 	$(PROD_COMPOSE) ps

@@ -1,6 +1,6 @@
 # Lattice — Deployment Contract
 
-Status: **P11.4 (2026-10-05).** This is the provider-independent production contract that
+Status: **P11.5 (2026-10-05).** This is the provider-independent production contract that
 Phase 11 builds towards. **Built in P11.1:** the two images, the ingress routing and the
 single trusted hop, the API's trusted-proxy setting, worker liveness, graceful shutdown,
 build identification, `lattice smoke` and the local reference stack (§15). **Built in
@@ -11,7 +11,8 @@ pre-flight, migration headers, `lattice check-deployment` with the privilege sna
 `images` job (§3). **Built in P11.3:** sessions recording their SSO connection, the
 connection lifecycle and the audited incident commands (runbook §2, §9), the clock-skew
 gauge, and the verification identity provider for the reference stack (§15). **Not built
-yet:** backups (P11.5), alerts (P11.6). **Built in P11.4:** every rate limit shared in
+yet:** alerts (P11.6). **Built in P11.5:** WAL archiving, base backups, restore and
+`lattice verify-restore` on the reference stack (§11). **Built in P11.4:** every rate limit shared in
 PostgreSQL (§12) and retention with database floors (§13). Every section says
 what exists **today** and what is a **target** and in which checkpoint it lands
 ([phase-11-plan.md](phase-11-plan.md) §25); nothing marked *target* may be relied on
@@ -424,24 +425,34 @@ point-in-time recovery, automated daily base backups, encryption at rest, restor
 **new** instance in an isolated network, and a documented recovery window. A production
 platform without PITR does not meet this contract.
 
-**Restore verification (P11.5 closure):** restore latest and to a chosen time; on each
-restored copy run `lattice verify-restore` (**target, P11.5**), `lattice check-db-role`,
-`lattice worker --once` and an api instance to readiness; scan the copy for every
-configured secret value (expected: none, §6); record measured RPO/RTO.
+**Restore verification (built P11.5).** Every restored copy must pass, before it serves:
+`lattice verify-restore --manifest <backup-time manifest>` as the schema owner (every
+`check-deployment` check — exact schema, safe roles, forced RLS, database access, the
+privilege snapshot including triggers — plus audit integrity: the append-only and
+access-audit triggers present **and enabled**, and per-organization row counts of every
+tenant table and the global tables equal to the manifest taken at the recovery point);
+`lattice check-db-role` as `lattice_app`; `lattice worker --once` as `lattice_worker`;
+an api instance reaching readiness; and a scan of the backup, the WAL archive and the
+restored copy for every configured secret value (expected: none — the database holds
+SCRAM verifiers, hashes and `env:` references only, §6). `lattice verify-restore
+--write-manifest` takes a manifest (counts and organization slugs only, no content).
 
-**P11.0 records capability and assumptions only — nothing is measured yet:**
+**Local reference stack (built P11.5; `deploy/backup.sh`):** `archive_mode=on`,
+`archive_command` copying each WAL segment to the `pgarchive` volume, `archive_timeout=60`;
+`deploy/backup.sh backup` = `pg_basebackup` (fast checkpoint, WAL streamed) into the
+`pgbackups` volume + a manifest; `deploy/backup.sh restore <id> [--target-time T]` stops the
+stack (one PostgreSQL at a time), copies the base backup into a new volume, replays the
+archive to the latest WAL or to `T`, starts the copy alone on an internal network and
+runs every verification above.
 
-| | Documented capability | Provisional assumption (to be replaced by P11.5 measurements) |
-| - | --------------------- | ------------------------------------------------------------ |
-| Candidate staging platform (Appendix A: DigitalOcean Managed PostgreSQL; **not provisioned or tested**) | daily full backups, WAL kept for restore "to any point-in-time within the previous seven days"; restore creates a new cluster | RPO: minutes (WAL-based), not measured; RTO: the time to create and verify a restored cluster plus a connection-string switch — expected tens of minutes to hours for staging-sized data, not measured |
-| Local reference stack (P11.5) | PostgreSQL's own `archive_command` + `pg_basebackup`, `recovery_target_time` | none until measured |
+| | Documented capability | Measured |
+| - | --------------------- | -------- |
+| Candidate staging platform (Appendix A: DigitalOcean Managed PostgreSQL; **not provisioned or tested**) | daily full backups, WAL kept for restore "to any point-in-time within the previous seven days"; restore creates a new cluster | **nothing: deferred** (phase-11-plan §21.1) — cloud RPO/RTO and managed PITR remain unverified and are a Phase 15 release gate |
+| Local reference stack (P11.5, 2026-10-05; synthetic data, 60 MB) | WAL archive + base backups on the same Docker host | base backup 0.9 s; restore to latest and to a point in time each recovered in **2.4 s**, full verification ≈ 7 s more; data-loss bound for a lost primary: the WAL not yet archived — at most `archive_timeout` (60 s) of commits. **Local durations only, on one laptop, with backups on the same disk: not an RPO/RTO for any deployment** |
 
 **Logical export** (`pg_dump`) is optional: it needs a role that bypasses RLS (a dump as
 `lattice_owner` or a runtime role contains no tenant rows); some platform admin roles have
 BYPASSRLS (DigitalOcean's `doadmin` does), others do not.
-
-**Today:** no backup is configured anywhere; runbook §7.7 describes a self-managed
-`pg_dump` as a superuser.
 
 ## 12. Rate-limit classes
 
@@ -537,7 +548,7 @@ administrative role and extension allow-list. The `bootstrap` job then runs
 
 It runs the production defaults (`LATTICE_ENV=production`, `LATTICE_QUERY_EMBEDDING=none`,
 no development sign-in). It is a verification environment, not a deployment recipe, and
-has no backups yet (P11.5). `deploy/drills/` builds deliberately broken or different
+backs up with `deploy/backup.sh` (§11, P11.5). `deploy/drills/` builds deliberately broken or different
 releases on top of a real backend image (a relabelled build, a migrating build with a
 reversible or irreversible drill revision numbered one above the image's head, a failing migration, an API that never
 becomes ready, a production API that serves `/docs`, an invalid baked-in setting); they

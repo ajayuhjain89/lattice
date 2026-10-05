@@ -5,7 +5,7 @@ amendments (§21). P11.0 approved (4990064). P11.1 approved (b07ac8d). D-22 amen
 2026-10-05 (§21.1): zero paid infrastructure — Phase 11 closes on full local
 production-shaped verification; real external staging validation is deferred and gates
 Phase 15 (v1 GA). P11.2–P11.7 authorized to run in sequence without a review stop per
-checkpoint. P11.2 delivered as ae03445 + test fix fd0d1bc (§25.3). P11.3 delivered as 1c68ed5 (§25.4). P11.4 delivered (§25.5).** Branch `phase/11-production-operations` from `main` 27da421.
+checkpoint. P11.2 delivered as ae03445 + test fix fd0d1bc (§25.3). P11.3 delivered as 1c68ed5 (§25.4). P11.4 delivered as 9a50e27 (§25.5). P11.5 delivered (§25.6).** Branch `phase/11-production-operations` from `main` 27da421.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 11. Phase 12
 owns customer-facing onboarding (organization, SSO, SCIM, sources/integrations,
@@ -817,6 +817,19 @@ refuses non-https providers anyway, so the verification provider uses TLS.
 | Job/maintenance metrics | `lattice_maintenance_rows_total`, `_last_success_timestamp_seconds`, `_failures_total` per task; one `maintenance.retention` event per run |
 | Tests | `tests/test_shared_limits.py` (two engines and two applications on one database: slots shared, parallel requests never exceed, expiry frees a crashed process's slot, a stale lease releases nothing, pre-auth shared and parallel-safe, no address stored, functions are the only path, malformed input refused, a spoofed `X-Forwarded-For` changes nothing, production requires the secret); `tests/ingestion/test_retention.py` (exact rows per class across two organizations, latest run kept, floors refuse younger rows even bound, the worker never reaches audit/tombstones/content, concurrent runs, metrics); inventories in `test_rls`, `test_app_role_access`, `test_worker_role`. Mutation check by hand: removing one restrictive floor fails the floor test |
 | Stack drills | runbook §8 "P11.4" (`make prod-limits`) |
+
+
+### 25.6 P11.5 — as built (2026-10-05)
+
+| §11.3 item | As built / evidence (runbook §8 "P11.5") |
+| ---------- | ---------------------------------------- |
+| 1. Backup model and restore procedure | deployment.md §11 and runbook §7.7 rewritten: the platform's PITR + base backups in production (unverified, deferred), PostgreSQL's own WAL archiving (`archive_timeout` 60 s) and `pg_basebackup` on the reference stack via `deploy/backup.sh backup \| manifest \| restore \| discard-restore` |
+| 2. Actual restores, latest and point in time | both on the local stack (recovery 2.4 s each); staging deferred (§21.1) |
+| 3. `lattice verify-restore` | built (`lattice.db.restore`): every `check-deployment` check, audit integrity (triggers present **and enabled** — the snapshot only records presence), per-organization row counts against a manifest taken at the recovery point; 9/9 on both copies, and FAIL on the wrong manifest |
+| 4. Startup checks on the copy | `check-db-role`, `worker --once` and an api instance's readiness PASS on both copies |
+| 5. Secret scan | none of the 9 configured values in the base backup, the WAL archive or the copy; the scanner finds a planted known string (not vacuous) |
+| 6. Measured durations | backup 0.9 s (60 MB), recovery 2.4 s, verification ≈ 7 s — local only, never presented as cloud RPO/RTO |
+| Not done | managed backup/PITR verification and cloud RPO/RTO (deferred, §21.1) |
 
 
 ## 26. Phase 11 acceptance criteria

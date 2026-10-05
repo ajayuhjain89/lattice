@@ -198,7 +198,7 @@ async def test_counter_functions_are_narrow_definer_functions(
     for name, security_definer, config, executors in rows:
         assert security_definer, name
         assert config == ["search_path=pg_catalog, public, pg_temp"], name
-        assert executors == sorted([COUNTER_FUNCTIONS[name], "lattice_auth"]), name
+        assert executors == sorted([COUNTER_FUNCTIONS[str(name)], "lattice_auth"]), name
 
 
 async def test_only_lattice_owner_can_act_as_lattice_auth_and_it_does_not_inherit(
