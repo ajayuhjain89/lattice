@@ -110,6 +110,7 @@ async def test_database_outage_reports_service_unavailable(app_client: AppFactor
     _assert_envelope(response, "service_unavailable", 503)
 
 
+@pytest.mark.usefixtures("production_runtime_environ")
 async def test_production_hides_api_docs_and_sets_hsts(app_client: AppFactory) -> None:
     async with app_client(
         env=Environment.PRODUCTION,

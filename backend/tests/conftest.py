@@ -28,7 +28,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from lattice.api.app import create_app
-from lattice.config import Environment, Settings
+from lattice.config import OWNER_CREDENTIAL_VARIABLES, Environment, Settings
 from lattice.db.engine import Database, create_engine
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -118,6 +118,18 @@ async def clean_tables(owner_db: Database) -> None:
 
 
 AppFactory = Callable[..., AbstractAsyncContextManager[httpx.AsyncClient]]
+
+
+@pytest.fixture
+def production_runtime_environ(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The environment of a production api or worker: no owner credential.
+
+    ``make test`` loads the developer's ``.env``, which holds the owner credential for
+    migrations; a production runtime refuses to start while any of them is set
+    (``config.OWNER_CREDENTIAL_VARIABLES``), so production-mode app tests remove them.
+    """
+    for name in OWNER_CREDENTIAL_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture

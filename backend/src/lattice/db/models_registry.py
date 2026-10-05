@@ -5,7 +5,9 @@ from sqlalchemy import MetaData
 
 
 def metadata() -> MetaData:
-    from lattice.authz import models as authz_models  # noqa: F401
+    # The public package registers the access-group and grant models (the boundary
+    # test forbids importing lattice.authz submodules from here).
+    import lattice.authz  # noqa: F401
     from lattice.db.base import Base
     from lattice.identity import models as identity_models  # noqa: F401
     from lattice.ingestion import models as ingestion_models  # noqa: F401

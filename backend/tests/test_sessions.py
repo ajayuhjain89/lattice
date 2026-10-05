@@ -236,6 +236,7 @@ async def test_last_seen_is_refreshed_and_idle_timeout_measured_from_it(
         await service.authenticate(token)
 
 
+@pytest.mark.usefixtures("production_runtime_environ")
 async def test_dev_login_is_not_mounted_in_production(app_client: AppFactory, maya: Member) -> None:
     async with app_client(
         env=Environment.PRODUCTION,
