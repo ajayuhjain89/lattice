@@ -363,6 +363,18 @@ MAINTENANCE_ROWS = Counter(
     ["task"],
     registry=REGISTRY,
 )
+MAINTENANCE_LAST_SUCCESS = Gauge(
+    "lattice_maintenance_last_success_timestamp_seconds",
+    "Unix time each retention task last completed.",
+    ["task"],
+    registry=REGISTRY,
+)
+MAINTENANCE_FAILURES = Counter(
+    "lattice_maintenance_failures_total",
+    "Retention task runs that failed (retried at the next run).",
+    ["task"],
+    registry=REGISTRY,
+)
 WORKER_HEARTBEAT = Gauge(
     "lattice_worker_heartbeat_timestamp_seconds",
     "Unix time of the worker's last heartbeat (each loop iteration and lease renewal).",

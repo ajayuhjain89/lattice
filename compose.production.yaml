@@ -41,6 +41,8 @@ x-api-environment: &api-environment
   LATTICE_METRICS_ADDRESS: 0.0.0.0:9464
   # Caddy's fixed address on the private network: the only trusted forwarding hop.
   LATTICE_TRUSTED_PROXIES: 172.31.250.10
+  # Keys the shared pre-authentication counters (P11.4): the same on every api instance.
+  LATTICE_CLIENT_KEY_SECRET: ${LATTICE_CLIENT_KEY_SECRET:?run make prod-env}
   # Two API processes share the database: a small pool each (docs/deployment.md §8).
   LATTICE_DB_POOL_SIZE: "3"
 

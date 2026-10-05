@@ -434,8 +434,10 @@ evidence (D-5: off/deferred).
   counts and codes, statuses, timings, token counts, chunk IDs of permitted rows and the
   validated answer. Never the prompt, evidence text, rejected claim text, provider
   bodies, secrets or references. `GET /v1/traces/{id}` implements the three views below.
-  Retention jobs are Phase 11 (the 90-day question/answer retention is **not yet
-  enforced**; finished background jobs are deleted after 30 days since Phase 8).
+  **Retention (P11.4):** the worker deletes whole trace rows after
+  `LATTICE_TRACE_RETENTION_DAYS` (default 90); the database refuses deleting a trace
+  younger than 90 days, and the worker can read only a trace's ID, organization and
+  creation time, never its question or answer (deployment.md §13).
 - **Asker's view of their own trace:** question, answer, evidence and stages.
   Evidence references are re-authorized against the asker's *current* access. If any
   evidence of that Ask is no longer readable -- cited or not, since supersession items
@@ -535,14 +537,19 @@ channel or document can itself be sensitive. Rules per channel:
 | **"No evidence" / refusal responses** | Identical for nonexistent and unreadable (SEC-5); "what was searched" lists only their own scope | — |
 | **Logs** | — | IDs, codes, durations only (SEC-8); document IDs in logs are UUIDs, never titles/filenames |
 
-## 11. Rate limits and resource protection (Phase 10)
+## 11. Rate limits and resource protection (Phase 10; shared since P11.4)
 
-Server-side only (`lattice.ratelimit`; T19, T24). Per membership: Asks per minute and per
-day (PostgreSQL counters shared by every API process, under row-level security) and in
-flight (per process); per administrator: access previews and writes; per SCIM token:
-requests; per client address before authentication: development sign-in, OIDC start and
-callback, failed SCIM authentication (per process, keyed hashes, bounded table; a client
-over the limit is refused before its SCIM token is even checked). A refusal is 429
+Server-side only (`lattice.ratelimit`; T19, T24), and **every limit is shared by all API
+processes through PostgreSQL** (D-24; deployment.md §12). Per membership: Asks per minute
+and per day (counters under row-level security) and in flight (`ask_slots` lease rows,
+freed by expiry if a process dies); per administrator: access previews and writes; per
+SCIM token: requests; per client before authentication: development sign-in, OIDC start
+and callback, failed SCIM authentication (`pre_auth_rate_limits`, which no login role can
+read or write — only the `lattice_auth` functions `lattice_pre_auth_hit` and
+`lattice_pre_auth_retention` — keyed by HMAC-SHA-256 of the client's IPv4 address or IPv6
+/64 under `LATTICE_CLIENT_KEY_SECRET`, so neither the table nor a backup holds an address
+or can be reversed by enumerating addresses; a client over the limit is refused before
+its SCIM token is even checked). A refusal is 429
 `rate_limited` with `Retry-After`; browser sign-in redirects with `error=rate_limited`.
 
 Rules: the subject comes from the session or token, never the request; a limit is taken

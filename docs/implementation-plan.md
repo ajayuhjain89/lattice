@@ -1172,8 +1172,8 @@ platform; no Phase 12–15 scope.
 | P11.0 | Decisions, deployment contract, staging-provider comparison, ADR-016, documentation corrections | Approved (4990064) |
 | P11.1 | Packaging and runtime: images, web standalone on `0.0.0.0`, ingress routing and single trusted hop, uvicorn production command, worker heartbeat, build info, local reference stack (api ×2, Caddy), `lattice smoke` | Approved (b07ac8d) |
 | P11.2 | Deployment and migrations: `lattice migrate` (lock, connection fence, pre-flight, exact verification), migration headers, managed-PostgreSQL bootstrap (verified locally against a CREATEROLE/CREATEDB administrator), privilege snapshot and `check-deployment`, `check-config`, GHCR `images` job, `deploy/deploy.sh` releases and rollbacks, two web instances (staging deferred, D-22 amended) | Delivered (ae03445 + fd0d1bc; plan §25.3) |
-| P11.3 | Identity and session operations: sessions record their SSO connection, disable revokes them, `sso enable/update`, audited `member suspend/reinstate`, `org suspend/reactivate`, `session revoke`, clock skew, verification IdP, the identity test matrix (plan §15.3) | Delivered (plan §25.4; 42/42 on the stack) |
-| P11.4 | Shared in-flight and pre-authentication limits in PostgreSQL; retention classes with database-enforced floors | Not started |
+| P11.3 | Identity and session operations: sessions record their SSO connection, disable revokes them, `sso enable/update`, audited `member suspend/reinstate`, `org suspend/reactivate`, `session revoke`, clock skew, verification IdP, the identity test matrix (plan §15.3) | Delivered (1c68ed5; plan §25.4; 42/42 on the stack) |
+| P11.4 | Shared in-flight and pre-authentication limits in PostgreSQL; retention classes with database-enforced floors | Delivered (plan §25.5) |
 | P11.5 | Backups and restore verified locally with measured local durations (managed PITR and cloud RPO/RTO deferred, D-22 amended) | Not started |
 | P11.6 | Metrics, alert rules with tests, a runbook action per alert | Not started |
 | P11.7 | Deployed authorization suite and failure drills on the local stack, closure (staging deferred) | Not started |

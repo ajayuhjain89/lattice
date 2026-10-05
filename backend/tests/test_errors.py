@@ -117,6 +117,7 @@ async def test_production_hides_api_docs_and_sets_hsts(app_client: AppFactory) -
         dev_auth_enabled=False,
         session_cookie_secure=True,
         public_url="https://lattice.example.com",
+        client_key_secret="k" * 32,
     ) as prod:
         for path in ("/docs", "/openapi.json", "/redoc"):
             assert (await prod.get(path)).status_code == 404

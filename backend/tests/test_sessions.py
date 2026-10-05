@@ -243,6 +243,7 @@ async def test_dev_login_is_not_mounted_in_production(app_client: AppFactory, ma
         dev_auth_enabled=False,
         session_cookie_secure=True,
         public_url="https://lattice.example.com",
+        client_key_secret="k" * 32,
     ) as prod:
         response = await login(prod, maya.email)
     assert response.status_code == 404

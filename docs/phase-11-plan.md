@@ -5,7 +5,7 @@ amendments (§21). P11.0 approved (4990064). P11.1 approved (b07ac8d). D-22 amen
 2026-10-05 (§21.1): zero paid infrastructure — Phase 11 closes on full local
 production-shaped verification; real external staging validation is deferred and gates
 Phase 15 (v1 GA). P11.2–P11.7 authorized to run in sequence without a review stop per
-checkpoint. P11.2 delivered as ae03445 + test fix fd0d1bc (§25.3). P11.3 delivered (§25.4).** Branch `phase/11-production-operations` from `main` 27da421.
+checkpoint. P11.2 delivered as ae03445 + test fix fd0d1bc (§25.3). P11.3 delivered as 1c68ed5 (§25.4). P11.4 delivered (§25.5).** Branch `phase/11-production-operations` from `main` 27da421.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 11. Phase 12
 owns customer-facing onboarding (organization, SSO, SCIM, sources/integrations,
@@ -384,11 +384,11 @@ it. Autovacuum defaults; retention deletes in batches; `ANALYZE` after large pur
 | ----- | ---- | ---- | -------------- | ----------- |
 | **Durable security record** | `audit_events` | never by retention; governed by its own durability requirements (append-only; removed only with its organization, Phase 12) | no DELETE privilege for any runtime role; UPDATE refused by trigger | nobody |
 | **Identity and configuration tombstones** | `directory_identities`, removed memberships, `scim_tokens`, `oidc_connections`, `provider_credentials` history | kept for the life of the organization | — | nobody |
-| **User history (content-bearing)** | `query_traces` | `LATTICE_TRACE_RETENTION_DAYS`, default 90 (decided: data-model, security-model §8), whole row | proposed 30 days — to confirm in P11.4 | worker |
+| **User history (content-bearing)** | `query_traces` | `LATTICE_TRACE_RETENTION_DAYS`, default 90 (decided: data-model, security-model §8), whole row | **90 days** (decided P11.4: the floor equals the default; §25.5) | worker |
 | **Operational history** | `jobs` (finished) | 30 days (exists) | 30 days | worker |
 | | `source_sync_runs` (+ their `sync_record_failures`, cascade) | 180 days, always keeping each source's latest run | 180 days | worker |
-| **Transient security state** | `sessions` | proposed: 30 days after `expires_at` or `revoked_at` — duration not decided in the canonical docs; to decide in P11.4 | never before the session ended | worker |
-| | `oidc_login_attempts` | proposed: 1 day after expiry or consumption — to decide in P11.4 | after expiry | worker (the per-organization cleanup at start is kept) |
+| **Transient security state** | `sessions` | **30 days** after `expires_at` or `revoked_at` (decided P11.4) | the same | worker |
+| | `oidc_login_attempts` | **1 day** after expiry (decided P11.4) | the same | worker (the per-organization cleanup at start is kept) |
 | | `rate_limit_counters` | window ended > 2 days ago | 2 days | worker |
 | | `pre_auth_rate_limits` | window ended > 2 days ago | 2 days | worker, through a `lattice_auth` function |
 | | `ask_slots` | lease expired > 1 hour ago | expired | worker |
@@ -804,6 +804,20 @@ Found and fixed on the way: `deploy/drills/` hard-coded 0013/0014 and now number
 drill revision one above the base image's head; the previous session's relaxation of
 `_check_issuer` (http for any host in development/test) was removed — the stack's API
 refuses non-https providers anyway, so the verification provider uses TLS.
+
+### 25.5 P11.4 — as built (2026-10-05)
+
+| Planned (§10, §12, §25 row P11.4) | As built |
+| --------------------------------- | -------- |
+| `ask_slots` (D-24) | migration 0015: lease rows per (organization, membership, slot) under tenant RLS; `AskSlots` takes a free or expired slot with a conditional upsert in its own short transaction and releases it by lease ID (a request whose lease expired and was taken over releases nothing); lease = generation deadline + 60 s on the database clock. Replaces the process-local `ConcurrencyLimiter` |
+| Shared pre-auth limit (§10.2) | `pre_auth_rate_limits` (no organization; forced RLS with a `lattice_auth` policy only; no login role has a privilege) written only by `lattice_pre_auth_hit(bucket, key, limit, window, count)` (`SECURITY DEFINER`, owner `lattice_auth`, `EXECUTE` for `lattice_app`; validates its input; `count = false` is the SCIM "refuse before the token is checked" probe). Key = HMAC-SHA-256(`LATTICE_CLIENT_KEY_SECRET`, client), the client being the IPv4 address or the IPv6 /64 from the trusted ingress. `LATTICE_CLIENT_KEY_SECRET` (≥ 32 bytes) is required in production (a fixed development key elsewhere, identical in every process). Replaces the process-local `ClientLimiter` |
+| No process-local limit left | true: `lattice.ratelimit` has no in-memory limiter; deployment.md §12 and runbook §7.4 list every limit as shared/durable or per request |
+| Retention classes and floors (§12) | `lattice.jobs.retention`, run by the worker hourly (and at start): jobs 30 d, traces `LATTICE_TRACE_RETENTION_DAYS` (default 90, minimum 90), superseded sync runs 180 d (each source's latest kept; organization by organization), ended sessions 30 d, login attempts 1 d after expiry, counters 2 d, pre-auth counters 2 d (through `lattice_pre_auth_retention`), Ask slots 1 h after the lease. Each is a **restrictive** DELETE policy for `lattice_worker` (plus permissive find/delete policies to work across organizations) and the worker reads only key and timestamp columns. Audit events and tombstones: no privilege |
+| Decisions recorded | trace floor = **90 days** (the retention itself: a shorter one needs a migration and a product decision — the "proposed 30 days" of §12.1 was not adopted); sessions **30 days** after expiry or revocation; login attempts **1 day** after expiry; IPv6 clients counted per /64 |
+| Job/maintenance metrics | `lattice_maintenance_rows_total`, `_last_success_timestamp_seconds`, `_failures_total` per task; one `maintenance.retention` event per run |
+| Tests | `tests/test_shared_limits.py` (two engines and two applications on one database: slots shared, parallel requests never exceed, expiry frees a crashed process's slot, a stale lease releases nothing, pre-auth shared and parallel-safe, no address stored, functions are the only path, malformed input refused, a spoofed `X-Forwarded-For` changes nothing, production requires the secret); `tests/ingestion/test_retention.py` (exact rows per class across two organizations, latest run kept, floors refuse younger rows even bound, the worker never reaches audit/tombstones/content, concurrent runs, metrics); inventories in `test_rls`, `test_app_role_access`, `test_worker_role`. Mutation check by hand: removing one restrictive floor fails the floor test |
+| Stack drills | runbook §8 "P11.4" (`make prod-limits`) |
+
 
 ## 26. Phase 11 acceptance criteria
 

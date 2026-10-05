@@ -71,7 +71,10 @@ def test_production_requires_an_https_public_url(public_url: str | None) -> None
         load_settings(env="production", database_url=APP_URL, public_url=public_url)
     assert (
         load_settings(
-            env="production", database_url=APP_URL, public_url="https://lattice.example.com/"
+            env="production",
+            database_url=APP_URL,
+            public_url="https://lattice.example.com/",
+            client_key_secret="k" * 32,
         ).web_origin
         == "https://lattice.example.com"
     )

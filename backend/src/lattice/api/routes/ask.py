@@ -46,7 +46,7 @@ async def post_ask(
 ) -> Answer:
     deps: AskDependencies = request.app.state.ask_dependencies
     # Per membership, before retrieval: the limit depends on nothing but the caller.
-    async with limits.ask_concurrency.slot(principal.membership_id):
+    async with limits.ask_concurrency.slot(principal.organization_id, principal.membership_id):
         await limits.limiter.hit(principal.organization_id, principal.membership_id, limits.ask)
         outcome = await ask(
             _db(request),

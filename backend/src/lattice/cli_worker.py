@@ -28,6 +28,7 @@ from lattice.config import (
 )
 from lattice.db.engine import Database, create_engine
 from lattice.db.role_check import verify_runtime_role
+from lattice.jobs.retention import RetentionPolicy
 from lattice.jobs.worker import Heartbeat, Worker
 from lattice.log import configure_logging, scrub_text
 from lattice.providers.factory import build_embedding_provider
@@ -68,6 +69,7 @@ async def run(args: argparse.Namespace) -> int:
             embedding=embedding,
             lease_seconds=settings.worker_lease_seconds,
             heartbeat=Heartbeat(settings.worker_heartbeat_file),
+            retention=RetentionPolicy(trace_days=settings.trace_retention_days),
         )
         if args.once:
             while await worker.run_once() is not None:

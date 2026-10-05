@@ -1,6 +1,42 @@
 {
  "column_grants": [
   {
+   "column": "expires_at",
+   "grantee": "lattice_app",
+   "name": "ask_slots",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "expires_at",
+   "grantee": "lattice_worker",
+   "name": "ask_slots",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "lease_id",
+   "grantee": "lattice_app",
+   "name": "ask_slots",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "membership_id",
+   "grantee": "lattice_worker",
+   "name": "ask_slots",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "organization_id",
+   "grantee": "lattice_worker",
+   "name": "ask_slots",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "slot",
+   "grantee": "lattice_worker",
+   "name": "ask_slots",
+   "privilege": "SELECT"
+  },
+  {
    "column": "family_name",
    "grantee": "lattice_app",
    "name": "directory_identities",
@@ -187,10 +223,64 @@
    "privilege": "UPDATE"
   },
   {
+   "column": "expires_at",
+   "grantee": "lattice_worker",
+   "name": "oidc_login_attempts",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "id",
+   "grantee": "lattice_worker",
+   "name": "oidc_login_attempts",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "organization_id",
+   "grantee": "lattice_worker",
+   "name": "oidc_login_attempts",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "created_at",
+   "grantee": "lattice_worker",
+   "name": "query_traces",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "id",
+   "grantee": "lattice_worker",
+   "name": "query_traces",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "organization_id",
+   "grantee": "lattice_worker",
+   "name": "query_traces",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "bucket",
+   "grantee": "lattice_worker",
+   "name": "rate_limit_counters",
+   "privilege": "SELECT"
+  },
+  {
    "column": "count",
    "grantee": "lattice_app",
    "name": "rate_limit_counters",
    "privilege": "UPDATE"
+  },
+  {
+   "column": "organization_id",
+   "grantee": "lattice_worker",
+   "name": "rate_limit_counters",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "subject",
+   "grantee": "lattice_worker",
+   "name": "rate_limit_counters",
+   "privilege": "SELECT"
   },
   {
    "column": "window_start",
@@ -199,16 +289,46 @@
    "privilege": "UPDATE"
   },
   {
+   "column": "window_start",
+   "grantee": "lattice_worker",
+   "name": "rate_limit_counters",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "expires_at",
+   "grantee": "lattice_worker",
+   "name": "sessions",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "id",
+   "grantee": "lattice_worker",
+   "name": "sessions",
+   "privilege": "SELECT"
+  },
+  {
    "column": "last_seen_at",
    "grantee": "lattice_app",
    "name": "sessions",
    "privilege": "UPDATE"
   },
   {
+   "column": "organization_id",
+   "grantee": "lattice_worker",
+   "name": "sessions",
+   "privilege": "SELECT"
+  },
+  {
    "column": "revoked_at",
    "grantee": "lattice_app",
    "name": "sessions",
    "privilege": "UPDATE"
+  },
+  {
+   "column": "revoked_at",
+   "grantee": "lattice_worker",
+   "name": "sessions",
+   "privilege": "SELECT"
   },
   {
    "column": "acl_synced_at",
@@ -314,6 +434,30 @@
     "search_path=pg_catalog, public, pg_temp"
    ],
    "signature": "lattice_oidc_connection(text)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_auth:EXECUTE"
+   ],
+   "owner": "lattice_auth",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_pre_auth_hit(text,bytea,integer,integer,boolean)"
+  },
+  {
+   "grants": [
+    "lattice_auth:EXECUTE",
+    "lattice_worker:EXECUTE"
+   ],
+   "owner": "lattice_auth",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_pre_auth_retention(integer)"
   },
   {
    "grants": [
@@ -503,6 +647,50 @@
    ],
    "using": "(organization_id = lattice_current_org_id())",
    "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "ask_slots",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "d",
+   "name": "ask_slots",
+   "permissive": true,
+   "policy": "worker_retention",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(expires_at < (now() - '01:00:00'::interval))",
+   "with_check": null
+  },
+  {
+   "command": "r",
+   "name": "ask_slots",
+   "permissive": true,
+   "policy": "worker_retention_find",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(expires_at < (now() - '01:00:00'::interval))",
+   "with_check": null
+  },
+  {
+   "command": "d",
+   "name": "ask_slots",
+   "permissive": false,
+   "policy": "worker_retention_floor",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(expires_at < (now() - '01:00:00'::interval))",
+   "with_check": null
   },
   {
    "command": "a",
@@ -714,6 +902,17 @@
    "with_check": null
   },
   {
+   "command": "d",
+   "name": "jobs",
+   "permissive": false,
+   "policy": "worker_retention_floor",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "((status = ANY (ARRAY['succeeded'::text, 'failed'::text])) AND (finished_at < (now() - '30 days'::interval)))",
+   "with_check": null
+  },
+  {
    "command": "*",
    "name": "membership_departments",
    "permissive": true,
@@ -835,6 +1034,39 @@
    "with_check": "(organization_id = lattice_current_org_id())"
   },
   {
+   "command": "d",
+   "name": "oidc_login_attempts",
+   "permissive": true,
+   "policy": "worker_retention",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(expires_at < (now() - '1 day'::interval))",
+   "with_check": null
+  },
+  {
+   "command": "r",
+   "name": "oidc_login_attempts",
+   "permissive": true,
+   "policy": "worker_retention_find",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(expires_at < (now() - '1 day'::interval))",
+   "with_check": null
+  },
+  {
+   "command": "d",
+   "name": "oidc_login_attempts",
+   "permissive": false,
+   "policy": "worker_retention_floor",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(expires_at < (now() - '1 day'::interval))",
+   "with_check": null
+  },
+  {
    "command": "*",
    "name": "org_settings",
    "permissive": true,
@@ -880,6 +1112,17 @@
   },
   {
    "command": "*",
+   "name": "pre_auth_rate_limits",
+   "permissive": true,
+   "policy": "auth_counters",
+   "roles": [
+    "lattice_auth"
+   ],
+   "using": "true",
+   "with_check": "true"
+  },
+  {
+   "command": "*",
    "name": "provider_credentials",
    "permissive": true,
    "policy": "tenant_isolation",
@@ -901,6 +1144,39 @@
    "with_check": "(organization_id = lattice_current_org_id())"
   },
   {
+   "command": "d",
+   "name": "query_traces",
+   "permissive": true,
+   "policy": "worker_retention",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(created_at < (now() - '90 days'::interval))",
+   "with_check": null
+  },
+  {
+   "command": "r",
+   "name": "query_traces",
+   "permissive": true,
+   "policy": "worker_retention_find",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(created_at < (now() - '90 days'::interval))",
+   "with_check": null
+  },
+  {
+   "command": "d",
+   "name": "query_traces",
+   "permissive": false,
+   "policy": "worker_retention_floor",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(created_at < (now() - '90 days'::interval))",
+   "with_check": null
+  },
+  {
    "command": "*",
    "name": "rate_limit_counters",
    "permissive": true,
@@ -912,6 +1188,39 @@
    "with_check": "(organization_id = lattice_current_org_id())"
   },
   {
+   "command": "d",
+   "name": "rate_limit_counters",
+   "permissive": true,
+   "policy": "worker_retention",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(window_start < (now() - '2 days'::interval))",
+   "with_check": null
+  },
+  {
+   "command": "r",
+   "name": "rate_limit_counters",
+   "permissive": true,
+   "policy": "worker_retention_find",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(window_start < (now() - '2 days'::interval))",
+   "with_check": null
+  },
+  {
+   "command": "d",
+   "name": "rate_limit_counters",
+   "permissive": false,
+   "policy": "worker_retention_floor",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(window_start < (now() - '2 days'::interval))",
+   "with_check": null
+  },
+  {
    "command": "r",
    "name": "scim_tokens",
    "permissive": true,
@@ -954,6 +1263,39 @@
    ],
    "using": "(organization_id = lattice_current_org_id())",
    "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "d",
+   "name": "sessions",
+   "permissive": true,
+   "policy": "worker_retention",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "((expires_at < (now() - '30 days'::interval)) OR (revoked_at < (now() - '30 days'::interval)))",
+   "with_check": null
+  },
+  {
+   "command": "r",
+   "name": "sessions",
+   "permissive": true,
+   "policy": "worker_retention_find",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "((expires_at < (now() - '30 days'::interval)) OR (revoked_at < (now() - '30 days'::interval)))",
+   "with_check": null
+  },
+  {
+   "command": "d",
+   "name": "sessions",
+   "permissive": false,
+   "policy": "worker_retention_floor",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "((expires_at < (now() - '30 days'::interval)) OR (revoked_at < (now() - '30 days'::interval)))",
+   "with_check": null
   },
   {
    "command": "*",
@@ -965,6 +1307,28 @@
    ],
    "using": "(organization_id = lattice_current_org_id())",
    "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "r",
+   "name": "source_sync_runs",
+   "permissive": true,
+   "policy": "worker_retention_find",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(started_at < (now() - '180 days'::interval))",
+   "with_check": null
+  },
+  {
+   "command": "d",
+   "name": "source_sync_runs",
+   "permissive": false,
+   "policy": "worker_retention_floor",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "((started_at < (now() - '180 days'::interval)) AND (EXISTS ( SELECT 1\n   FROM source_sync_runs newer\n  WHERE ((newer.organization_id = source_sync_runs.organization_id) AND (newer.source_id = source_sync_runs.source_id) AND (newer.started_at > source_sync_runs.started_at)))))",
+   "with_check": null
   },
   {
    "command": "*",
@@ -1184,6 +1548,30 @@
   {
    "grantable": false,
    "grantee": "lattice_app",
+   "name": "ask_slots",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "ask_slots",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "ask_slots",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "ask_slots",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
    "name": "audit_events",
    "privilege": "INSERT"
   },
@@ -1429,6 +1817,12 @@
   },
   {
    "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "oidc_login_attempts",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
    "grantee": "lattice_app",
    "name": "org_settings",
    "privilege": "SELECT"
@@ -1459,6 +1853,30 @@
   },
   {
    "grantable": false,
+   "grantee": "lattice_auth",
+   "name": "pre_auth_rate_limits",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_auth",
+   "name": "pre_auth_rate_limits",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_auth",
+   "name": "pre_auth_rate_limits",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_auth",
+   "name": "pre_auth_rate_limits",
+   "privilege": "UPDATE"
+  },
+  {
+   "grantable": false,
    "grantee": "lattice_app",
    "name": "provider_credentials",
    "privilege": "SELECT"
@@ -1477,6 +1895,12 @@
   },
   {
    "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "query_traces",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
    "grantee": "lattice_app",
    "name": "rate_limit_counters",
    "privilege": "INSERT"
@@ -1486,6 +1910,12 @@
    "grantee": "lattice_app",
    "name": "rate_limit_counters",
    "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "rate_limit_counters",
+   "privilege": "DELETE"
   },
   {
    "grantable": false,
@@ -1513,9 +1943,21 @@
   },
   {
    "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "sessions",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
    "grantee": "lattice_app",
    "name": "source_sync_runs",
    "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "source_sync_runs",
+   "privilege": "DELETE"
   },
   {
    "grantable": false,
@@ -1629,6 +2071,13 @@
   {
    "forced": true,
    "kind": "r",
+   "name": "ask_slots",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
    "name": "audit_events",
    "owner": "lattice_owner",
    "rls": true
@@ -1728,6 +2177,13 @@
    "forced": true,
    "kind": "r",
    "name": "organizations",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "pre_auth_rate_limits",
    "owner": "lattice_owner",
    "rls": true
   },

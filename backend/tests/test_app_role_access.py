@@ -66,6 +66,10 @@ APP_TABLES = {
     "directory_identities": {"SELECT", "INSERT"},
     "scim_tokens": set(),
     "rate_limit_counters": {"SELECT", "INSERT"},
+    # Phase 11 (P11.4): in-flight Ask leases; the pre-auth counters only through
+    # lattice_pre_auth_hit (lattice_auth).
+    "ask_slots": {"SELECT", "INSERT", "DELETE"},
+    "pre_auth_rate_limits": set(),
 }
 # Column-level privileges (table-level ones above).
 COLUMN_PRIVILEGES = {
@@ -87,6 +91,9 @@ COLUMN_PRIVILEGES = {
     },
     ("oidc_login_attempts", "UPDATE"): {"consumed_at"},
     ("rate_limit_counters", "UPDATE"): {"window_start", "count"},
+    ("ask_slots", "UPDATE"): {"lease_id", "expires_at"},
+    # 0014: the session-creation check reads the connection's status only (D-25).
+    ("oidc_connections", "SELECT"): {"id", "organization_id", "status"},
 }
 RLS_REFUSED = r"row-level security"
 

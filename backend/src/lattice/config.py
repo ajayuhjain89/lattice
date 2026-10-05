@@ -71,6 +71,9 @@ def _require_asyncpg_url(value: SecretStr | None) -> SecretStr | None:
 # The schema owner's credential belongs to the migration job and operators only
 # (deployment.md §5.3). A production api or worker refuses to start if any of these is in
 # its environment: it would be one compromised process away from owning the schema.
+# Not a secret: used only outside production (Settings.client_key).
+DEVELOPMENT_CLIENT_KEY = b"lattice-development-client-key-not-a-secret"
+
 OWNER_CREDENTIAL_VARIABLES = (
     "LATTICE_MIGRATION_DATABASE_URL",
     "LATTICE_OWNER_PASSWORD",
@@ -150,13 +153,19 @@ class Settings(BaseSettings):
     # none can be turned off. Asks per membership per minute / per day and in flight;
     # access-management writes (and previews) per administrator per minute; SCIM requests
     # per token per minute; pre-authentication requests (development sign-in, OIDC start
-    # and callback, failed SCIM authentication) per client address per minute, per process.
+    # and callback, failed SCIM authentication) per client per minute. Every limit is
+    # shared by all API processes through PostgreSQL (P11.4, D-24; deployment.md §12).
     rate_limit_ask_per_minute: int = Field(default=10, ge=1, le=10_000)
     rate_limit_ask_per_day: int = Field(default=500, ge=1, le=1_000_000)
     rate_limit_ask_concurrent: int = Field(default=2, ge=1, le=100)
     rate_limit_access_writes_per_minute: int = Field(default=60, ge=1, le=10_000)
     rate_limit_scim_per_minute: int = Field(default=600, ge=1, le=100_000)
     rate_limit_sign_in_per_minute: int = Field(default=30, ge=1, le=10_000)
+    # The key of the HMAC that turns a client address into a pre-authentication counter
+    # key (P11.4): at least 32 bytes, required in production. Rotating it resets the
+    # counts only. Outside production a fixed development key is used (every process the
+    # same, so the counts are still shared).
+    client_key_secret: SecretStr | None = None
 
     # --- OIDC sign-in (Phase 10; ADR-015) ----------------------------------------------------
     # The origin users reach Lattice at (the web app), e.g. https://lattice.example.com.
@@ -193,6 +202,13 @@ class Settings(BaseSettings):
             return None
         return ",".join(str(network) for network in parse_trusted_proxies(value))
 
+    @field_validator("client_key_secret")
+    @classmethod
+    def _check_client_key_secret(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode()) < 32:
+            raise ValueError("must be at least 32 bytes (e.g. `openssl rand -hex 32`)")
+        return value
+
     @model_validator(mode="after")
     def _enforce_environment_guards(self) -> Self:
         if self.env is Environment.PRODUCTION and self.fake_generation_delay_seconds:
@@ -226,6 +242,11 @@ class Settings(BaseSettings):
                 "LATTICE_SESSION_IDLE_TIMEOUT_MINUTES must not exceed "
                 "LATTICE_SESSION_ABSOLUTE_TIMEOUT_MINUTES"
             )
+        if self.env is Environment.PRODUCTION and self.client_key_secret is None:
+            raise ValueError(
+                "LATTICE_CLIENT_KEY_SECRET (at least 32 bytes) is required when "
+                "LATTICE_ENV=production: it keys the shared pre-authentication limit"
+            )
         return self
 
     @property
@@ -236,6 +257,14 @@ class Settings(BaseSettings):
     @property
     def web_origin(self) -> str:
         return self.public_url or "http://127.0.0.1:3000"
+
+    @property
+    def client_key(self) -> bytes:
+        """The pre-authentication HMAC key (``client_key_secret``; a fixed development
+        key outside production, which refuses to start without the secret)."""
+        if self.client_key_secret is not None:
+            return self.client_key_secret.get_secret_value().encode()
+        return DEVELOPMENT_CLIENT_KEY
 
     @property
     def session_cookie_name(self) -> str:
@@ -275,6 +304,10 @@ class WorkerSettings(BaseSettings):
     # iteration and lease renewal; the container health check reads its age. Unset = the
     # heartbeat is only the metric.
     worker_heartbeat_file: Path | None = None
+    # Query traces are deleted this many days after the Ask (P11.4, deployment.md §13).
+    # The database refuses deleting a trace younger than 90 days whatever this says, so
+    # the setting can only lengthen the retention.
+    trace_retention_days: int = Field(default=90, ge=90, le=3650)
     # Statement timeout for the worker's own connections (syncs write in batches).
     db_statement_timeout_ms: int = Field(default=300_000, ge=1_000, le=3_600_000)
     db_connect_timeout_seconds: float = Field(default=5.0, ge=0.5, le=60.0)

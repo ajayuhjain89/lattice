@@ -1,6 +1,6 @@
 # Lattice — Deployment Contract
 
-Status: **P11.3 (2026-10-05).** This is the provider-independent production contract that
+Status: **P11.4 (2026-10-05).** This is the provider-independent production contract that
 Phase 11 builds towards. **Built in P11.1:** the two images, the ingress routing and the
 single trusted hop, the API's trusted-proxy setting, worker liveness, graceful shutdown,
 build identification, `lattice smoke` and the local reference stack (§15). **Built in
@@ -11,7 +11,8 @@ pre-flight, migration headers, `lattice check-deployment` with the privilege sna
 `images` job (§3). **Built in P11.3:** sessions recording their SSO connection, the
 connection lifecycle and the audited incident commands (runbook §2, §9), the clock-skew
 gauge, and the verification identity provider for the reference stack (§15). **Not built
-yet:** shared limits and retention (P11.4), backups (P11.5), alerts (P11.6). Every section says
+yet:** backups (P11.5), alerts (P11.6). **Built in P11.4:** every rate limit shared in
+PostgreSQL (§12) and retention with database floors (§13). Every section says
 what exists **today** and what is a **target** and in which checkpoint it lands
 ([phase-11-plan.md](phase-11-plan.md) §25); nothing marked *target* may be relied on
 until its checkpoint is approved. Decision record:
@@ -171,7 +172,7 @@ secret). Only settings that exist today are listed unless marked *target*.
 | `LATTICE_PROVIDER_SECRET_<NAME>` | secret | one per organization provider credential; referenced as `env:…` |
 | `LATTICE_GEMINI_API_KEY` / `GEMINI_API_KEY` / `LATTICE_OPENAI_API_KEY` | secret | legacy process-wide keys for query embedding only; avoid in production |
 | `LATTICE_MODEL_DIR`, `LATTICE_LOCAL_EMBEDDING_MODEL`, `LATTICE_LOCAL_EMBEDDING_THREADS` | config | only with `local` embeddings; the model directory is a read-only volume filled by `lattice models fetch` |
-| `LATTICE_CLIENT_KEY_SECRET` | secret | **target, P11.4:** ≥ 32 random bytes, identical on every api instance; HMAC key for the shared pre-authentication counters (§12). Rotation resets those counters only |
+| `LATTICE_CLIENT_KEY_SECRET` | secret | **P11.4, required in production:** ≥ 32 bytes (`openssl rand -hex 32`), identical on every api instance; HMAC key for the shared pre-authentication counters (§12). Rotation resets those counters only. Outside production a fixed development key is used |
 | `LATTICE_BUILD_REVISION` / `LATTICE_BUILD_VERSION` | deployment | baked into the image at build (P11.1); never set by hand |
 | `LATTICE_TRUSTED_PROXIES` | deployment | **P11.1:** the ingress addresses or networks (comma-separated IPs/CIDRs; `*` refused); unset = trust no forwarding header. Run uvicorn with `--no-proxy-headers` (the image does) |
 | `LATTICE_FAKE_GENERATION_DELAY_SECONDS` | config | test double only: refused (must be 0) in production; the verification overlay uses it for the long-Ask proof |
@@ -186,6 +187,7 @@ secret). Only settings that exist today are listed unless marked *target*.
 | `LATTICE_WORKER_POLL_SECONDS` / `_LEASE_SECONDS` | config | 2 / 300 |
 | `LATTICE_WORKER_HEARTBEAT_FILE` | deployment | **P11.1:** e.g. `/tmp/lattice-worker-heartbeat` (a writable tmpfs); the container health check reads its age (§10) |
 | `LATTICE_DB_STATEMENT_TIMEOUT_MS` / `_CONNECT_TIMEOUT_SECONDS` | config | 300000 / 5 |
+| `LATTICE_TRACE_RETENTION_DAYS` | config | **P11.4:** 90 (minimum 90; the database floor, §13) |
 | `LATTICE_METRICS_ADDRESS` | deployment | `0.0.0.0:9465` private (carries the heartbeat gauge `lattice smoke` reads) |
 | provider keys / `LATTICE_PROVIDER_SECRET_*`, model settings | secret / config | as the api, only for the embedding provider the worker uses |
 
@@ -237,7 +239,7 @@ secret**: session tokens are random and stored as SHA-256 hashes.
 | `LATTICE_OIDC_SECRET_<NAME>` (OIDC client secret) | organization's IdP administrator + operator | api (token exchange) | IdP-driven (runbook §9): same reference with a new value — the provider keeps both secrets during the switch, rolling api restart, then the old one is removed at the provider; or a new reference — the variable into every api instance first (rolling restart), then `lattice sso update --client-secret-ref` (P11.3), then the old variable removed. No session impact | yes, for a new value | no: the database holds only the reference `env:…` |
 | SCIM bearer tokens | operator (`lattice scim token create`) | the organization's IdP | create new → switch the IdP → `lattice scim token revoke` | no | hash only (SHA-256) |
 | `LATTICE_PROVIDER_SECRET_<NAME>` (BYOK) | organization administrator via operator | api, worker | add new variable → rolling restart → `lattice provider credential set` (revokes the old reference) → remove old variable | yes, to add a variable | no: reference only |
-| `LATTICE_CLIENT_KEY_SECRET` (**target, P11.4**) | operator | api | replace + rolling restart (resets pre-auth counters) | yes | no |
+| `LATTICE_CLIENT_KEY_SECRET` (P11.4) | operator | api | replace + rolling restart (resets pre-auth counters; during the roll the two key versions count separately, so a client may get up to twice the limit for a minute) | yes | no: the database holds only HMAC outputs |
 | Session tokens | — (generated) | browsers | rotated at every sign-in | no | hash only |
 | OIDC login state (state, nonce, PKCE verifier) | — (generated) | api | ten-minute single-use attempts | no | yes, transiently (`oidc_login_attempts`, deleted by retention, §11) |
 | GHCR publishing | repository | the CI `images` job (`GITHUB_TOKEN`, `packages: write` on that job only; built P11.2) | automatic per run | — | — |
@@ -443,39 +445,54 @@ BYPASSRLS (DigitalOcean's `doadmin` does), others do not.
 
 ## 12. Rate-limit classes
 
-| Limit | Default | Today | P11.4 target |
-| ----- | ------- | ----- | ------------ |
-| Asks per minute per membership | 10 | **shared/durable** (PostgreSQL `rate_limit_counters`, RLS) | unchanged |
-| Asks per day per membership | 500 | **shared/durable** | unchanged |
-| Asks in flight per membership | 2 | **process-local** (`ConcurrencyLimiter`) | **shared/durable**: PostgreSQL lease rows, expiry = generation deadline + margin |
-| Access previews/writes per administrator | 60/min | **shared/durable** | unchanged |
-| SCIM requests per token | 600/min | **shared/durable** | unchanged |
-| Pre-authentication per client (development sign-in, OIDC start/callback, failed SCIM authentication) | 30/min | **process-local** (`ClientLimiter`, keyed hash with a per-process random key) | **shared/durable**: non-tenant counter reachable only through `lattice_auth` functions, keyed by HMAC(client address, `LATTICE_CLIENT_KEY_SECRET`), address from the trusted ingress only |
-| Request body, question length, statement timeout, generation deadline | as configured | per request (stateless) | unchanged |
+As built in P11.4 (D-24): **every limit is shared by all API processes through
+PostgreSQL**; defaults unchanged.
 
-**Connection-local:** none, today or after P11.4. After P11.4 no rate limit is
-process-local; only caches (OIDC discovery/JWKS, ten minutes) and metrics are per process.
+| Limit | Default | Class | How |
+| ----- | ------- | ----- | --- |
+| Asks per minute per membership | 10 | **shared/durable** | `rate_limit_counters` (RLS), fixed window, conditional upsert |
+| Asks per day per membership | 500 | **shared/durable** | the same |
+| Asks in flight per membership | 2 | **shared/durable** | `ask_slots` lease rows (RLS): a request takes a free or expired slot with a conditional upsert in its own short transaction and releases it by lease ID; the lease lasts the generation deadline + 60 s, so a crashed process's slot frees itself; expiry on the database clock |
+| Access previews/writes per administrator | 60/min | **shared/durable** | `rate_limit_counters` |
+| SCIM requests per token | 600/min | **shared/durable** | `rate_limit_counters` |
+| Pre-authentication per client (development sign-in, OIDC start/callback, failed SCIM authentication — refused before the token is checked) | 30/min | **shared/durable** | `pre_auth_rate_limits` (no organization; no login role has a privilege on it), written only by `lattice_pre_auth_hit` (`SECURITY DEFINER`, owner `lattice_auth`, `EXECUTE` for `lattice_app`), keyed by HMAC-SHA-256(`LATTICE_CLIENT_KEY_SECRET`, client) where the client is the IPv4 address or the IPv6 /64, taken only from the trusted ingress (§4) |
+| Request body, question length, statement timeout, generation deadline | as configured | per request (stateless) | — |
+
+**Connection-local:** none. **Process-local:** none — only caches (OIDC discovery and
+JWKS, ten minutes, refresh at most once a minute) and metrics, neither a security
+control. Proven across two engines and two applications in `tests/test_shared_limits.py`
+and on the reference stack (runbook §8, P11.4).
 
 ## 13. Retention classes
 
-Durations below come from the canonical documents; where none is decided it says so.
+As built in P11.4. The **worker** deletes, hourly, in batches of 500, as `lattice_worker`;
+every cutoff is computed from the database's `now()` inside the statement. The database
+**floor** is a restrictive row-level policy on the worker's DELETE (migration 0015): a
+row younger than it cannot be deleted by the worker even with a direct statement and an
+organization bound. The worker reads only identifying and timestamp columns of these
+tables, never content.
 
-| Data | Current behaviour | Phase 11 target (P11.4) | Deletes it | Minimum-age safety |
-| ---- | ----------------- | ----------------------- | ---------- | ------------------ |
-| `audit_events` | never deleted (append-only; UPDATE refused by trigger; no runtime role may DELETE); removed only with its organization | unchanged — separate durability/security requirement | nobody (organization purge is Phase 12) | no DELETE privilege for any runtime role |
-| `query_traces` | never deleted (90-day retention documented, not enforced) | delete whole rows after `LATTICE_TRACE_RETENTION_DAYS`, default **90** (data-model, security-model §8) | worker | database floor; **the floor value (proposed 30 days) needs product-owner confirmation in P11.4** |
-| `jobs` (finished) | deleted after **30 days**, hourly, in batches of 500 | unchanged | worker | database policy permits nothing younger than 30 days (exists) |
-| `source_sync_runs` (+ `sync_record_failures`, cascade) | never deleted | **180 days** for runs (data-model), always keeping each source's latest run; failures live and die with their run | worker | database floor at the configured age |
-| `sessions` | never deleted (expired/revoked sessions authenticate nothing) | delete some time after `expires_at` / `revoked_at` — **duration not decided in the canonical docs: needs a decision in P11.4** (forensic value vs. growth) | worker | never before the session ended |
-| `oidc_login_attempts` | deleted per organization when that organization's next sign-in starts (consumed or expired ones only) | also deleted globally after expiry/consumption — **grace duration to decide in P11.4** | worker (+ the existing per-start cleanup) | never before `expires_at` |
-| `rate_limit_counters` | one row per (organization, bucket, subject), overwritten per window, never deleted | delete rows whose window ended more than the longest window (1 day) ago | worker | never within the longest window |
-| Pre-auth counters, in-flight Ask leases (both new in P11.4) | — (process memory today) | delete after window end / lease expiry | worker (pre-auth via a `lattice_auth` function) | never within the window / lease |
-| Identity tombstones: `directory_identities`, removed memberships, `scim_tokens`, `oidc_connections`, `provider_credentials` history | kept | kept for the organization's life (D-20 terminal removal relies on them) | nobody | — |
-| Logs (stdout JSON) | wherever the process runs | platform log retention; **duration to decide with the platform** (no content in logs, SEC-8) | platform | — |
+| Class | Data | Rule (deleted when) | Database floor | Deletes it |
+| ----- | ---- | ------------------- | -------------- | ---------- |
+| Durable security record | `audit_events` | never by retention (append-only, UPDATE refused by trigger); removed only with its organization (Phase 12) | no DELETE privilege for any runtime role | nobody |
+| Identity and configuration tombstones | `directory_identities`, removed memberships, `scim_tokens`, `oidc_connections`, `provider_credentials` history | kept for the organization's life (D-20 terminal removal relies on them) | no privilege | nobody |
+| User history (content-bearing) | `query_traces` | created more than `LATTICE_TRACE_RETENTION_DAYS` ago (worker setting, default **90**, minimum 90) | **90 days**: a shorter retention needs a migration and a product decision (per-organization retention is Phase 12) | worker |
+| Operational history | `jobs` (finished) | finished more than 30 days ago | 30 days | worker |
+| | `source_sync_runs` (+ their `sync_record_failures`, cascade) | started more than **180 days** ago **and** superseded by a newer run of the same source — the latest run of each source is always kept | the same condition | worker, organization by organization |
+| Transient security state | `sessions` | expired, or revoked, more than **30 days** ago (decided P11.4: a month of sign-in history for incident review; an ended session authenticates nothing) | the same | worker |
+| | `oidc_login_attempts` | expired more than **1 day** ago (decided P11.4; consumed attempts expire ten minutes after creation like the rest) | the same | worker (+ the per-organization cleanup when a sign-in starts) |
+| | `rate_limit_counters` | window started more than 2 days ago (longest window: 1 day) | the same | worker |
+| | `pre_auth_rate_limits` | window started more than 2 days ago | the same, inside `lattice_pre_auth_retention` (owner `lattice_auth`, `EXECUTE` for `lattice_worker` only) | worker |
+| | `ask_slots` | lease expired more than 1 hour ago | the same | worker |
+| Logs | stdout JSON | platform log retention; **duration to decide with the platform** (no content in logs, SEC-8) | — | platform |
 
-All P11.4 deletions: cutoffs computed from the database `now()`, bounded batches,
-idempotent under retry and concurrent runs, metered per task, refused by the database
-below the floor (phase-11-plan §12.2).
+Safety: each batch is its own transaction, deletes by key and re-checks eligibility, so a
+repeated run deletes nothing and two workers never delete a row twice (a batch that met
+the other worker's rows may come back short; the next run finishes). A failing task is
+counted and logged and does not stop the others. Metrics per task:
+`lattice_maintenance_rows_total`, `lattice_maintenance_last_success_timestamp_seconds`,
+`lattice_maintenance_failures_total`; one `maintenance.retention` log event per run
+(counts only). Tests: `tests/ingestion/test_retention.py`.
 
 ## 14. Volumes
 
@@ -515,6 +532,7 @@ administrative role and extension allow-list. The `bootstrap` job then runs
 | `make prod-ps`, `prod-down`, `prod-destroy` | status; stop (volumes kept); stop and delete volumes |
 | `VERIFY=1 [FAKE_DELAY=s]` | adds `deploy/compose.verify.yaml`: `LATTICE_ENV=test`, development sign-in, fake providers, a 30 s worker lease — the same images and topology, for proofs that need a signed-in member. Not a production configuration |
 | `IDP=1` (P11.3) | adds `deploy/compose.idp.yaml`: the verification OIDC provider (`deploy/verification/idp.py`, run from the backend image with the script mounted; HTTPS from a throwaway CA made by `deploy/verification/make-certs.sh` into the git-ignored `deploy/.verification/`), the API instances trusting that CA alone (`SSL_CERT_FILE`) and holding the connection's secret reference, and each API instance's metrics listener published on 127.0.0.1 (19464, 19465) so the verification browser can see which instance served a step. The stack itself stays in production mode. Not a production configuration |
+| `make prod-limits VERIFY=1 IDP=1` (P11.4) | shared in-flight and pre-authentication limits across both API instances, retention in the worker, worker killed and stopped mid-job (`deploy/verification/limits_check.py`; needs `FAKE_DELAY` ≥ 10 and `make prod-seed VERIFY=1 IDP=1`; sets Halden's generation provider to the fake model) |
 | `make prod-identity IDP=1` | the identity verification of plan §15.3 (`deploy/verification/identity_check.py`, on the host): seeds Halden (an explicit test-mode operator run), connects it to the verification provider, provisions run-unique personas over SCIM through the ingress, and checks sign-in across both instances, replay, ID-token time boundaries, logout, operator suspension/reinstatement, SCIM deactivation/removal and token rotation, provider outage, SSO disable/enable, client-ID update and both secret rotations, and the clock-skew gauge (runbook §8) |
 
 It runs the production defaults (`LATTICE_ENV=production`, `LATTICE_QUERY_EMBEDDING=none`,

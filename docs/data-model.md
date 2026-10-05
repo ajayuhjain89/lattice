@@ -469,7 +469,9 @@ conflicts_proposed, conflicts_discarded, model_status}`), `answer` (the validate
 without evidence text), `status` (the table below plus `unsupported_request`),
 `status_reason`, `error_code`, `timings_ms`, `usage` (`{input_tokens, output_tokens}`;
 no cost estimate). Forced RLS; the runtime role may SELECT and INSERT only. No
-`filter_fingerprint` (no consumer yet). Retention jobs: Phase 11.
+`filter_fingerprint` (no consumer yet). Retention (P11.4): the worker deletes rows after
+`LATTICE_TRACE_RETENTION_DAYS` (90), never younger than 90 days (database floor), reading
+only `id, organization_id, created_at`.
 
 Design (Phase 0):
 
@@ -758,8 +760,19 @@ organization deleted ─► status=deleting; sessions revoked; purge by organiza
 Because vectors and lexical entries are columns of `chunks`, there is no separate
 index to reconcile and no orphaned vector state is possible.
 
-Retention (defaults, org-configurable later): traces 90 days; sync runs 180 days, with
-their record failures deleted together with the run (the schema has no notion of a
-failure being resolved; the earlier "30 days after resolution" had no column to act on).
-**Today** only finished jobs are deleted (30 days); the rest is Phase 11 (P11.4), with the
-classes and open durations in [deployment.md](deployment.md) §13.
+Retention (built P11.4; defaults, org-configurable in Phase 12): traces 90 days; sync runs
+180 days, keeping each source's latest run, with their record failures deleted together
+with the run (the schema has no notion of a failure being resolved; the earlier "30 days
+after resolution" had no column to act on); finished jobs 30 days; ended sessions 30
+days; login attempts 1 day after expiry; counters 2 days; Ask slots 1 hour after their
+lease; audit events never. Each is a database floor on the worker's DELETE — the classes
+are in [deployment.md](deployment.md) §13.
+
+### ask_slots, pre_auth_rate_limits (P11.4)
+
+`ask_slots (organization_id, membership_id, slot, lease_id, expires_at)`: the in-flight Ask
+limit shared by API processes; tenant RLS; `lattice_app` inserts, takes over expired rows
+and deletes by lease ID. `pre_auth_rate_limits (bucket, client_key, window_start, count)`:
+no organization; `client_key` is a 32-byte HMAC, never an address; no login role has a
+privilege on it (forced RLS, a `lattice_auth` policy only), written through
+`lattice_pre_auth_hit` and cleaned through `lattice_pre_auth_retention`.

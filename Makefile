@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity privilege-snapshot
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits privilege-snapshot
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -155,7 +155,7 @@ REVISION := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 prod-env: ## Generate deploy/.env.reference: random local-only passwords and drill secrets (git-ignored)
 	@umask 077; touch $(REFERENCE_ENV); \
 	for name in POSTGRES_PASSWORD PLATFORM_ADMIN_PASSWORD LATTICE_OWNER_PASSWORD \
-	  LATTICE_APP_PASSWORD LATTICE_WORKER_PASSWORD VERIFY_OIDC_CLIENT_SECRET \
+	  LATTICE_APP_PASSWORD LATTICE_WORKER_PASSWORD LATTICE_CLIENT_KEY_SECRET VERIFY_OIDC_CLIENT_SECRET \
 	  VERIFY_OIDC_CLIENT_SECRET_NEXT VERIFY_IDP_ADMIN_TOKEN; do \
 	  grep -q "^$$name=" $(REFERENCE_ENV) || { echo "$$name=$$(openssl rand -hex 24)" >> $(REFERENCE_ENV); \
 	    echo "added $$name to $(REFERENCE_ENV)"; }; \
@@ -217,6 +217,13 @@ prod-identity: ## Identity verification against the stack (needs `make prod-up I
 	@[ -n "$(IDP)" ] || { echo "prod-identity needs IDP=1"; exit 2; }
 	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
 	  ../deploy/verification/identity_check.py
+
+# Shared limits, retention and worker drills (P11.4) against the running stack:
+# `make prod-up VERIFY=1 IDP=1 FAKE_DELAY=20 && make prod-seed VERIFY=1 IDP=1` first.
+prod-limits: ## Shared-limit, retention and worker drills (needs VERIFY=1 IDP=1, FAKE_DELAY>=10)
+	@[ -n "$(VERIFY)" ] && [ -n "$(IDP)" ] || { echo "prod-limits needs VERIFY=1 IDP=1"; exit 2; }
+	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
+	  ../deploy/verification/limits_check.py
 
 prod-ps: ## Show the reference stack's containers and health
 	$(PROD_COMPOSE) ps

@@ -207,7 +207,7 @@ ever a label (`lattice.metrics`, tested).
 | `lattice_auth_rejections_total{reason}`, `lattice_http_requests_rejected_total{reason}` | session rejections; CSRF and oversized requests |
 | `lattice_sync_runs_total{mode,status}`, `lattice_sync_record_failures_total{stage}`, `lattice_sync_duration_seconds` | ingestion health |
 | `lattice_jobs_total{kind,outcome}`, `lattice_jobs_waiting`, `lattice_worker_polls_total{result}`, `lattice_job_duration_seconds` | worker throughput, backlog, errors; `abandoned` jobs |
-| `lattice_maintenance_rows_total{task}` | job retention |
+| `lattice_maintenance_rows_total{task}`, `lattice_maintenance_last_success_timestamp_seconds{task}`, `lattice_maintenance_failures_total{task}` | retention per task (`jobs`, `query_traces`, `source_sync_runs`, `sessions`, `oidc_login_attempts`, `rate_limit_counters`, `pre_auth_rate_limits`, `ask_slots`; P11.4) |
 | `lattice_rate_limited_total{bucket}` | requests refused by a limit (`ask_minute`, `ask_day`, `ask_concurrent`, `access_write`, `scim`, `sign_in`) |
 | `lattice_sso_sign_ins_total{outcome}` | OIDC sign-ins: `started`, `succeeded` and fixed failure outcomes (§2) |
 | `lattice_scim_operations_total{operation,status}` | SCIM requests by operation and status class; `unauthenticated` for bad tokens |
@@ -243,21 +243,21 @@ user report with its `X-Request-ID` header, then the trace ID in `answer.complet
 | Limit | Subject | Default | Where counted |
 | ----- | ------- | ------- | ------------- |
 | `LATTICE_RATE_LIMIT_ASK_PER_MINUTE` / `_PER_DAY` | each membership | 10 / 500 | PostgreSQL (shared by all API processes) |
-| `LATTICE_RATE_LIMIT_ASK_CONCURRENT` | each membership | 2 in flight | per API process |
+| `LATTICE_RATE_LIMIT_ASK_CONCURRENT` | each membership | 2 in flight | PostgreSQL lease rows `ask_slots` (P11.4); a crashed process's slot frees itself after the generation deadline + 60 s |
 | `LATTICE_RATE_LIMIT_ACCESS_WRITES_PER_MINUTE` | each administrator (previews, changes, grants, revocations) | 60 | PostgreSQL |
 | `LATTICE_RATE_LIMIT_SCIM_PER_MINUTE` | each SCIM token | 600 | PostgreSQL |
-| `LATTICE_RATE_LIMIT_SIGN_IN_PER_MINUTE` | each client address: development sign-in, OIDC start and callback, failed SCIM authentication | 30 | per API process (keyed hashes, bounded table) |
+| `LATTICE_RATE_LIMIT_SIGN_IN_PER_MINUTE` | each client (IPv4 address or IPv6 /64): development sign-in, OIDC start and callback, failed SCIM authentication | 30 | PostgreSQL `pre_auth_rate_limits` through `lattice_pre_auth_hit` (P11.4), keyed by HMAC under `LATTICE_CLIENT_KEY_SECRET` — no address stored |
 
-Fixed windows: a burst of up to twice a limit can straddle a window boundary. The
-per-process limits multiply by the number of API processes. The client address is the
+Fixed windows: a burst of up to twice a limit can straddle a window boundary. **Every
+limit is shared by all API processes** (P11.4, D-24; [deployment.md](deployment.md) §12):
+adding instances never raises a limit. The client address is the
 client the API derives (P11.1): the TCP peer, unless that peer is listed in
 `LATTICE_TRUSTED_PROXIES` (the ingress), in which case the right-most untrusted address of
 `X-Forwarded-For`. Set it to the ingress addresses only (never the web server's: under
 `next dev` the web server is the peer and every browser is one client), and keep uvicorn's
-`--no-proxy-headers`. **Still per process until P11.4 (D-24):** the in-flight and
-pre-authentication limits, so with two API instances each per-client limit is reached at
-twice its value ([deployment.md](deployment.md) §12). Provider quotas and the kill
-switches above still bound cost.
+`--no-proxy-headers`. Provider quotas and the kill switches above still bound cost. A
+member stuck at 429 `ask_concurrent` after an API crash waits for the lease to expire
+(deadline + 60 s); there is nothing to clear by hand.
 
 ### 7.5 The worker
 
@@ -267,7 +267,8 @@ switches above still bound cost.
 | A job failed | The Sources row shows the code; the job's run (if one opened) has the details. `source_config:*` codes need the operator's `sources.yaml` and a CLI sync; `source_unavailable:*` the export path |
 | `source_busy` | Another sync of that source (CLI or worker) holds its lock; the request is retried after 60 s × attempt, up to 3 attempts |
 | A worker died mid-job | Its lease expires (`LATTICE_WORKER_LEASE_SECONDS`, 300; renewed while the sync runs) and another poll retries it; after 3 attempts the job is `failed` / `job_abandoned`. The interrupted run is recorded `aborted` / `internal_error:interrupted` by the next sync of that source |
-| Job history | Finished jobs are deleted after 30 days, in batches of 500, once an hour; the database policy forbids deleting younger ones. Sync runs and failures are kept (retention: Phase 11) |
+| Retention (P11.4) | Once an hour (and at start) the worker deletes, in batches of 500: finished jobs after 30 days, traces after `LATTICE_TRACE_RETENTION_DAYS` (90), superseded sync runs after 180 days (each source's latest run is kept), ended sessions after 30 days, login attempts a day after expiry, counters after 2 days, Ask slots an hour after their lease ([deployment.md](deployment.md) §13). The database refuses deleting anything younger than each floor. Audit events and identity tombstones are never deleted |
+| Retention failing | `lattice_maintenance_failures_total{task}` rising or `lattice_maintenance_last_success_timestamp_seconds{task}` older than a few hours; the `maintenance.retention_failed` log event names the task and the error type. Other tasks keep running; the failed one is retried at the next run. Typical causes: database unreachable or a statement timeout on a very large backlog (it resumes where it stopped, batch by batch) |
 | Embeddings of requested syncs | `LATTICE_SYNC_EMBEDDING` (default `none`: new chunks stay `pending` until a sync with a provider). Use the provider the corpus was synced with |
 
 ### 7.6 Deployment checklist
@@ -501,6 +502,22 @@ expiry edges (±30 s), the issuer rename with `--subjects-unchanged` (sessions r
 same members sign in), and a development sign-in session untouched by `sso disable`.
 Removing the shared lock or the revocation fails those tests (mutation check by hand, not
 committed).
+
+**P11.4 shared limits, retention and worker drills (2026-10-05)**, local reference stack
+(`make prod-up VERIFY=1 IDP=1 FAKE_DELAY=20`, `make prod-seed VERIFY=1 IDP=1`,
+`make prod-limits VERIFY=1 IDP=1`: the verification overlay's persona sign-in and fake
+model waiting 20 s, Halden's generation provider set to the fake model, each API
+instance's own metrics read for every step). **10/10 passed**, then `check-deployment` 7/7
+(0015, privilege snapshot) and smoke 12/12:
+
+| Drill | Observed |
+| ----- | -------- |
+| Retention in the worker | every task (`jobs`, `query_traces`, `source_sync_runs`, `sessions`, `oidc_login_attempts`, `rate_limit_counters`, `pre_auth_rate_limits`, `ask_slots`) reported a last success at worker start; 7 restrictive floor policies installed |
+| In-flight Asks across instances (limit 2) | three concurrent Asks of one member through Caddy: `[200, 200, 429]` in 20 s; the 429 came from an instance that held only one of the member's Asks itself — refused because the other instance held the second (process-local, it would have been accepted); no slot left afterwards |
+| Pre-authentication across instances (30/min) | 40 sign-ins in a fresh window: exactly **30 accepted (15 per instance)**, then 10 × 429 split 5/5 — one shared count (process-local it would have been 60) |
+| Worker killed mid-job | the source's row held so the sync blocked at its last statement; `docker kill` with the job `running:1`; worker restarted; the job was reclaimed when its 30 s lease expired and finished `succeeded:2`; the interrupted run was recorded `aborted` by the retry |
+| Worker stopped (SIGTERM) mid-job | `running:1` when stopped; the worker finished the job (`succeeded:1`) before exiting |
+
 
 ## 9. Identity: SSO, SCIM provisioning and administrators — *implemented (Phase 10; lifecycle and incident commands P11.3)*
 

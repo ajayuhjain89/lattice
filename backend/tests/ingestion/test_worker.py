@@ -384,8 +384,8 @@ async def test_finished_jobs_are_deleted_after_30_days_only(
             text("UPDATE jobs SET finished_at = now() - interval '31 days' WHERE id = :j"),
             {"j": old},
         )
-    assert await worker.cleanup() == 1
-    assert await worker.cleanup() == 0  # idempotent
+    assert (await worker.cleanup())["jobs"] == 1
+    assert (await worker.cleanup())["jobs"] == 0  # idempotent
     async with owner_db.tenant_transaction(synced.id) as s:
         remaining: set[uuid.UUID] = set((await s.execute(text("SELECT id FROM jobs"))).scalars())
     assert remaining == {recent}

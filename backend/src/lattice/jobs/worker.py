@@ -30,8 +30,9 @@ Properties:
   next sync of that source. A job finishes at most once (every transition is guarded by
   its current status).
 * **Bounded.** One job at a time per worker, attempts capped (``max_attempts``), leases
-  expire, finished jobs are deleted after 30 days in batches (the row-level policy
-  permits nothing younger).
+  expire. Hourly maintenance runs retention (``lattice.jobs.retention``, P11.4): finished
+  jobs after 30 days, traces, sync runs, ended sessions, login attempts, counters and Ask
+  slots per their class, each refused by the database below its floor.
 * **Observable.** ``jobs.*`` log events with IDs and codes, ``lattice_jobs_*`` metrics,
   and each sync's own run row.
 * **Live (Phase 11).** A heartbeat -- the ``lattice_worker_heartbeat_timestamp_seconds``
@@ -57,13 +58,13 @@ from sqlalchemy import text
 from lattice import metrics
 from lattice.db.engine import Database
 from lattice.ingestion.sync import SyncError, SyncOptions, SyncResult, sync_source
+from lattice.jobs.retention import RetentionPolicy, run_retention
 from lattice.log import log_event
 from lattice.providers.embedding import EmbeddingProvider
 from lattice.sources.config import ChannelConfig, SourceConfig
 
 _log = logging.getLogger("lattice.jobs")
 
-RETENTION_BATCH: Final = 500
 # Backoff before a retry: attempt n waits n times this (source busy, unexpected error).
 RETRY_BACKOFF_SECONDS: Final = 60
 
@@ -104,10 +105,6 @@ _RETRY_SQL = text(
     "WHERE id = :id AND status = 'running' AND attempts = :attempt"
 )
 _WAITING_SQL = text("SELECT count(*) FROM jobs WHERE status = 'queued' AND run_after <= now()")
-_RETENTION_SQL = text(
-    "DELETE FROM jobs WHERE id IN (SELECT id FROM jobs WHERE status IN ('succeeded', 'failed') "
-    "AND finished_at < now() - interval '30 days' ORDER BY finished_at LIMIT :n) RETURNING id"
-)
 _SOURCE_SQL = text(
     "SELECT key, connector_type, name, config, default_sensitivity, account_scoped, authority, "
     "status FROM sources WHERE organization_id = :o AND id = :s"
@@ -189,11 +186,13 @@ class Worker:
         embedding: EmbeddingProvider | None,
         lease_seconds: int = 300,
         heartbeat: Heartbeat | None = None,
+        retention: RetentionPolicy | None = None,
     ) -> None:
         self.db = db
         self.embedding = embedding
         self.lease_seconds = lease_seconds
         self.heartbeat = heartbeat or Heartbeat()
+        self.retention = retention or RetentionPolicy()
 
     # --- queue ------------------------------------------------------------------------
 
@@ -223,19 +222,10 @@ class Worker:
             waiting: int = (await s.execute(_WAITING_SQL)).scalar_one()
         return waiting
 
-    async def cleanup(self) -> int:
-        """Delete finished jobs older than 30 days, in bounded batches."""
-        removed = 0
-        while True:
-            async with self.db.unscoped_transaction() as s:
-                batch = len((await s.execute(_RETENTION_SQL, {"n": RETENTION_BATCH})).all())
-            removed += batch
-            if batch < RETENTION_BATCH:
-                break
-        if removed:
-            metrics.MAINTENANCE_ROWS.labels(task="jobs_retention").inc(removed)
-            log_event(_log, logging.INFO, "jobs.retention", deleted=removed)
-        return removed
+    async def cleanup(self) -> dict[str, int | None]:
+        """Retention (P11.4): every class's expired rows, in bounded batches, as far as
+        the database's floors allow (``lattice.jobs.retention``)."""
+        return await run_retention(self.db, self.retention)
 
     # --- one job ------------------------------------------------------------------------
 

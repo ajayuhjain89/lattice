@@ -114,7 +114,7 @@ async def superuser_engine() -> AsyncIterator[AsyncEngine]:
 async def clean_tables(owner_db: Database) -> None:
     # TRUNCATE is not subject to row-level security; the owner may use it.
     async with owner_db.engine.begin() as conn:
-        await conn.execute(text("TRUNCATE organizations, users CASCADE"))
+        await conn.execute(text("TRUNCATE organizations, users, pre_auth_rate_limits CASCADE"))
 
 
 AppFactory = Callable[..., AbstractAsyncContextManager[httpx.AsyncClient]]
