@@ -30,3 +30,5 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+# Local deployment state of the reference stack (deploy/deploy.sh)
+deploy/state/

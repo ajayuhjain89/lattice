@@ -9,5 +9,6 @@
 !backend/alembic
 !infra/postgres/bootstrap.sql
 !infra/postgres/bootstrap_database.sql
+!infra/postgres/bootstrap_production.sql
 **/__pycache__
 **/*.pyc

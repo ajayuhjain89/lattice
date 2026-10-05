@@ -47,7 +47,7 @@ COPY --from=build /opt/lattice/venv /opt/lattice/venv
 WORKDIR /opt/lattice/app
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/alembic ./alembic
-COPY infra/postgres/bootstrap.sql infra/postgres/bootstrap_database.sql ./infra/postgres/
+COPY infra/postgres/bootstrap.sql infra/postgres/bootstrap_database.sql infra/postgres/bootstrap_production.sql ./infra/postgres/
 ENV PATH=/opt/lattice/venv/bin:${PATH} \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

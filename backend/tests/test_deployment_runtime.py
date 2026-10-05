@@ -300,6 +300,49 @@ def test_smoke_names_each_failure(kwargs: dict[str, Any], failing: str) -> None:
     assert all(failing in name for name in failed), failed
 
 
+def _with_build_metrics(revisions: dict[str, str]) -> Callable[[httpx.Request], httpx.Response]:
+    base = _deployment()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        host = request.url.host
+        if request.url.path == "/metrics" and host in revisions:
+            info = (
+                f'lattice_build_info{{revision="{revisions[host]}",schema_revision="0013",'
+                f'version="unknown"}} 1.0\n'
+            )
+            response = base(request) if host == "worker" else httpx.Response(200, text="")
+            return httpx.Response(200, text=response.text + info)
+        return base(request)
+
+    return handler
+
+
+def test_smoke_detects_a_process_running_another_revision() -> None:
+    def run(revisions: dict[str, str]) -> dict[str, bool]:
+        with httpx.Client(transport=httpx.MockTransport(_with_build_metrics(revisions))) as c:
+            results = smoke.run_smoke(
+                c,
+                "https://lattice.example.com",
+                instances=[],
+                worker_metrics="http://worker:9465/metrics",
+                worker_max_age=300,
+                production=True,
+                instance_metrics=["http://api1:9464/metrics", "http://api2:9464/metrics"],
+                expect_revision="abc123",
+            )
+        return {r.name: r.ok for r in results if r.name.startswith("build revision")}
+
+    same = run({"api1": "abc123", "api2": "abc123", "worker": "abc123"})
+    assert same == {
+        "build revision at api1:9464": True,
+        "build revision at api2:9464": True,
+        "build revision at worker:9465": True,
+    }
+    stale = run({"api1": "abc123", "api2": "old999", "worker": "abc123"})
+    assert stale["build revision at api2:9464"] is False
+    assert stale["build revision at api1:9464"] is True
+
+
 def test_smoke_requires_hsts_only_in_production() -> None:
     def no_hsts(request: httpx.Request) -> httpx.Response:
         response = _deployment()(request)

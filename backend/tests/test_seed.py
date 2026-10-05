@@ -308,3 +308,24 @@ async def test_the_seed_audits_provisioning_and_changes_but_not_reruns(
     assert len(before["accounts"]) == 2
     assert len(after["accounts"]) == 1
     assert after["is_admin"] is False
+
+
+def test_a_synthetic_only_bootstrap_refuses_any_other_manifest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Phase 11 verification stacks are bootstrapped with synthetic data only."""
+    from .conftest import OWNER_URL
+
+    monkeypatch.setenv("LATTICE_ENV", "test")
+    monkeypatch.setenv("LATTICE_MIGRATION_DATABASE_URL", OWNER_URL)
+    customer = tmp_path / "customer.yaml"
+    customer.write_text(
+        HALDEN.read_text().replace("data_origin: synthetic", "data_origin: customer")
+    )
+    assert main(["seed", "--require-synthetic", "--manifest", str(customer)]) == 2
+    assert "data_origin: synthetic" in capsys.readouterr().err
+    unmarked = tmp_path / "unmarked.yaml"
+    unmarked.write_text(HALDEN.read_text().replace("data_origin: synthetic", ""))
+    assert main(["seed", "--require-synthetic", "--manifest", str(unmarked)]) == 2
+    args = ["seed", "--require-synthetic", "--manifest", str(HALDEN), "--manifest", str(VERIDIAN)]
+    assert main(args) == 0

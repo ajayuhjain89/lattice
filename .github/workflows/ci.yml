@@ -3,6 +3,14 @@ name: CI
 on:
   push:
   pull_request:
+  # Publish the images of a commit whose push CI already passed (e.g. a Phase 11 revision
+  # for future staging) without merging it: the `images` job checks that run instead of
+  # repeating the test jobs, which are skipped on dispatch (D-27).
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why this revision is published (recorded in the run)"
+        required: true
 
 permissions:
   contents: read
@@ -13,6 +21,7 @@ permissions:
 
 jobs:
   backend:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -69,16 +78,29 @@ jobs:
       - name: Dataset lint (synthetic data + golden set; no database, no model)
         run: uv run lattice dataset lint
 
-      - name: Bootstrap database (roles, databases, extensions)
+      - name: Production bootstrap as a non-superuser platform administrator (Phase 11)
+        # The managed-PostgreSQL path creates the roles and the `lattice` database with
+        # CREATEROLE + CREATEDB only. template1's vector stands in for a platform's
+        # extension allow-list (pgvector is not a trusted extension).
+        working-directory: .
+        run: |
+          psql -v ON_ERROR_STOP=1 -d postgres \
+            -c "CREATE ROLE ci_platform_admin LOGIN CREATEROLE CREATEDB PASSWORD 'ci-admin-password'"
+          psql -v ON_ERROR_STOP=1 -d template1 -c "CREATE EXTENSION IF NOT EXISTS vector"
+          PGUSER=ci_platform_admin PGPASSWORD=ci-admin-password psql -v ON_ERROR_STOP=1 -d postgres \
+            -v owner_password=ci-owner-password -v app_password=ci-app-password \
+            -v worker_password=ci-worker-password -f infra/postgres/bootstrap_production.sql
+
+      - name: Bootstrap the test database (superuser bootstrap; idempotent over the above)
         working-directory: .
         run: >-
           psql -v ON_ERROR_STOP=1 -d postgres
           -v owner_password=ci-owner-password -v app_password=ci-app-password
           -v worker_password=ci-worker-password -f infra/postgres/bootstrap.sql
 
-      - name: Migrations apply to a clean database, round-trip, and match the models
+      - name: Migrations apply to a clean database (lattice migrate), round-trip, and match the models
         run: |
-          uv run alembic upgrade head
+          uv run lattice migrate
           uv run alembic check
           uv run alembic downgrade base
           uv run alembic upgrade head
@@ -111,6 +133,11 @@ jobs:
               --grants "../data/synthetic/$org/admin-grants.yaml"
           done
 
+      - name: The production migration is a no-op on the seeded data; deployment checks pass
+        run: |
+          uv run lattice migrate
+          uv run lattice check-deployment
+
       - name: Retrieval evaluation as every persona (security metrics must be 0)
         # Fake embeddings: this gates security, not quality (docs/evaluation-plan.md §9).
         run: uv run lattice eval retrieval --embedding fake --quiet
@@ -126,6 +153,7 @@ jobs:
   # Known vulnerabilities in the locked dependency sets (Phase 10). Separate job: it
   # needs the advisory databases, and a new advisory must not hide test results.
   dependency-audit:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
@@ -150,6 +178,7 @@ jobs:
         run: make audit
 
   web:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -217,3 +246,128 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report
           retention-days: 7
+
+  # Images (D-27): only for pushes to main, v* tags and manual dispatch -- never for a
+  # development branch push. On a push it runs after the three jobs above passed in the
+  # SAME run (nothing is re-tested); on dispatch it requires an earlier successful push
+  # run of this exact commit. Builds both images, starts the reference stack from them
+  # and smokes it (container-level checks the test jobs cannot make), then publishes to
+  # GHCR with GITHUB_TOKEN (no long-lived credential) and records the digests.
+  images:
+    needs: [backend, web, dependency-audit]
+    if: >-
+      always() && !cancelled() && (
+        github.event_name == 'workflow_dispatch' || (
+          github.event_name == 'push' &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
+          needs.backend.result == 'success' && needs.web.result == 'success' &&
+          needs.dependency-audit.result == 'success'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+    concurrency:
+      group: images-${{ github.sha }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: A dispatched publication needs a green push run of this exact commit
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          passed=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&event=push&status=success" --jq '.total_count')
+          if [ "${passed:-0}" -lt 1 ]; then
+            echo "::error::no successful push CI run for ${GITHUB_SHA}: push it and let CI pass first"
+            exit 1
+          fi
+          echo "Publishing ${GITHUB_SHA} from ${GITHUB_REF_NAME}: ${REASON}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Image names and version
+        id: names
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          version=unknown
+          case "$GITHUB_REF" in refs/tags/v*) version="${GITHUB_REF_NAME}" ;; esac
+          {
+            echo "backend=ghcr.io/${owner}/lattice-backend"
+            echo "web=ghcr.io/${owner}/lattice-web"
+            echo "version=${version}"
+            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build the backend image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/Dockerfile
+          load: true
+          tags: ${{ steps.names.outputs.backend }}:sha-${{ github.sha }}
+          build-args: |
+            LATTICE_BUILD_REVISION=${{ github.sha }}
+            LATTICE_BUILD_VERSION=${{ steps.names.outputs.version }}
+          labels: org.opencontainers.image.created=${{ steps.names.outputs.created }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      - name: Build the web image
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/web
+          file: apps/web/Dockerfile
+          load: true
+          tags: ${{ steps.names.outputs.web }}:sha-${{ github.sha }}
+          build-args: |
+            LATTICE_BUILD_REVISION=${{ github.sha }}
+            LATTICE_BUILD_VERSION=${{ steps.names.outputs.version }}
+          labels: org.opencontainers.image.created=${{ steps.names.outputs.created }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+      - name: Reference stack from these images, then smoke (production settings)
+        env:
+          LATTICE_BACKEND_IMAGE: ${{ steps.names.outputs.backend }}:sha-${{ github.sha }}
+          LATTICE_WEB_IMAGE: ${{ steps.names.outputs.web }}:sha-${{ github.sha }}
+        run: |
+          make prod-env
+          make prod-up
+          make prod-smoke
+          make prod-check
+
+      - name: Stop the reference stack
+        if: always()
+        run: make prod-destroy || true
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Publish by digest (sha-<commit>, plus the release tag on v*)
+        env:
+          BACKEND: ${{ steps.names.outputs.backend }}
+          WEB: ${{ steps.names.outputs.web }}
+          VERSION: ${{ steps.names.outputs.version }}
+        run: |
+          {
+            echo "| Image | Tags | Digest |"
+            echo "| ----- | ---- | ------ |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for image in "$BACKEND" "$WEB"; do
+            tags="sha-${GITHUB_SHA}"
+            if [ "$VERSION" != unknown ]; then
+              docker tag "${image}:sha-${GITHUB_SHA}" "${image}:${VERSION}"
+              tags="${tags} ${VERSION}"
+            fi
+            for tag in $tags; do docker push --quiet "${image}:${tag}"; done
+            digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "${image}:sha-${GITHUB_SHA}")
+            echo "| ${image} | ${tags} | \`${digest#*@}\` |" >> "$GITHUB_STEP_SUMMARY"
+          done

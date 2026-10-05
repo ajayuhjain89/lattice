@@ -6,7 +6,9 @@ per row; §3 (embedding) Phase 4, provider configuration Phase 6; §4 (retrieval
 switches, limits, the worker, deployment, backups, CI) and §8 (failure drills) Phase 8;
 §9 (identity: SSO, SCIM provisioning, first administrator) and the rate limits of §7.4
 Phase 10; the images, worker liveness, trusted ingress hop, §7.9 (local reference stack)
-and the P11.1 drills of §8 Phase 11 (P11.1).
+and the P11.1 drills of §8 Phase 11 (P11.1); the production bootstrap, `lattice
+migrate`, `check-deployment`, releases and rollbacks (§7.6, §7.7, §7.10) and the P11.2
+drills of §8 Phase 11 (P11.2).
 A row marked *planned* names the phase that makes it real; do not follow planned
 procedures on a live system.
 
@@ -22,7 +24,7 @@ operations:
 | Changed a password in `.env` after the database volume was created | `make db-bootstrap` (idempotent; re-asserts roles, passwords, databases, extensions) |
 | API exits at startup with `Refusing to start: database role ... is unsafe` | `LATTICE_DATABASE_URL` must use `lattice_app`. Run `make check-db-role` for the list of problems. Never "fix" this by granting privileges to the runtime role |
 | API exits with `Invalid configuration:` | The message names each missing/invalid `LATTICE_*` variable (values are never printed). Compare with `.env.example` |
-| `database schema is not migrated` | `make migrate` |
+| `database schema is not migrated` | `make migrate` (development); in a deployment the migration job runs `lattice migrate` (§7.7) |
 | Start over with an empty local database | `make db-destroy` (**deletes all local data**), then `make db-up migrate seed` |
 | Port 5433 already in use | Set `LATTICE_DB_HOST_PORT` in `.env` and update the ports in the `LATTICE_*_URL` values |
 | Edited the synthetic dataset or a golden item | `make dataset-lint` (must print `OK`); after changing authored tickets, `make dataset-generate` and commit the regenerated `tickets-bulk.jsonl`. See `data/synthetic/README.md` §13 |
@@ -273,19 +275,28 @@ unsafe runtime role; a schema at another revision; an invalid operational settin
 addition, before a first deployment:
 
 1. Three database credentials in the platform's secret store: runtime (`lattice_app`),
-   worker (`lattice_worker`), owner (`lattice_owner`, migration job only). Bootstrap once
-   as a superuser (`infra/postgres/bootstrap.sql`), then never use the superuser again.
-2. Order: migrate → start API and worker → readiness passes → route traffic.
+   worker (`lattice_worker`), owner (`lattice_owner`, migration job and operators only — a
+   production api or worker refuses to start if the owner credential is in its
+   environment). Bootstrap with the platform's administrative role (CREATEROLE + CREATEDB
+   suffice): `psql "<admin connection>" -v owner_password=… -v app_password=… -v
+   worker_password=… -f infra/postgres/bootstrap_production.sql` (in the backend image
+   under `/opt/lattice/app/infra/postgres/`); it fails loudly if a role is unsafe. Enable
+   `vector` through the platform first if its admin role cannot create it. Never use a
+   superuser for anything else.
+2. Order: `lattice migrate` → `lattice check-deployment` → start API and worker →
+   readiness passes → route traffic (deployment.md §9).
 3. Metrics listener on an internal interface; alert on
    `lattice_security_invariant_violations_total > 0`, readiness failures,
    `lattice_dependency_failures_total`, and a growing `lattice_jobs_waiting`.
 4. Identity: connect each organization's OIDC provider and SCIM (§9); set
    `LATTICE_PUBLIC_URL`; keep `LATTICE_OIDC_SECRET_*` in the secret store; set
    `LATTICE_TRUSTED_PROXIES` to the ingress addresses (§7.4).
-5. Images and the local reference stack exist (P11.1, §7.9); publishing, the production
-   migration flow and staging (P11.2), retention (P11.4), backups (P11.5) and alerting
-   (P11.6) are **not built**. The production contract is [deployment.md](deployment.md),
-   which marks each item built or target.
+5. Validate each process's configuration in its image without starting it:
+   `lattice check-config api|worker|migrate` (names problems, never values).
+6. Images, the reference stack, publishing and the release procedure exist (P11.1, P11.2;
+   §7.9, §7.10); retention (P11.4), backups (P11.5) and alerting (P11.6) are **not
+   built**. No cloud staging exists (D-22 amended: deferred, no budget). The production
+   contract is [deployment.md](deployment.md), which marks each item built or target.
 
 ### 7.7 Backups, recovery and migrations
 
@@ -300,7 +311,13 @@ For a self-managed database today:
 | ---- | --------- |
 | Back up | `pg_dump --format=custom --no-owner lattice > lattice-<date>.dump` as a superuser or a role that bypasses RLS (a dump as `lattice_owner` or a runtime role sees no tenant rows) |
 | Restore | Bootstrap an empty server (`bootstrap.sql`), `pg_restore --no-owner --role=lattice_owner -d lattice lattice-<date>.dump`, then `make check-db-role` and `lattice worker --once` (both verify roles and the schema revision) |
-| Migrate | Take a backup, run the new build's migrations as `lattice_owner`, then start the new build. Migrations are tested to round-trip (`alembic downgrade base` / `upgrade head` in CI); a downgrade is a last resort, after restoring is ruled out |
+| Migrate | Take a backup; stop every api instance and the worker (stop-the-world, D-23); run **`lattice migrate`** with the new image as `lattice_owner` (lock, fence, pre-flight, one transaction, exact verification — deployment.md §9.2); start the new build. `deploy/deploy.sh release --allow-migration` does all of it (§7.10). Never `alembic upgrade` by hand in a deployment, never edit `alembic_version` |
+| `lattice migrate` refused: `application sessions are still connected (lattice_app/lattice-api xN, …)` | An api instance or the worker is still running against the database. Stop it (every replica) and run again; nothing was changed |
+| `lattice migrate` refused: `another migration holds the migration lock` | Another `lattice migrate` is running (`lattice migrate --status` shows `migration_running: True`). Wait for it; never run two |
+| api/worker fail with `permission denied for database "lattice"`; `check-deployment` says `a migration fence was left in place` | A migration was killed after fencing (its transaction rolled back). Run `lattice migrate --status`, then `lattice migrate` (finishes and lifts the fence) or `lattice migrate --release-fence` |
+| `lattice migrate` failed (`FAILED: …`) | Its transaction rolled back: the schema is the old revision. Restart the previous build (the script does); fix forward |
+| Downgrade | Only `deploy/deploy.sh rollback --allow-downgrade`, and only when every revision being undone declares `Reversible: yes` (`lattice migrate --downgrade-to <rev> --check` decides; of 0001–0013 only 0002, 0010, 0012 do). Otherwise roll forward or restore |
+| Check a deployment's database | `lattice check-deployment [--api-instances N --api-pool-size N]` as `lattice_owner`: exact schema and no model drift, safe roles, forced RLS, no PUBLIC access or fence, privilege snapshot, connection budget. A privilege-snapshot difference after a migration that changed privileges: `make privilege-snapshot` and review the diff; anywhere else it is drift — find who granted what |
 | Rebuild derived data | Chunks, vectors and the lexical index are derived from the sources: `lattice reindex` rebuilds them without deleting documents |
 
 ### 7.8 CI and releases
@@ -316,6 +333,14 @@ contract, lints, type checks, runs unit tests, builds and runs the browser tests
 dependency-audit job (Phase 10) runs `make audit` (pip-audit over the locked backend set
 with hashes, `pnpm audit` over the web lockfile). A new advisory fails only that job:
 upgrade the package (or document why it does not apply) in a reviewed commit.
+
+**Images (P11.2, D-27).** The `images` job builds both images, starts the reference
+stack from them, smokes and checks it, and publishes `sha-<commit>` (and `vX.Y.Z` on a
+tag) to GHCR with the run's token — only on a push to `main`, a `v*` tag (after the three
+jobs of the same run) or a manual dispatch. To publish an unmerged revision for future
+staging: push it, wait for its CI run to pass, then *Actions → CI → Run workflow* on that
+branch with a reason; the test jobs are skipped and the job refuses unless a successful
+push run of that exact commit exists. Deploy by the digest in the job summary.
 
 **Audit exceptions.** When no fix exists, an advisory may be accepted, one at a time and
 by its GHSA identifier only, in `apps/web/pnpm-workspace.yaml` (`auditConfig.ignoreGhsas`)
@@ -339,11 +364,33 @@ Docker has 3 GB).
 | Build the images | `make prod-build` (labels them with the current git revision) |
 | Start / check / stop | `make prod-up` (waits for every health check), `make prod-smoke`, `make prod-ps`, `make prod-down`; `make prod-destroy` deletes its volumes |
 | Open it | `https://localhost:8443` (Caddy's internal CA: the browser warns). `http://localhost:8080` redirects |
-| Sign in as a persona / run an Ask | `make prod-up VERIFY=1 [FAKE_DELAY=40]`: test env, development sign-in, fake providers (deploy/compose.verify.yaml). Seed and sync with `docker compose --env-file deploy/.env.reference -f compose.production.yaml -f deploy/compose.verify.yaml run --rm ops seed --manifest /srv/lattice/data/synthetic/halden/org.yaml …` (exports are mounted at `/srv/lattice/data`) |
+| Sign in as a persona / run an Ask | `make prod-up VERIFY=1 [FAKE_DELAY=40]`: test env, development sign-in, fake providers (deploy/compose.verify.yaml); then `make prod-seed VERIFY=1` (synthetic-only: seed with `--require-synthetic`, sync with fake embeddings, admin grants) |
+| Database checks | `make prod-check` (`lattice check-deployment`), `make prod-migrate` (`lattice migrate --status`) |
+| `bootstrap` fails with `password authentication failed for user "platform_admin"` | The volume was initialised before P11.2 (superuser bootstrap): `make prod-destroy`, then `make prod-up` |
 | A container is `unhealthy` | `make prod-ps`; `docker logs lattice-reference-<service>-1`. api: readiness (database or schema). worker: heartbeat older than 300 s (frozen or blocked). web: `GET /` failing |
 | Changed `deploy/caddy/Caddyfile` | Recreate Caddy (`… up -d --force-recreate caddy`): it is a single-file bind mount, so an editor that replaces the file leaves the container on the old one |
 | `lattice smoke` cannot read the CA | It runs as uid 10001; `make prod-smoke` copies only Caddy's public root certificate to `deploy/.reference-ca.crt` (git-ignored) and mounts it |
 | Passwords | `deploy/.env.reference` (git-ignored, generated once by `make prod-env`); each service receives only its own credential |
+
+### 7.10 Releases and rollbacks — *implemented (P11.2)*
+
+`deploy/deploy.sh` (reference stack; the steps are the contract of deployment.md §9 for
+any platform). One deployment at a time; every image is resolved to its immutable ID
+first; the log is `deploy/state/deploy.log`.
+
+| Situation | Action |
+| --------- | ------ |
+| What is running | `deploy/deploy.sh status` (image ID and revision per service, database revision, open application sessions, migration lock) |
+| Release without a schema change | `deploy/deploy.sh release --backend <ref> --web <ref> --expect-revision <sha>`: rolling, readiness-gated, no downtime, smoke with every process's revision |
+| Release with a migration | the same plus `--allow-migration` (refused without it): stop-the-world, `lattice migrate`, unavailable interval printed (19 s measured) |
+| `FAILED: revision mismatch` | Backend and web images are from different commits, the image's label and baked revision differ, or `--expect-revision` differs. Build or pull the pair from one commit |
+| `FAILED: configuration of <process> is invalid` / `the stack configuration is incomplete` | Nothing was changed. Fix the named variable (or the image's baked setting) |
+| `FAILED: <service> did not become ready … previous image restored` | That instance runs the previous image again; the others never changed. Read `docker logs lattice-reference-<service>-1` (startup refusals name the problem) |
+| `FAILED: smoke failed after deploying …` | The new release is running: `deploy/deploy.sh rollback` (no-schema releases), then investigate |
+| `FAILED: schema change did not complete; previous build … restarted` | The migration failed or was refused (its transaction rolled back); the previous build serves again, maintenance lifted |
+| `FAILED: the new build did not become ready after the schema change; maintenance stays on` | Roll **forward**: the previous build cannot serve the new schema. Fix the configuration or deploy a fixed build of the same schema; `/api` answers 503 until then |
+| Roll back | `deploy/deploy.sh rollback` — the previous release by ID, rolling. Across a migration: refused (`the database … is newer than this build: roll forward`) unless `--allow-downgrade` and every undone revision is reversible |
+| `FAILED: another deployment is running` | Another `deploy.sh` holds `deploy/state/lock`; remove the directory only if none runs |
 
 ## 8. Failure drills — *run for Phase 8 (2026-09-29)*
 
@@ -392,6 +439,31 @@ fake providers where an Ask was needed):
 `/v1/activity` 31 ms, `/v1/admin/sources` 30 ms, `/v1/admin/activity` 21 ms; a requested
 sync of 148 unchanged tickets 1.7 s, of Drive 0.3 s; API resident memory about 77 MB.
 No model benchmark was run (ADR-012).
+
+**P11.2 drills (2026-10-05), local reference stack in production mode** (two API and two
+web instances behind Caddy, the managed-PostgreSQL emulation, release images built from
+the working tree under drill revision labels, `deploy/drills/` variants; traffic: one
+request each to `/api/v1/health/ready` and `/` through the ingress every ~0.2 s):
+
+| Drill | How | Observed |
+| ----- | --- | -------- |
+| Production bootstrap without a superuser | fresh volumes, `make prod-up` | `bootstrap_production.sql` as `platform_admin` (CREATEROLE, CREATEDB only) created roles, database, extensions and grants, idempotent on re-run (password rotation works); `lattice migrate` empty → 0013 in 0.5 s; smoke 13/13, `check-deployment` 7/7 (privilege snapshot identical to the superuser-bootstrapped test database) |
+| Migration with API and worker running | `ops migrate` | `REFUSED: application sessions are still connected (lattice_app/lattice-api x2, lattice_worker/lattice-worker x1)`; nothing changed, fence lifted |
+| Migration with only the worker running | api ×2 stopped | refused, naming `lattice_worker/lattice-worker x1` |
+| Migration with both stopped | api ×2 and worker stopped | `OK: 0013 -> 0013 (applied: none)` |
+| Concurrent migration | another `lattice_owner` session holds the migration lock 15 s | `--status` showed `migration_running: True`; `REFUSED: another migration holds the migration lock (waited 4 s)`; after release the migration ran |
+| Revision mismatch | `--expect-revision` differing; backend and web from different commits | both refused before any change |
+| Missing secret / invalid setting | `LATTICE_APP_PASSWORD` empty; an image with `LATTICE_RATE_LIMIT_ASK_PER_MINUTE=0` | `the stack configuration is incomplete`; `LATTICE_RATE_LIMIT_ASK_PER_MINUTE: Input should be greater than or equal to 1` from `check-config`; nothing changed |
+| Rolling release and rollback (no schema change) | A → B → A → B, each ~70 s, under traffic | 765 requests, **0** failed (api and web); smoke 13/13 with the expected revision on api1, api2 and the worker |
+| First attempt with one web instance | the same, before `web2` existed | API 0 failed, web 35 × 502/503 (a single instance cannot be replaced without a gap, plus the ingress's re-check): the reason the stack runs `web1`/`web2` and waits for the health check after each replacement |
+| Readiness never passes | an API listening on the wrong port | api1 unhealthy, restored to its previous image, deployment failed; 324 requests, 0 failed |
+| Ready but smoke fails | a production API serving `/docs` | rolled out, smoke `FAIL production API surface`, deployment failed; `rollback` → 13/13 |
+| Failing migration | revision 0014 fails (division by zero) inside its transaction | maintenance on, api/worker stopped, `lattice migrate` failed, previous build restarted, maintenance off; database still 0013; `/api` 503 for 11 s, web 0 failed |
+| Migrating release | 0013 → 0014 (a 2 s drill revision), `--allow-migration`, under traffic | lock, fence, pre-flight, upgrade, verify; **API unavailable 19 s** (target < 2 min) answering the maintenance 503 (`service_unavailable`, `Retry-After: 30`, the API's CSP); web 0 failed of 350; smoke 13/13 |
+| Schema mismatch | the 0013 build started against 0014 | `Refusing to start: … database schema is at revision 0014, this build expects 0013`; `check-deployment` `FAIL schema revision`; recovered by rolling forward |
+| Rollback across a reversible migration | `rollback` (refused: `roll forward`), then `rollback --allow-downgrade` | `allowed: would undo 0014`; stop-the-world downgrade by the running build; API unavailable 16 s; back on the 0013 release, smoke 13/13 |
+| Rollback across an irreversible migration | `rollback --allow-downgrade` | `REFUSED: revision(s) 0014 declare no data-safe downgrade` before anything stopped |
+| Migration killed mid-transaction | `docker kill` during the drill revision's upgrade | transaction rolled back (still 0013); new api connections `permission denied for database "lattice"` (fail closed); `check-deployment` reported the fence and the lock still held by the dying session; `lattice migrate --release-fence` → `check-deployment` 7/7 |
 
 ## 9. Identity: SSO, SCIM provisioning and administrators — *implemented (Phase 10)*
 

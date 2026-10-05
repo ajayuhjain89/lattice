@@ -16,6 +16,7 @@ implicit trust of its own (its default trusts 127.0.0.1).
 """
 
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
@@ -29,7 +30,14 @@ from lattice.api.handlers import register_exception_handlers
 from lattice.api.middleware import BodyLimitMiddleware, CsrfMiddleware, RequestContextMiddleware
 from lattice.api.routes import access, activity, admin, ask, auth, health, me, scim, sources
 from lattice.build import report_startup
-from lattice.config import Environment, Settings, load_provider_settings, load_settings
+from lattice.config import (
+    ConfigurationError,
+    Environment,
+    Settings,
+    load_provider_settings,
+    load_settings,
+    owner_credential_problem,
+)
 from lattice.db.engine import Database, create_engine
 from lattice.db.role_check import verify_runtime_role
 from lattice.identity.dev_provider import DevIdentityProvider
@@ -45,6 +53,8 @@ from lattice.ratelimit import ApiLimits
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
+    if (problem := owner_credential_problem(settings.env, os.environ)) is not None:
+        raise ConfigurationError(problem)
     production = settings.env is Environment.PRODUCTION
     configure_logging(
         level=settings.log_level,

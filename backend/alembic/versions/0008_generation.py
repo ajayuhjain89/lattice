@@ -4,6 +4,8 @@ audit events.
 Revision ID: 0008
 Revises: 0007
 Create Date: 2026-09-29
+Reversible: no (the downgrade drops traces, audit events and credential references)
+Locks: ACCESS EXCLUSIVE on model_providers; new tables
 
 Phase 6 (docs/security-model.md §5, §6, §8; ADR-011, D-16; data-model §7).
 

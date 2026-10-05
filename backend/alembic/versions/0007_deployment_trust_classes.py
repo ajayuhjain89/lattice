@@ -3,6 +3,8 @@
 Revision ID: 0007
 Revises: 0006
 Create Date: 2026-09-29
+Reversible: no (the downgrade drops approvals and the organization-controlled level)
+Locks: ACCESS EXCLUSIVE on model_providers and org_settings
 
 Final Phase 5 closure (docs/security-model.md §6, ADR-011).
 

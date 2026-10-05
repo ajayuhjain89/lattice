@@ -3,6 +3,8 @@
 Revision ID: 0002
 Revises: 0001
 Create Date: 2026-09-27
+Reversible: yes (the downgrade changes nothing)
+Locks: function ACL changes only (brief locks on two functions)
 
 Brings databases migrated with the original 0001 (and bootstrapped by the original
 bootstrap) to the steady state that the current 0001 and bootstrap produce directly.

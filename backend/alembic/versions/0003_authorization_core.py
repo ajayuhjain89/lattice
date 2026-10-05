@@ -3,6 +3,8 @@
 Revision ID: 0003
 Revises: 0002
 Create Date: 2026-09-27
+Reversible: no (the downgrade drops the authorization tables and their rows)
+Locks: new tables only
 
 Phase 2 (docs/implementation-plan.md): the tables the authorization policy reads
 (docs/authorization-model.md §3-4, docs/data-model.md §2, §4, §5). There is no content

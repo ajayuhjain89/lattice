@@ -8,6 +8,7 @@ offending variable but never includes its value: database URLs carry passwords, 
 pydantic's default error text echoes the input.
 """
 
+from collections.abc import Mapping
 from enum import StrEnum
 from ipaddress import IPv4Network, IPv6Network, ip_network
 from pathlib import Path
@@ -65,6 +66,31 @@ def _require_asyncpg_url(value: SecretStr | None) -> SecretStr | None:
     if value is not None and not value.get_secret_value().startswith(_ASYNC_POSTGRES_SCHEME):
         raise ValueError(f"must be a PostgreSQL URL starting with {_ASYNC_POSTGRES_SCHEME}")
     return value
+
+
+# The schema owner's credential belongs to the migration job and operators only
+# (deployment.md §5.3). A production api or worker refuses to start if any of these is in
+# its environment: it would be one compromised process away from owning the schema.
+OWNER_CREDENTIAL_VARIABLES = (
+    "LATTICE_MIGRATION_DATABASE_URL",
+    "LATTICE_OWNER_PASSWORD",
+    "POSTGRES_PASSWORD",
+)
+
+
+def owner_credential_problem(env: Environment, environ: Mapping[str, str]) -> str | None:
+    """Names (never values) of owner-credential variables a production runtime process
+    must not hold; None outside production or when none is set."""
+    if env is not Environment.PRODUCTION:
+        return None
+    present = [name for name in OWNER_CREDENTIAL_VARIABLES if environ.get(name)]
+    if not present:
+        return None
+    return (
+        f"{', '.join(present)} must not be set for the api or worker when "
+        "LATTICE_ENV=production: the schema owner's credential belongs to the migration "
+        "job and operators only"
+    )
 
 
 class Settings(BaseSettings):

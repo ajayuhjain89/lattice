@@ -3,6 +3,8 @@
 Revision ID: 0006
 Revises: 0005
 Create Date: 2026-09-28
+Reversible: no (the downgrade drops columns and local provider records)
+Locks: ACCESS EXCLUSIVE on model_providers and org_settings
 
 Phase 5 closure (docs/security-model.md §6, ADR-009, ADR-010).
 

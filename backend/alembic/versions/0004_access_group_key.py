@@ -3,6 +3,8 @@
 Revision ID: 0004
 Revises: 0003
 Create Date: 2026-09-27
+Reversible: no (the downgrade drops access_groups.key)
+Locks: ACCESS EXCLUSIVE on access_groups (column, backfill, constraints)
 
 Synthetic manifests (Phase 3) and future source synchronization (Phase 4) must refer
 to a group deterministically, as departments and accounts already are (by ``key``).

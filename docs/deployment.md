@@ -1,11 +1,15 @@
 # Lattice — Deployment Contract
 
-Status: **P11.1 (2026-10-03).** This is the provider-independent production contract that
+Status: **P11.2 (2026-10-05).** This is the provider-independent production contract that
 Phase 11 builds towards. **Built in P11.1:** the two images, the ingress routing and the
 single trusted hop, the API's trusted-proxy setting, worker liveness, graceful shutdown,
-build identification, `lattice smoke` and the local reference stack (§15). **Not built
-yet:** publishing, the migration flow and staging (P11.2), identity operations (P11.3),
-shared limits and retention (P11.4), backups (P11.5), alerts (P11.6). Every section says
+build identification, `lattice smoke` and the local reference stack (§15). **Built in
+P11.2:** the managed-PostgreSQL bootstrap (§7), `lattice migrate` with its lock, fence and
+pre-flight, migration headers, `lattice check-deployment` with the privilege snapshot
+(§8), `lattice check-config` and `lattice version`, the scripted deployment and rollback
+(§9, `deploy/deploy.sh`), the ingress maintenance switch, two web instances, and the GHCR
+`images` job (§3). **Not built yet:** identity operations (P11.3), shared limits and
+retention (P11.4), backups (P11.5), alerts (P11.6). Every section says
 what exists **today** and what is a **target** and in which checkpoint it lands
 ([phase-11-plan.md](phase-11-plan.md) §25); nothing marked *target* may be relied on
 until its checkpoint is approved. Decision record:
@@ -38,7 +42,7 @@ application must never depend on it.
                └──────┬──────────────┬──────┘
            private    │              │
            network    ▼              ▼
-               api ×2 (backend image)     web ×1+ (web image)
+               api ×2 (backend image)     web ×2 (web image)
                :8000, metrics :9464         :3000
                       │
      worker ×1 (backend image), metrics :9465        migrate (backend image, one-off)
@@ -51,7 +55,8 @@ application must never depend on it.
 | - | ------------- | ------ |
 | `/api/*` routing | The ingress routes `/api/*` straight to the API (reference stack: Caddy, `deploy/caddy/Caddyfile`). The production web build has **no** `/api` route: the Next.js rewrite exists only under `next dev` (`apps/web/next.config.ts`), with a 150 s proxy timeout | unchanged; staging/production use their own ingress under §4 (P11.2) |
 | API instances | Two in the reference stack (`api1`, `api2`); one under `make api` in development | ≥ 2 in staging and production |
-| Packaging | `lattice-backend` and `lattice-web` images (§3), built locally (`make prod-build`) | published to GHCR (P11.2) |
+| Packaging | `lattice-backend` and `lattice-web` images (§3), built locally (`make prod-build`); the CI `images` job (P11.2) builds, smokes and publishes them to GHCR from `main`, `v*` tags and manual dispatch only | unchanged |
+| Web instances | Two in the reference stack (`web1`, `web2`, P11.2), so a release replaces one at a time | ≥ 2 wherever web releases must not show a gap |
 
 The web server never calls the API server-side: every API call is the browser's,
 same-origin, to `/api` (`apps/web/src/api/client.ts`). That is why the ingress can send
@@ -63,8 +68,8 @@ same-origin, to `/api` (`apps/web/src/api/client.ts`). That is why the ingress c
 | ------- | -------------------------------- | ------------- | --------- | ----------- |
 | **api** | the image's default: `uvicorn lattice.api.app:create_app --factory --host 0.0.0.0 --port 8000 --no-access-log --no-proxy-headers --timeout-graceful-shutdown 150` | `lattice_app` | ≥ 2 | `make api` (127.0.0.1, `--reload`, `--no-proxy-headers`) |
 | **worker** | `lattice worker` | `lattice_worker` | 1 (more are safe: `SKIP LOCKED`) | `make worker` |
-| **web** | the image's default: `node server.js` (Next.js standalone) on `0.0.0.0:3000` | none | ≥ 1 | `make web` (`next dev`, 127.0.0.1) |
-| **migrate** | `alembic upgrade head` (one-off job; the production flow is P11.2) | `lattice_owner` | one at a time | `make migrate` |
+| **web** | the image's default: `node server.js` (Next.js standalone) on `0.0.0.0:3000` | none | ≥ 1 (≥ 2 for gap-free releases) | `make web` (`next dev`, 127.0.0.1) |
+| **migrate** | `lattice migrate` (one-off job, P11.2: lock, fence, pre-flight, upgrade, exact verification; §9.2) | `lattice_owner` | one at a time (the lock refuses a second) | `make migrate` (plain `alembic upgrade head`, development only) |
 | **operator** | `lattice <command>` (one-off) | `lattice_owner` | ad hoc | `uv run lattice …` on the host |
 
 `--no-proxy-headers` matters: uvicorn's own default trusts forwarding headers from
@@ -79,7 +84,20 @@ the application (§4), whatever command starts it.
 | `lattice-web` | Node 22 slim, pinned by digest | Next.js standalone output; no persona manifests, no `.env`, no fixtures | non-root; read-only root filesystem |
 
 - **Registry:** GHCR (D-27), published only from pushes to `main`, `v*` tags and manual
-  dispatch, after the existing CI jobs pass in the same run (P11.2).
+  dispatch. **As built (P11.2):** the `images` job of `.github/workflows/ci.yml`. On a
+  push to `main` or a `v*` tag it `needs` the backend, web and dependency-audit jobs of
+  the **same** run (nothing is re-tested). On `workflow_dispatch` (choose the branch or
+  commit in the Actions UI, give a reason) the three test jobs are skipped and the job
+  instead requires an earlier **successful push run of this exact commit** (GitHub API,
+  `actions: read`), so a Phase 11 revision can be published for future staging without
+  merging it and without re-running the suites. It builds both images with the commit
+  as `LATTICE_BUILD_REVISION`, starts the reference stack from them (`make prod-up`),
+  runs `make prod-smoke` and `make prod-check`, then pushes `sha-<commit>` (plus the
+  release tag on `v*`) with the run's `GITHUB_TOKEN` (`packages: write` on this job only;
+  no long-lived registry credential) and writes the digests to the job summary. A
+  development-branch push builds no image. The repository is private: GHCR storage then
+  counts against the account's free package allowance; nothing is published until a
+  push to `main`, a tag or a deliberate dispatch.
 - **Tags:** `sha-<40-char git sha>` for every published build; `vX.Y.Z` additionally for a
   release tag. Never `latest`. Tags are labels; **deployments reference the digest**
   (`…@sha256:…`), recorded in the deploy log.
@@ -91,7 +109,7 @@ the application (§4), whatever command starts it.
   revision). Reported only as `lattice_build_info{revision,version,schema_revision}` on
   the internal metrics listener and in one `startup` log line per api and worker process
   (`lattice.build`); unset or malformed values read `unknown`. Public endpoints never
-  expose a version (Phase 8 rule; tested). `.created` is left to the P11.2 publishing job.
+  expose a version (Phase 8 rule; tested). `.created` is set by the `images` job.
 - **As built (P11.1):** `backend/Dockerfile` (context: the repository root, limited by
   `backend/Dockerfile.dockerignore` to `backend/` sources, Alembic and the bootstrap SQL):
   a build stage with uv 0.12.19 and the locked dependencies, a runtime stage with only the
@@ -116,7 +134,7 @@ the application (§4), whatever command starts it.
 | Timeouts | Upstream response timeout to the API **≥ 150 s** (an Ask may spend `LATTICE_GENERATION_DEADLINE_SECONDS`, default 120 s, in generation plus retrieval). Connect timeout ≤ 5 s | `response_header_timeout 180s`, `dial_timeout 5s`; request header/body read 10 s / 30 s; web upstream 30 s |
 | Body size | The API's own cap, `LATTICE_MAX_REQUEST_BYTES` (64 KiB, 413 `request_too_large`), is authoritative. The ingress may only stop larger uploads, above that cap and ≤ 10 MiB, so it never answers first for a body the API would accept. No route needs more than 64 KiB | `request_body max_size 1MB`: bodies between 64 KiB and 1 MB get the API's typed 413 |
 | Health routing | The ingress (or platform) probes each api instance at `/v1/health/ready` on the instance port, not through the public route. Liveness `/v1/health/live`. The public `https://<origin>/api/v1/health/ready` is for the external availability probe | as stated; container health checks per process (§10) |
-| Maintenance | During a migrating release (§9.2) the ingress answers `/api/*` with 503 and `Retry-After` | target, P11.2 |
+| Maintenance | During a migrating release (§9.2) the ingress answers `/api/*` with 503 and `Retry-After` | **P11.2:** while `deploy/maintenance/api` exists (mounted read-only at `/srv/maintenance`), `/api/*` answers 503, `Retry-After: 30`, the API's `default-src 'none'` CSP and the API's error envelope (`service_unavailable`); web pages keep serving |
 
 **Development only:** `next dev` keeps proxying `/api/*` to `LATTICE_API_URL` (the
 Next.js server is then the API's peer, and `make api` trusts no forwarding header), with
@@ -173,7 +191,7 @@ secret). Only settings that exist today are listed unless marked *target*.
 
 | Variable | Class | Rule |
 | -------- | ----- | ---- |
-| `LATTICE_MIGRATION_DATABASE_URL` | secret | `lattice_owner` credential; available **only** to the migration job and operators, never to api, worker or web |
+| `LATTICE_MIGRATION_DATABASE_URL` | secret | `lattice_owner` credential; available **only** to the migration job and operators, never to api, worker or web. **Enforced (P11.2):** a production api or worker refuses to start when `LATTICE_MIGRATION_DATABASE_URL`, `LATTICE_OWNER_PASSWORD` or `POSTGRES_PASSWORD` is in its environment (`lattice.config.owner_credential_problem`; names only, never values); `lattice migrate` refuses a credential that does not own the schema, a superuser and a BYPASSRLS role |
 | `LATTICE_PUBLIC_URL` | deployment | printed by `lattice sso …` for redirect and SCIM URLs |
 | `LATTICE_ENV` | config | `production` for commands that load the full settings |
 
@@ -189,10 +207,18 @@ secret). Only settings that exist today are listed unless marked *target*.
 
 The web process holds **no secret** (architecture §2).
 
+**Validating a configuration without starting anything (P11.2):** `lattice check-config
+api|worker|migrate` loads exactly what the process would load from its environment,
+applies every production guard (and, for api and worker, the owner-credential refusal)
+and connects nowhere; `deploy/deploy.sh` runs it inside the new image with each
+service's real environment before changing anything. `lattice version [--json]` prints
+the build's revision, version and schema revision (no database).
+
 ### 5.5 bootstrap (once, by the platform's administrative role)
 
 `LATTICE_OWNER_PASSWORD`, `LATTICE_APP_PASSWORD`, `LATTICE_WORKER_PASSWORD` (secrets) feed
-`infra/postgres/bootstrap.sql`; see §7.
+`infra/postgres/bootstrap_production.sql` (managed PostgreSQL, P11.2) or
+`infra/postgres/bootstrap.sql` (development and CI, superuser); see §7.
 
 ## 6. Secrets
 
@@ -212,7 +238,7 @@ secret**: session tokens are random and stored as SHA-256 hashes.
 | `LATTICE_CLIENT_KEY_SECRET` (**target, P11.4**) | operator | api | replace + rolling restart (resets pre-auth counters) | yes | no |
 | Session tokens | — (generated) | browsers | rotated at every sign-in | no | hash only |
 | OIDC login state (state, nonce, PKCE verifier) | — (generated) | api | ten-minute single-use attempts | no | yes, transiently (`oidc_login_attempts`, deleted by retention, §11) |
-| GHCR publishing | repository | the CI `images` job (`GITHUB_TOKEN`, `packages: write` on that job only, **target, P11.2**) | automatic per run | — | — |
+| GHCR publishing | repository | the CI `images` job (`GITHUB_TOKEN`, `packages: write` on that job only; built P11.2) | automatic per run | — | — |
 | GHCR pull credential (if the package is private) | repository owner | the platform | per platform policy | — | — |
 
 Rules (current code): a credential never raises a sensitivity, trust class or approval
@@ -231,19 +257,32 @@ prompts, errors or audit events.
 | `lattice_auth` | **no** | nobody | owns the four `SECURITY DEFINER` pre-authentication lookups (`lattice_resolve_session`, `lattice_identity_memberships`, `lattice_oidc_connection`, `lattice_resolve_scim_token`); no `CREATE` anywhere at rest |
 | platform administrative role | yes | bootstrap, restore, optional logical export | whatever the platform provides; never configured for api, worker or migrate |
 
-**Bootstrap today** (`infra/postgres/bootstrap.sql`, documented "must run as a superuser")
-and its compatibility with managed PostgreSQL, which normally provides no superuser:
+**Bootstraps (P11.2).** `infra/postgres/bootstrap.sql` (development, CI; a superuser,
+also creates `lattice_test`) and **`infra/postgres/bootstrap_production.sql`** (managed
+PostgreSQL; shipped in the backend image under `/opt/lattice/app/infra/postgres/`), run
+with `psql` by the platform's administrative role, idempotent (re-run to rotate the three
+passwords). How each step of the superuser bootstrap was made to work without a
+superuser:
 
-| Bootstrap step | Managed-PostgreSQL concern | Expected in P11.2 |
-| -------------- | -------------------------- | ----------------- |
-| `CREATE ROLE … LOGIN PASSWORD`, `CREATE ROLE lattice_auth NOLOGIN` | needs `CREATEROLE` (most platforms grant it to the admin role) | keep; verify on the selected platform |
-| `ALTER ROLE … NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION` | PostgreSQL 16 lets a non-superuser change `BYPASSRLS`/`REPLICATION` only if it holds them; many admin roles do not | drop the attributes that are already the defaults for new roles, keep the startup role check as the authority |
-| `GRANT lattice_auth TO lattice_owner WITH INHERIT FALSE, SET TRUE` | PostgreSQL 16 grants need ADMIN OPTION on `lattice_auth`, which a `CREATEROLE` creator has | verify |
-| `CREATE DATABASE lattice OWNER lattice_owner` | needs `CREATEDB` and the ability to `SET ROLE lattice_owner` (PostgreSQL 16) | grant the admin role membership in `lattice_owner` for the bootstrap, then revoke; or let the platform create the database and transfer ownership |
-| `CREATE DATABASE lattice_test …` | a test database has no place in production | removed from the production variant |
-| `CREATE EXTENSION citext, vector` | platform-managed extension allow-lists; some need a platform command | verify `vector` ≥ 0.8 and `citext` on the platform |
-| `ALTER SCHEMA public OWNER TO lattice_owner`, `REVOKE CREATE ON SCHEMA public FROM PUBLIC` | in PostgreSQL 15+ `public` is owned by `pg_database_owner`, i.e. the database owner; the statement may be unnecessary or refused | verify; keep the revoke |
-| `REVOKE ALL ON DATABASE … FROM PUBLIC`, `GRANT CONNECT …`, `GRANT USAGE ON SCHEMA public …` (`bootstrap_database.sql`) | ordinary owner-level grants | verify |
+| Bootstrap step | Managed-PostgreSQL concern | As built (production variant) |
+| -------------- | -------------------------- | ------------------------------ |
+| `CREATE ROLE … LOGIN PASSWORD`, `CREATE ROLE lattice_auth NOLOGIN` | needs `CREATEROLE` | kept; the creator receives ADMIN OPTION on each role (PostgreSQL 16) |
+| `ALTER ROLE … NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION` | PostgreSQL 16 lets only a role holding an attribute change it | **dropped**: `CREATE ROLE`'s defaults are already safe; instead a final check **fails the bootstrap** if any Lattice role has SUPERUSER, BYPASSRLS, CREATEROLE, CREATEDB or REPLICATION, if `lattice_auth` can log in, if a runtime role is a member of any role, or if `citext`/`vector` ≥ 0.8 are missing |
+| `GRANT lattice_auth TO lattice_owner WITH INHERIT FALSE, SET TRUE` | needs ADMIN OPTION on `lattice_auth` | works (the creator holds it) |
+| `CREATE DATABASE lattice OWNER lattice_owner` | needs CREATEDB and SET ROLE to `lattice_owner`; afterwards only the owner can connect (PUBLIC's CONNECT is revoked) | the administrator grants itself `lattice_owner` (INHERIT, SET) for the bootstrap and **revokes it at the end** |
+| `CREATE DATABASE lattice_test …` | no place in production | not in the production variant |
+| `CREATE EXTENSION citext` | trusted extension | created **as `lattice_owner`** (the database owner may create trusted extensions) |
+| `CREATE EXTENSION vector` | **pgvector is not a trusted extension**: a non-superuser cannot create it; managed platforms provide it through their own extension mechanism for the admin role | created as the administrator with `IF NOT EXISTS`; where the platform needs its own step, enable it first (the statement then skips). The reference stack and CI emulate the platform by installing `vector` in `template1` as the container's superuser |
+| `ALTER SCHEMA public OWNER TO lattice_owner`, `REVOKE CREATE ON SCHEMA public FROM PUBLIC`, grants | owner-level statements | made as `lattice_owner` (`SET ROLE`) |
+
+**Verified locally (P11.2), not on a provider.** The reference stack's PostgreSQL creates
+only a `platform_admin` role with LOGIN, CREATEROLE and CREATEDB — deliberately weaker
+than DigitalOcean's documented `doadmin` (which also has BYPASSRLS and REPLICATION) —
+and the `bootstrap` job runs the production variant as that role; CI does the same on
+every push (a `ci_platform_admin` role) before the superuser bootstrap. The result passes
+`lattice check-deployment` with the same privilege snapshot as a superuser-bootstrapped
+database (§8). **Deferred (D-22 amended):** running it against a real managed provider's
+administrative role.
 
 Whatever the platform forces, the startup checks (`lattice check-db-role`, `lattice worker
 --once`) remain the authority: a role with BYPASSRLS, superuser, ownership or content
@@ -271,50 +310,88 @@ the 2 GiB plan (47 usable connections; D-22 as accepted for P11.1)**, which fits
 defaults with room for operators and drills; a plan with ~100 (Render) also fits. The
 reference stack runs `LATTICE_DB_POOL_SIZE=3` per API instance on its own PostgreSQL
 (default `max_connections` 100). No pooler is added (Phase 14 revisits).
-`lattice check-deployment` will compute this against `SHOW max_connections` (**target,
-P11.2**).
+`lattice check-deployment` computes it (P11.2): `max_connections` minus
+`superuser_reserved_connections` and `reserved_connections` must cover `api instances × 2
+× pool + worker × 4 + 3 operators + 10 headroom` (`--api-instances`, `--api-pool-size`,
+`--worker-instances`).
+
+**`lattice check-deployment` (P11.2)**, as the schema owner, read-only, catalogs only:
+schema revision exact and no Alembic autogenerate difference; role attributes and
+memberships; forced RLS on every table; database owner, no PUBLIC CONNECT/TEMPORARY, no
+migration fence left behind, no migration holding the lock; the **privilege snapshot**
+(policies, table and column grants, function owners/SECURITY DEFINER/settings/EXECUTE,
+triggers, schema ACL, memberships among the Lattice roles — no OIDs, grantors or database
+names) equal to `backend/src/lattice/db/privilege_snapshot.json`, which a test regenerates
+from a freshly migrated database and compares (`make privilege-snapshot` after a
+migration that changes privileges); and the connection budget. Exit 1 on any failure.
 
 ## 9. Deployment
 
+**As built (P11.2): `deploy/deploy.sh`** drives this for the reference stack (any
+platform needs the same steps; the script is the executable form of the procedure).
+Every image reference is resolved to its **content-addressed image ID** before anything
+changes; the ID is what runs (`deploy/state/images.env`, read by Compose and the Make
+targets) and what the log records (`deploy/state/deploy.log`; the previous release in
+`previous.env`). A registry deployment uses the digest the `images` job recorded.
+Pre-flight, before anything changes: the Compose configuration is complete (a missing
+secret fails closed), the backend image's OCI revision label equals the revision baked
+into it (`lattice version`), backend and web come from the same commit, and equal
+`--expect-revision` when given; `lattice check-config` passes for api, worker and migrate
+inside the new image with each service's real environment; `lattice migrate --status`
+(as the new build sees the database) decides the flow. Only one deployment runs at a
+time (`deploy/state/lock`).
+
 ### 9.1 Release without a schema change (rolling, no downtime)
 
-1. Pre-flight: the target digests exist and come from `main` or a `v*` tag with green CI;
-   the database revision equals the new build's `SCHEMA_REVISION`.
-2. Start new api instances; each must pass readiness; the ingress shifts traffic; old
-   instances get SIGTERM and drain (≥ 160 s grace).
+1. Pre-flight (above): the database revision equals the new build's `SCHEMA_REVISION`.
+2. Replace `api1`, wait for readiness (Compose health = `/v1/health/ready`), wait for the
+   ingress's next health check (7 s), then `api2` the same way; old instances get SIGTERM
+   and drain (≥ 160 s grace).
 3. Replace the worker (the old one finishes its current job; a killed job is recovered by
    its lease).
-4. Replace web instances.
-5. Smoke (`lattice smoke`, **target, P11.1**) and watch alerts for 15 minutes.
+4. Replace `web1`, then `web2`.
+5. `lattice smoke` with `--expect-revision`: the public path, both API instances, the
+   worker, and `lattice_build_info{revision}` of every api and worker process. A failed
+   smoke fails the deployment (the release is running; `deploy/deploy.sh rollback`).
 
-Rollback: redeploy the previous digests the same way.
+If an instance does not become ready, the script restores **that instance's previous
+image** and stops: the other instance never stopped serving.
+
+Rollback: `deploy/deploy.sh rollback` — the previous release by image ID, the same
+rolling way (it is a release whose schema equals the database's).
 
 ### 9.2 Release with a schema change (D-23, stop-the-world)
 
+`deploy/deploy.sh release … --allow-migration` (without the flag a migrating release is
+refused: the operator accepts the downtime explicitly).
+
 | Step | Action | If it fails |
 | ---- | ------ | ----------- |
-| 1 | Pre-flight: digests, CI, backups healthy, **record the pre-deploy time** (PITR target), no other deploy running | stop; nothing changed |
-| 2 | Ingress: `/api/*` answers 503 + `Retry-After` (web may keep serving pages; they show the API as unavailable) | stop; restore routing |
-| 3 | Stop **all** api instances | restart them; restore routing |
-| 4 | Stop the worker (it finishes or abandons its job to the lease) | as above |
-| 5 | Prove no `lattice_app` / `lattice_worker` session remains (`pg_stat_activity` by role; the migration's own pre-flight refuses otherwise, **target, P11.2**) | find and stop the remaining process; never migrate around it |
-| 6 | Run `migrate` with the new image (lock and statement timeouts, **target, P11.2**) | a failed Alembic migration rolls back its transaction: the schema is still the old revision → restart the **old** build (steps 7–9 with the old digests). A migration that committed partially (non-transactional steps) is handled per its header: roll forward, or restore to the step-1 time |
-| 7 | Start the new worker and api instances | they refuse to start on any role/schema/config problem; fix forward or roll back (below) |
-| 8 | Wait for readiness on every api instance (database + exact schema revision) | as step 7 |
-| 9 | Restore `/api/*` routing | — |
-| 10 | Smoke; roll web; watch alerts 15 minutes | — |
+| 1 | Pre-flight (§9): identity, revision, configuration, the database `pending` for the new build; **record the pre-deploy time** (PITR target once P11.5 exists) | stop; nothing changed |
+| 2 | Ingress: `/api/*` answers 503 + `Retry-After` (`deploy/maintenance/api`; web keeps serving) | — |
+| 3 | Stop **both** api instances | — |
+| 4 | Stop the worker (it finishes or abandons its job to the lease) | — |
+| 5 | `lattice migrate` (new image, `lattice_owner`): owner check; **migration lock** (`pg_try_advisory_lock`, waited ≤ `--lock-wait-seconds`, default 60: a concurrent migration refuses); **fence** (`REVOKE CONNECT` from `lattice_app`/`lattice_worker`, so nothing can connect mid-migration); **pre-flight**: no `lattice_app`/`lattice_worker` session on the database (refused otherwise — never migrated around); Alembic to head on the same connection with `lock_timeout` 5 s and `statement_timeout` 10 min, one transaction; **verify**: revision = the build's and no model/schema difference; fence lifted and lock released in every case | refused or failed → the transaction rolled back, the schema is the old revision: the script restarts the **old** build, lifts maintenance and fails. A migration killed hard leaves the fence (application roles cannot connect: fail closed) and `check-deployment` reports it; `lattice migrate --release-fence` (or a new `lattice migrate`) lifts it |
+| 6 | Start the new worker and api instances; wait for readiness | they refuse to start on any role/schema/config problem: maintenance stays on — roll forward (the old build cannot serve the new schema) |
+| 7 | Wait for the ingress health check, lift maintenance | — |
+| 8 | Roll `web1`, `web2`; smoke with `--expect-revision` | as §9.1 |
 
-Expected unavailable interval: steps 2–9, measured in P11.2 (target under two minutes).
-Because the old build refuses the new schema and the new build the old one, no step can
-leave an old instance serving a migrated schema: the old instances are stopped before step
-6 and could not become ready again afterwards.
+**Measured (reference stack, M1 8 GB, P11.2):** API unavailable 19 s for a migrating
+release whose migration takes 2 s (target under two minutes), 16 s for a downgrade; web
+pages served throughout. Because the old build refuses the new schema and the new build
+the old one, no step can leave an old instance serving a migrated schema.
 
-**Rollback after a successful migration.** Roll forward with a fix by default. A
-downgrade (`alembic downgrade <previous>`, then start the previous digests) is allowed
-only when the migration's header declares it reversible **and** data-safe (**target,
-P11.2**: header and test); none of 0001–0013 carries that declaration today, so treat them
-as roll-forward only. Otherwise the last resort is a point-in-time restore to the step-1
-time, which loses every write after it; state that window before choosing it.
+**Rollback after a successful migration.** Roll forward with a fix by default.
+`deploy/deploy.sh rollback --allow-downgrade` crosses a migration only if **every**
+revision being undone declares `Reversible: yes` in its header: the running build (which
+knows the newer revisions) checks first (`lattice migrate --downgrade-to <rev> --check`,
+nothing is stopped if refused), then runs the same stop-the-world sequence with
+`lattice migrate --downgrade-to <rev>` (lock, fence, pre-flight) and starts the previous
+release. Every migration states `Reversible: yes|no (…)` and `Locks: …` in its header
+(enforced by `tests/test_migration_safety.py`); of 0001–0013 only 0002, 0010 and 0012
+have a data-safe downgrade, and 0013 does not, so every release on 0013 rolls forward.
+Otherwise the last resort is a restore to the step-1 time (P11.5), which loses every
+write after it; state that window before choosing it. Never edit `alembic_version`.
 
 ## 10. Health, startup and shutdown
 
@@ -405,30 +482,45 @@ below the floor (phase-11-plan §12.2).
 | Source exports | worker (read-only), operator `lattice sync` (writes the configuration that names the path) | Required while connectors read local exports (all three today). The worker syncs only the path the operator's last `lattice sync` recorded (ADR-013), so operator and worker must see the **same path**. Reference stack: `./data` mounted read-only at `/srv/lattice/data` in `worker` and `ops`. Staging handling: P11.2 |
 | Model cache | api and worker, only with `local` embeddings | read-only, filled and verified by `lattice models fetch` |
 
-## 15. Local reference stack (P11.1)
+## 15. Local reference stack (P11.1, P11.2)
 
 `compose.production.yaml` (Compose project `lattice-reference`, separate from the
 development `compose.yaml`) runs the production topology on one machine: PostgreSQL,
-`api1` and `api2` (one backend image), `worker` (the same image), `web`, and Caddy as the
-ingress, on one private network; only Caddy publishes ports, on 127.0.0.1 (8443 HTTPS,
-8080 redirect). `migrate` and `ops` are one-off services. Every application container runs
-read-only with a `/tmp` tmpfs, all capabilities dropped (Caddy keeps
-`NET_BIND_SERVICE`, which its binary's file capability requires), `no-new-privileges`, no
-host network, no Docker socket and no privileged mode. Database passwords are generated
-into the git-ignored `deploy/.env.reference` and handed to each service as only the
-credential it needs (the owner credential reaches `migrate` and `ops` only).
+`api1` and `api2` (one backend image), `worker` (the same image), `web1` and `web2`, and
+Caddy as the ingress, on one private network; only Caddy publishes ports, on 127.0.0.1
+(8443 HTTPS, 8080 redirect). `bootstrap`, `migrate` and `ops` are one-off services. Every
+container except PostgreSQL runs read-only with a `/tmp` tmpfs, all capabilities dropped
+(Caddy keeps `NET_BIND_SERVICE`, which its binary's file capability requires),
+`no-new-privileges`, no host network, no Docker socket and no privileged mode. Passwords
+are generated into the git-ignored `deploy/.env.reference`; each service gets only the
+credential it needs (the owner credential reaches `migrate`, `ops` and `bootstrap` only,
+the platform administrator's only `postgres` and `bootstrap` — `tests/test_deployment_files.py`).
+
+**Managed-PostgreSQL emulation (P11.2).** On an empty volume PostgreSQL creates only
+`platform_admin` (LOGIN, CREATEROLE, CREATEDB; no superuser) and installs `vector` in
+`template1` (`deploy/postgres/initdb-platform.sh`) — the stand-in for a provider's
+administrative role and extension allow-list. The `bootstrap` job then runs
+`bootstrap_production.sql` as `platform_admin`, exactly as on a managed platform.
 
 | Command | What it does |
 | ------- | ------------ |
 | `make prod-build` | build `lattice-backend:local` and `lattice-web:local` with the git revision |
-| `make prod-up` | PostgreSQL (bootstrap on first start) → `alembic upgrade head` → api ×2, worker, web, Caddy, waiting for every health check |
-| `make prod-smoke` | `lattice smoke` from inside the private network (copies only Caddy's public root certificate out) |
+| `make prod-up` | PostgreSQL → `bootstrap` (platform admin) → `lattice migrate` → api ×2, worker, web ×2, Caddy, waiting for every health check |
+| `make prod-smoke` | `lattice smoke` from inside the private network, including every api/worker process's build revision |
+| `make prod-check` / `make prod-migrate` | `lattice check-deployment` / `lattice migrate --status` against the reference database |
+| `deploy/deploy.sh status \| release \| rollback` | releases and rollbacks by image ID (§9) |
+| `make prod-seed VERIFY=1` | the synthetic-only bootstrap: `lattice seed --require-synthetic` (refuses any manifest not declaring `data_origin: synthetic`; seeding is refused in production anyway), syncs with fake embeddings, admin grants |
 | `make prod-ps`, `prod-down`, `prod-destroy` | status; stop (volumes kept); stop and delete volumes |
-| `VERIFY=1 [FAKE_DELAY=s]` | adds `deploy/compose.verify.yaml`: `LATTICE_ENV=test`, development sign-in, fake providers, a 30 s worker lease — the same images and topology, for proofs that need a signed-in member before P11.3's verification identity provider exists. Not a production configuration |
+| `VERIFY=1 [FAKE_DELAY=s]` | adds `deploy/compose.verify.yaml`: `LATTICE_ENV=test`, development sign-in, fake providers, a 30 s worker lease — the same images and topology, for proofs that need a signed-in member. Not a production configuration |
 
 It runs the production defaults (`LATTICE_ENV=production`, `LATTICE_QUERY_EMBEDDING=none`,
-no development sign-in). It is a verification environment, not a deployment recipe: its
-PostgreSQL bootstrap still assumes a superuser (P11.2) and it has no backups (P11.5).
+no development sign-in). It is a verification environment, not a deployment recipe, and
+has no backups yet (P11.5). `deploy/drills/` builds deliberately broken or different
+releases on top of a real backend image (a relabelled build, a migrating build with a
+reversible or irreversible drill revision 0014, a failing migration, an API that never
+becomes ready, a production API that serves `/docs`, an invalid baked-in setting); they
+exist only for the drills of runbook §8, CI never builds them and no release contains
+them.
 
 ---
 

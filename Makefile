@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed privilege-snapshot
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -75,6 +75,11 @@ dataset-lint: ## Validate the synthetic dataset and golden set (no database, no 
 dataset-generate: ## Regenerate the deterministic bulk distractor tickets
 	$(UV) lattice dataset generate
 
+privilege-snapshot: ## Regenerate the committed privilege snapshot from the freshly migrated test database
+	cd backend && uv run --extra local --env-file ../.env sh -c \
+	  'LATTICE_MIGRATION_DATABASE_URL="$$LATTICE_TEST_MIGRATION_DATABASE_URL" lattice check-deployment \
+	    --write-privilege-snapshot src/lattice/db/privilege_snapshot.json'
+
 check-db-role: ## Verify the runtime role cannot bypass row-level security
 	$(UV_RUN) lattice check-db-role
 
@@ -135,29 +140,55 @@ api-contract: ## Re-export the OpenAPI schema and regenerate the web app's TypeS
 # VERIFY=1 adds deploy/compose.verify.yaml (test env, persona sign-in, fake providers);
 # FAKE_DELAY=<seconds> makes the fake model wait (long-Ask proof).
 REFERENCE_ENV := deploy/.env.reference
+# The images deploy/deploy.sh last deployed (by immutable ID), when there are any.
+DEPLOYED_IMAGES := $(wildcard deploy/state/images.env)
 VERIFY ?=
 FAKE_DELAY ?= 0
 PROD_COMPOSE := FAKE_DELAY=$(FAKE_DELAY) docker compose --env-file $(REFERENCE_ENV) \
+  $(if $(DEPLOYED_IMAGES),--env-file $(DEPLOYED_IMAGES)) \
   -f compose.production.yaml $(if $(VERIFY),-f deploy/compose.verify.yaml)
 REVISION := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 
 prod-env: ## Generate deploy/.env.reference: random local-only database passwords (git-ignored)
-	@if [ ! -f $(REFERENCE_ENV) ]; then \
-	  umask 077; \
-	  for name in POSTGRES_PASSWORD LATTICE_OWNER_PASSWORD LATTICE_APP_PASSWORD LATTICE_WORKER_PASSWORD; do \
-	    echo "$$name=$$(openssl rand -hex 24)"; \
-	  done > $(REFERENCE_ENV); \
-	  echo "wrote $(REFERENCE_ENV)"; \
-	fi
+	@umask 077; touch $(REFERENCE_ENV); \
+	for name in POSTGRES_PASSWORD PLATFORM_ADMIN_PASSWORD LATTICE_OWNER_PASSWORD \
+	  LATTICE_APP_PASSWORD LATTICE_WORKER_PASSWORD; do \
+	  grep -q "^$$name=" $(REFERENCE_ENV) || { echo "$$name=$$(openssl rand -hex 24)" >> $(REFERENCE_ENV); \
+	    echo "added $$name to $(REFERENCE_ENV)"; }; \
+	done
 
 prod-build: ## Build lattice-backend:local and lattice-web:local, labelled with the git revision
 	docker build -f backend/Dockerfile --build-arg LATTICE_BUILD_REVISION=$(REVISION) -t lattice-backend:local .
 	docker build -f apps/web/Dockerfile --build-arg LATTICE_BUILD_REVISION=$(REVISION) -t lattice-web:local apps/web
 
-prod-up: prod-env ## Start the reference stack: PostgreSQL, migrations, api x2, worker, web, Caddy
+prod-up: prod-env ## Start the reference stack: PostgreSQL, bootstrap, migrations, api x2, worker, web x2, Caddy
 	$(PROD_COMPOSE) up -d --wait postgres
+	$(PROD_COMPOSE) run --rm bootstrap
 	$(PROD_COMPOSE) run --rm migrate
-	$(PROD_COMPOSE) up -d --wait api1 api2 worker web caddy
+	$(PROD_COMPOSE) up -d --wait api1 api2 worker web1 web2 caddy
+
+prod-migrate: ## Status of the reference database against the deployed build (read-only)
+	$(PROD_COMPOSE) run --rm --no-deps ops migrate --status
+
+prod-check: ## lattice check-deployment against the reference database (read-only)
+	$(PROD_COMPOSE) run --rm --no-deps ops check-deployment --api-pool-size 3
+
+# Synthetic-only deployment bootstrap: the Halden and Veridian manifests (each declares
+# data_origin: synthetic; --require-synthetic refuses anything else), their sources with
+# fake embeddings, and the admin grants. Verification overlay only: seeding is refused when
+# LATTICE_ENV=production.
+prod-seed: ## Seed + sync the synthetic organizations into the reference stack (VERIFY=1 only)
+	@[ -n "$(VERIFY)" ] || { echo "prod-seed needs VERIFY=1 (seeding is refused in production)"; exit 2; }
+	$(PROD_COMPOSE) run --rm --no-deps ops seed --require-synthetic \
+	  --manifest /srv/lattice/data/synthetic/halden/org.yaml \
+	  --manifest /srv/lattice/data/synthetic/veridian/org.yaml
+	@for org in $(ORGS); do \
+	  $(PROD_COMPOSE) run --rm --no-deps ops sync --org $$org \
+	    --sources /srv/lattice/data/synthetic/$$org/sources.yaml --embedding fake; \
+	  rc=$$?; [ $$rc -eq 0 ] || [ $$rc -eq 3 ] || exit $$rc; \
+	  $(PROD_COMPOSE) run --rm --no-deps ops apply-admin-grants --org $$org \
+	    --grants /srv/lattice/data/synthetic/$$org/admin-grants.yaml || exit $$?; \
+	done
 
 REFERENCE_CA := deploy/.reference-ca.crt
 
@@ -167,13 +198,16 @@ prod-smoke: ## lattice smoke against the reference stack, from inside its privat
 	$(PROD_COMPOSE) run --rm -v $(CURDIR)/$(REFERENCE_CA):/srv/reference-ca.crt:ro ops \
 	  smoke --url https://caddy:8443 --ca-file /srv/reference-ca.crt \
 	  --instance http://api1:8000 --instance http://api2:8000 \
-	  --worker-metrics http://worker:9465/metrics $(if $(VERIFY),,--production)
+	  --worker-metrics http://worker:9465/metrics $(if $(VERIFY),,--production) \
+	  --instance-metrics http://api1:9464/metrics --instance-metrics http://api2:9464/metrics \
+	  --expect-revision $$($(PROD_COMPOSE) run --rm --no-deps -T ops version --json | \
+	    python3 -c 'import json, sys; print(json.load(sys.stdin)["revision"])')
 
 prod-ps: ## Show the reference stack's containers and health
 	$(PROD_COMPOSE) ps
 
-prod-down: ## Stop the reference stack (volumes kept)
+prod-down: prod-env ## Stop the reference stack (volumes kept)
 	$(PROD_COMPOSE) down
 
-prod-destroy: ## DELETE the reference stack and its volumes
+prod-destroy: prod-env ## DELETE the reference stack and its volumes
 	$(PROD_COMPOSE) down -v

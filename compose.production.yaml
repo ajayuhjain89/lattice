@@ -4,9 +4,10 @@
 #
 #   make prod-env     generate deploy/.env.reference (random local passwords, git-ignored)
 #   make prod-build   build lattice-backend:local and lattice-web:local
-#   make prod-up      PostgreSQL → migrations → api ×2, worker, web, Caddy (waits for health)
+#   make prod-up      PostgreSQL → bootstrap → `lattice migrate` → api ×2, worker, web ×2, Caddy
 #   make prod-smoke   lattice smoke from inside the private network
 #   make prod-down    stop (data kept)        make prod-destroy   remove volumes too
+#   deploy/deploy.sh  releases and rollbacks by immutable image ID (P11.2, deployment.md §9)
 #
 # Browser entry: https://localhost:8443 (Caddy's internal CA; the browser will warn).
 # Only Caddy publishes ports, on 127.0.0.1. Defaults are production settings
@@ -62,37 +63,72 @@ x-api: &api
 
 services:
   postgres:
-    image: pgvector/pgvector:0.8.1-pg16@sha256:33198da2828a14c30348d2ccb4750833d5ed9a44c88d840a0e523d7417120337
+    image: &postgres-image pgvector/pgvector:0.8.1-pg16@sha256:33198da2828a14c30348d2ccb4750833d5ed9a44c88d840a0e523d7417120337
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run make prod-env}
       POSTGRES_DB: postgres
-      # infra/postgres/initdb.sh runs the bootstrap on an empty volume (superuser; the
-      # managed-PostgreSQL variant is P11.2, docs/deployment.md §7).
-      LATTICE_OWNER_PASSWORD: ${LATTICE_OWNER_PASSWORD:?run make prod-env}
-      LATTICE_APP_PASSWORD: ${LATTICE_APP_PASSWORD:?run make prod-env}
-      LATTICE_WORKER_PASSWORD: ${LATTICE_WORKER_PASSWORD:?run make prod-env}
+      # Managed-PostgreSQL emulation (P11.2): on an empty volume, create only the
+      # platform's administrative role (CREATEROLE, CREATEDB; no superuser). The Lattice
+      # roles and database come from the `bootstrap` job, as on a managed platform.
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:?run make prod-env}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./infra/postgres:/bootstrap:ro
-      - ./infra/postgres/initdb.sh:/docker-entrypoint-initdb.d/10-lattice-bootstrap.sh:ro
+      - ./deploy/postgres/initdb-platform.sh:/docker-entrypoint-initdb.d/10-platform.sh:ro
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
     networks:
       - private
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d lattice"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 2s
       timeout: 3s
       retries: 30
 
-  # One-off: migrations as lattice_owner (P11.2 adds the production migration flow).
+  # One-off: the production bootstrap (infra/postgres/bootstrap_production.sql) as the
+  # platform's administrative role -- never a superuser. Idempotent; re-run to rotate the
+  # Lattice role passwords.
+  bootstrap:
+    image: *postgres-image
+    restart: "no"
+    profiles: [tools]
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - private
+    environment:
+      PGHOST: postgres
+      PGUSER: platform_admin
+      PGDATABASE: postgres
+      PGPASSWORD: ${PLATFORM_ADMIN_PASSWORD:?run make prod-env}
+      LATTICE_OWNER_PASSWORD: ${LATTICE_OWNER_PASSWORD:?run make prod-env}
+      LATTICE_APP_PASSWORD: ${LATTICE_APP_PASSWORD:?run make prod-env}
+      LATTICE_WORKER_PASSWORD: ${LATTICE_WORKER_PASSWORD:?run make prod-env}
+    volumes:
+      - ./infra/postgres:/bootstrap:ro
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        psql -q -v ON_ERROR_STOP=1 -v owner_password="$$LATTICE_OWNER_PASSWORD"
+        -v app_password="$$LATTICE_APP_PASSWORD" -v worker_password="$$LATTICE_WORKER_PASSWORD"
+        -f /bootstrap/bootstrap_production.sql
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # One-off: the production migration as lattice_owner (lattice.db.migrate: lock, fence,
+  # pre-flight refusing while any api/worker session remains, exact verification).
   migrate:
     <<: *backend
     restart: "no"
     profiles: [tools]
-    command: ["alembic", "upgrade", "head"]
+    command: ["lattice", "migrate"]
     environment:
       LATTICE_MIGRATION_DATABASE_URL: postgresql+asyncpg://lattice_owner:${LATTICE_OWNER_PASSWORD:?run make prod-env}@postgres:5432/lattice
     depends_on:
@@ -146,7 +182,9 @@ services:
       retries: 3
       start_period: 20s
 
-  web:
+  # Two web instances, like the API: a release replaces one at a time behind the ingress,
+  # so pages never go dark (one instance cannot be replaced without a gap).
+  web1: &web
     <<: *hardened
     image: ${LATTICE_WEB_IMAGE:-lattice-web:local}
     tmpfs:
@@ -160,6 +198,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+  web2:
+    <<: *web
 
   caddy:
     <<: *hardened
@@ -173,6 +213,8 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # deploy/deploy.sh creates `api` here during a migrating release (503 for /api/*).
+      - ./deploy/maintenance:/srv/maintenance:ro
       - caddy-data:/data
       - caddy-config:/config
     networks:
@@ -183,7 +225,9 @@ services:
         condition: service_healthy
       api2:
         condition: service_healthy
-      web:
+      web1:
+        condition: service_healthy
+      web2:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]

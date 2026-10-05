@@ -2,7 +2,8 @@
 
 Status: Accepted for Phase 11 (2026-10-03; decisions D-22–D-27). **Partly implemented**:
 P11.1 built the images, the ingress routing, the trusted-hop setting and the local
-reference stack (implementation notes below); the contract is
+reference stack; P11.2 the migration flow, the managed-PostgreSQL bootstrap and image
+publishing (implementation notes below); the contract is
 [deployment.md](../deployment.md); checkpoints P11.2–P11.7 of
 [phase-11-plan.md](../phase-11-plan.md) build the rest.
 
@@ -113,6 +114,25 @@ Factual refinements found while building, none changing the decision:
   file in the container's tmpfs, renewed by the loop and by lease renewals.
 - **Caddy** (reference ingress only) listens on unprivileged ports but keeps
   `NET_BIND_SERVICE`, which its binary's file capability requires to execute.
+
+## Implementation notes (P11.2)
+
+- **The migration pre-flight needed no extra privilege.** Every role sees the role and
+  application name of other roles' sessions in `pg_stat_activity`, so the owner can prove
+  no `lattice_app`/`lattice_worker` session remains without `pg_read_all_stats`.
+- **A connection fence closes the remaining race.** Between the pre-flight and the
+  commit, an *old* build starting up would pass its exact-revision check against the old
+  schema; `lattice migrate` therefore revokes CONNECT from the application roles while it
+  runs (the database owner granted it and can take it back). A hard kill leaves the fence
+  — failing closed — and the check reports it.
+- **The production bootstrap works with CREATEROLE + CREATEDB**, except that pgvector is
+  not a trusted extension: it must come from the platform's extension mechanism. Proved
+  against an emulated administrator only; a live provider remains part of the deferred
+  external validation (D-22 amended).
+- **One web instance cannot be replaced without a gap** (measured: 35 failed page
+  requests). The reference stack runs two, like the API.
+- **Image identity at deploy time is the content-addressed image ID** (a registry digest
+  when pulled from GHCR); tags are never what runs.
 
 ## Reconsider when
 

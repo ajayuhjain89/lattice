@@ -3,6 +3,8 @@
 Revision ID: 0011
 Revises: 0010
 Create Date: 2026-09-29
+Reversible: no (the downgrade drops the jobs table)
+Locks: new table; SHARE on query_traces (index build); brief ACCESS EXCLUSIVE for policies
 
 Phase 8 (implementation-plan §4, architecture §1; ADR-013).
 

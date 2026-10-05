@@ -350,15 +350,20 @@ and runnable locally:
 ```
 make db-down        # one PostgreSQL at a time on a small machine
 make prod-build     # lattice-backend:local and lattice-web:local
-make prod-up        # PostgreSQL, migrations, api ×2, worker, web, Caddy (https://localhost:8443)
-make prod-smoke     # lattice smoke: ingress, both API instances, readiness, worker heartbeat
+make prod-up        # PostgreSQL, bootstrap, lattice migrate, api ×2, worker, web ×2, Caddy (https://localhost:8443)
+make prod-smoke     # lattice smoke: ingress, both API instances, worker heartbeat, build revisions
 make prod-down
 ```
 
-`lattice smoke --url <origin>` is the read-only "is this deployment usable?" check, for
-the reference stack now and staging later. Publishing, the production migration flow and
-staging (P11.2), identity operations (P11.3), shared limits and retention (P11.4),
-backups (P11.5) and alerts (P11.6) follow ([plan](docs/phase-11-plan.md)).
+`lattice smoke --url <origin>` is the read-only "is this deployment usable?" check.
+Releases go through `deploy/deploy.sh` (rolling without a schema change; stop-the-world
+`lattice migrate` with a lock, a connection fence and a pre-flight when there is one;
+rollback by image ID), and `lattice check-deployment` compares a database with what the
+build requires, including a committed privilege snapshot. CI publishes images to GHCR
+only from `main`, `v*` tags and manual dispatch. No cloud staging exists: real external
+validation is deferred for lack of a deployment budget and gates v1 GA
+([plan](docs/phase-11-plan.md) §21.1). Identity operations (P11.3), shared limits and
+retention (P11.4), backups (P11.5) and alerts (P11.6) follow.
 
 ## Repository layout
 

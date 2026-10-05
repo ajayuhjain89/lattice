@@ -13,12 +13,19 @@ revision -- the same checks as the API.
 import argparse
 import asyncio
 import logging
+import os
 import signal
 import sys
 
 from lattice import metrics
 from lattice.build import report_startup
-from lattice.config import Environment, load_provider_settings, load_worker_settings
+from lattice.config import (
+    ConfigurationError,
+    Environment,
+    load_provider_settings,
+    load_worker_settings,
+    owner_credential_problem,
+)
 from lattice.db.engine import Database, create_engine
 from lattice.db.role_check import verify_runtime_role
 from lattice.jobs.worker import Heartbeat, Worker
@@ -33,6 +40,8 @@ def add_parser(commands: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 async def run(args: argparse.Namespace) -> int:
     settings = load_worker_settings()
+    if (problem := owner_credential_problem(settings.env, os.environ)) is not None:
+        raise ConfigurationError(problem)
     configure_logging(
         level=settings.log_level,
         include_exception_text=settings.env is Environment.DEVELOPMENT,

@@ -3,6 +3,8 @@
 Revision ID: 0012
 Revises: 0011
 Create Date: 2026-10-02
+Reversible: yes (the downgrade drops policies, grants and an index; no row is removed)
+Locks: brief ACCESS EXCLUSIVE for policies; SHARE on audit_events (index build)
 
 Phase 9 (implementation-plan §4 "Phase 9"; security-model §8, §10; threat model T3).
 

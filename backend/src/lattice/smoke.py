@@ -14,7 +14,11 @@ A short, read-only black-box check of a running deployment, from the outside in:
 * **each API instance** (``--instance URL``, repeatable, from the private network) is
   live and ready;
 * **worker** (``--worker-metrics URL``, from the private network) -- its heartbeat is
-  younger than ``--worker-max-age`` seconds.
+  younger than ``--worker-max-age`` seconds;
+* **build revision** (``--expect-revision SHA`` with ``--instance-metrics URL``,
+  repeatable, and/or ``--worker-metrics``) -- every listed process reports
+  ``lattice_build_info{revision="SHA"}``: a deployment that left an old instance running
+  (or started the wrong image) fails (P11.2).
 
 It sends no credentials, creates nothing and prints only check names, statuses and
 fixed reasons -- never response bodies, cookies or header values. Exit 0 when every
@@ -42,6 +46,7 @@ API_CSP: Final = "default-src 'none'"
 _HEARTBEAT: Final = re.compile(
     r"^lattice_worker_heartbeat_timestamp_seconds\s+([0-9.eE+]+)\s*$", re.MULTILINE
 )
+_BUILD_REVISION: Final = re.compile(r'^lattice_build_info\{[^}]*\brevision="([^"]*)"', re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -158,6 +163,16 @@ class Smoke:
             raise SmokeError(f"heartbeat {age:.0f} s old (limit {max_age:.0f} s)")
         return f"heartbeat {age:.0f} s old"
 
+    def revision(self, metrics_url: str, expected: str) -> str:
+        response = self._client.get(metrics_url)
+        _expect(response, 200)
+        found = _BUILD_REVISION.search(response.text)
+        if found is None:
+            raise SmokeError("no lattice_build_info metric")
+        if found.group(1) != expected:
+            raise SmokeError("runs another build revision")
+        return "expected build revision"
+
 
 def run_smoke(
     client: httpx.Client,
@@ -167,6 +182,8 @@ def run_smoke(
     worker_metrics: str | None,
     worker_max_age: float,
     production: bool,
+    instance_metrics: list[str] | None = None,
+    expect_revision: str | None = None,
 ) -> list[Result]:
     origin = _origin(url)
     api = f"{origin}/api"
@@ -188,6 +205,14 @@ def run_smoke(
     if worker_metrics is not None:
         metrics_url = _origin(worker_metrics)
         smoke.check("worker heartbeat", lambda: smoke.worker(metrics_url, worker_max_age))
+    if expect_revision is not None:
+        targets = list(instance_metrics or [])
+        if worker_metrics is not None:
+            targets.append(worker_metrics)
+        for target in targets:
+            url_ = _origin(target)
+            name = f"build revision at {urlsplit(url_).netloc}"
+            smoke.check(name, partial(smoke.revision, url_, expect_revision))
     return smoke.results
 
 
@@ -206,6 +231,16 @@ def add_parser(commands: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         "--worker-metrics", help="The worker's private metrics URL, e.g. http://worker:9465/metrics"
     )
     smoke.add_argument("--worker-max-age", type=float, default=300.0)
+    smoke.add_argument(
+        "--instance-metrics",
+        action="append",
+        default=[],
+        help="An API instance's private metrics URL (repeatable), for --expect-revision",
+    )
+    smoke.add_argument(
+        "--expect-revision",
+        help="the git revision every --instance-metrics/--worker-metrics process must run",
+    )
     smoke.add_argument("--ca-file", type=Path, help="CA bundle for a private ingress certificate")
     smoke.add_argument(
         "--production", action="store_true", help="Also check the production-only API surface"
@@ -230,6 +265,8 @@ def run(args: argparse.Namespace) -> int:
                 worker_metrics=args.worker_metrics,
                 worker_max_age=args.worker_max_age,
                 production=args.production,
+                instance_metrics=args.instance_metrics,
+                expect_revision=args.expect_revision,
             )
     except ValueError as exc:
         print(f"error: URL {exc}")

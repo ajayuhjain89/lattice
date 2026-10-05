@@ -1,0 +1,1950 @@
+{
+ "column_grants": [
+  {
+   "column": "family_name",
+   "grantee": "lattice_app",
+   "name": "directory_identities",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "given_name",
+   "grantee": "lattice_app",
+   "name": "directory_identities",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "updated_at",
+   "grantee": "lattice_app",
+   "name": "directory_identities",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "user_name",
+   "grantee": "lattice_app",
+   "name": "directory_identities",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "version",
+   "grantee": "lattice_app",
+   "name": "directory_identities",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "attempts",
+   "grantee": "lattice_worker",
+   "name": "jobs",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "error_code",
+   "grantee": "lattice_worker",
+   "name": "jobs",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "finished_at",
+   "grantee": "lattice_worker",
+   "name": "jobs",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "kind",
+   "grantee": "lattice_app",
+   "name": "jobs",
+   "privilege": "INSERT"
+  },
+  {
+   "column": "lease_expires_at",
+   "grantee": "lattice_worker",
+   "name": "jobs",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "mode",
+   "grantee": "lattice_app",
+   "name": "jobs",
+   "privilege": "INSERT"
+  },
+  {
+   "column": "organization_id",
+   "grantee": "lattice_app",
+   "name": "jobs",
+   "privilege": "INSERT"
+  },
+  {
+   "column": "requested_by",
+   "grantee": "lattice_app",
+   "name": "jobs",
+   "privilege": "INSERT"
+  },
+  {
+   "column": "run_after",
+   "grantee": "lattice_worker",
+   "name": "jobs",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "source_id",
+   "grantee": "lattice_app",
+   "name": "jobs",
+   "privilege": "INSERT"
+  },
+  {
+   "column": "started_at",
+   "grantee": "lattice_worker",
+   "name": "jobs",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "status",
+   "grantee": "lattice_worker",
+   "name": "jobs",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "sync_run_id",
+   "grantee": "lattice_worker",
+   "name": "jobs",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "account_scope",
+   "grantee": "lattice_app",
+   "name": "memberships",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "authz_updated_at",
+   "grantee": "lattice_app",
+   "name": "memberships",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "authz_updated_at",
+   "grantee": "lattice_worker",
+   "name": "memberships",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "clearance",
+   "grantee": "lattice_app",
+   "name": "memberships",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "organization_id",
+   "grantee": "lattice_app",
+   "name": "memberships",
+   "privilege": "INSERT"
+  },
+  {
+   "column": "status",
+   "grantee": "lattice_app",
+   "name": "memberships",
+   "privilege": "INSERT"
+  },
+  {
+   "column": "status",
+   "grantee": "lattice_app",
+   "name": "memberships",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "updated_at",
+   "grantee": "lattice_app",
+   "name": "memberships",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "user_id",
+   "grantee": "lattice_app",
+   "name": "memberships",
+   "privilege": "INSERT"
+  },
+  {
+   "column": "consumed_at",
+   "grantee": "lattice_app",
+   "name": "oidc_login_attempts",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "count",
+   "grantee": "lattice_app",
+   "name": "rate_limit_counters",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "window_start",
+   "grantee": "lattice_app",
+   "name": "rate_limit_counters",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "last_seen_at",
+   "grantee": "lattice_app",
+   "name": "sessions",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "revoked_at",
+   "grantee": "lattice_app",
+   "name": "sessions",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "acl_synced_at",
+   "grantee": "lattice_worker",
+   "name": "sources",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "last_succeeded_at",
+   "grantee": "lattice_worker",
+   "name": "sources",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "last_synced_at",
+   "grantee": "lattice_worker",
+   "name": "sources",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "display_name",
+   "grantee": "lattice_app",
+   "name": "users",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "email",
+   "grantee": "lattice_app",
+   "name": "users",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "updated_at",
+   "grantee": "lattice_app",
+   "name": "users",
+   "privilege": "UPDATE"
+  }
+ ],
+ "functions": [
+  {
+   "grants": [
+    "lattice_owner:EXECUTE",
+    "PUBLIC:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": null,
+   "signature": "lattice_audit_events_immutable()"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE",
+    "PUBLIC:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_check_document_departments()"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE",
+    "PUBLIC:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": null,
+   "signature": "lattice_current_org_id()"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_auth:EXECUTE"
+   ],
+   "owner": "lattice_auth",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_identity_memberships(text,text)"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_membership_home_organization()"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_auth:EXECUTE"
+   ],
+   "owner": "lattice_auth",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_oidc_connection(text)"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE",
+    "PUBLIC:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_require_access_audit()"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_auth:EXECUTE"
+   ],
+   "owner": "lattice_auth",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_resolve_scim_token(bytea)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_auth:EXECUTE"
+   ],
+   "owner": "lattice_auth",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_resolve_session(bytea)"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE",
+    "PUBLIC:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": null,
+   "signature": "lattice_set_updated_at()"
+  }
+ ],
+ "memberships": [
+  {
+   "admin": false,
+   "inherit": false,
+   "member": "lattice_owner",
+   "role": "lattice_auth",
+   "set": true
+  }
+ ],
+ "policies": [
+  {
+   "command": "d",
+   "name": "access_group_members",
+   "permissive": false,
+   "policy": "app_admin_groups_only_delete",
+   "roles": [
+    "lattice_app"
+   ],
+   "using": "(EXISTS ( SELECT 1\n   FROM access_groups g\n  WHERE ((g.organization_id = access_group_members.organization_id) AND (g.id = access_group_members.group_id) AND (g.origin = 'admin'::text))))",
+   "with_check": null
+  },
+  {
+   "command": "a",
+   "name": "access_group_members",
+   "permissive": false,
+   "policy": "app_admin_groups_only_insert",
+   "roles": [
+    "lattice_app"
+   ],
+   "using": null,
+   "with_check": "(EXISTS ( SELECT 1\n   FROM access_groups g\n  WHERE ((g.organization_id = access_group_members.organization_id) AND (g.id = access_group_members.group_id) AND (g.origin = 'admin'::text))))"
+  },
+  {
+   "command": "*",
+   "name": "access_group_members",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "d",
+   "name": "access_group_members",
+   "permissive": false,
+   "policy": "worker_source_origin_delete",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(EXISTS ( SELECT 1\n   FROM access_groups g\n  WHERE ((g.id = access_group_members.group_id) AND (g.origin = 'source'::text))))",
+   "with_check": null
+  },
+  {
+   "command": "a",
+   "name": "access_group_members",
+   "permissive": false,
+   "policy": "worker_source_origin_insert",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": null,
+   "with_check": "(EXISTS ( SELECT 1\n   FROM access_groups g\n  WHERE ((g.id = access_group_members.group_id) AND (g.origin = 'source'::text))))"
+  },
+  {
+   "command": "w",
+   "name": "access_group_members",
+   "permissive": false,
+   "policy": "worker_source_origin_update",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(EXISTS ( SELECT 1\n   FROM access_groups g\n  WHERE ((g.id = access_group_members.group_id) AND (g.origin = 'source'::text))))",
+   "with_check": "(EXISTS ( SELECT 1\n   FROM access_groups g\n  WHERE ((g.id = access_group_members.group_id) AND (g.origin = 'source'::text))))"
+  },
+  {
+   "command": "*",
+   "name": "access_groups",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "d",
+   "name": "access_groups",
+   "permissive": false,
+   "policy": "worker_source_origin_delete",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(origin = 'source'::text)",
+   "with_check": null
+  },
+  {
+   "command": "a",
+   "name": "access_groups",
+   "permissive": false,
+   "policy": "worker_source_origin_insert",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": null,
+   "with_check": "(origin = 'source'::text)"
+  },
+  {
+   "command": "w",
+   "name": "access_groups",
+   "permissive": false,
+   "policy": "worker_source_origin_update",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(origin = 'source'::text)",
+   "with_check": "(origin = 'source'::text)"
+  },
+  {
+   "command": "*",
+   "name": "account_assignments",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "accounts",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "a",
+   "name": "audit_events",
+   "permissive": false,
+   "policy": "app_access_events",
+   "roles": [
+    "lattice_app"
+   ],
+   "using": null,
+   "with_check": "((action ~~ 'access.%'::text) AND ((actor ~~ 'member:%'::text) OR (actor ~~ 'scim:%'::text)))"
+  },
+  {
+   "command": "*",
+   "name": "audit_events",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "chunks",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "departments",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "directory_identities",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "d",
+   "name": "document_grants",
+   "permissive": false,
+   "policy": "app_admin_membership_grants_delete",
+   "roles": [
+    "lattice_app"
+   ],
+   "using": "((origin = 'admin'::text) AND (principal_type = 'membership'::text))",
+   "with_check": null
+  },
+  {
+   "command": "a",
+   "name": "document_grants",
+   "permissive": false,
+   "policy": "app_admin_membership_grants_insert",
+   "roles": [
+    "lattice_app"
+   ],
+   "using": null,
+   "with_check": "((origin = 'admin'::text) AND (principal_type = 'membership'::text))"
+  },
+  {
+   "command": "*",
+   "name": "document_grants",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "d",
+   "name": "document_grants",
+   "permissive": false,
+   "policy": "worker_source_origin_delete",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(origin = 'source'::text)",
+   "with_check": null
+  },
+  {
+   "command": "a",
+   "name": "document_grants",
+   "permissive": false,
+   "policy": "worker_source_origin_insert",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": null,
+   "with_check": "(origin = 'source'::text)"
+  },
+  {
+   "command": "w",
+   "name": "document_grants",
+   "permissive": false,
+   "policy": "worker_source_origin_update",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "(origin = 'source'::text)",
+   "with_check": "(origin = 'source'::text)"
+  },
+  {
+   "command": "*",
+   "name": "documents",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "r",
+   "name": "external_identities",
+   "permissive": true,
+   "policy": "auth_lookup",
+   "roles": [
+    "lattice_auth"
+   ],
+   "using": "true",
+   "with_check": null
+  },
+  {
+   "command": "r",
+   "name": "external_identities",
+   "permissive": true,
+   "policy": "member_visible",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(EXISTS ( SELECT 1\n   FROM users u\n  WHERE (u.id = external_identities.user_id)))",
+   "with_check": null
+  },
+  {
+   "command": "*",
+   "name": "external_identities",
+   "permissive": true,
+   "policy": "owner_provisioning",
+   "roles": [
+    "lattice_owner"
+   ],
+   "using": "true",
+   "with_check": "true"
+  },
+  {
+   "command": "*",
+   "name": "jobs",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "w",
+   "name": "jobs",
+   "permissive": true,
+   "policy": "worker_claim",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "true",
+   "with_check": "true"
+  },
+  {
+   "command": "r",
+   "name": "jobs",
+   "permissive": true,
+   "policy": "worker_queue",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "true",
+   "with_check": null
+  },
+  {
+   "command": "d",
+   "name": "jobs",
+   "permissive": true,
+   "policy": "worker_retention",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": "((status = ANY (ARRAY['succeeded'::text, 'failed'::text])) AND (finished_at < (now() - '30 days'::interval)))",
+   "with_check": null
+  },
+  {
+   "command": "*",
+   "name": "membership_departments",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "a",
+   "name": "memberships",
+   "permissive": false,
+   "policy": "app_member_insert",
+   "roles": [
+    "lattice_app"
+   ],
+   "using": null,
+   "with_check": "((status = ANY (ARRAY['active'::text, 'suspended'::text])) AND (EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = memberships.user_id) AND (u.home_organization_id = memberships.organization_id)))))"
+  },
+  {
+   "command": "w",
+   "name": "memberships",
+   "permissive": false,
+   "policy": "app_member_status",
+   "roles": [
+    "lattice_app"
+   ],
+   "using": "(status <> 'removed'::text)",
+   "with_check": "((status = ANY (ARRAY['active'::text, 'suspended'::text])) OR ((status = 'removed'::text) AND (EXISTS ( SELECT 1\n   FROM directory_identities d\n  WHERE ((d.organization_id = memberships.organization_id) AND (d.membership_id = memberships.id))))))"
+  },
+  {
+   "command": "r",
+   "name": "memberships",
+   "permissive": true,
+   "policy": "auth_lookup",
+   "roles": [
+    "lattice_auth"
+   ],
+   "using": "true",
+   "with_check": null
+  },
+  {
+   "command": "*",
+   "name": "memberships",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "model_providers",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "a",
+   "name": "model_providers",
+   "permissive": false,
+   "policy": "worker_records_embedding_only",
+   "roles": [
+    "lattice_worker"
+   ],
+   "using": null,
+   "with_check": "((purpose = 'embedding'::text) AND (approved_for_level = 'internal'::text) AND (approved_at IS NULL))"
+  },
+  {
+   "command": "r",
+   "name": "oidc_connections",
+   "permissive": true,
+   "policy": "auth_lookup",
+   "roles": [
+    "lattice_auth"
+   ],
+   "using": "true",
+   "with_check": null
+  },
+  {
+   "command": "*",
+   "name": "oidc_connections",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "d",
+   "name": "oidc_login_attempts",
+   "permissive": false,
+   "policy": "app_attempts_cleanup",
+   "roles": [
+    "lattice_app"
+   ],
+   "using": "((consumed_at IS NOT NULL) OR (expires_at <= now()))",
+   "with_check": null
+  },
+  {
+   "command": "*",
+   "name": "oidc_login_attempts",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "org_settings",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "r",
+   "name": "organizations",
+   "permissive": true,
+   "policy": "auth_lookup",
+   "roles": [
+    "lattice_auth"
+   ],
+   "using": "true",
+   "with_check": null
+  },
+  {
+   "command": "*",
+   "name": "organizations",
+   "permissive": true,
+   "policy": "owner_provisioning",
+   "roles": [
+    "lattice_owner"
+   ],
+   "using": "true",
+   "with_check": "true"
+  },
+  {
+   "command": "*",
+   "name": "organizations",
+   "permissive": true,
+   "policy": "tenant_self",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(id = lattice_current_org_id())",
+   "with_check": "(id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "provider_credentials",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "query_traces",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "rate_limit_counters",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "r",
+   "name": "scim_tokens",
+   "permissive": true,
+   "policy": "auth_lookup",
+   "roles": [
+    "lattice_auth"
+   ],
+   "using": "true",
+   "with_check": null
+  },
+  {
+   "command": "*",
+   "name": "scim_tokens",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "r",
+   "name": "sessions",
+   "permissive": true,
+   "policy": "auth_lookup",
+   "roles": [
+    "lattice_auth"
+   ],
+   "using": "true",
+   "with_check": null
+  },
+  {
+   "command": "*",
+   "name": "sessions",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "source_sync_runs",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "sources",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "sync_record_failures",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "a",
+   "name": "users",
+   "permissive": true,
+   "policy": "app_provision_users",
+   "roles": [
+    "lattice_app"
+   ],
+   "using": null,
+   "with_check": "(home_organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "w",
+   "name": "users",
+   "permissive": true,
+   "policy": "app_provisioned_users_update",
+   "roles": [
+    "lattice_app"
+   ],
+   "using": "(home_organization_id = lattice_current_org_id())",
+   "with_check": "(home_organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "r",
+   "name": "users",
+   "permissive": true,
+   "policy": "auth_lookup",
+   "roles": [
+    "lattice_auth"
+   ],
+   "using": "true",
+   "with_check": null
+  },
+  {
+   "command": "r",
+   "name": "users",
+   "permissive": true,
+   "policy": "home_visible",
+   "roles": [
+    "lattice_app"
+   ],
+   "using": "(home_organization_id = lattice_current_org_id())",
+   "with_check": null
+  },
+  {
+   "command": "r",
+   "name": "users",
+   "permissive": true,
+   "policy": "member_visible",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(EXISTS ( SELECT 1\n   FROM memberships m\n  WHERE (m.user_id = users.id)))",
+   "with_check": null
+  },
+  {
+   "command": "*",
+   "name": "users",
+   "permissive": true,
+   "policy": "owner_provisioning",
+   "roles": [
+    "lattice_owner"
+   ],
+   "using": "true",
+   "with_check": "true"
+  }
+ ],
+ "schema": [
+  {
+   "grants": [
+    "lattice_app:USAGE",
+    "lattice_auth:USAGE",
+    "lattice_worker:USAGE",
+    "PUBLIC:USAGE"
+   ],
+   "owner": "lattice_owner"
+  }
+ ],
+ "table_grants": [
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "access_group_members",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "access_group_members",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "access_group_members",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "access_group_members",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "access_group_members",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "access_group_members",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "access_groups",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "access_groups",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "access_groups",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "access_groups",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "access_groups",
+   "privilege": "UPDATE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "account_assignments",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "account_assignments",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "account_assignments",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "account_assignments",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "accounts",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "accounts",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "alembic_version",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "alembic_version",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "audit_events",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "audit_events",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "chunks",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "chunks",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "chunks",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "chunks",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "chunks",
+   "privilege": "UPDATE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "departments",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "departments",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "directory_identities",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "directory_identities",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "document_grants",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "document_grants",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "document_grants",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "document_grants",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "document_grants",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "document_grants",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "documents",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "documents",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "documents",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "documents",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "documents",
+   "privilege": "UPDATE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "external_identities",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_auth",
+   "name": "external_identities",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "jobs",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "jobs",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "jobs",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "membership_departments",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "membership_departments",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "membership_departments",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "membership_departments",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "memberships",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_auth",
+   "name": "memberships",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "memberships",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "model_providers",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "model_providers",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "model_providers",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_auth",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "oidc_login_attempts",
+   "privilege": "DELETE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "oidc_login_attempts",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "oidc_login_attempts",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "org_settings",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "org_settings",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "organizations",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_auth",
+   "name": "organizations",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "organizations",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "provider_credentials",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "query_traces",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "query_traces",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "rate_limit_counters",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "rate_limit_counters",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_auth",
+   "name": "scim_tokens",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "sessions",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "sessions",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_auth",
+   "name": "sessions",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "source_sync_runs",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "source_sync_runs",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "source_sync_runs",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "source_sync_runs",
+   "privilege": "UPDATE"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "sources",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "sources",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "sync_record_failures",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "sync_record_failures",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "sync_record_failures",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "users",
+   "privilege": "INSERT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "users",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_auth",
+   "name": "users",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_worker",
+   "name": "users",
+   "privilege": "SELECT"
+  }
+ ],
+ "tables": [
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "access_group_members",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "access_groups",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "account_assignments",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "accounts",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": false,
+   "kind": "r",
+   "name": "alembic_version",
+   "owner": "lattice_owner",
+   "rls": false
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "audit_events",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "chunks",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "departments",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "directory_identities",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "document_grants",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "documents",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "external_identities",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "jobs",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "membership_departments",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "memberships",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "model_providers",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "oidc_connections",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "oidc_login_attempts",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "org_settings",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "organizations",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "provider_credentials",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "query_traces",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "rate_limit_counters",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "scim_tokens",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "sessions",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "source_sync_runs",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "sources",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "sync_record_failures",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "users",
+   "owner": "lattice_owner",
+   "rls": true
+  }
+ ],
+ "triggers": [
+  {
+   "deferrable": true,
+   "enabled": "O",
+   "function": "lattice_require_access_audit()",
+   "initially_deferred": true,
+   "name": "access_group_members",
+   "trigger": "trg_access_group_members_access_audit"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_set_updated_at()",
+   "initially_deferred": false,
+   "name": "access_groups",
+   "trigger": "trg_access_groups_updated_at"
+  },
+  {
+   "deferrable": true,
+   "enabled": "O",
+   "function": "lattice_require_access_audit()",
+   "initially_deferred": true,
+   "name": "account_assignments",
+   "trigger": "trg_account_assignments_access_audit"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_set_updated_at()",
+   "initially_deferred": false,
+   "name": "accounts",
+   "trigger": "trg_accounts_updated_at"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_audit_events_immutable()",
+   "initially_deferred": false,
+   "name": "audit_events",
+   "trigger": "trg_audit_events_immutable"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_set_updated_at()",
+   "initially_deferred": false,
+   "name": "departments",
+   "trigger": "trg_departments_updated_at"
+  },
+  {
+   "deferrable": true,
+   "enabled": "O",
+   "function": "lattice_require_access_audit()",
+   "initially_deferred": true,
+   "name": "directory_identities",
+   "trigger": "trg_directory_identities_access_audit"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_set_updated_at()",
+   "initially_deferred": false,
+   "name": "directory_identities",
+   "trigger": "trg_directory_identities_updated_at"
+  },
+  {
+   "deferrable": true,
+   "enabled": "O",
+   "function": "lattice_require_access_audit()",
+   "initially_deferred": true,
+   "name": "document_grants",
+   "trigger": "trg_document_grants_access_audit"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_check_document_departments()",
+   "initially_deferred": false,
+   "name": "documents",
+   "trigger": "trg_documents_department_ids"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_set_updated_at()",
+   "initially_deferred": false,
+   "name": "documents",
+   "trigger": "trg_documents_updated_at"
+  },
+  {
+   "deferrable": true,
+   "enabled": "O",
+   "function": "lattice_require_access_audit()",
+   "initially_deferred": true,
+   "name": "membership_departments",
+   "trigger": "trg_membership_departments_access_audit"
+  },
+  {
+   "deferrable": true,
+   "enabled": "O",
+   "function": "lattice_require_access_audit()",
+   "initially_deferred": true,
+   "name": "memberships",
+   "trigger": "trg_memberships_access_audit"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_membership_home_organization()",
+   "initially_deferred": false,
+   "name": "memberships",
+   "trigger": "trg_memberships_home_organization"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_set_updated_at()",
+   "initially_deferred": false,
+   "name": "memberships",
+   "trigger": "trg_memberships_updated_at"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_set_updated_at()",
+   "initially_deferred": false,
+   "name": "model_providers",
+   "trigger": "trg_model_providers_updated_at"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_set_updated_at()",
+   "initially_deferred": false,
+   "name": "oidc_connections",
+   "trigger": "trg_oidc_connections_updated_at"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_set_updated_at()",
+   "initially_deferred": false,
+   "name": "org_settings",
+   "trigger": "trg_org_settings_updated_at"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_set_updated_at()",
+   "initially_deferred": false,
+   "name": "organizations",
+   "trigger": "trg_organizations_updated_at"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_set_updated_at()",
+   "initially_deferred": false,
+   "name": "sources",
+   "trigger": "trg_sources_updated_at"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_set_updated_at()",
+   "initially_deferred": false,
+   "name": "users",
+   "trigger": "trg_users_updated_at"
+  }
+ ]
+}

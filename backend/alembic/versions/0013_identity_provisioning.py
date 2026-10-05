@@ -3,6 +3,8 @@
 Revision ID: 0013
 Revises: 0012
 Create Date: 2026-10-02
+Reversible: no (the downgrade drops the identity tables and organization-owned users)
+Locks: ACCESS EXCLUSIVE on users, memberships and audit_events; new tables
 
 Phase 10 (implementation-plan §4 "Phase 10"; ADR-015; security-model §4, §8; threat
 model T3, T19, T22-T24).

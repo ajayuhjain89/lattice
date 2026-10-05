@@ -5,7 +5,7 @@ amendments (§21). P11.0 approved (4990064). P11.1 approved (b07ac8d). D-22 amen
 2026-10-05 (§21.1): zero paid infrastructure — Phase 11 closes on full local
 production-shaped verification; real external staging validation is deferred and gates
 Phase 15 (v1 GA). P11.2–P11.7 authorized to run in sequence without a review stop per
-checkpoint.** Branch `phase/11-production-operations` from `main` 27da421.
+checkpoint. P11.2 delivered (§25.3).** Branch `phase/11-production-operations` from `main` 27da421.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 11. Phase 12
 owns customer-facing onboarding (organization, SSO, SCIM, sources/integrations,
@@ -700,7 +700,7 @@ evidence for a checkpoint, or the staging deployment needing published images fr
 | ---- | ----- | ------------- |
 | **P11.0** Decisions, contract and staging selection | §25.1 | §25.1 |
 | **P11.1** Packaging and runtime | Dockerfiles, `.dockerignore`; web standalone, `0.0.0.0`, dev `proxyTimeout` (F1, F11); ingress routing and trusted-hop configuration (F2, F3); uvicorn production command (proxy headers, graceful timeout); worker heartbeat (F9); `lattice_build_info` and build arguments (F14); metrics address required in production; `deploy/` reference stack with api ×2 and Caddy; `lattice smoke`; image tests; GHSA re-check | `make prod-up prod-smoke` green; an Ask lasting > 30 s succeeds through the ingress; client address correct and unspoofable through the stack; all existing suites green |
-| **P11.2** Deployment, migrations, CI images (staging deploy deferred, §21.1) | `migrate` job; migration pre-flight (open application connections) and `lock_timeout`; migration headers + test; seeded-data migration check; production bootstrap variant verified against the selected platform (F10); privilege snapshot + `check-deployment`; `images` job (D-27); scripted deploy and rollback (§6.3, §7); **first staging deployment** | Migrating and non-migrating deploys and a no-migration rollback rehearsed on the local stack, unavailable interval measured; staging serves the release by digest and passes `smoke` and `check-deployment` |
+| **P11.2** Deployment, migrations, CI images (staging deploy deferred, §21.1) — *delivered, §25.3* | `migrate` job; migration pre-flight (open application connections) and `lock_timeout`; migration headers + test; seeded-data migration check; production bootstrap variant verified against the selected platform (F10); privilege snapshot + `check-deployment`; `images` job (D-27); scripted deploy and rollback (§6.3, §7); **first staging deployment** | Migrating and non-migrating deploys and a no-migration rollback rehearsed on the local stack, unavailable interval measured; staging serves the release by digest and passes `smoke` and `check-deployment` |
 | **P11.3** Identity and session operations | `sessions.oidc_connection_id`; `sso disable` revokes (D-25); `sso enable/update`, guarded `sso add`; `member suspend/reinstate`, `org suspend/reactivate`, `session revoke` (D-26, F12); clock-skew gauge; verification IdP; rotation runbooks | Every §15.3 case passes on the local stack across both API instances |
 | **P11.4** Shared limits, jobs, retention | `ask_slots`; shared pre-auth limit (§10.2) with `LATTICE_CLIENT_KEY_SECRET`; retention classes and safeguards (§12); job/maintenance metrics | Limit and retention tests green; §10.1 table true and documented; no process-local security limit left; worker drills pass |
 | **P11.5** Backups, PITR, restore | Backup model; WAL archiving in the local stack; `verify-restore`; restores per §11.3 on the local stack (staging deferred, §21.1); secret-free backup scan; measured local backup/restore durations | All six items of §11.3 met with recorded evidence; no RPO/RTO claimed beyond the platform's capability |
@@ -763,6 +763,21 @@ infrastructure change**, and no cloud resource created.
 | Metrics address required in production | **Deferred to P11.6** (with the monitoring contract): every deployment sets it, but making it mandatory now would change every production configuration and the test harness for no P11.1 benefit |
 | GHSA re-check | still unpatched; `pnpm-workspace.yaml` comment corrected to both chains |
 | Staging database | the 2 GiB DigitalOcean plan (product owner, 2026-10-03); Appendix A re-costed |
+
+### 25.3 P11.2 — as built (2026-10-05)
+
+| Planned | As built |
+| ------- | -------- |
+| `migrate` job, pre-flight, `lock_timeout` | `lattice migrate` (`lattice.db.migrate`): owner check (refuses a runtime credential, a superuser, BYPASSRLS); session advisory lock with a bounded wait; a **connection fence** (CONNECT revoked from `lattice_app`/`lattice_worker` while it runs — closes the race of an old build starting mid-migration; lifted in every case, reported by `check-deployment` if a hard kill leaves it); pre-flight refusing any application session (by role, so it needs no `pg_read_all_stats`); one-transaction upgrade with `lock_timeout` 5 s / `statement_timeout` 10 min; exact verification (revision and no autogenerate difference). `--status [--json]`, `--release-fence`, `--downgrade-to REV [--check]` |
+| Migration headers + test | `Reversible: yes\|no (…)` and `Locks: …` in 0001–0013; `tests/test_migration_safety.py`; downgrade allowed only over revisions declared reversible |
+| Seeded-data migration check | CI runs `lattice migrate` on the clean database and again on the seeded and synced data (no-op, verified), then `check-deployment` |
+| Production bootstrap (F10) | `infra/postgres/bootstrap_production.sql`, proved with a CREATEROLE + CREATEDB administrator in the reference stack and on every CI push; pgvector, being untrusted, comes from the platform's extension mechanism (emulated by `template1`) — deployment.md §7. Live-provider verification deferred (§21.1) |
+| Privilege snapshot + `check-deployment` | `lattice check-deployment` (deployment.md §8); snapshot committed as `backend/src/lattice/db/privilege_snapshot.json`, regenerated by `make privilege-snapshot`, pinned by a test |
+| `images` job (D-27) | in `ci.yml`: push to `main`/`v*` after the same run's jobs; `workflow_dispatch` skips the test jobs and requires an earlier green push run of the commit; reference stack + smoke + check before pushing; `GITHUB_TOKEN` only. Remote proof deferred to the final branch validation |
+| Scripted deploy and rollback | `deploy/deploy.sh status\|release\|rollback`; immutable image IDs; pre-flight (identity, revision consistency, `check-config` in the new image, schema state); rolling and stop-the-world flows; per-instance restore on failed readiness; smoke with `--expect-revision`; rollback across a reversible migration only with `--allow-downgrade` |
+| Additions found necessary | `lattice check-config`, `lattice version`, `lattice smoke --instance-metrics/--expect-revision`; production api/worker refuse the owner credential in their environment; ingress maintenance switch; **two web instances** (a single one cannot be replaced without a gap — measured); `lattice seed --require-synthetic` and `make prod-seed` (synthetic-only bootstrap); `deploy/drills/` |
+| First staging deploy | **Deferred** (D-22 amended, §21.1) |
+| Evidence | runbook §8 "P11.2 drills": every refusal and flow above, 0 failed requests over rolling releases and rollbacks, 19 s unavailable for a migrating release |
 
 ## 26. Phase 11 acceptance criteria
 

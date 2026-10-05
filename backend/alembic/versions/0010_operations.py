@@ -3,6 +3,8 @@
 Revision ID: 0010
 Revises: 0009
 Create Date: 2026-09-29
+Reversible: yes (the downgrade only revokes one grant)
+Locks: brief lock on alembic_version (GRANT)
 
 Phase 8. The API refuses to start, and reports not ready, unless the database is at the
 revision its code expects (``lattice.db.schema``). ``alembic_version`` holds one row,
