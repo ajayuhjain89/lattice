@@ -308,8 +308,9 @@ test.describe("Jump", () => {
 
   test("administrators: admin destinations, the audit log, and members found by the Access search", async ({ page }) => {
     const admin = adminRequests(page);
-    await mockApi(page, { me: ME_LENA });
-    await page.goto("/ask");
+    // Wait for the Ask page like every other Jump test: the chord's listener exists only
+    // once the shell has hydrated (a chord pressed earlier is lost).
+    await openAsk(page, { me: ME_LENA });
     await page.keyboard.press(await jumpChord(page));
     await expect(page.getByRole("group", { name: "Go to" }).getByRole("option")).toHaveText(["Ask", "Activity", "Sources", "Access", "AI providers", "Organization runs, Activity", "Audit log, Access"]);
     // No member is listed, or requested, before anything is typed.

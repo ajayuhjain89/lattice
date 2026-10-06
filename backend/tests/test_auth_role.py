@@ -18,6 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from lattice.db.deployment import LATTICE_ROLES
 from lattice.db.engine import Database
 from lattice.identity.sessions import SessionPolicy, SessionService
 
@@ -213,9 +214,20 @@ async def test_only_lattice_owner_can_act_as_lattice_auth_and_it_does_not_inheri
         WHERE g.rolname = 'lattice_auth' OR m.rolname = 'lattice_auth'
         """,
     )
-    # lattice_auth is a member of nothing; its only member is the migration role, which
-    # may SET ROLE to it (to transfer function ownership) but inherits nothing from it.
-    assert edges == [("lattice_auth", "lattice_owner", False, True)]
+    # lattice_auth is a member of nothing; among the Lattice roles its only member is the
+    # migration role, which may SET ROLE to it (to transfer function ownership) but
+    # inherits nothing from it. Compared as a set, like check-deployment: a role
+    # bootstrapped by the superuser and again by a platform administrator carries the
+    # same grant twice (two grantors).
+    lattice = {("lattice_auth", "lattice_owner", False, True)}
+    assert {e for e in edges if e[1] in LATTICE_ROLES} == lattice
+    assert all(e[0] == "lattice_auth" for e in edges), "lattice_auth is a member of nothing"
+    # On a managed platform the administrative role that ran bootstrap_production.sql
+    # (CREATEROLE, not a superuser) holds PostgreSQL 16's automatic ADMIN-only membership
+    # in the roles it created: it may neither inherit from lattice_auth nor become it.
+    for granted, member, inherit, set_role in edges:
+        if member not in LATTICE_ROLES:
+            assert (inherit, set_role) == (False, False), (granted, member)
     can_become = await _rows(
         superuser_engine,
         "SELECT rolname FROM pg_roles WHERE rolcanlogin AND NOT rolsuper "

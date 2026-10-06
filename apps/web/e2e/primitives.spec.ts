@@ -5,11 +5,13 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-import { WIDTHS, expectNoHorizontalOverflow, jumpChord, settled } from "./helpers";
+import { WIDTHS, expectNoHorizontalOverflow, hydrated, jumpChord, settled } from "./helpers";
 
 async function openSpecimen(page: Page) {
   await page.goto("/specimen");
   await expect(page.getByRole("heading", { level: 2, name: "Data table" })).toBeVisible();
+  // Server-rendered: visible before it is interactive (helpers.ts, hydrated).
+  await hydrated(page.getByRole("button", { name: "Actions for Employee handbook" }));
 }
 
 async function audit(page: Page) {

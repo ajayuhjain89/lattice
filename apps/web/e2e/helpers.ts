@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 import type { components } from "../src/api/schema.gen";
 
@@ -38,6 +38,26 @@ export async function expectNoHorizontalOverflow(page: Page) {
 }
 
 /** Wait for running CSS animations to settle, so contrast is measured on final colours. */
+/**
+ * Wait until React has hydrated `element` and run its effects. A server-rendered page is
+ * visible before it is interactive: a key pressed earlier reaches no React handler, and
+ * document listeners registered in effects (Radix's keyboard-mode flag, the Jump chord)
+ * miss it. On a slow runner that turned "Enter opens the menu with the first item
+ * focused" into "the menu opens, nothing focused" (primitives.spec.ts, P11.7).
+ */
+export async function hydrated(element: Locator) {
+  await element.evaluate(
+    (el) =>
+      new Promise<void>((done) => {
+        const owned = () => Object.keys(el).some((key) => key.startsWith("__reactProps"));
+        // Then one frame and one task: passive effects run after the hydrating commit.
+        const effects = () => requestAnimationFrame(() => setTimeout(done, 0));
+        const poll = () => (owned() ? effects() : setTimeout(poll, 20));
+        poll();
+      }),
+  );
+}
+
 export async function settled(page: Page) {
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity));
 }
