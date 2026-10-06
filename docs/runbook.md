@@ -382,7 +382,7 @@ Docker has 3 GB).
 | `bootstrap` fails with `password authentication failed for user "platform_admin"` | The volume was initialised before P11.2 (superuser bootstrap): `make prod-destroy`, then `make prod-up` |
 | A container is `unhealthy` | `make prod-ps`; `docker logs lattice-reference-<service>-1`. api: readiness (database or schema). worker: heartbeat older than 300 s (frozen or blocked). web: `GET /` failing |
 | Changed `deploy/caddy/Caddyfile` | Recreate Caddy (`… up -d --force-recreate caddy`): it is a single-file bind mount, so an editor that replaces the file leaves the container on the old one |
-| `lattice smoke` cannot read the CA | It runs as uid 10001; `make prod-smoke` copies only Caddy's public root certificate to `deploy/.reference-ca.crt` (git-ignored) and mounts it |
+| `lattice smoke` cannot read the CA (`--ca-file is not a readable file`) | It runs as uid 10001; `make prod-smoke` copies only Caddy's public root certificate to `deploy/.reference-ca.crt` (git-ignored), makes it 0644 (Caddy stores it 0600, unreadable to another uid on a Linux host) and mounts it |
 | Passwords | `deploy/.env.reference` (git-ignored, generated once by `make prod-env`); each service receives only its own credential |
 
 ### 7.10 Releases and rollbacks — *implemented (P11.2)*

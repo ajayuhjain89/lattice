@@ -209,6 +209,9 @@ REFERENCE_CA := deploy/.reference-ca.crt
 prod-smoke: ## lattice smoke against the reference stack, from inside its private network
 	@# Only the internal CA's public root certificate leaves the Caddy container.
 	$(PROD_COMPOSE) cp caddy:/data/caddy/pki/authorities/local/root.crt $(REFERENCE_CA)
+	@# Caddy stores it 0600; smoke runs as uid 10001, which on a Linux host cannot read a
+	@# bind-mounted 0600 file owned by the caller (Docker Desktop hides this). Public data.
+	chmod 0644 $(REFERENCE_CA)
 	$(PROD_COMPOSE) run --rm -v $(CURDIR)/$(REFERENCE_CA):/srv/reference-ca.crt:ro ops \
 	  smoke --url https://caddy:8443 --ca-file /srv/reference-ca.crt \
 	  --instance http://api1:8000 --instance http://api2:8000 \
