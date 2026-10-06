@@ -28,7 +28,7 @@ vectors and the lexical index.
    │  HTTPS, same origin (session cookie)
    ▼
  Next.js web app  (apps/web)          ← rendering + client interaction only
-   │  /api/* proxied to FastAPI; server components forward the session cookie
+   │  /api/* proxied to FastAPI (the browser's own calls; the server never calls the API)
    ▼
  FastAPI application  (backend, `lattice` package)
    │   identity · orgs · authz · sources · retrieval · answering · tracing
@@ -79,8 +79,14 @@ Rules:
 - Next.js holds **no secrets** other than the internal API base URL, and **no business
   rules**. If Next.js were fully compromised, it could only do what the logged-in
   user's session can already do.
-- Same-origin: `/api/*` is proxied to FastAPI (Next.js rewrites in development, the
-  reverse proxy in deployment). Cookies stay first-party; no CORS configuration.
+- Same-origin: `/api/*` reaches FastAPI on the web origin, so cookies stay first-party
+  and no CORS is configured. Every API call is made by the browser
+  (`apps/web/src/api/client.ts`); no server component or route handler calls the API.
+  **In deployment (Phase 11, P11.1, ADR-016)** the ingress routes `/api/*` directly to the
+  API and is the only trusted forwarding hop (`LATTICE_TRUSTED_PROXIES`); the production
+  web build has no `/api` route. **In development** `next dev` proxies `/api/*` to the API
+  (`next.config.ts`, 150 s proxy timeout); the API then sees the web server as the client
+  ([deployment.md](deployment.md) §4).
 - The FastAPI OpenAPI schema is the canonical HTTP contract. TypeScript types are
   generated with `openapi-typescript`, and the client uses `openapi-fetch` (both tiny,
   no runtime framework). CI fails if generated types are out of date.

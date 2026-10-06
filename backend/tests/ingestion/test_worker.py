@@ -200,6 +200,32 @@ async def test_a_missing_export_fails_the_job_without_retry(
     assert row["sync_run_id"] is not None  # the run records the failure too
 
 
+async def test_a_suspended_organization_runs_no_sync(
+    owner_db: Database, app_db: Database, worker_db: Database, synced: Org
+) -> None:
+    """``lattice org suspend`` (D-26): a job already queued fails without running."""
+    source = await _source(owner_db, synced, "drive")
+    job, _ = await request_sync(
+        app_db,
+        organization_id=synced.id,
+        membership_id=await _admin(owner_db, synced),
+        source_id=source,
+    )
+    before = await row_versions(owner_db, synced.id)
+    async with owner_db.tenant_transaction(synced.id) as s:
+        await s.execute(text("UPDATE organizations SET status = 'suspended'"))
+    outcome = await Worker(worker_db, embedding=FAKE).run_once()
+    assert outcome is not None
+    assert (outcome.outcome, outcome.error_code) == ("failed", "organization_suspended")
+    row = await _job(owner_db, synced, job.id)
+    assert (row["status"], row["error_code"], row["sync_run_id"]) == (
+        "failed",
+        "organization_suspended",
+        None,
+    )
+    assert await row_versions(owner_db, synced.id) == before
+
+
 @asynccontextmanager
 async def _hold_source_lock(owner_db: Database, org: Org, key: str) -> AsyncIterator[None]:
     name = f"lattice-sync:{org.id}:{key}"
@@ -358,8 +384,8 @@ async def test_finished_jobs_are_deleted_after_30_days_only(
             text("UPDATE jobs SET finished_at = now() - interval '31 days' WHERE id = :j"),
             {"j": old},
         )
-    assert await worker.cleanup() == 1
-    assert await worker.cleanup() == 0  # idempotent
+    assert (await worker.cleanup())["jobs"] == 1
+    assert (await worker.cleanup())["jobs"] == 0  # idempotent
     async with owner_db.tenant_transaction(synced.id) as s:
         remaining: set[uuid.UUID] = set((await s.execute(text("SELECT id FROM jobs"))).scalars())
     assert remaining == {recent}

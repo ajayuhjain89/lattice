@@ -26,6 +26,7 @@ Implementations:
 Errors are ``GenerationError`` with a fixed code, never provider text.
 """
 
+import asyncio
 import json
 import re
 from collections.abc import Sequence
@@ -115,13 +116,16 @@ def _first_sentence(text: str) -> str | None:
 @dataclass
 class FakeGenerationProvider:
     """Deterministic drafts from the prompt itself: the first sentence of the best-ranked
-    evidence is quoted verbatim as the direct answer, the next block's as support."""
+    evidence is quoted verbatim as the direct answer, the next block's as support.
+    ``delay_seconds`` makes each call wait first, to exercise long Asks through the
+    ingress (the reference stack's verification profile; never in production)."""
 
     provider: str = "fake"
     model: str = "fake-extractive-v1"
     deployment: Deployment = "external_api"
     retention_mode: str = "none"
     training_opt_out: bool = True
+    delay_seconds: float = 0.0
 
     def draft(self, prompt: str) -> dict[str, Any]:
         question = _QUESTION.search(prompt)
@@ -161,6 +165,8 @@ class FakeGenerationProvider:
         }
 
     async def generate(self, request: GenerationRequest) -> GenerationResult:
+        if self.delay_seconds:
+            await asyncio.sleep(self.delay_seconds)
         text = json.dumps(self.draft(request.prompt))
         return GenerationResult(
             text=text, input_tokens=len(request.prompt) // 4, output_tokens=len(text) // 4

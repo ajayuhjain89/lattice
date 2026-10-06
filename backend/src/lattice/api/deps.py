@@ -46,9 +46,9 @@ def get_limits(request: Request) -> ApiLimits:
 
 
 def client_address(request: Request) -> str | None:
-    """The peer address as the server sees it. Behind a reverse proxy, run uvicorn with
-    ``--proxy-headers --forwarded-allow-ips=<proxy>`` so this is the client's address
-    (runbook §7); a forwarded header from anyone else is ignored."""
+    """The client address: the peer, or -- only when the peer is a trusted ingress
+    (``LATTICE_TRUSTED_PROXIES``, P11.1) -- the address that hop put in
+    ``X-Forwarded-For``. A forwarded header from anyone else is ignored."""
     return request.client.host if request.client else None
 
 

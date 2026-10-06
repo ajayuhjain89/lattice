@@ -319,3 +319,11 @@ def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]")
         help="'none': the organization_controlled class is not allowed",
     )
     egress_cmd.add_argument("--reason", required=True)
+    # Emergency stop (P11.3, D-26): handled by lattice.cli_identity.
+    for name, help_text in (
+        ("suspend", "Stop the organization: sign-in, SCIM, worker; revoke every session"),
+        ("reactivate", "Reactivate a suspended organization"),
+    ):
+        lifecycle = org_commands.add_parser(name, help=help_text)
+        lifecycle.add_argument("--org", required=True)
+        lifecycle.add_argument("--reason", required=True)

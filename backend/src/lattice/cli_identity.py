@@ -1,7 +1,13 @@
-"""``lattice sso``, ``lattice scim token`` and ``lattice member admin`` (Phase 10): the
-operator's identity controls, as ``lattice_owner`` through row-level security, each with
-a reason and an audit event (``lattice.identity.admin``). Nothing here is reachable from
-the API."""
+"""The operator's identity and incident controls (Phase 10; Phase 11 P11.3, D-25, D-26),
+as ``lattice_owner`` through row-level security, each with a reason and an audit event
+(``lattice.identity.admin``). Nothing here is reachable from the API.
+
+    lattice sso add|show|list|disable|enable|update --org SLUG ...
+    lattice scim token create|list|revoke --org SLUG ...
+    lattice member admin|suspend|reinstate --org SLUG --email E --reason R
+    lattice session revoke --org SLUG (--email E | --all) --reason R
+    lattice org suspend|reactivate --org SLUG --reason R
+"""
 
 import argparse
 import os
@@ -13,7 +19,7 @@ from lattice.db.engine import Database, create_engine
 from lattice.identity import admin
 from lattice.ingestion.store import organization_id
 
-COMMANDS = ("sso", "scim", "member")
+COMMANDS = ("sso", "scim", "member", "session")
 
 
 def _fail(message: str) -> int:
@@ -29,6 +35,10 @@ def _owner() -> Database:
             pool_size=1,
         )
     )
+
+
+def _id(value: str | None) -> uuid.UUID | None:
+    return None if value is None else uuid.UUID(value)
 
 
 def _origin() -> str:
@@ -76,13 +86,46 @@ async def run(args: argparse.Namespace) -> int:
                     subject_claim=args.subject_claim,
                     reason=reason,
                     actor=actor,
+                    new_identity_namespace=args.new_identity_namespace,
+                )
+                _print_connection(args.org, found)
+            elif args.command == "sso" and args.sso_command == "list":
+                for c in await admin.connections(s, org):
+                    print(f"{c.id}  {c.status:8}  {c.issuer}  client {c.client_id}")
+            elif args.command == "sso" and args.sso_command == "disable":
+                disabled, revoked = await admin.disable_connection(
+                    s, org, reason=reason, actor=actor
+                )
+                print(
+                    f"{args.org}: OIDC connection {disabled.id} disabled; {revoked} session(s) "
+                    "it issued revoked; its SCIM tokens stop working"
+                )
+            elif args.command == "sso" and args.sso_command == "enable":
+                found = await admin.enable_connection(
+                    s, org, connection_id=_id(args.connection_id), reason=reason, actor=actor
                 )
                 _print_connection(args.org, found)
             elif args.command == "sso":
-                found = await admin.disable_connection(s, org, reason=reason, actor=actor)
-                print(
-                    f"{args.org}: OIDC connection {found.id} disabled; its SCIM tokens stop working"
+                secret: object = admin._UNSET
+                if args.no_client_secret:
+                    secret = None
+                elif args.client_secret_ref is not None:
+                    secret = args.client_secret_ref
+                updated, revoked = await admin.update_connection(
+                    s,
+                    org,
+                    connection_id=_id(args.connection_id),
+                    client_id=args.client_id,
+                    secret_ref=secret,
+                    issuer=args.issuer,
+                    subject_claim=args.subject_claim,
+                    subjects_unchanged=args.subjects_unchanged,
+                    reason=reason,
+                    actor=actor,
                 )
+                _print_connection(args.org, updated)
+                if revoked:
+                    print(f"  {revoked} session(s) of this connection revoked")
             elif args.command == "scim" and args.scim_action == "create":
                 token_id, token = await admin.create_scim_token(s, org, reason=reason, actor=actor)
                 print(f"{args.org}: SCIM token {token_id} created. Shown once; store it in the")
@@ -100,6 +143,52 @@ async def run(args: argparse.Namespace) -> int:
                         f"revoked {row['revoked_at']:%Y-%m-%d}" if row["revoked_at"] else "active"
                     )
                     print(f"{row['id']}  created {row['created_at']:%Y-%m-%d}  {state}")
+            elif args.command == "member" and args.member_command == "suspend":
+                suspended = await admin.suspend_member(
+                    s, org, email=args.email, reason=reason, actor=actor
+                )
+                if suspended is None:
+                    print(f"{args.org}: {args.email} is already suspended")
+                else:
+                    member, revoked = suspended
+                    print(f"{args.org}: {args.email} suspended; {revoked} session(s) revoked")
+                    if member.provisioned:
+                        print(
+                            "  provisioned by the identity provider: suspend them there too, "
+                            "or its next update may reactivate them (D-19)"
+                        )
+            elif args.command == "member" and args.member_command == "reinstate":
+                reinstated = await admin.reinstate_member(
+                    s, org, email=args.email, reason=reason, actor=actor
+                )
+                print(
+                    f"{args.org}: {args.email} is "
+                    f"{'already active' if reinstated is None else 'active again'}"
+                )
+            elif args.command == "session":
+                revoked = await admin.revoke_sessions(
+                    s,
+                    org,
+                    email=None if args.all_sessions else args.email,
+                    reason=reason,
+                    actor=actor,
+                )
+                whose = args.email or "every member"
+                print(f"{args.org}: {revoked} session(s) of {whose} revoked")
+            elif args.command == "org":
+                result = await admin.set_organization_status(
+                    s, org, suspend=args.org_command == "suspend", reason=reason, actor=actor
+                )
+                if result is None:
+                    state = "suspended" if args.org_command == "suspend" else "active"
+                    print(f"{args.org}: already {state}")
+                elif args.org_command == "suspend":
+                    print(
+                        f"{args.org}: suspended; sign-in, SCIM and requested syncs stop; "
+                        f"{result} session(s) revoked"
+                    )
+                else:
+                    print(f"{args.org}: reactivated (members sign in again)")
             else:
                 changed = await admin.set_admin(
                     s, org, email=args.email, grant=args.grant, reason=reason, actor=actor
@@ -113,7 +202,7 @@ async def run(args: argparse.Namespace) -> int:
     except admin.OperatorRejected as exc:
         return _fail(str(exc))
     except ValueError:
-        return _fail("--id must be a token ID")
+        return _fail("--id / --connection-id must be an ID")
     finally:
         await db.dispose()
     return 0
@@ -134,11 +223,36 @@ def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]")
         default="sub",
         help="The ID-token claim that identifies a person; the SCIM externalId must match it",
     )
+    add.add_argument(
+        "--new-identity-namespace",
+        action="store_true",
+        help="Add even though a disabled connection has provisioned members (they will not map)",
+    )
     show = sso_commands.add_parser("show", help="The active connection and its URLs")
-    disable = sso_commands.add_parser("disable", help="Disable the active connection")
-    for command in (add, show, disable):
+    listing_sso = sso_commands.add_parser("list", help="Every connection, active and disabled")
+    disable = sso_commands.add_parser(
+        "disable", help="Disable the active connection and revoke the sessions it issued"
+    )
+    enable = sso_commands.add_parser(
+        "enable", help="Re-activate a disabled connection (same members, same login key)"
+    )
+    update = sso_commands.add_parser("update", help="Change a connection in place")
+    update.add_argument("--client-id")
+    secret = update.add_mutually_exclusive_group()
+    secret.add_argument("--client-secret-ref", help="env:LATTICE_OIDC_SECRET_<NAME> (rotation)")
+    secret.add_argument("--no-client-secret", action="store_true", help="a public PKCE client")
+    update.add_argument("--issuer")
+    update.add_argument("--subject-claim")
+    update.add_argument(
+        "--subjects-unchanged",
+        action="store_true",
+        help="Required with --issuer/--subject-claim: every person keeps the same subject",
+    )
+    for command in (enable, update):
+        command.add_argument("--connection-id", help="needed when several could match")
+    for command in (add, show, listing_sso, disable, enable, update):
         command.add_argument("--org", required=True)
-    for command in (add, disable):
+    for command in (add, disable, enable, update):
         command.add_argument("--reason", required=True)
 
     scim = commands.add_parser("scim", help="SCIM provisioning tokens (D-20)")
@@ -165,3 +279,22 @@ def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]")
     choice.add_argument("--grant", dest="grant", action="store_true")
     choice.add_argument("--revoke", dest="grant", action="store_false")
     admin_cmd.add_argument("--reason", required=True)
+    for name, help_text in (
+        ("suspend", "Suspend a member now and revoke their sessions (audited)"),
+        ("reinstate", "Make a suspended or removed member active again (audited)"),
+    ):
+        lifecycle = member_commands.add_parser(name, help=help_text)
+        lifecycle.add_argument("--org", required=True)
+        lifecycle.add_argument("--email", required=True)
+        lifecycle.add_argument("--reason", required=True)
+
+    session_cmd = commands.add_parser("session", help="End sessions (audited)")
+    session_commands = session_cmd.add_subparsers(dest="session_command", required=True)
+    revoke_sessions = session_commands.add_parser("revoke", help="Revoke sessions now")
+    revoke_sessions.add_argument("--org", required=True)
+    whose = revoke_sessions.add_mutually_exclusive_group(required=True)
+    whose.add_argument("--email", help="one member's sessions")
+    whose.add_argument(
+        "--all", dest="all_sessions", action="store_true", help="every session of the organization"
+    )
+    revoke_sessions.add_argument("--reason", required=True)

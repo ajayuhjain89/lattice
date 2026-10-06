@@ -1,0 +1,12 @@
+# Build context for apps/web/Dockerfile: the app's sources and lockfile only.
+**/node_modules
+.next
+out
+test-results
+playwright-report
+e2e
+*.tsbuildinfo
+.env*
+**/.DS_Store
+Dockerfile
+.dockerignore

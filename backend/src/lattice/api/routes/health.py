@@ -5,10 +5,12 @@ versions, revisions, hosts, counts, organizations or error text.
   liveness probe: failing it means restart the process.
 * ``/v1/health/ready`` -- the database answers and its schema is at the revision this
   build expects. For a readiness probe / load balancer: failing it means send no
-  traffic here; restarting will not help.
+  traffic here; restarting will not help. It also refreshes the
+  ``lattice_clock_skew_seconds`` gauge (internal metrics only).
 * ``/v1/health`` -- the Phase 1 check (database connectivity), kept for compatibility.
 """
 
+import contextlib
 import logging
 from typing import Any
 
@@ -69,4 +71,9 @@ async def ready(request: Request) -> ReadyResponse:
         metrics.DEPENDENCY_FAILURES.labels(dependency="database", check="schema_revision").inc()
         log_event(logger, logging.WARNING, "health.schema_mismatch")
         raise LatticeError(ErrorCode.SERVICE_UNAVAILABLE)
+    # Clock skew against the database (OIDC token times, session expiry): a gauge for the
+    # alert, never a readiness condition -- a skewed clock is an operator problem, and
+    # refusing traffic would not fix it.
+    with contextlib.suppress(SQLAlchemyError, OSError):
+        metrics.CLOCK_SKEW.set(await db.clock_skew())
     return ReadyResponse(status="ready", database="ok", schema_revision="ok")

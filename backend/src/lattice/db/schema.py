@@ -12,7 +12,7 @@ from typing import Final
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-SCHEMA_REVISION: Final = "0013"
+SCHEMA_REVISION: Final = "0015"
 
 _READABLE_SQL = text(
     "SELECT to_regclass('public.alembic_version') IS NOT NULL "
@@ -32,8 +32,11 @@ def revision_problem(revision: str | None) -> str | None:
     if revision == SCHEMA_REVISION:
         return None
     if revision is None:
-        return f"database schema is not migrated to {SCHEMA_REVISION} (run `make migrate`)"
+        return (
+            f"database schema is not migrated to {SCHEMA_REVISION} (run `lattice migrate`; "
+            "`make migrate` in development)"
+        )
     return (
         f"database schema is at revision {revision}, this build expects {SCHEMA_REVISION} "
-        "(run `make migrate`, or deploy the build that matches the database)"
+        "(run `lattice migrate`, or deploy the build that matches the database)"
     )

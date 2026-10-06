@@ -1,8 +1,10 @@
 """The worker's runtime role (``lattice_worker``, migration 0011, ADR-013) and the jobs
 table's privileges. The worker writes ingestion tables, so its role is the narrowest
-that a sync needs -- and nothing else: no sessions, identities, traces, audit events,
-provider credentials or settings; source-origin grants and groups only; one
-organization at a time for everything but the queue."""
+that a sync needs -- and nothing else: no identities, audit events, provider credentials
+or settings; source-origin grants and groups only; one organization at a time for
+everything but the queue. Retention (0015, P11.4) adds DELETE of aged rows behind
+database floors, with SELECT of identifying and timestamp columns only -- never the
+content of a session, trace or sign-in attempt (tests/ingestion/test_retention.py)."""
 
 import uuid
 
@@ -35,22 +37,25 @@ WORKER_TABLES = {
     "document_grants": {"SELECT", "INSERT", "DELETE"},
     "chunks": {"SELECT", "INSERT", "UPDATE", "DELETE"},
     "sources": {"SELECT"},
-    "source_sync_runs": {"SELECT", "INSERT", "UPDATE"},
+    "source_sync_runs": {"SELECT", "INSERT", "UPDATE", "DELETE"},
     "sync_record_failures": {"SELECT", "INSERT"},
     "org_settings": {"SELECT"},
     "model_providers": {"SELECT", "INSERT"},
     "jobs": {"SELECT", "DELETE"},
     "external_identities": set(),
-    "sessions": set(),
-    "query_traces": set(),
+    "sessions": {"DELETE"},
+    "query_traces": {"DELETE"},
     "audit_events": set(),
     "provider_credentials": set(),
     # Phase 10: identity, provisioning and limits are none of a sync's business.
     "oidc_connections": set(),
-    "oidc_login_attempts": set(),
+    "oidc_login_attempts": {"DELETE"},
     "directory_identities": set(),
     "scim_tokens": set(),
-    "rate_limit_counters": set(),
+    "rate_limit_counters": {"DELETE"},
+    # Phase 11 (P11.4): retention only.
+    "ask_slots": {"DELETE"},
+    "pre_auth_rate_limits": set(),
 }
 
 

@@ -18,6 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from lattice.db.deployment import LATTICE_ROLES
 from lattice.db.engine import Database
 from lattice.identity.sessions import SessionPolicy, SessionService
 
@@ -30,7 +31,13 @@ LOOKUP_FUNCTIONS = {
     "lattice_oidc_connection",
     "lattice_resolve_scim_token",
 }
-# Exactly what the functions read, and nothing else.
+# P11.4: the shared pre-authentication counters (written, not read for a lookup).
+COUNTER_FUNCTIONS = {
+    "lattice_pre_auth_hit": "lattice_app",
+    "lattice_pre_auth_retention": "lattice_worker",
+}
+COUNTER_TABLE = "pre_auth_rate_limits"
+# Exactly what the lookup functions read, and nothing else.
 READABLE_TABLES = {
     "organizations",
     "users",
@@ -95,7 +102,9 @@ async def test_owns_exactly_the_lookup_functions(superuser_engine: AsyncEngine) 
         SELECT 'schema', nspname FROM pg_namespace WHERE nspowner = 'lattice_auth'::regrole
         """,
     )
-    assert {(kind, name) for kind, name in owned} == {("function", f) for f in LOOKUP_FUNCTIONS}
+    assert {(kind, name) for kind, name in owned} == {
+        ("function", f) for f in (*LOOKUP_FUNCTIONS, *COUNTER_FUNCTIONS)
+    }
 
 
 async def test_lookup_functions_are_narrow_definer_functions(superuser_engine: AsyncEngine) -> None:
@@ -147,9 +156,12 @@ async def test_table_privileges_are_exactly_select_on_the_lookup_tables(
                         {"t": f"public.{table}", "p": privilege},
                     )
                 ).scalar_one()
-                expected = privilege == "SELECT" and table in READABLE_TABLES
+                if table == COUNTER_TABLE:
+                    expected = privilege in ("SELECT", "INSERT", "UPDATE", "DELETE")
+                else:
+                    expected = privilege == "SELECT" and table in READABLE_TABLES
                 assert held is expected, f"{table}: {privilege}"
-            if table not in READABLE_TABLES:
+            if table not in READABLE_TABLES and table != COUNTER_TABLE:
                 any_column: object = (
                     await conn.execute(
                         text("SELECT has_any_column_privilege('lattice_auth', :t, 'SELECT')"),
@@ -166,7 +178,28 @@ async def test_only_select_policies_target_lattice_auth(superuser_engine: AsyncE
     )
     assert {(t, p, c) for t, p, c in policies} == {
         (t, "auth_lookup", "SELECT") for t in READABLE_TABLES
-    }
+    } | {(COUNTER_TABLE, "auth_counters", "ALL")}
+
+
+async def test_counter_functions_are_narrow_definer_functions(
+    superuser_engine: AsyncEngine,
+) -> None:
+    rows = await _rows(
+        superuser_engine,
+        """
+        SELECT p.proname, p.prosecdef, p.proconfig,
+               array(SELECT DISTINCT coalesce(r.rolname, 'PUBLIC')
+                     FROM aclexplode(p.proacl) a LEFT JOIN pg_roles r ON r.oid = a.grantee
+                     WHERE a.privilege_type = 'EXECUTE' ORDER BY 1)
+        FROM pg_proc p
+        WHERE p.proname IN ('lattice_pre_auth_hit', 'lattice_pre_auth_retention')
+        """,
+    )
+    assert {r[0] for r in rows} == set(COUNTER_FUNCTIONS)
+    for name, security_definer, config, executors in rows:
+        assert security_definer, name
+        assert config == ["search_path=pg_catalog, public, pg_temp"], name
+        assert executors == sorted([COUNTER_FUNCTIONS[str(name)], "lattice_auth"]), name
 
 
 async def test_only_lattice_owner_can_act_as_lattice_auth_and_it_does_not_inherit(
@@ -181,9 +214,20 @@ async def test_only_lattice_owner_can_act_as_lattice_auth_and_it_does_not_inheri
         WHERE g.rolname = 'lattice_auth' OR m.rolname = 'lattice_auth'
         """,
     )
-    # lattice_auth is a member of nothing; its only member is the migration role, which
-    # may SET ROLE to it (to transfer function ownership) but inherits nothing from it.
-    assert edges == [("lattice_auth", "lattice_owner", False, True)]
+    # lattice_auth is a member of nothing; among the Lattice roles its only member is the
+    # migration role, which may SET ROLE to it (to transfer function ownership) but
+    # inherits nothing from it. Compared as a set, like check-deployment: a role
+    # bootstrapped by the superuser and again by a platform administrator carries the
+    # same grant twice (two grantors).
+    lattice = {("lattice_auth", "lattice_owner", False, True)}
+    assert {e for e in edges if e[1] in LATTICE_ROLES} == lattice
+    assert all(e[0] == "lattice_auth" for e in edges), "lattice_auth is a member of nothing"
+    # On a managed platform the administrative role that ran bootstrap_production.sql
+    # (CREATEROLE, not a superuser) holds PostgreSQL 16's automatic ADMIN-only membership
+    # in the roles it created: it may neither inherit from lattice_auth nor become it.
+    for granted, member, inherit, set_role in edges:
+        if member not in LATTICE_ROLES:
+            assert (inherit, set_role) == (False, False), (granted, member)
     can_become = await _rows(
         superuser_engine,
         "SELECT rolname FROM pg_roles WHERE rolcanlogin AND NOT rolsuper "

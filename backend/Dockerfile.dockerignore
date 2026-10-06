@@ -1,0 +1,14 @@
+# Context for backend/Dockerfile (built from the repository root): deny everything, then
+# allow exactly what the image copies. Secrets (.env), data/, apps/, .git and tests never
+# enter the build context.
+*
+!backend/pyproject.toml
+!backend/uv.lock
+!backend/src
+!backend/alembic.ini
+!backend/alembic
+!infra/postgres/bootstrap.sql
+!infra/postgres/bootstrap_database.sql
+!infra/postgres/bootstrap_production.sql
+**/__pycache__
+**/*.pyc

@@ -2,6 +2,10 @@
 
 The URL comes from ``config.attributes["database_url"]`` (used by tests) or else from
 LATTICE_MIGRATION_DATABASE_URL. It is never written to alembic.ini or logged.
+
+``lattice migrate`` (lattice.db.migrate) passes its own connection instead, in
+``config.attributes["connection"]``: the one that holds the migration lock and carries
+the lock and statement timeouts.
 """
 
 import asyncio
@@ -12,20 +16,11 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from lattice.authz import models as authz_models  # noqa: F401 - register tables
 from lattice.config import load_migration_settings
-from lattice.db.base import Base
-from lattice.identity import models as identity_models  # noqa: F401 - register tables
-from lattice.ingestion import models as ingestion_models  # noqa: F401 - register tables
-from lattice.jobs import models as job_models  # noqa: F401 - register tables
-from lattice.orgs import models as org_models  # noqa: F401 - register tables
-from lattice.providers import models as provider_models  # noqa: F401 - register tables
-from lattice.ratelimit import models as ratelimit_models  # noqa: F401 - register tables
-from lattice.sources import models as source_models  # noqa: F401 - register tables
-from lattice.tracing import models as tracing_models  # noqa: F401 - register tables
+from lattice.db.models_registry import metadata
 
 config = context.config
-target_metadata = Base.metadata
+target_metadata = metadata()
 
 # Show migration progress on the CLI. Programmatic callers (tests) set
 # attributes["configure_logging"] = False so their own logging setup is untouched.
@@ -60,4 +55,8 @@ async def _run_async() -> None:
 if context.is_offline_mode():
     raise SystemExit("Offline (SQL script) migrations are not supported for Lattice.")
 
-asyncio.run(_run_async())
+_connection = config.attributes.get("connection")
+if isinstance(_connection, Connection):
+    _run(_connection)
+else:
+    asyncio.run(_run_async())

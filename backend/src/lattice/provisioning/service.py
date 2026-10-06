@@ -33,6 +33,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lattice import metrics
 from lattice.access.audit import IDENTITY_CHANGED, MEMBER_CHANGED, record_event
 from lattice.access.directory import access_snapshot
 from lattice.db.engine import Database
@@ -270,6 +271,7 @@ class Provisioning:
                     )
                 ).scalar_one()
                 status = "active" if state.active else "suspended"
+                metrics.member_changed(None, status, "scim")
                 membership_id: uuid.UUID = (
                     await session.execute(
                         text(
@@ -388,13 +390,18 @@ class Provisioning:
                 {"s": status, "o": org, "m": current.membership_id},
             )
             if status != "active":
-                await session.execute(
+                ended = await session.execute(
                     text(
                         "UPDATE sessions SET revoked_at = now() WHERE organization_id = :o "
                         "AND user_id = :u AND revoked_at IS NULL"
                     ),
                     {"o": org, "u": current.user_id},
                 )
+                metrics.sessions_revoked(
+                    "member_removed" if status == "removed" else "member_suspended",
+                    getattr(ended, "rowcount", 0),
+                )
+            metrics.member_changed(current.status, status, "scim")
             await record_event(
                 session,
                 org,

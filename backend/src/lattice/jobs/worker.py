@@ -30,10 +30,18 @@ Properties:
   next sync of that source. A job finishes at most once (every transition is guarded by
   its current status).
 * **Bounded.** One job at a time per worker, attempts capped (``max_attempts``), leases
-  expire, finished jobs are deleted after 30 days in batches (the row-level policy
-  permits nothing younger).
+  expire. Hourly maintenance runs retention (``lattice.jobs.retention``, P11.4): finished
+  jobs after 30 days, traces, sync runs, ended sessions, login attempts, counters and Ask
+  slots per their class, each refused by the database below its floor.
 * **Observable.** ``jobs.*`` log events with IDs and codes, ``lattice_jobs_*`` metrics,
   and each sync's own run row.
+* **Live (Phase 11).** A heartbeat -- the ``lattice_worker_heartbeat_timestamp_seconds``
+  gauge and, when configured, the modification time of ``LATTICE_WORKER_HEARTBEAT_FILE``
+  -- is renewed at every loop iteration (also while the database is unreachable: the
+  loop still runs and restarting would not help) and at every lease renewal during a
+  job. If the event loop stops making progress (the process hung, or a sync blocks the
+  loop), the heartbeat ages; the container health check compares its age with a
+  threshold (docs/deployment.md §10). It carries a timestamp only.
 """
 
 import asyncio
@@ -50,13 +58,13 @@ from sqlalchemy import text
 from lattice import metrics
 from lattice.db.engine import Database
 from lattice.ingestion.sync import SyncError, SyncOptions, SyncResult, sync_source
+from lattice.jobs.retention import RetentionPolicy, run_retention
 from lattice.log import log_event
 from lattice.providers.embedding import EmbeddingProvider
 from lattice.sources.config import ChannelConfig, SourceConfig
 
 _log = logging.getLogger("lattice.jobs")
 
-RETENTION_BATCH: Final = 500
 # Backoff before a retry: attempt n waits n times this (source busy, unexpected error).
 RETRY_BACKOFF_SECONDS: Final = 60
 
@@ -96,15 +104,21 @@ _RETRY_SQL = text(
     "run_after = now() + make_interval(secs => :delay) "
     "WHERE id = :id AND status = 'running' AND attempts = :attempt"
 )
-_WAITING_SQL = text("SELECT count(*) FROM jobs WHERE status = 'queued' AND run_after <= now()")
-_RETENTION_SQL = text(
-    "DELETE FROM jobs WHERE id IN (SELECT id FROM jobs WHERE status IN ('succeeded', 'failed') "
-    "AND finished_at < now() - interval '30 days' ORDER BY finished_at LIMIT :n) RETURNING id"
+_WAITING_SQL = text(
+    "SELECT count(*), coalesce(extract(epoch FROM now() - min(run_after)), 0) "
+    "FROM jobs WHERE status = 'queued' AND run_after <= now()"
 )
+# Database-wide health the worker can see without any tenant data (P11.6): size, and the
+# WAL archiver's state (PostgreSQL's own statistics; a platform may hide it).
+_DATABASE_SIZE_SQL = text("SELECT pg_database_size(current_database())")
+_ARCHIVER_SQL = text("SELECT last_archived_time, last_failed_time FROM pg_stat_archiver")
+STATS_INTERVAL_SECONDS: Final = 60.0
 _SOURCE_SQL = text(
     "SELECT key, connector_type, name, config, default_sensitivity, account_scoped, authority, "
     "status FROM sources WHERE organization_id = :o AND id = :s"
 )
+# An organization suspended by an operator (``lattice org suspend``, D-26) runs no sync.
+_ORGANIZATION_STATUS_SQL = text("SELECT status FROM organizations WHERE id = :o")
 
 
 @dataclass(frozen=True)
@@ -155,6 +169,23 @@ def source_config(row: Any) -> tuple[SourceConfig, Path]:
     return config, Path(path)
 
 
+class Heartbeat:
+    """Proof of progress: the gauge always, the file's mtime when a path is given."""
+
+    def __init__(self, path: Path | None = None) -> None:
+        self.path = path
+
+    def beat(self) -> None:
+        metrics.WORKER_HEARTBEAT.set(time.time())
+        if self.path is not None:
+            try:
+                self.path.touch()
+            except OSError as exc:  # a full or read-only /tmp must not stop the worker
+                log_event(
+                    _log, logging.WARNING, "worker.heartbeat_failed", error_type=type(exc).__name__
+                )
+
+
 class Worker:
     def __init__(
         self,
@@ -162,10 +193,14 @@ class Worker:
         *,
         embedding: EmbeddingProvider | None,
         lease_seconds: int = 300,
+        heartbeat: Heartbeat | None = None,
+        retention: RetentionPolicy | None = None,
     ) -> None:
         self.db = db
         self.embedding = embedding
         self.lease_seconds = lease_seconds
+        self.heartbeat = heartbeat or Heartbeat()
+        self.retention = retention or RetentionPolicy()
 
     # --- queue ------------------------------------------------------------------------
 
@@ -191,23 +226,27 @@ class Worker:
         return ClaimedJob(*row)
 
     async def waiting(self) -> int:
+        """Due queued jobs; also sets the oldest one's age."""
         async with self.db.unscoped_transaction() as s:
-            waiting: int = (await s.execute(_WAITING_SQL)).scalar_one()
-        return waiting
+            waiting, oldest = (await s.execute(_WAITING_SQL)).one()
+        metrics.JOBS_OLDEST_WAITING.set(float(oldest))
+        return int(waiting)
 
-    async def cleanup(self) -> int:
-        """Delete finished jobs older than 30 days, in bounded batches."""
-        removed = 0
-        while True:
-            async with self.db.unscoped_transaction() as s:
-                batch = len((await s.execute(_RETENTION_SQL, {"n": RETENTION_BATCH})).all())
-            removed += batch
-            if batch < RETENTION_BATCH:
-                break
-        if removed:
-            metrics.MAINTENANCE_ROWS.labels(task="jobs_retention").inc(removed)
-            log_event(_log, logging.INFO, "jobs.retention", deleted=removed)
-        return removed
+    async def database_stats(self) -> None:
+        """Database size and WAL-archiver health gauges (alerts, runbook §10)."""
+        async with self.db.unscoped_transaction() as s:
+            metrics.DATABASE_SIZE.set((await s.execute(_DATABASE_SIZE_SQL)).scalar_one())
+            archived, failed = (await s.execute(_ARCHIVER_SQL)).one()
+        if archived is not None:
+            metrics.WAL_ARCHIVE_LAST_SUCCESS.set(archived.timestamp())
+        if archived is not None or failed is not None:
+            failing = failed is not None and (archived is None or failed > archived)
+            metrics.WAL_ARCHIVE_FAILING.set(1 if failing else 0)
+
+    async def cleanup(self) -> dict[str, int | None]:
+        """Retention (P11.4): every class's expired rows, in bounded batches, as far as
+        the database's floors allow (``lattice.jobs.retention``)."""
+        return await run_retention(self.db, self.retention)
 
     # --- one job ------------------------------------------------------------------------
 
@@ -290,9 +329,14 @@ class Worker:
         if job.kind != "source_sync":
             raise _Unrunnable("job_kind_unsupported")
         async with self.db.tenant_transaction(job.organization_id) as s:
+            organization = (
+                await s.execute(_ORGANIZATION_STATUS_SQL, {"o": job.organization_id})
+            ).scalar_one_or_none()
             row = (
                 await s.execute(_SOURCE_SQL, {"o": job.organization_id, "s": job.source_id})
             ).one_or_none()
+        if organization != "active":
+            raise _Unrunnable("organization_suspended")
         if row is None:
             raise _Unrunnable("source_config:source_missing")
         if row.status != "active":
@@ -355,6 +399,7 @@ class Worker:
                     job_id=str(job.id),
                     error_type=type(exc).__name__,
                 )
+            self.heartbeat.beat()
 
     # --- the loop ------------------------------------------------------------------------
 
@@ -363,12 +408,18 @@ class Worker:
     ) -> None:
         """Poll until ``stop`` is set; a job in progress is finished first."""
         next_maintenance = 0.0
+        next_stats = 0.0
         while not stop.is_set():
+            self.heartbeat.beat()
             try:
                 if time.monotonic() >= next_maintenance:
                     await self.cleanup()
                     next_maintenance = time.monotonic() + maintenance_seconds
+                if time.monotonic() >= next_stats:
+                    await self.database_stats()
+                    next_stats = time.monotonic() + STATS_INTERVAL_SECONDS
                 metrics.JOBS_WAITING.set(await self.waiting())
+                metrics.CLOCK_SKEW.set(await self.db.clock_skew())
                 if await self.run_once() is not None:
                     continue  # there may be more due; poll again at once
             except Exception as exc:

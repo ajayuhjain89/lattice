@@ -184,6 +184,22 @@ SYNC_STAGES: Final = frozenset(
 )
 JOB_KINDS: Final = frozenset({"source_sync"})
 JOB_OUTCOMES: Final = frozenset({"succeeded", "failed", "retry", "abandoned"})
+# Phase 11 (P11.6): membership lifecycle by actor (provisioning bursts, threat T23) and
+# session revocations by cause.
+MEMBER_CHANGES: Final = frozenset({"created", "suspended", "reactivated", "removed"})
+ACTOR_KINDS: Final = frozenset({"scim", "administrator", "operator"})
+REVOCATION_REASONS: Final = frozenset(
+    {
+        "logout",
+        "sign_in_rotation",
+        "member_suspended",
+        "member_removed",
+        "sso_disabled",
+        "sso_identity_changed",
+        "operator_revoke",
+        "organization_suspended",
+    }
+)
 
 
 def bounded(value: str | None, allowed: Iterable[str], *, none: str = "none") -> str:
@@ -191,6 +207,26 @@ def bounded(value: str | None, allowed: Iterable[str], *, none: str = "none") ->
     if value is None:
         return none
     return value if value in allowed else OTHER
+
+
+def member_changed(before: str | None, after: str, actor_kind: str) -> None:
+    """Count a membership status change (``before`` None: the member was created)."""
+    if before == after:
+        return
+    if before is None:
+        change = "created"
+    elif after == "active":
+        change = "reactivated"
+    else:
+        change = after
+    MEMBER_LIFECYCLE.labels(
+        change=bounded(change, MEMBER_CHANGES), actor_kind=bounded(actor_kind, ACTOR_KINDS)
+    ).inc()
+
+
+def sessions_revoked(reason: str, count: int) -> None:
+    if count > 0:
+        SESSIONS_REVOKED.labels(reason=bounded(reason, REVOCATION_REASONS)).inc(count)
 
 
 def outcome_of(code: str | None) -> str:
@@ -361,6 +397,67 @@ MAINTENANCE_ROWS = Counter(
     "lattice_maintenance_rows_total",
     "Rows removed by maintenance tasks.",
     ["task"],
+    registry=REGISTRY,
+)
+MAINTENANCE_LAST_SUCCESS = Gauge(
+    "lattice_maintenance_last_success_timestamp_seconds",
+    "Unix time each retention task last completed.",
+    ["task"],
+    registry=REGISTRY,
+)
+MAINTENANCE_FAILURES = Counter(
+    "lattice_maintenance_failures_total",
+    "Retention task runs that failed (retried at the next run).",
+    ["task"],
+    registry=REGISTRY,
+)
+WORKER_HEARTBEAT = Gauge(
+    "lattice_worker_heartbeat_timestamp_seconds",
+    "Unix time of the worker's last heartbeat (each loop iteration and lease renewal).",
+    registry=REGISTRY,
+)
+MEMBER_LIFECYCLE = Counter(
+    "lattice_member_lifecycle_total",
+    "Membership status changes by change and actor kind (SCIM, administrator, operator).",
+    ["change", "actor_kind"],
+    registry=REGISTRY,
+)
+SESSIONS_REVOKED = Counter(
+    "lattice_sessions_revoked_total",
+    "Sessions revoked, by cause.",
+    ["reason"],
+    registry=REGISTRY,
+)
+JOBS_OLDEST_WAITING = Gauge(
+    "lattice_jobs_oldest_waiting_seconds",
+    "Age of the oldest queued, due job (0 when none; worker view).",
+    registry=REGISTRY,
+)
+DATABASE_SIZE = Gauge(
+    "lattice_database_size_bytes",
+    "Size of the Lattice database (worker, once a minute).",
+    registry=REGISTRY,
+)
+WAL_ARCHIVE_FAILING = Gauge(
+    "lattice_wal_archive_failing",
+    "1 when PostgreSQL's last WAL archive attempt failed after its last success "
+    "(pg_stat_archiver; absent when archiving is not visible to the worker).",
+    registry=REGISTRY,
+)
+WAL_ARCHIVE_LAST_SUCCESS = Gauge(
+    "lattice_wal_archive_last_success_timestamp_seconds",
+    "Unix time of the last successfully archived WAL segment (pg_stat_archiver).",
+    registry=REGISTRY,
+)
+CLOCK_SKEW = Gauge(
+    "lattice_clock_skew_seconds",
+    "This process's clock minus the database's clock (API readiness checks, worker polls).",
+    registry=REGISTRY,
+)
+BUILD_INFO = Gauge(
+    "lattice_build_info",
+    "Always 1; the labels identify the running build (internal listener only).",
+    ["revision", "version", "schema_revision"],
     registry=REGISTRY,
 )
 

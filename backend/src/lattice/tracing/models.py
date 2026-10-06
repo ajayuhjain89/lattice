@@ -26,6 +26,8 @@ class QueryTrace(Base):
             ["memberships.organization_id", "memberships.id"],
             ondelete="CASCADE",
         ),
+        # Retention scans by age across organizations (0015).
+        Index("ix_query_traces_created_at", "created_at"),
         Index(
             "ix_query_traces_organization_id_membership_id_created_at",
             "organization_id",

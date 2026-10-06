@@ -33,6 +33,7 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lattice import metrics
 from lattice.access.audit import GRANT_CREATED, GRANT_REVOKED, MEMBER_CHANGED, record_event
 from lattice.access.directory import (
     DOCUMENTS,
@@ -314,6 +315,7 @@ async def change_member(
             raise _invalid("change", "no_change")
         await _refuse_managed_lifecycle(session, organization_id, membership_id, before, after)
         await write_snapshot(session, organization_id, membership_id, before, after)
+        metrics.member_changed(before.status, after.status, "administrator")
         await record_event(
             session,
             organization_id,

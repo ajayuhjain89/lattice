@@ -3,6 +3,8 @@
 Revision ID: 0009
 Revises: 0008
 Create Date: 2026-09-29
+Reversible: no (the downgrade drops query_traces.answer_account_ids)
+Locks: ACCESS EXCLUSIVE on query_traces
 
 Phase 6 closure (docs/security-model.md §8, §10; D-8).
 

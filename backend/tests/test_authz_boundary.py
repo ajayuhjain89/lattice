@@ -109,6 +109,9 @@ ALLOWED: dict[str, frozenset[str]] = {
     # Names the principals of the grants ``authz.explain_for_reviewer`` matched (member,
     # department, group display rule). No SQL of its own.
     "access.explain": frozenset({"principal_type"}),
+    # --- Phase 11 (P11.5): restore verification names the access tables only to check
+    # that their audit triggers survived a restore (catalog lookups, no row is read).
+    "db.restore": frozenset({"access_group_members", "document_grants"}),
 }
 
 

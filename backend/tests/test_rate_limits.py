@@ -1,7 +1,8 @@
 """Rate limits and resource protection (Phase 10; threat model T19, T24).
 
 Server-side, per membership / SCIM token in PostgreSQL and per client before
-authentication; 429 ``rate_limited`` with ``Retry-After``; no role is exempt; a 429
+authentication (shared across processes since P11.4: tests/test_shared_limits.py);
+429 ``rate_limited`` with ``Retry-After``; no role is exempt; a 429
 reveals nothing about the request's target or another organization; parallel requests
 never exceed a limit; metric labels are the bucket name only."""
 
@@ -17,10 +18,10 @@ from sqlalchemy import text
 from lattice import metrics
 from lattice.db.engine import Database
 from lattice.ratelimit import (
+    AskSlots,
     Bucket,
-    ClientLimiter,
-    ConcurrencyLimiter,
     Limit,
+    PreAuthLimiter,
     RateLimited,
     RateLimiter,
     retry_after,
@@ -48,9 +49,11 @@ def test_limits_cannot_be_zero() -> None:
     with pytest.raises(ValueError, match="at least one"):
         Limit(Bucket.ASK_MINUTE, 0, 60)
     with pytest.raises(ValueError, match="at least one"):
-        ConcurrencyLimiter(Bucket.ASK_CONCURRENT, 0)
+        AskSlots(None, Bucket.ASK_CONCURRENT, 0, 180)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="at least one"):
-        ClientLimiter(0)
+        PreAuthLimiter(None, b"k" * 32, 0)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="32-byte"):
+        PreAuthLimiter(None, b"short", 1)  # type: ignore[arg-type]
 
 
 def test_windows_are_aligned_and_retry_after_counts_to_the_end() -> None:
@@ -138,39 +141,6 @@ async def test_organizations_and_subjects_are_counted_separately(
     assert orgs == {a}
 
 
-async def test_concurrency_slots_are_per_key_and_released() -> None:
-    limiter = ConcurrencyLimiter(Bucket.ASK_CONCURRENT, 1)
-    a, b = uuid.uuid4(), uuid.uuid4()
-    async with limiter.slot(a):
-        with pytest.raises(RateLimited):
-            async with limiter.slot(a):
-                pass
-        async with limiter.slot(b):
-            assert limiter.in_flight(b) == 1
-    assert (limiter.in_flight(a), limiter.in_flight(b)) == (0, 0)
-    with pytest.raises(RuntimeError):
-        async with limiter.slot(a):
-            raise RuntimeError
-    assert limiter.in_flight(a) == 0
-
-
-async def test_client_limiter_is_bounded_and_stores_no_address() -> None:
-    now = [1000.0]
-    limiter = ClientLimiter(2, 60, max_clients=3, clock=lambda: now[0])
-    for address in ("10.0.0.1", "10.0.0.1"):
-        await limiter.hit(address)
-    with pytest.raises(RateLimited) as refused:
-        await limiter.hit("10.0.0.1")
-    assert refused.value.bucket is Bucket.SIGN_IN
-    await limiter.hit("10.0.0.2")  # another client
-    for i in range(10):
-        await limiter.hit(f"192.0.2.{i}")
-    assert len(limiter) == 3
-    assert all(b"10.0.0" not in key and b"192.0.2" not in key for key in limiter._counts)
-    now[0] += 60
-    await limiter.hit("10.0.0.1")
-
-
 # --- through the API -----------------------------------------------------------------------
 
 
@@ -235,14 +205,14 @@ async def test_concurrent_asks_are_limited_per_member(
     org = await create_org(owner_db, "halden")
     member = await create_member(owner_db, org, "maya@halden.example")
 
-    holder: dict[str, ConcurrencyLimiter] = {}
+    holder: dict[str, AskSlots] = {}
 
     def configure(app: object) -> None:
         holder["limiter"] = app.state.limits.ask_concurrency  # type: ignore[attr-defined]
 
     async with app_client(configure, rate_limit_ask_concurrent=1) as client:
         await _signed_in(client, "maya@halden.example")
-        async with holder["limiter"].slot(member.membership_id):  # an Ask in flight
+        async with holder["limiter"].slot(org, member.membership_id):  # an Ask in flight
             refused = await client.post("/v1/ask", json=ASK, headers=CSRF)
         assert refused.status_code == 429
         assert refused.headers["retry-after"] == "1"

@@ -8,7 +8,9 @@ offending variable but never includes its value: database URLs carry passwords, 
 pydantic's default error text echoes the input.
 """
 
+from collections.abc import Mapping
 from enum import StrEnum
+from ipaddress import IPv4Network, IPv6Network, ip_network
 from pathlib import Path
 from typing import Literal, Self
 
@@ -45,10 +47,53 @@ def parse_host_port(value: str) -> tuple[str, int]:
     return host, int(port)
 
 
+def parse_trusted_proxies(value: str) -> list[IPv4Network | IPv6Network]:
+    """Comma-separated IP addresses or CIDR networks. A wildcard, a hostname or an empty
+    item is refused: trusting forwarding headers is an explicit list of ingress peers."""
+    networks: list[IPv4Network | IPv6Network] = []
+    for item in value.split(","):
+        item = item.strip()
+        if not item or item == "*":
+            raise ValueError("must list IP addresses or CIDR networks (never '*')")
+        try:
+            networks.append(ip_network(item, strict=False))
+        except ValueError:
+            raise ValueError("must list IP addresses or CIDR networks (never '*')") from None
+    return networks
+
+
 def _require_asyncpg_url(value: SecretStr | None) -> SecretStr | None:
     if value is not None and not value.get_secret_value().startswith(_ASYNC_POSTGRES_SCHEME):
         raise ValueError(f"must be a PostgreSQL URL starting with {_ASYNC_POSTGRES_SCHEME}")
     return value
+
+
+# The schema owner's credential belongs to the migration job and operators only
+# (deployment.md §5.3). A production api or worker refuses to start if any of these is in
+# its environment: it would be one compromised process away from owning the schema.
+# Not a secret: used only outside production (Settings.client_key).
+DEVELOPMENT_CLIENT_KEY = b"lattice-development-client-key-not-a-secret"
+
+OWNER_CREDENTIAL_VARIABLES = (
+    "LATTICE_MIGRATION_DATABASE_URL",
+    "LATTICE_OWNER_PASSWORD",
+    "POSTGRES_PASSWORD",
+)
+
+
+def owner_credential_problem(env: Environment, environ: Mapping[str, str]) -> str | None:
+    """Names (never values) of owner-credential variables a production runtime process
+    must not hold; None outside production or when none is set."""
+    if env is not Environment.PRODUCTION:
+        return None
+    present = [name for name in OWNER_CREDENTIAL_VARIABLES if environ.get(name)]
+    if not present:
+        return None
+    return (
+        f"{', '.join(present)} must not be set for the api or worker when "
+        "LATTICE_ENV=production: the schema owner's credential belongs to the migration "
+        "job and operators only"
+    )
 
 
 class Settings(BaseSettings):
@@ -93,18 +138,34 @@ class Settings(BaseSettings):
     # the web app). Unset = no listener. Bind it to an internal interface only.
     metrics_address: str | None = None
 
+    # --- Deployment (Phase 11; ADR-016, docs/deployment.md §4) -----------------------------
+    # The ingress addresses (IPs or CIDR networks, comma-separated) whose X-Forwarded-For
+    # and X-Forwarded-Proto the API accepts. Unset = no forwarding header is trusted from
+    # anyone: the client is the TCP peer. Never "*". Run uvicorn with --no-proxy-headers
+    # so the server's own default (trusting 127.0.0.1) cannot add a second, implicit hop.
+    trusted_proxies: str | None = None
+    # Test double only: seconds the fake generation provider waits before answering, to
+    # prove long Asks survive the ingress. Refused (must be 0) in production.
+    fake_generation_delay_seconds: float = Field(default=0.0, ge=0.0, le=600.0)
+
     # --- Rate limits (Phase 10; lattice.ratelimit) -----------------------------------------
     # Every limit applies to every role (administrators included) and must be at least 1:
     # none can be turned off. Asks per membership per minute / per day and in flight;
     # access-management writes (and previews) per administrator per minute; SCIM requests
     # per token per minute; pre-authentication requests (development sign-in, OIDC start
-    # and callback, failed SCIM authentication) per client address per minute, per process.
+    # and callback, failed SCIM authentication) per client per minute. Every limit is
+    # shared by all API processes through PostgreSQL (P11.4, D-24; deployment.md §12).
     rate_limit_ask_per_minute: int = Field(default=10, ge=1, le=10_000)
     rate_limit_ask_per_day: int = Field(default=500, ge=1, le=1_000_000)
     rate_limit_ask_concurrent: int = Field(default=2, ge=1, le=100)
     rate_limit_access_writes_per_minute: int = Field(default=60, ge=1, le=10_000)
     rate_limit_scim_per_minute: int = Field(default=600, ge=1, le=100_000)
     rate_limit_sign_in_per_minute: int = Field(default=30, ge=1, le=10_000)
+    # The key of the HMAC that turns a client address into a pre-authentication counter
+    # key (P11.4): at least 32 bytes, required in production. Rotating it resets the
+    # counts only. Outside production a fixed development key is used (every process the
+    # same, so the counts are still shared).
+    client_key_secret: SecretStr | None = None
 
     # --- OIDC sign-in (Phase 10; ADR-015) ----------------------------------------------------
     # The origin users reach Lattice at (the web app), e.g. https://lattice.example.com.
@@ -134,8 +195,27 @@ class Settings(BaseSettings):
             parse_host_port(value)
         return value
 
+    @field_validator("trusted_proxies")
+    @classmethod
+    def _check_trusted_proxies(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return ",".join(str(network) for network in parse_trusted_proxies(value))
+
+    @field_validator("client_key_secret")
+    @classmethod
+    def _check_client_key_secret(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode()) < 32:
+            raise ValueError("must be at least 32 bytes (e.g. `openssl rand -hex 32`)")
+        return value
+
     @model_validator(mode="after")
     def _enforce_environment_guards(self) -> Self:
+        if self.env is Environment.PRODUCTION and self.fake_generation_delay_seconds:
+            raise ValueError(
+                "LATTICE_FAKE_GENERATION_DELAY_SECONDS is a test setting and must be 0 when "
+                "LATTICE_ENV=production"
+            )
         if self.env is Environment.PRODUCTION and self.dev_auth_enabled:
             raise ValueError(
                 "LATTICE_DEV_AUTH_ENABLED must be false when LATTICE_ENV=production "
@@ -162,6 +242,16 @@ class Settings(BaseSettings):
                 "LATTICE_SESSION_IDLE_TIMEOUT_MINUTES must not exceed "
                 "LATTICE_SESSION_ABSOLUTE_TIMEOUT_MINUTES"
             )
+        if self.env is Environment.PRODUCTION and not self.metrics_address:
+            raise ValueError(
+                "LATTICE_METRICS_ADDRESS (a private host:port) is required when "
+                "LATTICE_ENV=production: alerting reads the API's metrics (deployment.md §16)"
+            )
+        if self.env is Environment.PRODUCTION and self.client_key_secret is None:
+            raise ValueError(
+                "LATTICE_CLIENT_KEY_SECRET (at least 32 bytes) is required when "
+                "LATTICE_ENV=production: it keys the shared pre-authentication limit"
+            )
         return self
 
     @property
@@ -172,6 +262,14 @@ class Settings(BaseSettings):
     @property
     def web_origin(self) -> str:
         return self.public_url or "http://127.0.0.1:3000"
+
+    @property
+    def client_key(self) -> bytes:
+        """The pre-authentication HMAC key (``client_key_secret``; a fixed development
+        key outside production, which refuses to start without the secret)."""
+        if self.client_key_secret is not None:
+            return self.client_key_secret.get_secret_value().encode()
+        return DEVELOPMENT_CLIENT_KEY
 
     @property
     def session_cookie_name(self) -> str:
@@ -207,6 +305,14 @@ class WorkerSettings(BaseSettings):
     # A running job's lease; the worker renews it while the sync runs. A job whose
     # lease expired (the worker died) is retried by another poll, up to its attempts.
     worker_lease_seconds: int = Field(default=300, ge=30, le=3600)
+    # Liveness (Phase 11): a file whose modification time the worker renews at every loop
+    # iteration and lease renewal; the container health check reads its age. Unset = the
+    # heartbeat is only the metric.
+    worker_heartbeat_file: Path | None = None
+    # Query traces are deleted this many days after the Ask (P11.4, deployment.md §13).
+    # The database refuses deleting a trace younger than 90 days whatever this says, so
+    # the setting can only lengthen the retention.
+    trace_retention_days: int = Field(default=90, ge=90, le=3650)
     # Statement timeout for the worker's own connections (syncs write in batches).
     db_statement_timeout_ms: int = Field(default=300_000, ge=1_000, le=3_600_000)
     db_connect_timeout_seconds: float = Field(default=5.0, ge=0.5, le=60.0)
@@ -223,6 +329,11 @@ class WorkerSettings(BaseSettings):
 
     @model_validator(mode="after")
     def _enforce_environment_guards(self) -> Self:
+        if self.env is Environment.PRODUCTION and not self.metrics_address:
+            raise ValueError(
+                "LATTICE_METRICS_ADDRESS (a private host:port) is required when "
+                "LATTICE_ENV=production: liveness and alerting read the worker's metrics"
+            )
         if self.env is Environment.PRODUCTION and self.sync_embedding == "fake":
             raise ValueError(
                 "LATTICE_SYNC_EMBEDDING=fake is a test double and is refused when "

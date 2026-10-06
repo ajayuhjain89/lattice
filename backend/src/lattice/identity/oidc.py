@@ -122,6 +122,7 @@ class Started:
 class SignedIn:
     user_id: uuid.UUID
     organization_id: uuid.UUID
+    connection_id: uuid.UUID
     return_to: str
 
 
@@ -478,6 +479,7 @@ class OidcSignIn:
         return SignedIn(
             user_id=user_id,
             organization_id=connection.organization_id,
+            connection_id=connection.id,
             return_to=safe_return_to(attempt.return_to),
         )
 

@@ -72,6 +72,9 @@ class GenerationFactory(Protocol):
 class DefaultGenerationFactory:
     env: Environment
     ollama_timeout_seconds: float = 300.0
+    # Test double only (refused in production by configuration): see
+    # ``Settings.fake_generation_delay_seconds``.
+    fake_delay_seconds: float = 0.0
 
     def declare(self, config: GenerationConfig, credential: CredentialRef | None) -> Declaration:
         name = config.record.provider
@@ -96,7 +99,9 @@ class DefaultGenerationFactory:
         if name == "fake":
             if production:
                 raise GenerationUnavailable("refused_in_production")
-            return FakeGenerationProvider(model=config.record.model)
+            return FakeGenerationProvider(
+                model=config.record.model, delay_seconds=self.fake_delay_seconds
+            )
         if name == "ollama":
             return OllamaGenerationProvider(
                 model=config.record.model,

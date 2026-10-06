@@ -1,7 +1,9 @@
 """Operator command line: ``lattice <command>``.
 
-    lattice seed --manifest PATH [--manifest PATH ...]
+    lattice seed --manifest PATH [--manifest PATH ...] [--require-synthetic]
         Upsert organizations/users/memberships from manifests (as lattice_owner).
+        --require-synthetic: refuse unless every manifest declares data_origin: synthetic
+        (the deployment bootstrap of a verification stack; Phase 11).
     lattice check-db-role
         Run the API's startup safety check against LATTICE_DATABASE_URL and report.
     lattice dataset lint [--data DIR] [--golden DIR]
@@ -36,9 +38,17 @@
     lattice org egress --org SLUG [--external-level L] [--organization-controlled-level L]
         Organization provider configuration and AI egress ceilings (administrative;
         each change needs --reason and is recorded in audit_events).
+    lattice sso|scim|member|session ..., lattice org suspend|reactivate --org SLUG
+        Identity and incident controls (lattice.cli_identity; audited).
     lattice worker [--once]
         The background worker: runs the syncs administrators request from the web app,
         as lattice_worker (LATTICE_WORKER_DATABASE_URL).
+    lattice smoke --url ORIGIN [--instance URL ...] [--worker-metrics URL] [--ca-file F]
+                  [--production]
+        Read-only check that a deployment is usable (lattice.smoke); no database access.
+    lattice version | check-config PROCESS | migrate [...] | check-deployment [...]
+        Deployment commands (lattice.cli_deploy): build identity, configuration
+        validation, the production migration and the database deployment checks.
 
 Ingestion commands run as lattice_owner (operator tools, through row-level security)
 and print counts and fixed codes only -- never record content, titles or filenames.
@@ -58,7 +68,15 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from lattice import cli_answer, cli_identity, cli_providers, cli_retrieval, cli_worker
+from lattice import (
+    cli_answer,
+    cli_deploy,
+    cli_identity,
+    cli_providers,
+    cli_retrieval,
+    cli_worker,
+    smoke,
+)
 from lattice.admin_grants import apply_admin_grants, load_admin_grants
 from lattice.config import (
     ConfigurationError,
@@ -83,7 +101,7 @@ def _fail(message: str) -> int:
     return 2
 
 
-async def _seed(paths: Sequence[Path]) -> int:
+async def _seed(paths: Sequence[Path], *, require_synthetic: bool = False) -> int:
     if os.environ.get("LATTICE_ENV") not in ("development", "test"):
         return _fail(
             "seeding synthetic data requires LATTICE_ENV=development or test "
@@ -101,6 +119,13 @@ async def _seed(paths: Sequence[Path]) -> int:
                 for e in exc.errors(include_input=False, include_url=False)
             )
             return _fail(f"invalid manifest {path}: {problems}")
+    if require_synthetic:
+        for path, manifest in zip(paths, manifests, strict=True):
+            if manifest.organization.data_origin != "synthetic":
+                return _fail(
+                    f"{path}: organization {manifest.organization.slug!r} does not declare "
+                    "data_origin: synthetic (only synthetic data may bootstrap this deployment)"
+                )
 
     settings = load_migration_settings()
     db = Database(
@@ -304,6 +329,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     seed = commands.add_parser("seed", help="Seed organizations from YAML manifests")
     seed.add_argument("--manifest", type=Path, action="append", required=True)
+    seed.add_argument("--require-synthetic", action="store_true")
     commands.add_parser("check-db-role", help="Verify the runtime database role is safe")
     dataset = commands.add_parser("dataset", help="Synthetic dataset tools")
     dataset_commands = dataset.add_subparsers(dest="dataset_command", required=True)
@@ -342,6 +368,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     cli_providers.add_parsers(commands)
     cli_identity.add_parsers(commands)
     cli_worker.add_parser(commands)
+    smoke.add_parser(commands)
+    cli_deploy.add_parsers(commands)
     args = parser.parse_args(argv)
 
     if args.command == "dataset":
@@ -352,7 +380,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     try:
         if args.command == "seed":
-            return asyncio.run(_seed(args.manifest))
+            return asyncio.run(_seed(args.manifest, require_synthetic=args.require_synthetic))
         if args.command in ("sync", "reindex"):
             embedding: ProviderName = args.embedding
             args.embedding = embedding
@@ -371,10 +399,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             return asyncio.run(cli_retrieval.eval_retrieval(args))
         if args.command == "models":
             return cli_providers.models(args)
+        if args.command == "org" and args.org_command in ("suspend", "reactivate"):
+            return asyncio.run(cli_identity.run(args))
         if args.command in ("provider", "org"):
             return asyncio.run(cli_providers.provider(args))
         if args.command == "worker":
             return asyncio.run(cli_worker.run(args))
+        if args.command == "smoke":
+            return smoke.run(args)
+        if args.command == "version":
+            return cli_deploy.version(args)
+        if args.command == "check-config":
+            return cli_deploy.check_config(args)
+        if args.command == "migrate":
+            return asyncio.run(cli_deploy.migrate_command(args))
+        if args.command == "check-deployment":
+            return asyncio.run(cli_deploy.check_deployment_command(args))
+        if args.command == "verify-restore":
+            return asyncio.run(cli_deploy.verify_restore_command(args))
         if args.command in cli_identity.COMMANDS:
             return asyncio.run(cli_identity.run(args))
         return asyncio.run(_check_db_role())

@@ -14,6 +14,7 @@ which also proves the migration chain applies to a clean database.
 
 import asyncio
 import os
+import socket
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
@@ -28,7 +29,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from lattice.api.app import create_app
-from lattice.config import Environment, Settings
+from lattice.config import OWNER_CREDENTIAL_VARIABLES, Environment, Settings
 from lattice.db.engine import Database, create_engine
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -114,10 +115,29 @@ async def superuser_engine() -> AsyncIterator[AsyncEngine]:
 async def clean_tables(owner_db: Database) -> None:
     # TRUNCATE is not subject to row-level security; the owner may use it.
     async with owner_db.engine.begin() as conn:
-        await conn.execute(text("TRUNCATE organizations, users CASCADE"))
+        await conn.execute(text("TRUNCATE organizations, users, pre_auth_rate_limits CASCADE"))
 
 
 AppFactory = Callable[..., AbstractAsyncContextManager[httpx.AsyncClient]]
+
+
+def free_metrics_address() -> str:
+    """A loopback host:port nobody listens on: production processes must serve metrics."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return f"127.0.0.1:{probe.getsockname()[1]}"
+
+
+@pytest.fixture
+def production_runtime_environ(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The environment of a production api or worker: no owner credential.
+
+    ``make test`` loads the developer's ``.env``, which holds the owner credential for
+    migrations; a production runtime refuses to start while any of them is set
+    (``config.OWNER_CREDENTIAL_VARIABLES``), so production-mode app tests remove them.
+    """
+    for name in OWNER_CREDENTIAL_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture

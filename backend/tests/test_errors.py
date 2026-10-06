@@ -8,7 +8,7 @@ from sqlalchemy import text
 from lattice.config import Environment
 from lattice.db.engine import Database, create_engine
 
-from .conftest import CSRF, AppFactory
+from .conftest import CSRF, AppFactory, free_metrics_address
 
 SENSITIVE = "password=hunter2 at /srv/lattice/secret.py SELECT * FROM sessions"
 
@@ -110,12 +110,15 @@ async def test_database_outage_reports_service_unavailable(app_client: AppFactor
     _assert_envelope(response, "service_unavailable", 503)
 
 
+@pytest.mark.usefixtures("production_runtime_environ")
 async def test_production_hides_api_docs_and_sets_hsts(app_client: AppFactory) -> None:
     async with app_client(
         env=Environment.PRODUCTION,
         dev_auth_enabled=False,
         session_cookie_secure=True,
         public_url="https://lattice.example.com",
+        client_key_secret="k" * 32,
+        metrics_address=free_metrics_address(),
     ) as prod:
         for path in ("/docs", "/openapi.json", "/redoc"):
             assert (await prod.get(path)).status_code == 404

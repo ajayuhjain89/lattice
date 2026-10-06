@@ -3,6 +3,8 @@
 Revision ID: 0001
 Revises:
 Create Date: 2026-09-27
+Reversible: no (the downgrade drops every Phase 1 table and its rows)
+Locks: new tables only
 
 Creates the Phase 1 tables (docs/data-model.md §2), their row-level-security policies,
 the privileges of the runtime role, and the two SECURITY DEFINER pre-authentication

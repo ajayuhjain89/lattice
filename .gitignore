@@ -2,6 +2,10 @@
 .env
 .env.*
 !.env.example
+# The local reference stack's generated CA certificate (make prod-smoke)
+deploy/.reference-ca.crt
+# The verification identity provider's throwaway CA and certificate (P11.3)
+deploy/.verification/
 
 # Python
 __pycache__/
@@ -28,3 +32,5 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+# Local deployment state of the reference stack (deploy/deploy.sh)
+deploy/state/

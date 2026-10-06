@@ -43,6 +43,8 @@ class FakeIdp:
     client_secret: str | None = None
     # Overrides applied to every ID token issued (claims; None removes one).
     claims: dict[str, Any] = field(default_factory=dict)
+    # Claims set to the issuing time plus an offset in seconds (clock-skew boundaries).
+    claim_offsets: dict[str, int] = field(default_factory=dict)
     header: dict[str, Any] = field(default_factory=dict)
     # "rsa" (RS256), "ec" (ES256), "other-rsa" (a key the JWKS does not hold), "none",
     # "hs256-public" (HMAC keyed with the public key: algorithm confusion).
@@ -50,6 +52,8 @@ class FakeIdp:
     discovery_issuer: str | None = None
     token_status: int = 200
     oversized: bool = False
+    # An outage: every endpoint is unreachable.
+    down: bool = False
     requests: list[httpx.Request] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -81,6 +85,8 @@ class FakeIdp:
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
+        if self.down:
+            raise httpx.ConnectError("identity provider unreachable", request=request)
         path = request.url.path
         if path.endswith("/.well-known/openid-configuration"):
             if self.oversized:
@@ -151,6 +157,8 @@ class FakeIdp:
             "email": "pat@halden.example",
             "name": "Pat Doe",
         }
+        for key, offset in self.claim_offsets.items():
+            claims[key] = now + offset
         for key, value in self.claims.items():
             if value is None:
                 claims.pop(key, None)

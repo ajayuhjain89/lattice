@@ -101,7 +101,7 @@ async def inspect_runtime_role(
 
     checked = [t for t in tables if t["table_name"] not in RLS_EXEMPT_TABLES]
     if not any(t["table_name"] == "alembic_version" for t in tables):
-        problems.append("database schema is not migrated (run `make migrate`)")
+        problems.append("database schema is not migrated (run `lattice migrate`)")
     elif (problem := revision_problem(revision)) is not None:
         problems.append(problem)
     for table in checked:

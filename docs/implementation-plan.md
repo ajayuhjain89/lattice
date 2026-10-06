@@ -7,18 +7,23 @@ of Phase 3). Phase 3 approved and merged to `main`. Phase 4 approved and merged 
 **Phase 5 approved and merged to `main`** (78e5640, 2026-09-29; branch
 `phase/5-retrieval` kept for reference). **Phase 6** (dc0973c) and **Phase 7** (5fe873f)
 are merged, and **Phase 8** (9fed350) is merged. **Phase 9 (access management and audit
-events) is implemented on `phase/9-access-management` and awaits review** (not merged);
-its plan and as-built notes follow Phase 8 below. The Phase 5 closure added a local model, Gemini and the provider invocation
+events)** was built on `phase/9-access-management`, reviewed and merged (8d3af3b); its plan
+and as-built notes follow Phase 8 below. The Phase 5 closure added a local model, Gemini and the provider invocation
 rule, and decided and implemented D-13 and D-14. The final closure (2026-09-29)
 removed the rejected cross-encoder experiment, resolved D-15 (deployment trust
 classes, migration 0007) and decided D-16's timing, and it froze retrieval.
 Phase 5 engineering and security are **complete** (every security metric 0, final
 verification passed). The product objective Recall@10 ≥ 0.90 is **not yet achieved**:
-best real result is Gemini 0.726, local 0.695 (evaluation-plan §12). **Phase 6 is
-implemented on `phase/6-generation` and awaits review** (not merged): engineering and
-security verification complete; the real-model answer-quality evaluation was **not run**
-(reference hardware constraint, M1 8 GB; ADR-012). (Historical note: Phase 6 was merged
-after that review.)
+best real result is Gemini 0.726, local 0.695 (evaluation-plan §12). **Phase 6** was
+built on `phase/6-generation`, reviewed and merged (dc0973c): engineering and security
+verification complete; the real-model answer-quality evaluation was **not run**
+(reference hardware constraint, M1 8 GB; ADR-012).
+
+**Current state (2026-10-03).** Phases 1–10 are approved and merged (Phase 9: 8d3af3b;
+Phase 10: 8e26522), and the frontend product-design overhaul (D0–D7) is approved and
+merged (27da421); `design-system.md` v2 is canonical. The paragraph above is the
+historical status log. **Next: Phase 11 — Production Deployment, Identity Operations &
+Reliability** (§4 "Later phases").
 
 ---
 
@@ -1144,16 +1149,55 @@ nowhere. The development database was migrated to 0013 (no data change).
 
 ---
 
+### Phase 11 — Production Deployment, Identity Operations & Reliability
+
+§4 "Later phases" row 11. The approved plan is [phase-11-plan.md](phase-11-plan.md)
+(2026-10-03); the provider-independent contract is [deployment.md](deployment.md) and the
+topology decision [ADR-016](decisions/016-production-topology.md). Decisions D-22–D-27 (§7).
+
+**Objective.** Prove that what Phases 1–10 built operates correctly as a production
+system: immutable images (one backend image for API, worker, migrations and operator
+commands; one web image), the ingress routing `/api/*` straight to the API, shared limits
+in PostgreSQL, safe migrations, backups with **tested** restore and PITR, enforced
+retention, actionable alerts, audited operator procedures, and drills — on a local
+production-shaped stack with two API instances. **D-22 amended 2026-10-05: zero paid
+infrastructure** — real external staging validation is deferred (list in
+[phase-11-plan](phase-11-plan.md) §21.1) and is a release gate for Phase 15. No Redis, Kubernetes, broker, pooler, secrets product or new observability
+platform; no Phase 12–15 scope.
+
+**Checkpoints** (plan §25; P11.2–P11.7 authorized 2026-10-05 to run in sequence):
+
+| Step | Scope | Status |
+| ---- | ----- | ------ |
+| P11.0 | Decisions, deployment contract, staging-provider comparison, ADR-016, documentation corrections | Approved (4990064) |
+| P11.1 | Packaging and runtime: images, web standalone on `0.0.0.0`, ingress routing and single trusted hop, uvicorn production command, worker heartbeat, build info, local reference stack (api ×2, Caddy), `lattice smoke` | Approved (b07ac8d) |
+| P11.2 | Deployment and migrations: `lattice migrate` (lock, connection fence, pre-flight, exact verification), migration headers, managed-PostgreSQL bootstrap (verified locally against a CREATEROLE/CREATEDB administrator), privilege snapshot and `check-deployment`, `check-config`, GHCR `images` job, `deploy/deploy.sh` releases and rollbacks, two web instances (staging deferred, D-22 amended) | Delivered (ae03445 + fd0d1bc; plan §25.3) |
+| P11.3 | Identity and session operations: sessions record their SSO connection, disable revokes them, `sso enable/update`, audited `member suspend/reinstate`, `org suspend/reactivate`, `session revoke`, clock skew, verification IdP, the identity test matrix (plan §15.3) | Delivered (1c68ed5; plan §25.4; 42/42 on the stack) |
+| P11.4 | Shared in-flight and pre-authentication limits in PostgreSQL; retention classes with database-enforced floors | Delivered (9a50e27; plan §25.5) |
+| P11.5 | Backups and restore verified locally with measured local durations (managed PITR and cloud RPO/RTO deferred, D-22 amended) | Delivered (0b7fe76; plan §25.6) |
+| P11.6 | Metrics, alert rules with tests, a runbook action per alert | Delivered (f6025fe; plan §25.7) |
+| P11.7 | Deployed authorization suite and failure drills on the local stack, closure (staging deferred) | Delivered (commit "P11.7: deployed authorization suite, failure drills and Phase 11 closure"; plan §25.8, acceptance §26.1) |
+
+**Roadmap disposition recorded with Phase 11** (§4 table): scoped Ask already shipped
+(Phase 9); account administration → Phase 12; account timeline workspace → post-v1 unless
+deliberately pulled forward; next connectors → evaluated in Phase 12; retrieval and answer
+quality → Phase 13; enterprise hardening and scale → Phase 14; GA/v1 closure → Phase 15.
+
+---
+
 ### Later phases (order to be revisited after the slice)
 
 | Phase | Theme | Notes |
 | ----- | ----- | ----- |
 | 9 | Access management UX + audit events | **Built and merged** (8d3af3b; Phase 9 section above). Explanations, change previews (counts only over admin-readable documents), admin grants, full `audit_events` (the provider and AI egress settings UI is Phase 7, D-16) |
 | 10 | OIDC SSO + hardening | **Built, verified and approved** (Phase 10 section above; decisions D-1, D-19 revised, D-20 and D-21 accepted 2026-10-02): OIDC (D-1), SCIM provisioning (D-20), rate limits (D-21), database-enforced access audit, security headers review, dependency audit, threat-model review, pen-test style review of isolation |
-| — | Product-design overhaul (frontend only) | **Direction accepted 2026-10-02 (D0)**: `design-direction.md` is the locked source of truth; steps D1–D7 run in order on `phase/design-overhaul`, each reviewed before the next. Inserted before Phase 11 |
-| 11 | Deployment + operations | Container images, single-region deploy, backups/PITR, migrations in CI/CD, retention jobs, alerting on `security_invariant_violated` |
-| 12 | Accounts workspace | Account timeline + scoped Ask (AM workflow) |
-| 13 | Next connectors | Call transcripts, CRM notes, GitHub issues, release notes |
+| — | Product-design overhaul (frontend only) | **Closed and merged** (27da421, 2026-10-03): D0–D7 complete and approved; `design-direction.md` is the historical record, `design-system.md` v2 is canonical. Inserted before Phase 11 |
+| 11 | Production Deployment, Identity Operations & Reliability | **Built and verified on the local reference stack (P11.0–P11.7, closed 2026-10-06); external staging validation deferred to the Phase 15 gate.** **Plan approved 2026-10-03** ([phase-11-plan.md](phase-11-plan.md); decisions D-22–D-27; checkpoints P11.0–P11.7). Production deployment (images, single region, migrations in CI/CD, rollback), production identity and session operations, shared limits, jobs and retention, backups/PITR with tested restore, observability and actionable alerts (including `security_invariant_violated`), production runbooks and drills |
+| 12 | Customer onboarding | Customer-facing organization onboarding, SSO and SCIM setup, source/integration and provider (BYOK) setup, zero-to-first-question. Also: **account administration** (creating accounts and mapping them to source account references, today manifest-only — from the former "Accounts workspace"), **evaluation of the next connectors** (call transcripts, CRM notes, GitHub issues, release notes) within integration setup, organization deletion/purge (D-26), identity-provider migration with differing subjects (phase-11-plan §9.2) |
+| 13 | Retrieval and answer quality | Retrieval and answer-quality improvement |
+| 14 | Enterprise-scale hardening | Large-scale, load and adversarial hardening |
+| 15 | GA / v1 closure | Final general-availability closure. **Release gate (D-22 amended 2026-10-05):** real external staging validation (phase-11-plan §21.1: cloud staging deployment, managed-PostgreSQL privileges, managed backup/PITR, public TLS/origin, external OIDC callback, provider-specific deploy/rollback, cloud RPO/RTO) must be completed before v1 GA / production-ready is declared |
+| — | Former rows 12 (Accounts workspace) and 13 (Next connectors), placed 2026-10-03 (phase-11-plan §27) | *Accounts workspace* meant an account timeline + scoped Ask for account managers. Scoped Ask shipped in Phase 9; account administration → Phase 12 (above); the **account timeline workspace → post-v1, intentionally deferred**: the v1 workflow (product brief §5, §8) is Ask → cited answer → evidence, which account managers already have through scoped Ask, and Phase 0 recorded the timeline as not needed for the first release — the product owner may pull it into Phases 13–15. *Next connectors* → evaluated in Phase 12's integration scope; those not needed for v1 are recorded there as post-v1 |
 | — | Only if evals demand | HNSW tuning, model reranker (a local cross-encoder was measured and rejected in Phase 5, evaluation-plan §11), query rewriting, simple-config tsvector |
 
 ## 5. Local development
@@ -1229,6 +1273,12 @@ adds `make audit` (network: vulnerability databases).
 | D-19 | Who is authoritative for a member's access when the manifest (later the IdP) and the Access page disagree? | Phase 9 | **Decided (Phase 9):** provisioning. Re-running `make seed` makes members match the manifest and records `operator:seed` events, so a reverted UI change is visible, never silent. **Revisited (Phase 10; accepted by the product owner 2026-10-02):** for members provisioned by an identity provider, the provider is authoritative for identity (user name, e-mail, name) and lifecycle (active / suspended / removed); Lattice is authoritative for access (clearance, scope, assignments, departments, groups, grants) and the administrator capability. The Access page refuses lifecycle changes for such members; SCIM never writes access | Product owner — accepted |
 | D-20 | What may SCIM provisioning do, and with what default access? | Phase 10 | **Decided and accepted (Phase 10; accepted by the product owner 2026-10-02):** `Users` only (no `Groups`). `externalId` required, immutable, and equal to the OIDC identifying claim. A provisioned person is a user *owned by the organization* (never linked to an existing user; e-mail unique per organization). New members get least access: clearance `internal`, account scope `assigned` with no accounts, no departments, groups or grants, not an administrator. `active=false` suspends, `DELETE` removes (terminal; re-hire under a new `externalId` or by an operator). Identical requests are no-ops. Every change audited | Product owner — accepted |
 | D-21 | Rate-limit scope and defaults | Phase 10 | **Decided and accepted (Phase 10; accepted by the product owner 2026-10-02):** per member 10 Asks/minute, 500/day, 2 in flight; per administrator 60 access previews/writes per minute; per SCIM token 600 requests/minute; per client address 30 pre-authentication requests/minute (per process). Fixed windows; no role exempt; no setting disables a limit. No per-organization Ask budget yet (one member cannot exhaust it for others; a whole organization can still spend its provider quota) | Product owner — accepted |
+| D-22 | Where Phase 11 is verified | Phase 11 | **Decided (2026-10-03); amended by the product owner 2026-10-05 (zero paid infrastructure):** the production-shaped local reference stack (two API instances) is the verification environment, and Phase 11 closes on full local production-shaped verification. The real cloud staging deployment is **deferred because no deployment budget is currently available**, together with managed-PostgreSQL privilege verification, managed backup/PITR verification, public TLS/origin validation, real external OIDC callback validation, provider-specific deploy/rollback validation and cloud RPO/RTO measurement; none is claimed done. This external validation is a **release gate for Phase 15**: v1 GA / production-ready cannot be declared before it. DigitalOcean (deployment.md Appendix A) is the selected candidate for future staging validation; not provisioned or tested. The contract stays provider-independent ([phase-11-plan](phase-11-plan.md) §6.5, §21.1) | Product owner — decided (amended) |
+| D-23 | Schema compatibility during deploys | Phase 11 | **Decided (2026-10-03):** keep the exact schema-revision guard; releases with a migration are deployed stop-the-world (stop api and worker, migrate with a pre-flight that refuses while application connections are open, start the new build) and accept a short unavailable interval; no expand/contract machinery unless proven necessary for correctness (phase-11-plan §6.3) | Product owner — decided |
+| D-24 | Shared rate limits for multi-process deployment | Phase 11 | **Decided (2026-10-03):** in-flight Asks and the pre-authentication per-client limit move to PostgreSQL (leases; a `lattice_auth`-owned counter keyed by an HMAC of the client address taken only from the trusted ingress); no Redis; defaults unchanged; no process-local security limit remains (phase-11-plan §10) | Product owner — decided |
+| D-25 | Sessions and lifecycle when an SSO connection is disabled | Phase 11 | **Decided (2026-10-03):** sessions record the connection that issued them and `lattice sso disable` revokes them; the connection can be re-enabled and updated in place (client ID, secret-reference rotation; issuer/claim only with an explicit subjects-unchanged assertion), and a new connection cannot orphan provisioned members by accident. Operator commands only; customer UI is Phase 12 (phase-11-plan §9.2) | Product owner — decided |
+| D-26 | Organization deletion | Phase 11 | **Decided (2026-10-03):** destructive deletion/purge deferred to Phase 12; Phase 11 adds audited `lattice org suspend/reactivate` and replaces unaudited owner SQL in incident procedures with audited operator commands (phase-11-plan §9.3) | Product owner — decided |
+| D-27 | Image publishing | Phase 11 | **Decided (2026-10-03):** one gated path — pushes to `main`, `v*` tags and manual dispatch build and publish both images to GHCR in the same CI run, after the existing jobs pass (no duplicate test runs, no images on development pushes); deployments use digests; revision and version visible internally at runtime (phase-11-plan §7) | Product owner — decided |
 
 ## 8. Self-review log (Phase 0)
 

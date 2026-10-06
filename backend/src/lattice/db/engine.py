@@ -22,9 +22,11 @@ Rules for callers:
   rows, but it is a bug).
 """
 
+import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -37,6 +39,7 @@ from sqlalchemy.ext.asyncio import (
 from lattice.db.schema import current_revision
 
 _BIND_ORG_SQL = text("SELECT set_config('app.org_id', :org_id, true)")
+_DATABASE_CLOCK_SQL = text("SELECT extract(epoch FROM clock_timestamp())")
 
 
 def create_engine(
@@ -114,6 +117,15 @@ class Database:
         """The applied migration revision (readiness). Touches no tenant data."""
         async with self.engine.connect() as conn:
             return await current_revision(conn)
+
+    async def clock_skew(self) -> float:
+        """This process's clock minus the database's, in seconds, compared at the
+        midpoint of the round trip. Touches no tenant data."""
+        async with self.engine.connect() as conn:
+            before = time.time()
+            database: Any = (await conn.execute(_DATABASE_CLOCK_SQL)).scalar_one()
+            after = time.time()
+        return (before + after) / 2 - float(database)
 
     async def dispose(self) -> None:
         await self.engine.dispose()

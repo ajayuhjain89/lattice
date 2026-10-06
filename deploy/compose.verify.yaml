@@ -1,0 +1,29 @@
+# Verification overlay for the reference stack (P11.1). NOT a production configuration.
+#
+# Production sign-in is OIDC only, and the verification identity provider arrives in
+# P11.3. Until then this overlay runs the SAME images and topology with LATTICE_ENV=test,
+# the development persona sign-in and the fake providers, so an end-to-end Ask can travel
+# Caddy → API through the production path. LATTICE_FAKE_GENERATION_DELAY_SECONDS makes
+# the fake model wait (the long-Ask proof); configuration refuses it in production.
+#
+#   make prod-up VERIFY=1 [FAKE_DELAY=40]
+x-verify-api: &verify-api
+  LATTICE_ENV: test
+  LATTICE_DEV_AUTH_ENABLED: "true"
+  LATTICE_QUERY_EMBEDDING: fake
+  LATTICE_FAKE_GENERATION_DELAY_SECONDS: ${FAKE_DELAY:-0}
+
+services:
+  api1:
+    environment: *verify-api
+  api2:
+    environment: *verify-api
+  worker:
+    environment:
+      LATTICE_ENV: test
+      LATTICE_SYNC_EMBEDDING: fake
+      # The minimum, so a killed job is recovered within a drill.
+      LATTICE_WORKER_LEASE_SECONDS: "30"
+  ops:
+    environment:
+      LATTICE_ENV: test

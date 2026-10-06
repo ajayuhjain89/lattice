@@ -4,6 +4,8 @@ egress settings the embedding step needs.
 Revision ID: 0005
 Revises: 0004
 Create Date: 2026-09-27
+Reversible: no (the downgrade deletes all ingested content)
+Locks: ACCESS EXCLUSIVE on documents, access_groups and document_grants; new tables
 
 Phase 4 (docs/implementation-plan.md, docs/ingestion-design.md, docs/data-model.md
 §3-7). Everything is tenant-owned, has forced row-level security with the tenant

@@ -5,20 +5,39 @@
 database role is safe and the schema is at the revision this build expects
 (lattice.db.role_check). With ``LATTICE_METRICS_ADDRESS`` set it also serves
 Prometheus metrics on that separate listener (lattice.metrics).
+
+Forwarding headers (Phase 11, docs/deployment.md §4): the client address and scheme are
+the TCP peer's unless the peer is one of ``LATTICE_TRUSTED_PROXIES`` (the ingress), in
+which case uvicorn's ``ProxyHeadersMiddleware`` takes them from ``X-Forwarded-For`` /
+``X-Forwarded-Proto``, skipping trusted hops from the right. It is installed here, from
+validated configuration, so the trust boundary does not depend on how the server was
+started; production runs uvicorn with ``--no-proxy-headers`` so the server adds no
+implicit trust of its own (its default trusts 127.0.0.1).
 """
 
+import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 
 from fastapi import FastAPI
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from lattice import metrics
 from lattice.answering.service import AskDependencies
 from lattice.api.handlers import register_exception_handlers
 from lattice.api.middleware import BodyLimitMiddleware, CsrfMiddleware, RequestContextMiddleware
 from lattice.api.routes import access, activity, admin, ask, auth, health, me, scim, sources
-from lattice.config import Environment, Settings, load_provider_settings, load_settings
+from lattice.build import report_startup
+from lattice.config import (
+    ConfigurationError,
+    Environment,
+    Settings,
+    load_provider_settings,
+    load_settings,
+    owner_credential_problem,
+)
 from lattice.db.engine import Database, create_engine
 from lattice.db.role_check import verify_runtime_role
 from lattice.identity.dev_provider import DevIdentityProvider
@@ -34,6 +53,8 @@ from lattice.ratelimit import ApiLimits
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
+    if (problem := owner_credential_problem(settings.env, os.environ)) is not None:
+        raise ConfigurationError(problem)
     production = settings.env is Environment.PRODUCTION
     configure_logging(
         level=settings.log_level,
@@ -53,6 +74,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await verify_runtime_role(db.engine, forbid_content_writes=True)
+        report_startup("api", logging.getLogger("lattice.api"))
         server = metrics.serve(settings.metrics_address) if settings.metrics_address else None
         try:
             yield
@@ -96,7 +118,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if settings.query_embedding == "none"
             else build_embedding_provider(settings.query_embedding, load_provider_settings())
         ),
-        generation=DefaultGenerationFactory(settings.env),
+        generation=DefaultGenerationFactory(
+            settings.env, fake_delay_seconds=settings.fake_generation_delay_seconds
+        ),
         secrets=EnvironmentSecretStore(),
         generation_enabled=settings.generation_enabled,
         generation_deadline_seconds=settings.generation_deadline_seconds,
@@ -120,4 +144,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(CsrfMiddleware)
     app.add_middleware(BodyLimitMiddleware, max_bytes=settings.max_request_bytes)
     app.add_middleware(RequestContextMiddleware, production=production)
+    if settings.trusted_proxies:
+        # Outermost: every other layer sees the client the trusted ingress reported.
+        app.add_middleware(
+            ProxyHeadersMiddleware, trusted_hosts=settings.trusted_proxies.split(",")
+        )
     return app
