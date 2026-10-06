@@ -5,7 +5,7 @@ amendments (§21). P11.0 approved (4990064). P11.1 approved (b07ac8d). D-22 amen
 2026-10-05 (§21.1): zero paid infrastructure — Phase 11 closes on full local
 production-shaped verification; real external staging validation is deferred and gates
 Phase 15 (v1 GA). P11.2–P11.7 authorized to run in sequence without a review stop per
-checkpoint. P11.2 delivered as ae03445 + test fix fd0d1bc (§25.3). P11.3 delivered as 1c68ed5 (§25.4). P11.4 delivered as 9a50e27 (§25.5). P11.5 delivered as 0b7fe76 (§25.6). P11.6 delivered as f6025fe (§25.7). P11.7 delivered (§25.8); acceptance checklist §26.1 — Phase 11 closed on local verification only.** Branch `phase/11-production-operations` from `main` 27da421.
+checkpoint. P11.2 delivered as ae03445 + test fix fd0d1bc (§25.3). P11.3 delivered as 1c68ed5 (§25.4). P11.4 delivered as 9a50e27 (§25.5). P11.5 delivered as 0b7fe76 (§25.6). P11.6 delivered as f6025fe (§25.7). P11.7 delivered (§25.8); acceptance checklist §26.1 — Phase 11 closed on local verification only. Merged to `main` --no-ff as 143392f (2026-10-06), merge CI green.** Branch `phase/11-production-operations` from `main` 27da421.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 11. Phase 12
 owns customer-facing onboarding (organization, SSO, SCIM, sources/integrations,

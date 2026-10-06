@@ -10,7 +10,8 @@ information they are authorized to see.
 v2](docs/design-system.md) is canonical. Phase 11 (Production Deployment, Identity
 Operations & Reliability) was verified on a local production-shaped stack only: real
 external staging validation is deferred and gates v1 GA ([plan](docs/phase-11-plan.md)
-§21.1). Phase 12 (customer onboarding) has not started.** What runs today: a FastAPI
+§21.1). Phase 11 is merged (143392f). Phase 12 (Organization Setup, Identity
+Configuration & Integrations) is in planning and has not started.** What runs today: a FastAPI
 backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced
 row-level security for organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
