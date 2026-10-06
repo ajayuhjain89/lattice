@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits prod-backup alerts-test privilege-snapshot
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits prod-authz prod-drills prod-perf prod-backup alerts-test privilege-snapshot
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -234,6 +234,24 @@ prod-limits: ## Shared-limit, retention and worker drills (needs VERIFY=1 IDP=1,
 	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
 	  ../deploy/verification/limits_check.py
 
+# The deployed authorization suite (plan §15.2, P11.7) and the failure drills (§18):
+# `make prod-up VERIFY=1 IDP=1 FAKE_DELAY=20 && make prod-seed VERIFY=1 IDP=1` first.
+prod-authz: ## Deployed authorization suite: route sweep, revocation, roles, eval security gates
+	@[ -n "$(VERIFY)" ] && [ -n "$(IDP)" ] || { echo "prod-authz needs VERIFY=1 IDP=1"; exit 2; }
+	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
+	  ../deploy/verification/authz_check.py
+
+prod-drills: ## Failure drills: API kill/SIGTERM mid-Ask, database and provider outages
+	@[ -n "$(VERIFY)" ] && [ -n "$(IDP)" ] || { echo "prod-drills needs VERIFY=1 IDP=1"; exit 2; }
+	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
+	  ../deploy/verification/drills_check.py
+
+prod-perf: ## Performance sanity through the ingress (needs VERIFY=1 IDP=1, FAKE_DELAY=0)
+	@[ -n "$(VERIFY)" ] && [ -n "$(IDP)" ] && [ "$(FAKE_DELAY)" = 0 ] || \
+	  { echo "prod-perf needs VERIFY=1 IDP=1 and FAKE_DELAY=0"; exit 2; }
+	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
+	  ../deploy/verification/perf_check.py
+
 # Backups (P11.5): restore and verification with deploy/backup.sh restore <id> [...].
 prod-backup: ## Base backup of the reference database + row-count manifest (deploy/backup.sh)
 	deploy/backup.sh backup
@@ -242,7 +260,7 @@ prod-ps: ## Show the reference stack's containers and health
 	$(PROD_COMPOSE) ps
 
 prod-down: prod-env ## Stop the reference stack (volumes kept)
-	$(PROD_COMPOSE) down
+	$(PROD_COMPOSE) down --remove-orphans
 
 prod-destroy: prod-env ## DELETE the reference stack and its volumes
 	$(PROD_COMPOSE) down -v

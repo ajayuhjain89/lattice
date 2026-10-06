@@ -4,6 +4,7 @@ schema-revision guard, database failures, request limits, and metrics.
 Every failure here must be predictable and safe: a fixed error envelope, no stack
 traces, SQL, revisions or hosts in a response, and nothing unbounded in a metric."""
 
+import errno
 import socket
 import uuid
 from collections.abc import AsyncIterator
@@ -17,6 +18,7 @@ from sqlalchemy import text
 
 from lattice import metrics
 from lattice.api.app import create_app
+from lattice.api.handlers import database_unavailable
 from lattice.authz import AuthorizationInvariantViolation
 from lattice.config import ConfigurationError, Environment, load_settings
 from lattice.db.engine import Database, create_engine
@@ -141,6 +143,27 @@ def _add_routes(app: FastAPI) -> None:
         finally:
             await db.dispose()
 
+    @app.get("/v1/_test/unresolvable")
+    async def unresolvable() -> None:
+        # A database host whose name no longer resolves (a stopped Compose service, a
+        # DNS outage): asyncpg raises socket.gaierror, an OSError but no ConnectionError.
+        db = Database(
+            create_engine(
+                "postgresql+asyncpg://lattice_app:x@lattice-database.invalid:5432/none",
+                application_name="lattice-tests-unresolvable",
+                connect_timeout_seconds=1.0,
+            )
+        )
+        try:
+            async with db.unscoped_transaction() as s:
+                await s.execute(text("SELECT 1"))
+        finally:
+            await db.dispose()
+
+    @app.get("/v1/_test/file-error")
+    async def file_error() -> None:
+        raise FileNotFoundError(errno.ENOENT, "No such file or directory", "/srv/x")
+
     @app.get("/v1/_test/invariant")
     async def invariant() -> None:
         raise AuthorizationInvariantViolation()
@@ -162,6 +185,45 @@ async def test_an_unreachable_database_is_a_503(app_client: AppFactory) -> None:
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "service_unavailable"
     assert "127.0.0.1" not in response.text
+
+
+async def test_an_unresolvable_database_host_is_a_503(app_client: AppFactory) -> None:
+    before = _sample("lattice_dependency_failures_total", dependency="database", check="request")
+    async with app_client(configure=_add_routes) as client:
+        response = await client.get("/v1/_test/unresolvable")
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "service_unavailable"
+    assert response.headers["retry-after"] == "5"
+    assert "invalid" not in response.text
+    after = _sample("lattice_dependency_failures_total", dependency="database", check="request")
+    assert after == before + 1
+
+
+async def test_any_other_os_error_stays_a_500(app_client: AppFactory) -> None:
+    async with app_client(configure=_add_routes) as client:
+        response = await client.get("/v1/_test/file-error")
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "internal_error"
+    assert "retry-after" not in response.headers
+    assert "/srv/x" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("error", "unavailable"),
+    [
+        (socket.gaierror(socket.EAI_NONAME, "Name or service not known"), True),
+        (OSError(errno.EHOSTUNREACH, "No route to host"), True),
+        (OSError(errno.ENETUNREACH, "Network is unreachable"), True),
+        (ConnectionRefusedError(errno.ECONNREFUSED, "refused"), True),
+        # Not connectivity: a bug, still a 500.
+        (OSError(errno.ENOENT, "No such file or directory"), False),
+        (OSError("no errno"), False),
+    ],
+)
+def test_only_connectivity_errors_count_as_database_unavailable(
+    error: OSError, unavailable: bool
+) -> None:
+    assert database_unavailable(error) is unavailable
 
 
 async def test_an_invariant_violation_is_reported_by_its_code_only(

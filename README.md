@@ -5,10 +5,12 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–10 are implemented and merged, and the frontend product-design
-overhaul (D0–D7, [design direction](docs/design-direction.md)) is approved and merged;
-[design system v2](docs/design-system.md) is canonical. The next phase is Phase 11 —
-Production Deployment, Identity Operations & Reliability.** What runs today: a FastAPI
+**Status: Phases 1–11 are implemented, and the frontend product-design overhaul (D0–D7,
+[design direction](docs/design-direction.md)) is merged; [design system
+v2](docs/design-system.md) is canonical. Phase 11 (Production Deployment, Identity
+Operations & Reliability) was verified on a local production-shaped stack only: real
+external staging validation is deferred and gates v1 GA ([plan](docs/phase-11-plan.md)
+§21.1). Phase 12 (customer onboarding) has not started.** What runs today: a FastAPI
 backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced
 row-level security for organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -337,7 +339,7 @@ procedures: [runbook §2 and §9](docs/runbook.md); decisions: D-1, D-19, D-20 a
 before Phase 10 needs `make migrate` (0013); `make audit` checks the locked dependencies
 for known vulnerabilities.
 
-## How deployment works (Phase 11, in progress)
+## How deployment works (Phase 11)
 
 Lattice ships as two images ([ADR-016](docs/decisions/016-production-topology.md),
 [deployment contract](docs/deployment.md)): `lattice-backend`, one image that runs the
@@ -370,7 +372,19 @@ verification identity provider (`make prod-up IDP=1 && make prod-identity`). P11
 every rate limit shared in PostgreSQL and added retention with database-enforced floors;
 P11.5 added WAL archiving, base backups and verified restores on the reference stack
 (`deploy/backup.sh`, `lattice verify-restore`) — local durations only, managed PITR
-unverified. Alerts (P11.6) follow.
+unverified. P11.6 added metrics for identity, jobs, storage and WAL archiving, 19 alert
+rules with `promtool` tests (`make alerts-test`) and a runbook action per alert. P11.7
+closed the phase on the same stack: the deployed authorization suite (`make prod-authz`:
+route sweep across organizations, revocation on both instances, roles, the evaluation
+security gates as an operator job), the failure drills (`make prod-drills`: an API
+instance killed or stopped during an Ask, the database and the model provider down) and
+a performance sanity check (`make prod-perf`), recorded in runbook §8.
+
+**What is not proven.** Everything above ran on one laptop. Real cloud staging, managed
+PostgreSQL privileges, managed backup/PITR, public TLS and origin, a real external OIDC
+callback, provider-specific deploy/rollback and cloud RPO/RTO are deferred for lack of a
+deployment budget ([plan](docs/phase-11-plan.md) §21.1); they gate v1 GA (Phase 15), and
+until then Lattice is not described as production-proven.
 
 ## Repository layout
 

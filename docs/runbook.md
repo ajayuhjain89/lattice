@@ -364,7 +364,7 @@ Remove a row as soon as its condition no longer holds.
 | --- | --- | --- | --- |
 | GHSA-vfj7-8cjw-p6xm (CVE-2026-93687, high), accepted 2026-10-03 | `braces` ≤3.0.3, via `micromatch` on two dev-only paths: `eslint-config-next` › `@next/eslint-plugin-next` › `fast-glob` › `micromatch`, and `stylelint` (directly and through `globby` › `fast-glob`) › `micromatch` (re-checked 2026-10-03) | No patched release exists. Dev lint tooling only, never in the production bundle; already on `main` before the design overhaul (the advisory record was updated 2026-10-02) | A patched `braces` reaches that chain, or `braces` leaves the lockfile |
 
-### 7.9 Local reference stack — *implemented (P11.1)*
+### 7.9 Local reference stack — *implemented (P11.1; verification drivers P11.3–P11.7)*
 
 The production topology on one machine ([deployment.md](deployment.md) §15):
 `compose.production.yaml`, Compose project `lattice-reference` (never the development
@@ -378,6 +378,7 @@ Docker has 3 GB).
 | Open it | `https://localhost:8443` (Caddy's internal CA: the browser warns). `http://localhost:8080` redirects |
 | Sign in as a persona / run an Ask | `make prod-up VERIFY=1 [FAKE_DELAY=40]`: test env, development sign-in, fake providers (deploy/compose.verify.yaml); then `make prod-seed VERIFY=1` (synthetic-only: seed with `--require-synthetic`, sync with fake embeddings, admin grants) |
 | Database checks | `make prod-check` (`lattice check-deployment`), `make prod-migrate` (`lattice migrate --status`) |
+| Re-run the verification | `make prod-up VERIFY=1 IDP=1 FAKE_DELAY=20`, `make prod-seed VERIFY=1 IDP=1`, then `make prod-limits`, `prod-authz`, `prod-drills` (each with `VERIFY=1 IDP=1`); `prod-perf` needs the API instances at `FAKE_DELAY=0`. Each prints PASS/FAIL per case and exits 1 on any failure; results are recorded in §8 |
 | `bootstrap` fails with `password authentication failed for user "platform_admin"` | The volume was initialised before P11.2 (superuser bootstrap): `make prod-destroy`, then `make prod-up` |
 | A container is `unhealthy` | `make prod-ps`; `docker logs lattice-reference-<service>-1`. api: readiness (database or schema). worker: heartbeat older than 300 s (frozen or blocked). web: `GET /` failing |
 | Changed `deploy/caddy/Caddyfile` | Recreate Caddy (`… up -d --force-recreate caddy`): it is a single-file bind mount, so an editor that replaces the file leaves the container on the old one |
@@ -404,7 +405,7 @@ first; the log is `deploy/state/deploy.log`.
 | Roll back | `deploy/deploy.sh rollback` — the previous release by ID, rolling. Across a migration: refused (`the database … is newer than this build: roll forward`) unless `--allow-downgrade` and every undone revision is reversible |
 | `FAILED: another deployment is running` | Another `deploy.sh` holds `deploy/state/lock`; remove the directory only if none runs |
 
-## 8. Failure drills — *run for Phase 8 (2026-09-29)*
+## 8. Failure drills — *run for Phase 8 (2026-09-29) and Phase 11 (P11.1–P11.7, local reference stack)*
 
 Run against the real API and worker on the development database (fake generation
 provider recorded for Halden, fake embeddings), and as automated tests
@@ -543,6 +544,58 @@ instance's own metrics read for every step). **10/10 passed**, then `check-deplo
 These are local durations on one laptop with the backups on the same disk. They are
 **not** an RPO/RTO for any deployment; managed backup/PITR and cloud RPO/RTO remain
 deferred (phase-11-plan §21.1).
+
+**P11.7 deployed authorization suite, failure drills and performance (2026-10-06)**, local
+reference stack (`make prod-up VERIFY=1 IDP=1 FAKE_DELAY=20`; the verification overlay's
+persona sign-in, fake embeddings, the fake model waiting 20 s, each API instance's own
+metrics read to see which instance served a step; synthetic data only).
+
+`make prod-authz VERIFY=1 IDP=1` — **18/18 passed in 51 s**:
+
+| Case | Observed |
+| ---- | -------- |
+| Route sweep (read from the API's routers) | anonymous: 22/22 member and administrator routes 401 `authentication_required`; SCIM without a token 7/7 401 |
+| A member on administrator routes | 15/15 one identical 403 for Halden's identifiers and random ones; nothing of Halden's changed |
+| Another organization's administrator | Ines (Veridian; capability granted for the sweep, audited, then revoked): 10/10 identified routes answer Halden's real source, member, document, grant, trace and evidence identifiers exactly like random ones (404, identical body); Halden's grants, Maya's access, jobs and audit trail unchanged; Veridian's member directory names no Halden member |
+| Administrator ≠ content (SEC-15) | Lena reads Maya's trace as `operational` (no question, no answer); Maya reads her own as `asker`, re-authorized |
+| Revocation | Lena suspends Maya on the Access page (PATCH 200): Maya's live session 401 on api1 and api2 at the next request; reactivation revives no session; a new sign-in 200 on both |
+| Roles | `check-deployment` 7/7; a requested sync per organization ran in the worker (`succeeded`) |
+| Eval security gates inside the stack | an operator job on the private network against `lattice_app`, golden set mounted read-only: retrieval 89 items, answer 96 items, **every security count 0** |
+| Not vacuous (hand mutation, not committed) | given Veridian's own identifiers as the "foreign" set, the sweep FAILS on the routes that answer 200 |
+
+`make prod-drills VERIFY=1 IDP=1` — **18/18 passed in 205 s**:
+
+| Drill | Observed |
+| ----- | -------- |
+| API instance killed (SIGKILL) during an Ask | one Ask in flight on each instance; api1 killed 3 s in: the Ask on api2 completed (200 `answered`, 20.1 s), the one on api1 failed at the ingress in 4.1 s with 503 `service_unavailable` (no hang); 10/10 readiness through Caddy while api1 was down; api1 restarted |
+| ... its Ask slot | still held after the kill (the member: two concurrent Asks → `[200, 429]`); freed when the lease expired (≈ 3 min after it was taken): `[200, 200]` |
+| API instance stopped (SIGTERM) during an Ask | both instances serving an Ask; `docker compose stop api1` 3 s in: both Asks completed (200 `answered`, 20.1 s); the stop took 18 s; 32/32 readiness through Caddy while api1 drained; no slot left behind |
+| Database stopped 18 s | each instance: `/v1/me` 503 `service_unavailable` + `Retry-After: 5`, readiness 503, liveness 200; through Caddy 503 + `Retry-After: 5` with the API's envelope at once and after its health checks marked both instances down; after `start` the same session served again at once (0.0 s after PostgreSQL was healthy), no API or worker restart; `lattice_dependency_failures_total{dependency="database"}` +16; a requested sync then succeeded |
+| Generation provider unavailable | Halden's generation set to an `ollama` `local` record on the instance's loopback port 11434, where nothing listens (no model server runs): the Ask answered 200 `failed` / `provider_unavailable` with 12 evidence items in 0.1 s; generation-call counter +1 (provider-surge alert input); the fake model reconfigured → `answered` |
+| Found by the first run (fixed, then re-run) | the database case answered **500** `internal_error` on `/v1/me` (the stopped service's name no longer resolved: `socket.gaierror`, not mapped) and Caddy answered its own empty 502/503 when an instance died or none was ready. Fixed in the API's handler and with Caddy `handle_errors` (deployment.md §4, §10) |
+
+**Earlier evidence for the remaining §18 rows** (phase-11-plan §18): source sync failure —
+the Phase 8 drill above (`partial`, `access_unmappable:account`; missing export →
+`source_unavailable:missing_export`) and the repeated-sync-failure alert's rule tests
+(P11.6); revoked secret — P11.3 (new secret reference before the provider → `sso_unavailable`;
+revoked SCIM token 401 on both instances) and the Phase 6 credential tests
+(`credential_unavailable`); clock skew — the gauge on both instances (P11.3) and the
+clock-skew alert's rule tests (P11.6); worker kill/restart — P11.1 and P11.4; migration
+failure and rollback — P11.2; backup restore and PITR — P11.5 and the restore drill below.
+
+**Performance sanity** (`make prod-perf VERIFY=1 IDP=1` at `FAKE_DELAY=0`; through Caddy,
+sequential, both instances, fake embeddings and the fake model, so an Ask is retrieval,
+authorization, trace and pipeline without a model; M1 8 GB, Docker at 3 GB):
+
+| Request (through Caddy) | n | p50 | p95 | max |
+| ----------------------- | - | --- | --- | --- |
+| `GET /api/v1/me` | 200 | 4.2 ms | 5.9 ms | 17.9 ms |
+| `GET /api/v1/sources` | 200 | 8.5 ms | 27.4 ms | 147.3 ms |
+| `POST /api/v1/ask` (4 members × 10) | 40 | 52.0 ms | 90.5 ms | 216.6 ms |
+
+A local regression signal, not a capacity figure.
+
+**Final gate** — backend 2,367 passed; lint and mypy clean; web 211 unit, production build, Playwright 290 passed (desktop, mobile, production; no retries; the known flaky `shell.spec.ts:309` and `primitives.spec.ts:85` passed first time); `make audit` green after GHSA-68fv-2mgg-jv7q (`source-map-js`) was fixed by the lockfile (allowlist unchanged); `make alerts-test` SUCCESS; production-mode stack from `make prod-build`: smoke 13/13, `check-deployment` 7/7; restore drill: base backup 1.0 s (65 MB), recovered 2.9 s, `verify-restore` 9/9 (2 organizations, 2,534 tenant rows), `check-db-role`, `worker --once`, api readiness, secret scan (none of 9 values) PASS; then discarded and smoke 13/13. Local durations; not an RPO/RTO.
 
 ## 9. Identity: SSO, SCIM provisioning and administrators — *implemented (Phase 10; lifecycle and incident commands P11.3)*
 

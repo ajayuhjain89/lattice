@@ -2,8 +2,9 @@
 
 Beyond ``LatticeError`` and validation errors:
 
-* **The database is unreachable or too slow** (connection refused or lost, the pool's
-  wait for a connection, a statement cancelled by ``statement_timeout``): 503
+* **The database is unreachable or too slow** (connection refused or lost, its host
+  name not resolving or no route to it, the pool's wait for a connection, a statement
+  cancelled by ``statement_timeout``): 503
   ``service_unavailable`` with ``Retry-After``, logged as ``db.unavailable`` with the
   exception type only. A SQL *bug* (a missing table, a constraint) stays a 500
   ``internal_error``: it is not transient, and retrying would not help.
@@ -16,7 +17,9 @@ Beyond ``LatticeError`` and validation errors:
   ``lattice_security_invariant_violations_total`` is the alerting signal.
 """
 
+import errno
 import logging
+import socket
 
 from asyncpg.exceptions import QueryCanceledError
 from fastapi import FastAPI, Request
@@ -48,6 +51,11 @@ def _request_id(request: Request) -> str:
     return str(getattr(request.state, "request_id", ""))
 
 
+# A connect that fails below TCP: asyncpg raises these as plain OSError (P11.7 drill: a
+# stopped database service whose name no longer resolves answered 500, not 503).
+_UNREACHABLE = {errno.EHOSTUNREACH, errno.ENETUNREACH, errno.EHOSTDOWN, errno.ENETDOWN}
+
+
 def database_unavailable(exc: BaseException) -> bool:
     """Connectivity, pool exhaustion or a cancelled (timed-out) statement."""
     if isinstance(exc, (OperationalError, InterfaceError, PoolTimeoutError)):
@@ -60,7 +68,9 @@ def database_unavailable(exc: BaseException) -> bool:
             getattr(orig, "pgcode", None),
             getattr(getattr(orig, "__cause__", None), "sqlstate", None),
         )
-    return isinstance(exc, (ConnectionError, TimeoutError))
+    if isinstance(exc, (ConnectionError, TimeoutError, socket.gaierror)):
+        return True
+    return isinstance(exc, OSError) and exc.errno in _UNREACHABLE
 
 
 def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
@@ -132,8 +142,9 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
     app.add_exception_handler(LatticeError, lattice_error)
     app.add_exception_handler(DBAPIError, database_error)
     app.add_exception_handler(PoolTimeoutError, database_error)
-    app.add_exception_handler(ConnectionError, database_error)
-    app.add_exception_handler(TimeoutError, database_error)
+    # ConnectionError, TimeoutError, socket.gaierror and the rest: any other OSError is
+    # re-raised by database_error and stays a 500.
+    app.add_exception_handler(OSError, database_error)
     app.add_exception_handler(AuthorizationInvariantViolation, invariant_violation)
     app.add_exception_handler(RequestValidationError, validation_error)
     app.add_exception_handler(StarletteHTTPException, http_error)

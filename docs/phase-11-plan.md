@@ -5,7 +5,7 @@ amendments (§21). P11.0 approved (4990064). P11.1 approved (b07ac8d). D-22 amen
 2026-10-05 (§21.1): zero paid infrastructure — Phase 11 closes on full local
 production-shaped verification; real external staging validation is deferred and gates
 Phase 15 (v1 GA). P11.2–P11.7 authorized to run in sequence without a review stop per
-checkpoint. P11.2 delivered as ae03445 + test fix fd0d1bc (§25.3). P11.3 delivered as 1c68ed5 (§25.4). P11.4 delivered as 9a50e27 (§25.5). P11.5 delivered as 0b7fe76 (§25.6). P11.6 delivered (§25.7).** Branch `phase/11-production-operations` from `main` 27da421.
+checkpoint. P11.2 delivered as ae03445 + test fix fd0d1bc (§25.3). P11.3 delivered as 1c68ed5 (§25.4). P11.4 delivered as 9a50e27 (§25.5). P11.5 delivered as 0b7fe76 (§25.6). P11.6 delivered as f6025fe (§25.7). P11.7 delivered (§25.8); acceptance checklist §26.1 — Phase 11 closed on local verification only.** Branch `phase/11-production-operations` from `main` 27da421.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 11. Phase 12
 owns customer-facing onboarding (organization, SSO, SCIM, sources/integrations,
@@ -844,6 +844,18 @@ refuses non-https providers anyway, so the verification provider uses TLS.
 | Not rules | the platform's backup/PITR window and the restore-drill cadence (calendar control, runbook §10.4) — no honest in-application metric; TLS expiry and availability use the black-box probe the contract requires (deployment.md §16) |
 
 
+### 25.8 P11.7 — as built (2026-10-06)
+
+| Planned (§15.2, §18, §25 row P11.7) | As built / evidence (runbook §8 "P11.7") |
+| ----------------------------------- | ---------------------------------------- |
+| §15.2 authorization suite on the stack | `make prod-authz` (`deploy/verification/authz_check.py`), through Caddy over both API instances: the route list is read from the API's own routers (a new route is swept without editing the driver); anonymous 401 on every member/administrator route and SCIM without its token 401; one identical 403 for a member on every administrator route; for a Veridian administrator every identified route answers Halden's real identifiers (source, member, document, grant, trace, evidence) exactly like random ones, and Halden's grants, access, jobs and audit trail are unchanged; administrator ≠ content on traces (SEC-15); an Access suspension ends the session on both instances at the next request and reactivation revives none; `check-deployment` 7/7; a requested sync per organization succeeds in the worker; `eval retrieval` and `eval answer` run inside the stack as an operator job against `lattice_app` with every security count 0. **18/18 passed in 51 s** on the final images: 22 member/administrator routes anonymous 401, 7 SCIM 401, 15 administrator routes 403 to a member, 10 identified routes 404 with identical bodies for Halden's real identifiers; eval gates over 89 retrieval and 96 answer items, every security count 0. Mutation check by hand (not committed): fed Veridian's own identifiers as the "foreign" set, the sweep FAILS on the routes that answer 200 |
+| §18 drills | `make prod-drills` (`deploy/verification/drills_check.py`): API instance killed and stopped (SIGTERM) during an Ask, database stopped/started, generation provider unreachable, the dead process's Ask slot freed at lease expiry. **18/18 passed in 205 s** on the final images (the database case failed before the fix below). The other §18 rows cite earlier runs: worker kill/restart (P11.1, P11.4), source sync failure (Phase 8 drill; alert rule tests P11.6), migration failure and rollback (P11.2), backup restore + PITR (P11.5 and the final gate below), revoked secret, disabled SSO connection, suspended user (P11.3), clock skew (gauge P11.3; alert rule test P11.6) |
+| Found and fixed by the drills | (1) **database host not resolving → 500**: with the database service stopped its name no longer resolves; asyncpg raises `socket.gaierror` (an `OSError`, not a `ConnectionError`) and request routes answered `500 internal_error` while readiness correctly said 503. `database_unavailable` now also classifies `gaierror` and the unreachable-host/network errnos; any other `OSError` stays a 500 (tests in `tests/test_operations.py`). (2) **the ingress's own failures**: with no instance ready, or an instance killed mid-request, Caddy answered with its own empty 502/503. `handle_errors 502 503 504` for `/api/*` now answers what the API answers when unavailable (503 `service_unavailable`, `Retry-After: 5`, the envelope, the API's CSP); deployment.md §4 records it as contract. (3) GHSA-68fv-2mgg-jv7q in the web toolchain: lockfile moved to `source-map-js` 1.2.2 (nothing else re-resolved). (4) `make prod-down` now passes `--remove-orphans`, so the overlays' services (the verification provider) stop too |
+| Perf sanity | `make prod-perf` (`FAKE_DELAY=0`) — `/api/v1/me` p50 4.2 ms / p95 5.9 ms (200 requests), `/api/v1/sources` 8.5 / 27.4 ms (200), an Ask with the fake model 52 / 91 ms (40); all 200. Local regression signal only |
+| Final local gate | backend suite **2,367 passed** (10 min); `make lint typecheck` clean; web lint/typecheck/**211** unit tests, production build, Playwright desktop/mobile/production **290 passed** (52 skipped by project), no retries — the known flaky `shell.spec.ts:309` and `primitives.spec.ts:85` passed first time in every Phase 11 run recorded here (no occurrence, so no race fix was due); `make audit` green with only GHSA-vfj7-8cjw-p6xm excepted (braces still 3.0.3, no patched release) after a **new** advisory, GHSA-68fv-2mgg-jv7q (`source-map-js` < 1.2.2, through postcss in the web toolchain, published 2026-09-18), was fixed by moving the lockfile to 1.2.2 alone — the allowlist unchanged; `make alerts-test` SUCCESS; `make prod-build`, production-mode stack: smoke 13/13, `check-deployment` 7/7; restore drill (`deploy/backup.sh`): base backup 1.0 s (65 MB), recovered 2.9 s, `verify-restore` 9/9, `check-db-role`, `worker --once`, api readiness, secret scan PASS, discarded, smoke 13/13 again; doc links: 122 relative links in 36 files, anchors included, 0 broken |
+| Staging | deferred (§21.1); nothing was deployed outside the laptop |
+
+
 ## 26. Phase 11 acceptance criteria
 
 1. Both images build reproducibly from a locked tree, run non-root on a read-only root
@@ -879,6 +891,31 @@ refuses non-https providers anyway, so the verification provider uses TLS.
     dependency audit with only GHSA-vfj7-8cjw-p6xm excepted); flaky-test occurrences
     recorded; no infrastructure beyond §20.
 
+### 26.1 Acceptance checklist at closure (2026-10-06)
+
+| # | Criterion | Status | Evidence |
+| - | --------- | ------ | -------- |
+| 1 | Images: reproducible, non-root, read-only, no secrets/test data, revision/version | Met (local) | §25.2; image tests in `tests/test_deployment_files.py`; `make prod-build` + smoke in the final gate; CI `images` job |
+| 2 | Documented start order; guards refuse inside containers; migrating release cannot leave an old instance on the new schema | Met (local) | §25.3, runbook §8 "P11.2" |
+| 3 | Ask > 30 s through the production path; graceful shutdown loses no completed Ask | Met (local) | runbook §8 "P11.1" (40 s Ask); "P11.7" (SIGTERM with both instances serving: both Asks completed) |
+| 4 | Client address only from the trusted ingress | Met (local) | runbook §8 "P11.1", `tests/test_shared_limits.py` |
+| 5 | Every limit shared or per request, across two instances, defaults unchanged | Met (local) | §25.5, runbook §8 "P11.4" |
+| 6 | SSO lifecycle without orphaning; audited operator commands; no owner SQL in incident runbooks | Met (local) | §25.4, runbook §8 "P11.3" (42/42), runbook §2/§9 |
+| 7 | Retention exact per class, floors enforced by the database, safe under retry, observable | Met (local) | §25.5, `tests/ingestion/test_retention.py` |
+| 8 | §11.3 restore verification on the local stack; durations never presented as cloud RPO/RTO | Met (local) | §25.6; final-gate restore drill (runbook §8 "P11.7") |
+| 9 | Every alert has a rule test and runbook action; security-invariant alert fires on a synthetic violation | Met | §25.7; `make alerts-test` in the final gate and in CI |
+| 10 | §15.2 and §15.3 pass on the local stack; no drift; eval security gates 0 | Met (local) | §25.4, §25.8 (`make prod-identity`, `make prod-authz`) |
+| 11 | Every §18 drill run on the local stack and recorded | Met (local); starred rows' staging repeat deferred | §25.8, runbook §8 |
+| 12 | (replaced) deferred external validation recorded and carried as a Phase 15 gate | Met | §21.1; implementation-plan row 15; README |
+| 13 | All suites green, only GHSA-vfj7-8cjw-p6xm excepted, flaky occurrences recorded, no infrastructure beyond §20 | Met (local) | §25.8 final gate; branch and merge CI run after this commit (§28) | §25.8 final gate |
+
+**Not done, by decision (§21.1, reason: no deployment budget):** real cloud staging
+deployment; managed-PostgreSQL privilege verification; managed backup/PITR verification;
+public TLS/origin validation; real external OIDC callback validation; provider-specific
+deploy/rollback validation; cloud RPO/RTO measurement. None of these is claimed. They are
+a release gate for Phase 15: Lattice is not production-proven until they are done.
+
+
 ## 27. Roadmap correction: displaced items
 
 On 2026-10-03 the roadmap rows 12 (Accounts workspace) and 13 (Next connectors) were
@@ -906,3 +943,43 @@ in two:
 customer needs connected, and turning today's export-based connectors into setup-able
 integrations. Connectors that Phase 12 finds necessary for v1 are built there; the rest are
 recorded there as post-v1.
+
+## 28. Closure report (2026-10-06)
+
+**Phase 11 is closed on full local production-shaped verification** (§21.1). Delivered:
+P11.0 4990064 (contract, ADR-016, staging comparison) · P11.1 b07ac8d (images, ingress,
+reference stack) · P11.2 ae03445 + fd0d1bc (migrations, deploy and rollback, GHCR job) ·
+P11.3 1c68ed5 (identity and session operations) · P11.4 9a50e27 (shared limits,
+retention) · P11.5 0b7fe76 (backups, verified restores) · P11.6 f6025fe (metrics, alerts,
+runbook §10) · P11.7, the commit carrying this report (authorization suite, drills,
+fixes, closure). Every §26 criterion is met on the local stack (§26.1).
+
+**What the closing checkpoint changed in behaviour:** a database host that does not
+resolve or route is now a 503 with `Retry-After` (it was a 500); the reference ingress
+answers its own `/api/*` failures with the API's 503 envelope; the web lockfile carries
+`source-map-js` 1.2.2 (GHSA-68fv-2mgg-jv7q). No migration, role, RLS, audit or identity
+change; no new service.
+
+**Deferred external validation — not done, not claimed.** Reason: *Deferred because no
+deployment budget is currently available.*
+
+1. real cloud staging deployment;
+2. managed PostgreSQL privilege verification;
+3. managed backup/PITR verification;
+4. public TLS/origin validation;
+5. real external OIDC callback validation;
+6. provider-specific deploy/rollback validation;
+7. cloud RPO/RTO measurement.
+
+These are a **release gate for Phase 15**: v1 GA / production-ready must not be declared
+until they are done, and Lattice is not described as production-proven before then.
+DigitalOcean (deployment.md Appendix A) remains the selected candidate for that
+validation — not provisioned or tested.
+
+**Also carried forward:** GHSA-vfj7-8cjw-p6xm (braces, web dev toolchain only, no patched
+release as of 2026-10-06) stays the only audit exception (§19.1); the flaky
+`shell.spec.ts:309` and `primitives.spec.ts:85` had no occurrence in Phase 11's recorded
+runs; the in-process-only items of §25.4 (the stack-level SSO-disable race, the issuer
+rename on the stack). The branch CI run, the GHCR image publication and the merge-commit
+CI run happen after this commit and are reported with the merge, not in the tree.
+

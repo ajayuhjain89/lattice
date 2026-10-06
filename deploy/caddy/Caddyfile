@@ -71,6 +71,22 @@ https://localhost:8443, https://caddy:8443 {
 		}
 	}
 
+	# The ingress's own failures on /api/* (P11.7 drills): no instance passes readiness
+	# (the database is down, 503), the chosen instance died mid-request or refused for
+	# longer than lb_try_duration (502), or no response header within 180 s (504). The
+	# client gets what the API itself answers when it is unavailable -- 503
+	# service_unavailable, Retry-After: 5, the API's CSP -- never Caddy's empty error.
+	handle_errors 502 503 504 {
+		@api expression `{http.request.orig_uri.path}.startsWith("/api/")`
+		handle @api {
+			header Retry-After 5
+			header Cache-Control no-store
+			header Content-Type application/json
+			header Content-Security-Policy "default-src 'none'"
+			respond `{"error":{"code":"service_unavailable","message":"Lattice is temporarily unavailable.","request_id":""}}` 503
+		}
+	}
+
 	# Every other path → the web servers (no /api route exists there in production), two
 	# instances like the API so a release can replace one at a time.
 	handle {
