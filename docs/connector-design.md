@@ -92,6 +92,16 @@ All three read from local directories in the slice, so the synthetic dataset can
 versioned in the repo and ingestion is fully reproducible. Their formats mirror real
 exports so that switching to API-backed readers later changes only the reader.
 
+**What they are (stated for customers, D-33, 2026-10-06).** All three are
+**export-based sources**, not live integrations: *Documents (Markdown export)* is
+Lattice's Markdown interchange format; *Tickets (JSON Lines export)* is Lattice's ticket
+interchange format shaped like a Zendesk export — not a Zendesk integration; *Slack
+workspace export* is Slack's own export format — not a live Slack integration. Phase 12
+adds no live connector (GitHub Issues is the first future candidate). *Current:* exports
+are read from a path an operator's `lattice sync` recorded. *Phase 12 target (not built):*
+administrators upload exports through the import store (phase-12-plan C8) or pick an
+operator-registered location; the connectors are unchanged.
+
 ### 3.1 `document_repository` — Markdown with front matter
 
 Mirrors a Drive/Notion export plus a sharing manifest.
@@ -140,7 +150,9 @@ Parts: a header part (subject, status, priority, requester) + one part per comme
 Internal (non-public) comments are included; they are internal-level content.
 `account_ref` = ticketing organization ID → mapped by the source configuration's
 `account_refs` (as built; the draft's `account_external_refs` table is not needed until
-accounts are managed in Lattice). Source is `account_scoped = true`: unmapped tickets
+accounts are managed in Lattice). *Phase 12 target (P12.3, not built):* accounts are now
+product-managed, so mappings move into `account_external_refs` — contract in
+phase-12-plan C10. Source is `account_scoped = true`: unmapped tickets
 are not indexed (`access_unmappable:account`, e.g. HAL-4951 in the dataset).
 `display_ref` = the ticket ID. People appear by name only; emails are never copied into
 content. A ticket ID that appears twice is rejected in every occurrence.

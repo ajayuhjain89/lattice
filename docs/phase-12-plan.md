@@ -1,8 +1,12 @@
 # Phase 12 — Organization Setup, Identity Configuration & Integrations: plan
 
-Status: **Draft for approval (2026-10-06). Nothing is implemented.** Branch
-`phase/12-org-setup-integrations` from `main` 143392f. Decisions D-28–D-37 (§22) need the
-product owner before P12.1; P12.0 is this document plus the ADR it calls for.
+Status: **Plan approved (2026-10-06). P12.0 (contracts, Part II) written; nothing is
+implemented.** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
+D-28–D-33, D-35, D-36 and D-37B are approved (§22, with the contracts of Part II);
+D-34 (raising egress ceilings: IdP step-up, C6) and D-37A (organization purge: semantics
+now, executable purge in Phase 15, C14) were decided by engineering under the product
+owner's delegation, as were corrections to D-31 and D-36 (C18). P12.1 waits for the
+product owner's go-ahead.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 12. Phase 11
 is closed (143392f); real external staging validation stays deferred and remains a
@@ -87,6 +91,8 @@ customer integrations.
 
 ## 5. Setup model
 
+> **Superseded by C12** (the backend-owned status contract: categories, states and reason codes).
+
 A durable **setup record** for the organization, derived on every read from backend
 data. Nothing is stored as "progress", nothing is a percentage, and every state carries
 the reason code that produced it.
@@ -111,6 +117,8 @@ organization's setup record (§7). It is a status surface, not a wizard: each ro
 to the page that owns the item, and remains useful after onboarding.
 
 ## 6. Organization bootstrap (platform) vs organization setup (admin)
+
+> Binding contract: **C1**.
 
 **Recommended (D-28 A):** operator-created organization, customer-configured after.
 
@@ -197,6 +205,8 @@ Not needed for onboarding: post-v1 as recorded (phase-11-plan §27).
 
 ## 10. Identity setup (P12.4)
 
+> Binding contract: **C5**; D-37B limitation stated in the UI.
+
 ### 10.1 OIDC
 - **Add** (when none is active): issuer, client ID, client secret (D-29) or public
   client with PKCE, identifying claim (default `sub`; `email` offered with the warning
@@ -238,6 +248,8 @@ Not needed for onboarding: post-v1 as recorded (phase-11-plan §27).
 
 ## 11. Providers, BYOK and egress (P12.5)
 
+> Binding contracts: **C3** (credentials) and **C6** (egress; D-34 step-up).
+
 The egress lattice remains the page's centre; editing happens around it.
 
 - **Generation provider**: choose from implemented adapters only — `gemini` (BYOK) and
@@ -260,6 +272,8 @@ The egress lattice remains the page's centre; editing happens around it.
   read-only with its approval for this organization (approve/withdraw is editable).
 
 ## 12. Sources and first sync (P12.6)
+
+> Binding contracts: **C7** (supported types, named as exports) and **C8** (imports).
 
 ### 12.1 Supported in Phase 12 (D-32, D-33)
 The three existing connector types, configured entirely in the product, fed by
@@ -313,6 +327,8 @@ the product owner wants it (post-v1 or D-33 B).
 
 ## 14. Members, administrators, re-hire (P12.2)
 
+> **Superseded in part by C2:** reinstatement resets to **least access** (C2.3), and the last-administrator rule binds product actions only (C2.2).
+
 - **Add member** (D-30 B): e-mail, name, identifying-claim value (prefilled from the
   e-mail when the claim is `email`), created exactly as SCIM creates one — least access
   (D-20 defaults), a directory identity under the active connection, `managed_by`
@@ -346,6 +362,8 @@ names of hidden groups, titles of unreadable documents.
 
 ## 16. Audit
 
+> **Superseded by C11** (final action families).
+
 Existing and unchanged: `access.*`, `sso.connection_*`, `scim.token_*`,
 `provider.*`, `credential.*`, `egress.levels_changed`, `session.revoked`,
 `organization.suspended/reactivated`. Added (actor `member:<id>` from the product,
@@ -369,6 +387,8 @@ INSERT and SELECT only, with the insert policy widened from `access.%` to the li
 action families and still pinned to `member:%` actors (ADR-017).
 
 ## 17. Security review of the new surfaces
+
+> The SSRF row is **superseded by C4** (operator-registered private targets, not a `LATTICE_OUTBOUND_ALLOW` setting); the export row by **C8.3**.
 
 | Surface | Risk | Rule |
 | ------- | ---- | ---- |
@@ -460,7 +480,15 @@ Each checkpoint: backend and API work, frontend work, invariants, tests and non-
 as stated in the sections it references; checkpoint as-built notes are added here as
 each lands (as Phase 11 did).
 
-## 22. Decisions needing the product owner
+## 22. Decisions (as proposed on 2026-10-06)
+
+**Disposition (product owner, 2026-10-06):** D-28, D-30, D-31, D-33, D-35, D-37B
+approved; D-29 approved at the security-property level (recoverable credentials
+encrypted, verification-only secrets stay hashed — C3); D-32 approved with a storage
+abstraction (C8); D-36 approved with identity safety and least-access reinstatement
+(C2.3); D-34 and D-37A, left open, were then decided under the product owner's
+delegation (C6.4, C14.3), with corrections to D-31 and D-36 (C18). The options below are
+kept as proposed; Part II is the binding contract where they differ.
 
 **D-28 — Organization bootstrap.** A: operator creates the organization, its first
 OIDC connection and the first administrator's identity with one audited command; the
@@ -581,3 +609,613 @@ dialog).
   every dependency change.
 - External staging validation (phase-11-plan §21.1): unchanged; still a Phase 15 gate.
 - D-25's phase-11-plan wording "no Phase 12 UI" is superseded by this plan once approved.
+
+---
+
+# Part II — P12.0 contracts (2026-10-06)
+
+Binding for P12.1–P12.8. Where Part I's proposals differ, Part II wins. Each contract
+marks **current behaviour** (what the code does today) and the **Phase 12 target**.
+Decisions D-34 and D-37A, left open by the product owner, and the corrections to D-31
+and D-36 were decided by engineering **under the product owner's delegation
+(2026-10-06)**; each says so and gives its reasoning (C18).
+
+## C1. Platform boundary and organization bootstrap (D-28)
+
+| Platform operator (owner credential, audited commands) | Organization administrator (the product) |
+| ------------------------------------------------------ | ---------------------------------------- |
+| creates the tenant trust root: organization, initial settings, first OIDC connection, first administrator's membership and directory identity | everything after the first sign-in: identity settings, members, administrators, accounts, mappings, providers, credentials, egress (C6), sources, imports |
+| suspend / reactivate / (Phase 15) purge an organization; `data_origin`; outbound targets for private endpoints (C4); "all administrators lost"; the `--new-identity-namespace` connection replacement; deployment keys | — |
+
+**Command** (P12.1): `lattice org create --slug S --name N --issuer URL --client-id ID
+[--client-secret-ref env:… | --client-secret-stdin] [--subject-claim sub]
+--first-admin-email E --first-admin-identifier V [--first-admin-name …] --reason R`.
+
+- **One transaction**: organization, `org_settings` (defaults: external ceiling
+  `internal`, organization-controlled `NULL`, default sensitivity `internal`,
+  `data_origin = customer`), OIDC connection (new opaque `login_key`), a **new** user owned
+  by the organization, the membership (`is_admin = true`, clearance `internal`, scope
+  `assigned`, nothing else), the directory identity `(connection, external_id = V)`, and
+  `organization.created` + `sso.connection_created` + `access.member_changed` audit
+  events (actor `operator:cli`). All or nothing.
+- **Deterministic and safe on retry**: the slug is the idempotency key. Re-running with
+  identical arguments prints *already exists, unchanged* and writes nothing; any
+  difference is refused, naming the differing field, and changes nothing (no partial
+  update — later changes go through the product or `sso update`).
+- **Identities**: the first administrator is a new user of this organization even if the
+  e-mail exists in another one (users are organization-owned, D-20); nothing is linked
+  by e-mail; no membership is ever created from an e-mail match or at sign-in (no JIT).
+  The identifier `V` is the exact value of the connection's identifying claim for that
+  person (C2.1).
+- **Output**: the sign-in URL and the redirect URI to register; never a secret (a
+  `--client-secret-stdin` value is read from stdin, encrypted (C3) and never echoed);
+  the issuer must pass the outbound policy (C4) unless the operator also registers it as
+  a target.
+- **First administrator**: signs in at `/sso/<login key>`; that sign-in marks the
+  connection verified (C12). Until then the organization has no product access.
+
+## C2. Members and administrators
+
+### C2.1 Manual member creation (D-30)
+Fields (all required unless marked): **e-mail** (contact and display; unique per
+organization; never used to match a sign-in), **display name**, given/family name
+(optional), **identifier** — the exact value the active connection's identifying claim
+(`subject_claim`, shown on the form) carries for that person. Stored: a new organization
+user, a membership with the D-20 least-access defaults (clearance `internal`, scope
+`assigned`, no accounts, departments, groups, grants, not an administrator — the fenced
+function writes them; the request cannot carry access), and a directory identity
+`(connection_id, external_id = identifier, user_name = e-mail)`. The identifier is
+compared byte-for-byte after NFC normalisation and trimming, case preserved — when the
+claim is `email` it is still an identifier, not an e-mail match. Requires an active
+connection (otherwise *Blocked: connect identity first*). Refused (409, fixed code) if
+the identifier or the e-mail already belongs to a member of this organization; another
+organization's identities are invisible and irrelevant. Hand-added members are managed
+in the product (suspend/reactivate in Access); SCIM-created members stay IdP-managed. If
+SCIM later sends `POST /Users` with an `externalId` a hand-added member holds, the
+answer is SCIM `409 uniqueness`, recorded as `scim.request_refused` (C10) so the
+administrator sees it; nothing is adopted silently.
+
+### C2.2 Administrator capability (D-31, with the C18 correction)
+Granted or revoked for **another** member of the same organization by an administrator,
+through a preview ("administration grants no access to content"), a reason, the fenced
+function `lattice_set_admin` and one `access.member_changed` event. Refused: self-grant,
+self-revoke (D-17), a removed member, and any product action (revoke, suspend,
+reinstate-to-least-access of an admin is not a reduction) that would leave **zero active
+administrators** — the ADR-017 lock-then-count rule makes concurrent requests safe. The
+identity provider and operators are not bound by the last-admin rule (C18).
+
+### C2.3 Reinstating a removed member (D-36)
+- **Identity**: the original membership row and its **original directory identity**
+  `(connection_id, external_id)` are reactivated — found by membership ID, never by
+  e-mail. Refused if the directory identity's connection is not the organization's active
+  connection (a replaced namespace, D-37B) or if any other membership in the organization
+  now holds that identifier or e-mail (conflict, no duplicate is created). Identities are
+  organization-scoped: there is no cross-organization lookup to relink.
+- **Access: least access.** The fenced function resets clearance to `internal`, scope to
+  `assigned`, removes account assignments, departments, administrator-defined group
+  memberships and administrator grants, and never restores `is_admin`. Source-synced
+  group memberships follow the sources as always. The preview shows what the person had
+  ("Before removal: Confidential · 3 accounts · 2 groups") and that it is **not**
+  restored; the administrator re-grants through the normal Access change.
+- Sessions are not revived. One `access.member_changed` event with before/after.
+- SCIM after reinstatement: requests for that `externalId` resolve to the reinstated
+  identity (`filter externalId eq …`); a `POST` for it answers `409 uniqueness`; the IdP
+  stays authoritative for its later deactivation or removal.
+- **Operator `member reinstate` (P11.3) keeps restoring prior access**: it is the
+  incident-reversal path (e.g. an IdP that removed people in error). The difference is
+  deliberate and documented (C18).
+
+## C3. Secret model (D-29)
+
+### C3.1 Classes
+| Class | Examples | Storage | Recoverable |
+| ----- | -------- | ------- | ----------- |
+| **Recoverable credential** | OIDC client secret; generation-provider API key (Gemini); future connector credentials | encrypted at rest in PostgreSQL (`encrypted_secrets`) **or** an environment reference (`env:…`, unchanged) | yes, by the process that presents it |
+| **Verification-only secret** | SCIM bearer tokens; session tokens; OIDC `state`/binding values | one-way hash (SHA-256 of a 256-bit random token), shown once | no |
+| **Deployment secret** | database passwords, `LATTICE_CLIENT_KEY_SECRET`, the master keys below | the deployment's environment / platform secret store | n/a (operator) |
+
+Verification-only secrets never move into decryptable storage.
+
+### C3.2 Construction
+- **AEAD: AES-256-GCM** from `cryptography` (`cryptography.hazmat.primitives.ciphers.aead.AESGCM`;
+  already locked at 50.0.2 through `pyjwt[crypto]`, becomes a direct dependency in P12.1).
+  Chosen because it is a standard, audited AEAD with associated data, constant-time in
+  OpenSSL, and available without new services. Fernet was rejected (no associated data,
+  so a ciphertext could not be bound to its record). No custom construction.
+- **Nonce**: 96 bits from `os.urandom` per encryption, stored with the ciphertext; never
+  reused deliberately. Volume is tiny (a few writes per organization), far below the
+  2³² random-nonce bound per key.
+- **Associated data** (authenticated, not secret):
+  `"lattice-secret/v1" | organization_id | secret_id | owner_kind | owner_id | key_id`.
+  Moving a ciphertext to another organization, record or credential type fails
+  authentication.
+- **Row** `encrypted_secrets(id, organization_id, owner_kind, owner_id, key_id, nonce,
+  ciphertext, hint, created_at, destroyed_at)`; `hint` = the last four characters only
+  for provider keys whose format makes that non-sensitive (never for OIDC secrets).
+  Reference scheme **`vault:<secret_id>`** behind the existing `SecretStore` protocol;
+  `env:` and `memory:` stay. PostgreSQL is storage for ciphertext, not a secret manager.
+- **Plaintext** is accepted only by create/replace/rotate request models typed
+  `SecretStr`, encrypted before any write, never returned, and never in logs, traces,
+  audit payloads, URLs, metrics, caches or validation errors (422 bodies name the field,
+  never the value; secret routes' bodies are excluded from request logging). Status
+  (*set*, *rotated on*, *hint*, *last test*) is exposed; the value is not.
+
+### C3.3 Master keys
+- `LATTICE_SECRET_KEYS` = `id1:<base64 32 bytes>,id2:…` and `LATTICE_SECRET_ACTIVE_KEY`
+  = `id2`, provided by the deployment's environment; **never in PostgreSQL**, never in
+  images, never logged. Production refuses to start an API without them once any
+  `vault:` reference exists (check-deployment: every stored `key_id` is configured —
+  IDs compared, keys never read by the check).
+- **Lifecycle**: generated by the operator (`lattice secrets new-key` prints one, or
+  `openssl rand -base64 32`), stored in the platform's secret mechanism, **backed up
+  separately from the database** (a database restore without its key restores
+  credentials that cannot be decrypted: they must be re-entered).
+- **Master-key rotation**: add the new key, make it active, restart the API, run
+  `lattice secrets rekey` (re-encrypts every live ciphertext under the active key, one
+  `secret.rekeyed` operator event per organization with counts), verify, then remove the
+  old key. No downtime; old backups need the old key — keep it as long as those backups.
+- **Credential rotation** (administrator): a new `encrypted_secrets` row and a new
+  reference; the old row is destroyed (ciphertext set to `NULL`, `destroyed_at`). Live
+  data no longer holds it; backups do until they expire (C3.5).
+- **Revocation**: the credential's status `revoked` excludes it at the next request
+  (ADR-011) and its ciphertext is destroyed.
+
+### C3.4 Who may decrypt what
+| Process | Holds master keys | May decrypt | Why |
+| ------- | ----------------- | ----------- | --- |
+| api | yes | OIDC client secrets (token exchange at callback, test sign-in); generation-provider keys (Ask, provider test) | it presents them |
+| worker | **no** (no keys, no privilege on `encrypted_secrets`) | nothing | Phase 12 adds no live connector; embedding keys stay deployment environment values |
+| ops / operator commands | only for `secrets rekey` and `org create --client-secret-stdin` (encrypt) | rekey only | rotation |
+| migrate | no | nothing | — |
+| web | no | nothing; never receives plaintext after submission | — |
+| tests | a fixed test key | everything in test databases | — |
+
+### C3.5 Compromise cases
+- **Ciphertext stolen without the key** (database dump, backup, replica): values stay
+  confidential; tampering fails authentication. No action beyond the usual incident
+  procedure.
+- **Master key compromised** (with or without the ciphertext): treat every recoverable
+  credential as exposed — anyone holding a backup can decrypt it. Rotate the master key
+  *and* rotate every credential at its source (provider keys, OIDC client secrets);
+  re-keying alone is not enough. Runbook procedure in P12.1.
+- **API process compromised**: it holds keys and ciphertext — same as the `env:` model
+  today. Out of scope for encryption at rest by definition.
+- **Decryption/authentication failure** at use: fail closed with a fixed code
+  (`credential_unavailable` for providers → `evidence_only`; `sso_unavailable` for
+  sign-in), a `secret.decrypt_failed` log event with the secret ID and code (no value),
+  a metric; never a retry with another key ID, never a fallback to another credential.
+
+## C4. Outbound target policy (SSRF)
+
+One module (`lattice.outbound`) used for every request Lattice makes to a URL an
+administrator entered or a discovery document returned: OIDC discovery, JWKS, token
+endpoint; generation-provider endpoints; future connector endpoints.
+
+| Class | Allowed | Who registers |
+| ----- | ------- | ------------- |
+| **Public endpoint** (default for administrator-entered URLs) | `https` only; no userinfo, query or fragment in a base URL; port **443** unless the target is registered; every resolved address must be globally routable | the administrator, by entering the URL |
+| **Registered private target** (organization-controlled servers under D-15, a verification IdP) | the exact `scheme://host:port` the operator registered for that organization and purpose (`oidc`, `generation`) | operator: `lattice outbound allow --org --url --purpose --reason` (audited, `outbound.target_*`) |
+| **Deployment-local** (`local` trust class, e.g. loopback Ollama) | operator-configured only, as today | operator |
+
+- **Address rules** (Python `ipaddress`, not string matching): refuse loopback, private
+  (RFC 1918, `fc00::/7`), link-local (`169.254/16`, `fe80::/10`, incl. the cloud metadata
+  addresses), CGNAT `100.64/10`, multicast, unspecified, reserved/documentation ranges,
+  benchmarking `198.18/15`, and IPv4-mapped/compatible/NAT64/6to4 forms of any of these
+  (unwrapped before checking). IP literals are judged the same way.
+- **Resolve/connect consistency**: the check runs **at connect time** inside the HTTP
+  client's network backend (a custom `httpcore` backend): every address actually
+  connected to is checked, so DNS rebinding between a "check" and a "connect" cannot
+  pass. TLS verifies the hostname as usual.
+- **Redirects** are not followed (discovery, JWKS, token and provider calls do not need
+  them); a 3xx is an error code.
+- **Discovery documents**: `jwks_uri`, `token_endpoint` and `authorization_endpoint`
+  must be `https` and are subject to the same class as the issuer (a public issuer
+  cannot point Lattice at a private address). The authorization endpoint is only a
+  browser redirect but is validated anyway.
+- **Bounded**: 5 s connect, 10 s total, 1 MiB response cap; fixed error codes
+  (`target_not_public`, `target_unreachable`, `tls_failed`, `redirect_refused`,
+  `response_too_large`); never a response body, resolved address or timing detail in a
+  message.
+- **Current behaviour**: operator-entered URLs only, `https` (http for localhost)
+  enforced, no address policy. **Target**: the policy above for all outbound calls; the
+  existing operator-created connections with private issuers (the verification IdP)
+  receive registered targets in the P12.1 migration's runbook step.
+
+## C5. Identity setup (OIDC, SCIM) and D-37B
+
+- **OIDC in the product** (P12.4): add (when none is active), test sign-in, update client
+  ID and secret (rotation: new secret encrypted, old destroyed; sessions kept), change
+  issuer or identifying claim (separate action: preview "every session from this
+  connection ends", typed confirmation, reason — the P11.3 `--subjects-unchanged`
+  semantics), disable (preview: sign-in stops, *N* sessions end), re-enable. One active
+  connection per organization.
+- **Not in the product** (D-37B): replacing a connection with a new identity namespace or
+  migrating to an IdP whose subjects differ. The issuer-change dialog states it plainly:
+  *"Only for the same identity provider at a new address. Moving to a different identity
+  provider is not supported — contact your Lattice operator."* Post-v1.
+- **Test sign-in**: a sign-in flow with purpose `test` bound to the administrator's
+  session; on success it records `oidc_connections.last_success_at` and shows only the
+  administrator's own identifying-claim value and whether it matches their directory
+  identity; it creates no session.
+- **SCIM**: tokens created in the product (256-bit random, shown once in a dialog with
+  `Cache-Control: no-store`, stored as a SHA-256 hash), revoked with a preview; new
+  column `scim_tokens.last_used_at` (minute precision, written by the SCIM path);
+  rotation is create → switch the IdP → revoke. Provisioning activity = audit events by
+  `identity_provider` actors plus `scim.request_refused`. Users only (D-20).
+
+## C6. Providers and egress (D-34 — decided under delegation)
+
+### C6.1 Seven separate facts, never merged in UI or code
+1 credential exists · 2 credential test succeeded · 3 provider record approved for a
+level · 4 provider trust class · 5 organization egress ceiling for that class · 6 question
+sensitivity (D-13 default, raised per question) · 7 call-time authorization of each
+evidence item. Only the invocation rule combines them, at call time. A credential and a
+passing test change only facts 1–2 and never a cell of the egress lattice.
+
+### C6.2 Escalation defined
+A change is an **escalation** when the policy reading after it would allow some
+(level, provider) cell that the reading before it did not — computed by the same function
+that draws the egress lattice, on the Now and After configurations. Escalations include:
+raising the external or organization-controlled ceiling, setting the latter from `NULL`,
+approving a provider at a higher level, enabling a provider whose approved level is above
+what is allowed now, lowering the default question sensitivity. Anything else (lowering,
+disabling, revoking, renaming) is not, and applies at once.
+
+### C6.3 Options evaluated
+| | A — step-up | B — risk-tiered second admin | C — second admin for every raise |
+| - | ----------- | ---------------------------- | -------------------------------- |
+| Stolen session cookie alone | **insufficient** if step-up is a fresh IdP re-authentication | insufficient for high-risk tiers; sufficient for "small" raises (whose definition is itself a judgement) | insufficient |
+| Compromised IdP account of an admin | sufficient (also defeats every model for one admin's account; detectable) | needs a second compromised admin for high risk | needs a second |
+| One-admin organization | works | high-risk raises **impossible** without an operator | every raise impossible without an operator |
+| Phase 15 onboarding | the first admin completes setup alone | needs two admins before choosing an external provider | needs two admins |
+| Session architecture | an OIDC flow variant (`max_age=0`, `prompt=login`, `auth_time` check) bound to the session and the change | approval requests table, expiry, notification (none exists), self-approval rules | same as B |
+| Cost | small: one flow purpose, one grant table | medium–large | medium–large |
+| Audit | one event with the step-up time | request + approval + application events | same |
+
+### C6.4 Decision: **A, with a real step-up**
+High-impact = every escalation (C6.2). It requires, in order: the Now → After preview
+naming each newly allowed cell ("Confidential content may now be sent to Gemini (external
+API)"); a reason; typed confirmation of the organization's name; then a **fresh
+re-authentication at the identity provider**: an OIDC authorization request with
+`max_age=0` and `prompt=login`, `nonce` and PKCE as for sign-in, returning an ID token
+whose `auth_time` is at most 5 minutes old and whose identifying claim equals the
+caller's own directory identity. The callback creates a **single-use step-up grant**
+bound to the session, the member and the SHA-256 digest of the exact previewed change,
+valid for 5 minutes; `lattice_apply_egress_change` consumes it and refuses any other
+change. One `egress.levels_changed` / `provider.approval_changed` event records the
+change, reason and step-up time. Lowering is immediate and needs none of this.
+
+**Why it is secure enough against session compromise**: a stolen session cookie (or a
+browser left open) cannot complete the step-up without the person's IdP credentials and
+whatever MFA the IdP enforces at `prompt=login`; the grant is bound to one previewed
+change, one session and five minutes; CSRF protections already apply. Residual risk: an
+attacker with the administrator's IdP account — which already controls everything that
+administrator controls — is detected through the audit event and a new metric/alert
+(`lattice_egress_escalations_total`, ticket severity, P11.6 style). An IdP that ignores
+`max_age` is detected by the `auth_time` check (no fresh `auth_time` → refused,
+`step_up_not_fresh`).
+
+**One-admin organization**: fully self-sufficient. **Development**: the verification IdP
+honours `max_age`; the development persona sign-in cannot step up (escalations are
+refused in development unless `LATTICE_ENV=test`, where a test-only shortcut exists).
+**Implementation impact** (P12.5): `oidc_login_attempts.purpose` (`sign_in`, `test`,
+`step_up`) and `session_id`; `step_up_grants(id, organization_id, session_id,
+membership_id, change_digest, created_at, expires_at, consumed_at)`; the verification IdP
+emits `auth_time` and honours `max_age`; ADR-017's escalation function.
+
+## C7. Sources and supported types (D-33)
+
+| Name in the product | Connector type | It is | It is not |
+| ------------------- | -------------- | ----- | --------- |
+| **Documents (Markdown export)** | `document_repository` | Lattice's Markdown interchange format with YAML front matter for access | a Google Drive or Notion integration |
+| **Tickets (JSON Lines export)** | `ticketing` | Lattice's ticket interchange format, shaped like a Zendesk export | a Zendesk integration |
+| **Slack workspace export** | `chat_export` | Slack's own workspace export (a zip) | a live Slack integration |
+
+Release notes and policies are a Documents source with authority *system of record*.
+Every type is **export-based**: data arrives as an import (C8); syncs read the latest
+ready import; nothing is fetched from the source system. Format specifications are
+published in `connector-design.md` §3 (P12.6). No live connector in Phase 12; GitHub
+Issues is the first future candidate.
+
+Product operations (P12.6): create (type, name, key, defaults, authority,
+account-scoped), upload/replace an import, *Check import* (the dry-run pipeline: counts
+and codes only), first sync, edit safe settings, pause/resume (`paused`, refused
+requested syncs; content stays searchable), disconnect (the existing purge: preview with
+document and chunk counts, typed confirmation, reason). Connector type and key are
+immutable. A source configured by an operator file (`lattice sync --sources`) stays
+supported: re-running the file makes the source and its mappings match it again,
+audited as `operator:sync` (the seed precedent) — never silently.
+
+## C8. Imports and storage (D-32)
+
+### C8.1 Contract
+```
+ImportStore (protocol)          filesystem backend (P12.6)      future: object storage
+  begin(org_id, source_id)  →   <root>/<org_uuid>/<import_uuid>/archive.partial
+  append(import_id, bytes)      streamed, size-capped, SHA-256 as it arrives
+  seal(import_id) → digest
+  extract(import_id, limits)→   <root>/<org_uuid>/<import_uuid>/tree/   (validated)
+  tree(import_id) → read-only directory for the connector
+  delete(import_id)
+```
+Domain state never holds a path: `source_imports(id, organization_id, source_id,
+backend, status, size, sha256, entries, expanded_size, rejected_code, created_by,
+created_at, ready_at, superseded_at, deleted_at)`; `sources.config` holds
+`import_id` (the latest ready import) or `location_id`. The backend derives every
+location from the organization and import UUIDs it generated; no user-supplied name,
+filename or path reaches a host path, and no tenant is inferred from a path.
+
+**Operator-mounted folders** stay supported as `export_locations(id, organization_id,
+name, backend, location)` registered by `lattice source location add --org --name
+--path` (path validated under `LATTICE_EXPORT_LOCATIONS_ROOT`, audited); administrators
+pick a location by name, never type a path. Existing CLI-configured sources (absolute
+path recorded by `lattice sync`) keep working unchanged (current behaviour).
+
+### C8.2 Lifecycle
+`receiving → validating → ready | rejected`; `ready → superseded` when a newer import of
+the source becomes ready **and** a sync from it succeeded; `→ deleted` (files removed)
+for rejected imports at once, superseded imports after 7 days, and every import of a
+disconnected source. Deletion is done by the API on the transition and by an hourly
+worker retention task for anything left (the worker's imports mount is read-write for
+deletion only; the API's is read-write; the web has none). Uploaded files are never
+served back, never public, never executed (written `0640`, no execute bits, owned by
+the service user).
+
+### C8.3 Archive security
+Accepted: `.zip` (all types), a single `.jsonl` (tickets). Limits (configurable,
+defaults): upload ≤ 200 MiB compressed; expanded total ≤ 1 GiB; ≤ 50,000 entries; each
+file ≤ 100 MiB; per-entry compression ratio ≤ 100:1, checked while streaming (declared
+sizes are not trusted); path depth ≤ 16; each name ≤ 255 bytes, valid UTF-8. Refused:
+absolute paths, drive letters, `..` after normalisation, backslash separators, empty or
+`.`/`..` components, symlinks, hard links and device entries (zip external attributes),
+duplicate names (also case-insensitively), encrypted entries, nested archives (not
+expanded). Extraction is entry by entry with these checks — never `extractall`. A
+malformed archive is `rejected` with a fixed code (`archive_invalid`, `too_large`,
+`too_many_entries`, `ratio_exceeded`, `unsafe_path`, `link_refused`,
+`duplicate_name`, `unsupported_layout`) and its files are removed. The connector then
+reads the tree as it reads a local export today.
+
+### C8.4 Transport limits
+The global API body cap (64 KiB) and the ingress cap (1 MiB) stay; the single upload
+route (`POST /v1/admin/sources/{id}/imports`, streamed) has its own cap, and the ingress
+contract gains that one route-specific limit (deployment.md §4, P12.6). The reference
+stack mounts one `imports` volume read-write in api1, api2 and the worker.
+
+## C9. Source and import privacy
+
+Setup surfaces show operational metadata only: counts, codes, opaque references, sizes,
+digests, times, export structure counts (files, records). Never: message, ticket or
+document bodies; previews or snippets; file names from an import (they can be
+protected titles); private channel names; content-derived mapping suggestions — unless
+the existing authorization independently lets this administrator read that document
+(the Phase 8 rule for failure identifiers).
+
+## C10. Account mapping (`account_external_refs`)
+
+```
+account_external_refs(
+  id uuid PK, organization_id uuid NOT NULL,
+  source_id uuid NOT NULL,   FK (organization_id, source_id) → sources ON DELETE CASCADE
+  ref_kind text NOT NULL CHECK (ref_kind IN ('ticketing_organization', 'chat_channel')),
+  external_ref text NOT NULL CHECK (external_ref = btrim(external_ref) AND length 1..256),
+  account_id uuid NOT NULL,  FK (organization_id, account_id) → accounts ON DELETE RESTRICT
+  created_at, updated_at, created_by text
+  UNIQUE (organization_id, source_id, ref_kind, external_ref)
+)
+```
+- **Deterministic identifier**: the value the connector reports as `account_ref`
+  (ticketing organization ID as decimal text; Slack channel ID), normalised as
+  `external_id`s are (NFC, trimmed, case preserved). `ref_kind` must fit the source's
+  connector type (CHECK through the fenced function).
+- **Cardinality**: one reference → at most one account (the unique key); one account →
+  many references, across sources. Cross-organization mapping is impossible (composite
+  foreign keys, RLS).
+- **Sync**: ingestion reads the table instead of `sources.config`; behaviour unchanged —
+  an unmapped record of an account-scoped source is not indexed
+  (`access_unmappable:account`); a previously indexed record whose reference loses its
+  mapping is **quarantined** at the next sync (Phase 4 rule); a remap moves the
+  documents to the new account at the next sync (access update).
+- **Migration** (P12.3): `sources.config.account_refs` and `channels.*.account` move into
+  the table; channel *sensitivity* stays in source settings. The synthetic organizations
+  must index the same documents with the same accounts before and after (test).
+- **Source disconnected**: its mappings are deleted with it (cascade); the
+  `source.disconnected` event records how many. Accounts are untouched.
+- **Account status**: today `accounts.status` is `active`, `churned` or `prospect` and
+  has no effect anywhere (display only). Those three stay editable labels with no effect.
+  P12.3 widens the CHECK with **`archived`**, the only status with setup consequences,
+  set one-way by the product (un-archiving is operator-only).
+- **Account archived**: no new mappings or assignments may name it; existing mappings
+  keep resolving (its documents stay correctly scoped — removing them would quarantine
+  them); member assignments stay (archiving is not an access change); the Ask account
+  picker shows it as *archived*. Un-archiving is operator-only. Accounts are never
+  deleted by the product.
+- **Changes**: `account.mapping_changed` with before/after per reference, in the same
+  transaction (ADR-017 coupling).
+- **Unmapped references view**: from the latest run's `access_unmappable:account`
+  failures, grouped by reference: the reference value and the count of records waiting.
+  For chat sources the reference is the channel ID; the channel name is shown only for
+  public channels (`channels.json`), never for private ones (`groups.json`), regardless
+  of the viewer being an administrator (D-18). No suggestions from content or names.
+- Scoped Ask unchanged; the account timeline stays post-v1.
+
+## C11. Audit families
+
+Unchanged: `access.*` (incl. `access.member_changed` for hand-created members,
+reinstatement and administrator capability), `sso.connection_*`, `scim.token_*`,
+`provider.*`, `credential.*`, `egress.levels_changed`, `session.revoked`,
+`organization.suspended|reactivated`.
+
+| New action | Mutation | Actor |
+| ---------- | -------- | ----- |
+| `organization.created` | `lattice org create` | operator |
+| `organization.updated` | name; default question sensitivity | member |
+| `account.created` · `account.updated` · `account.archived` | account lifecycle | member / operator:sync |
+| `account.mapping_changed` | map, remap, unmap (before/after) | member / operator:sync |
+| `source.created` · `source.updated` · `source.paused` · `source.resumed` · `source.disconnected` | source lifecycle, from the product **and** from `lattice sync` / `source disconnect` | member / operator |
+| `source.import_accepted` · `source.import_rejected` | an import became ready / was rejected (size, digest, code — no names or content) | member |
+| `sso.connection_tested` | a test sign-in result, at most one event per connection per hour per outcome | member |
+| `scim.request_refused` | a SCIM request refused for a reason an administrator can act on (uniqueness, schema) — the SCIM error type only | identity_provider |
+| `outbound.target_added` · `outbound.target_removed` | operator registers a private target | operator |
+| `secret.rekeyed` | master-key rotation, per organization, counts | operator |
+
+Not audited: page views, form validation, *Check import*, provider tests (logged and
+counted, they change no trust state), failed step-up attempts beyond the existing
+sign-in metrics. Every new action is pinned to `member:` actors for `lattice_app`
+inserts (ADR-017); audit payloads never carry a secret, a path, a file name or content.
+
+## C12. Setup status (backend-owned)
+
+`GET /v1/admin/setup` (administrators) returns, for each category, `state`, `reason`,
+`message` (fixed text keyed by reason), `facts` (counts, times — never names of hidden
+resources) and `action` (`{kind: "link", href}` to the owning page, or `null` when only
+an operator can act). The frontend renders it; it never infers a state.
+
+States: `complete` · `required` · `optional` · `in_progress` · `attention` · `blocked`.
+
+| Category | State · reason (condition) |
+| -------- | -------------------------- |
+| `organization` | `complete·active` · `attention·single_administrator` (exactly one active admin) · `blocked·suspended` · `blocked·no_administrator` (zero active admins; action null: operator) |
+| `identity` | `required·no_connection` · `required·not_verified` (active, no `last_success_at`) · `complete·verified` · `attention·connection_disabled` · `attention·provider_unavailable` (last sign-in attempt `sso_unavailable` after the last success) |
+| `members` | `blocked·identity_required` · `required·only_administrators` (no active non-admin member) · `complete·members_active` |
+| `provisioning` | `optional·not_configured` · `optional·token_not_used_yet` · `complete·in_use` (an unrevoked token with `last_used_at`) · `attention·no_valid_token` (all revoked while IdP-managed members exist) |
+| `ai_policy` | `optional·evidence_only` (no enabled generation provider: answers show evidence without a written answer) · `complete·generation_ready` · `attention·credential_failed` (last test or last call `credential_unavailable`) · `attention·policy_excludes_default` (the provider is not allowed for the default question sensitivity) |
+| `sources` | `required·no_sources` · `required·awaiting_import` · `attention·import_rejected` · `in_progress·syncing` · `attention·sync_failed` (latest run `failed`) · `complete·synced` (≥ 1 active source with a `succeeded`/`partial` latest run) |
+| `accounts` | `optional·not_needed` (no account-scoped source, no channel mapping) · `attention·unmapped_references` (count) · `complete·mapped` |
+| `first_answer` | `blocked·sources_required` · `required·no_answer_yet` · `complete·answered` (≥ 1 trace `answered`/`partial`) |
+
+No percentage, score or celebration. Each reason has a test that builds its condition.
+
+## C13. Operator-only and post-v1
+
+**Operator-only in v1**: organization create, suspend, reactivate, purge (Phase 15),
+`data_origin`, un-archiving an account, outbound private targets, export locations,
+master keys and `secrets rekey`, `sso add --new-identity-namespace`, appointing an
+administrator when none is active, `member reinstate` with prior access (incident
+reversal), retention and deployment settings, embedding provider choice.
+
+**Post-v1**: live connectors (GitHub Issues first), IdP migration with differing
+subjects (D-37B), the account timeline workspace, SCIM `Groups`, multiple active IdPs per
+organization, self-service organizations, per-organization embedding models.
+
+## C14. Organization purge (D-37A — decided under delegation)
+
+### C14.1 What exists
+`audit_events` and every tenant table reference `organizations` with `ON DELETE
+CASCADE`; the audit trigger blocks `UPDATE` only. A `DELETE FROM organizations` as the
+owner would therefore erase the tenant **including its whole audit trail**, leaving no
+record that a purge happened; backups and the WAL archive would keep the data until they
+expire.
+
+### C14.2 Options
+- **A — implement in Phase 12** with the existing architecture: impossible coherently —
+  evidence that the purge happened must outlive the tenant, which needs a record outside
+  every tenant (a platform-level table), plus a stated backup-expiry commitment.
+- **B — define semantics now, build in Phase 15** (chosen).
+- **C — post-v1**: rejected; an enterprise v1 needs a way to honour "delete our data" at
+  contract end.
+
+### C14.3 Decision: **B**
+Executable purge is built in Phase 15 (GA closure: data-lifecycle commitments,
+fresh-environment and offboarding journeys). Until then **suspension** is the control
+(sign-in, SCIM, worker stopped; sessions revoked; P11.3), and runbook §2 says so.
+Semantics fixed now:
+1. Two operator steps: `org suspend` (existing) then `org purge --slug --confirm-slug
+   --reason` after a waiting period (default 7 days from suspension, overridable only
+   with an explicit flag).
+2. Before deletion: a **platform deletion record** is written — a new table outside
+   tenant scope, owner-written only, no RLS tenant, never readable by `lattice_app`:
+   organization ID, a keyed hash of the slug, requested/executed times, operator,
+   reason, per-table row counts. No content, names or identifiers of people. **This is
+   new architecture** (a cross-tenant record) to be recorded in a Phase 15 ADR.
+3. Deletion: the tenant's rows in dependency order (or the cascade) in one transaction,
+   then imports and export locations removed from storage, then encrypted secrets are
+   gone with their rows (no key change needed).
+4. Verification query: zero rows for the organization ID in every tenant table; the
+   result is stored on the deletion record.
+5. Backups/WAL: the deployment's backup retention is the stated outer bound ("deleted
+   from live systems at T, from backups by T + retention"); no backup surgery.
+6. Platform evidence = the deletion record + the operator's log; the tenant audit trail
+   is deleted with the tenant by design.
+
+## C15. Mismatches between code and docs (tracked)
+
+| Item | Historical | Current | Phase 12 target |
+| ---- | ---------- | ------- | --------------- |
+| D-16 "Phase 7 frontend builds the admin provider UX" | planned in Phase 5 closure | the Phase 7 page is **read-only** (product owner's instruction); configuration is CLI | P12.5 builds it; the register row is corrected (2026-10-06) |
+| Production organization creation | — | none: `seed` refuses production; runbook §9 starts after the organization exists | `lattice org create` (P12.1); runbook §1/§9 |
+| `sources.status = 'paused'` | allowed since 0005 | nothing sets it | pause/resume (P12.6) |
+| `account_external_refs` | deferred in connector-design §3.2 "until accounts are managed in Lattice" | mappings in `sources.config` JSON | the table (P12.3) |
+| `secrets.py`: "the database never holds a credential" | true since Phase 6 | true | becomes "never holds a credential in plaintext" when `vault:` lands (P12.1); ADR-011 amended |
+| phase-11-plan D-25: "backend/operator only, no Phase 12 UI" | Phase 11 scope note | — | superseded by this plan (identity UX in P12.4) |
+
+## C16. Answers to the P12.0 questions
+
+| # | Answer (section) |
+| - | ---------------- |
+| 1 | A platform operator, with `lattice org create` (C1) |
+| 2 | The operator binds the first admin's exact IdP identifier to a new membership in the bootstrap transaction; their first sign-in verifies the connection (C1) |
+| 3 | An admin supplies e-mail, name and the exact identifier; a fenced function creates it with least access (C2.1) |
+| 4 | The connection's `subject_claim` value, NFC-normalised and trimmed, case preserved, as `directory_identities.external_id` (C2.1) |
+| 5 | Any organization administrator, for another member (C2.2) |
+| 6 | An advisory lock per organization, count after the lock, refuse zero; a deferred trigger repeats it (ADR-017) |
+| 7 | OIDC client secrets, provider API keys, future connector credentials (C3.1) |
+| 8 | SCIM tokens, session tokens, OIDC state/binding values (C3.1) |
+| 9 | `encrypted_secrets` in PostgreSQL as AES-256-GCM ciphertext, referenced as `vault:<id>` (C3.2) |
+| 10 | AEAD confidentiality and integrity, binding to organization/record/type/key via associated data, random 96-bit nonces, key IDs (C3.2) |
+| 11 | The deployment environment / platform secret store, never PostgreSQL (C3.3) |
+| 12 | Values stay confidential; tampering fails closed (C3.5) |
+| 13 | All recoverable credentials are exposed: rotate the key and every credential at its source (C3.5) |
+| 14 | Master key: add, activate, `secrets rekey`, retire. Credential: new row, old destroyed (C3.3) |
+| 15 | API decrypts OIDC and provider secrets; worker, web, migrate none; ops only to rekey (C3.4) |
+| 16 | Streamed upload to the API → import store under generated IDs → validated tree → the worker reads it by import ID (C8) |
+| 17 | `ImportStore` + `source_imports`; domain state holds IDs, never paths (C8.1) |
+| 18 | Entry-by-entry extraction with the C8.3 limits and refusals |
+| 19 | C10 |
+| 20 | Its mappings are deleted with it; accounts stay (C10) |
+| 21 | No new mappings/assignments; existing ones keep resolving (C10) |
+| 22 | Private channels by ID only; no names from imports; counts and codes only (C9, C10) |
+| 23 | The ADR-017 operation table |
+| 24 | Column grants, restrictive policies, fenced functions and audit-coupling triggers; no broad grant or setup role (ADR-017) |
+| 25 | C11 |
+| 26 | Same membership and original `(connection, externalId)`; never by e-mail; conflicts refused (C2.3) |
+| 27 | Least access; `is_admin` never restored (C2.3) |
+| 28 | Product data only, per C12's conditions |
+| 29 | Documents (Markdown export), Tickets (JSON Lines export), Slack workspace export (C7) |
+| 30 | All three (C7) |
+| 31 | The C4 policy, enforced at connect time |
+| 32 | Only as operator-registered private targets (C4) |
+| 33 | A: fresh IdP re-authentication bound to the exact change (C6.4) |
+| 34 | A stolen session cannot pass the IdP re-authentication; the grant is single-use, change-bound and short (C6.4) |
+| 35 | It works with one admin (C6.4); the last-admin rule protects it from product lock-out (C2.2) |
+| 36 | B: semantics now, executable purge in Phase 15 (C14) |
+| 37 | Phase 15: it needs a platform deletion record and backup-expiry commitments that belong to GA (C14) |
+| 38 | Tenant audit is deleted with the tenant; a platform deletion record outlives it (C14) |
+| 39 | C13 |
+| 40 | C13 |
+
+## C17. Checkpoint changes from Part I
+
+- P12.1 adds: `encrypted_secrets` + `vault:` scheme, master-key checks and `secrets
+  rekey`; the outbound policy module and `outbound_targets`; `org create`; setup status.
+- P12.2 uses C2 (least-access reinstatement, last-admin rule bound to product actions).
+- P12.5 adds the step-up flow and grants (C6.4).
+- P12.6 uses the import store (C8) and the C8.4 route limit.
+- P12.8 no longer contains organization purge (C14: Phase 15).
+
+## C18. Review of the approved decisions (engineering, 2026-10-06)
+
+The product owner asked for each decision to be checked. Result:
+
+| Decision | Verdict | Note |
+| -------- | ------- | ---- |
+| D-28 | sound | Practical cost: the operator must obtain the first administrator's exact IdP identifier from the customer (easy with an `email` claim, a lookup with an opaque `sub`). Kept; documented in the runbook |
+| D-29 | sound | Two additions: associated data includes the owning record (so a ciphertext cannot be moved between records), and the master key must be backed up **separately** — a restore without it loses recoverable credentials (they are re-entered) |
+| D-30 | sound | Risk: an administrator who types another person's identifier binds that person to the record; contained by uniqueness per connection, the test sign-in mismatch message and the audit event. Mixed SCIM/manual conflicts answer SCIM 409 (C2.1) |
+| D-31 | **corrected** | "Never suspend/remove the last active administrator" cannot bind the identity provider or operators: a departed last administrator must lose access. The invariant binds product actions; IdP/operator reductions to zero leave the organization in `blocked·no_administrator` until an operator appoints one (ADR-017, C12) |
+| D-32 | sound | Needs a route-specific upload limit at the ingress and a read-write imports volume for the API and (deletion only) the worker — deployment-contract changes (C8.4) |
+| D-33 | sound | — |
+| D-34 | **decided: A with IdP step-up** | B and C make one-admin organizations depend on an operator and need an approval subsystem; a step-up that is only "session age" would not stop a stolen cookie, so A is specified as a real IdP re-authentication (C6.4) |
+| D-35 | sound | — |
+| D-36 | sound, **with a documented divergence** | Least-access reinstatement is right for re-hire. The existing operator `member reinstate` restores prior access and stays that way as the incident-reversal path; both are documented so the difference is intentional, not accidental |
+| D-37A | **decided: B (Phase 15)** | Coherent purge evidence needs a new platform-level record — architecture that belongs with GA data-lifecycle commitments, not onboarding |
+| D-37B | sound | The issuer-change UI states the limitation (C5) |

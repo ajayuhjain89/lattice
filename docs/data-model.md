@@ -192,6 +192,9 @@ dimension and a core query dimension ("What did we promise Acme?").
 `account_assignments(organization_id, membership_id, account_id, assigned_at)` —
 which accounts an `assigned`-scope member can see.
 
+*Not built (Phase 0 draft; as built, mappings live in `sources.config`). Phase 12 target
+(P12.3): the table as contracted in phase-12-plan C10, with `ref_kind`, a composite
+source FK (cascade) and an account FK (restrict); `accounts.status` gains `archived`.*
 `account_external_refs(organization_id, account_id, source_id, external_ref)` — maps
 e.g. a ticketing "organization id" or a Slack channel to an account. UQ
 (organization_id, source_id, external_ref). Unmapped references on account-scoped
@@ -248,7 +251,7 @@ the organization's `sources.yaml` (Lattice-side configuration, `lattice.sources.
 | default_sensitivity | enum    | AUTHZ   | **Required** (`internal` or `confidential`). Applied when a record carries no sensitivity |
 | account_scoped      | bool    | ACCT    | If true, every record must map to an account or it is not indexed |
 | authority           | enum    | AUTH-R  | Default authority for records: `system_of_record`, `working`, `conversational` |
-| status              | enum    | DEL     | `active`, `paused`, `deleting` (a `deleting` source refuses syncs) |
+| status              | enum    | DEL     | `active`, `paused`, `deleting` (a `deleting` source refuses syncs). *Current:* nothing sets `paused`. *Phase 12 target:* pause/resume from the product (P12.6) |
 | opaque_ref_key      | bytea   | DBG     | 32 random bytes keying the opaque references of its failures (security-model §10). Never displayed |
 | last_synced_at, last_succeeded_at, acl_synced_at | timestamptz? | DBG, FRESH | Last run; last fully successful run; last run that applied the source's access state |
 

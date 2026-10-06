@@ -487,7 +487,7 @@ tables, never content.
 
 | Class | Data | Rule (deleted when) | Database floor | Deletes it |
 | ----- | ---- | ------------------- | -------------- | ---------- |
-| Durable security record | `audit_events` | never by retention (append-only, UPDATE refused by trigger); removed only with its organization (Phase 12) | no DELETE privilege for any runtime role | nobody |
+| Durable security record | `audit_events` | never by retention (append-only, UPDATE refused by trigger); removed only with its organization (executable purge: Phase 15, D-37A) | no DELETE privilege for any runtime role | nobody |
 | Identity and configuration tombstones | `directory_identities`, removed memberships, `scim_tokens`, `oidc_connections`, `provider_credentials` history | kept for the organization's life (D-20 terminal removal relies on them) | no privilege | nobody |
 | User history (content-bearing) | `query_traces` | created more than `LATTICE_TRACE_RETENTION_DAYS` ago (worker setting, default **90**, minimum 90) | **90 days**: a shorter retention needs a migration and a product decision (per-organization retention is Phase 12) | worker |
 | Operational history | `jobs` (finished) | finished more than 30 days ago | 30 days | worker |

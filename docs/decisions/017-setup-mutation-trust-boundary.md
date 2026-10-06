@@ -1,0 +1,110 @@
+# ADR-017: Organization setup mutations by the API role, fenced per operation
+
+Status: **Accepted as the P12.0 contract (2026-10-06). Not implemented** — built
+checkpoint by checkpoint from P12.1 (phase-12-plan Part II).
+
+## Context
+
+Phase 12 lets organization administrators configure what operators configured until
+now: organization settings, members and the administrator capability, accounts and
+source-reference mappings, the OIDC connection, SCIM tokens, providers and their
+credentials, egress ceilings, sources and their imports.
+
+Today `lattice_app` can only **read** `organizations`, `org_settings`, `accounts`,
+`sources`, `model_providers`, `provider_credentials` and `oidc_connections`, cannot see
+`scim_tokens`, cannot set `memberships.is_admin`, and may insert only `access.*` audit
+events as a `member:` actor (privilege snapshot, migrations 0012/0013). That narrowness
+is a security property: a compromised API process today cannot make an administrator,
+reconfigure identity, redirect a sync or widen egress.
+
+The options for giving the product these writes:
+
+1. **A privileged setup role** used by the API for setup routes. Rejected: the API would
+   hold both credentials, so a compromise holds both; and one broad role makes every
+   setup table writable in every column.
+2. **Broad grants to `lattice_app`** (table `INSERT/UPDATE`). Rejected: arbitrary SQL from
+   a compromised API could set any column — a ceiling, a secret reference, a source path.
+3. **Per-operation fences**, the ADR-014 discipline extended: column-level grants plus
+   restrictive policies where a direct write is safe; `SECURITY DEFINER` functions where a
+   transition has invariants the database must check itself (concurrency, cross-row
+   rules); audit coupling enforced by deferred constraint triggers (the 0013 pattern).
+
+## Decision
+
+Option 3. Every Phase 12 write is one of the operations in the table below; nothing
+else becomes writable. The privilege snapshot records each one, and
+`tests/test_app_role_access.py` pins it.
+
+### Mechanisms
+
+- **Restricted direct write** — `INSERT`/`UPDATE` on named columns only, under the
+  tenant RLS policy, with a restrictive policy for value rules (e.g. a status
+  transition). Used where the rule is per row.
+- **Fenced function** — a `SECURITY DEFINER` function owned by `lattice_owner` (search
+  path pinned, input validated, `EXECUTE` for `lattice_app` only) for transitions whose
+  invariant spans rows or needs a lock: the last-administrator rule, member creation
+  with its directory identity, mapping replacement, egress escalation with a step-up
+  grant. The table itself stays unwritable for those columns.
+- **Audit coupling** — a deferred constraint trigger on each fenced table refuses to
+  commit a `lattice_app` write unless the same transaction (`audit_events.txid =
+  txid_current()`) inserted the matching event for the same subject (the 0013
+  mechanism). The audit insert policy is widened from `access.%` to the families of
+  phase-12-plan C10 and stays pinned to `actor LIKE 'member:%'`; `audit_events` stays
+  append-only (UPDATE trigger, no DELETE privilege).
+- Every operation also passes the code checks: the administrator capability before any
+  read (E7), optimistic `version`/`updated_at` concurrency (409), and a reason.
+
+### Operations
+
+| Table / object | Operation (API role) | Mechanism | Never |
+| -------------- | -------------------- | --------- | ----- |
+| `organizations` | rename | `UPDATE (name, updated_at)` | slug, status, create, delete |
+| `org_settings` | default question sensitivity raise; ceilings lower | restricted direct write (restrictive policy: the new value is not less restrictive) | `data_origin` |
+| `org_settings` | ceiling raise, default sensitivity lower (escalation) | fenced function `lattice_apply_egress_change(change, …)` which consumes a single-use step-up grant from a fresh identity-provider re-authentication bound to the exact change (D-34, phase-12-plan C6.4) | direct escalation |
+| `memberships` | create a member by hand (with `users`, `directory_identities`) | fenced function `lattice_create_member` (least-access defaults written by the function, identifier unique per connection) | choosing access at creation |
+| `memberships.is_admin` | grant / revoke for another member | fenced function `lattice_set_admin` (§"Last administrator") | self, last active admin |
+| `memberships.status` | suspend / reactivate (non-provisioned), reinstate removed (D-36) | existing restrictive policy extended; reinstatement via fenced function `lattice_reinstate_member` (resets access, D-36) | `removed` by the API; suspending/demoting the last active admin |
+| `accounts` | create, rename, aliases, archive | `INSERT (key, name, aliases)`, `UPDATE (name, aliases, status, updated_at)`; restrictive policy: status among `active`/`churned`/`prospect`/`archived`, never out of `archived` (C10) | delete, un-archive by the API (operator) |
+| `account_external_refs` | map, remap, unmap | fenced function `lattice_set_account_ref` (one reference → one account, archived target refused) | direct writes |
+| `oidc_connections` | add (none active), update client ID/secret, issuer/claim change, disable, enable | `INSERT`/`UPDATE` of named columns; disable/issuer change through fenced function `lattice_change_connection` which revokes the connection's sessions in the same transaction (P11.3 semantics, the advisory lock) | `login_key`, deleting, a second active connection, `--new-identity-namespace` (operator) |
+| `scim_tokens` | create (hash only), revoke | `INSERT (organization_id, connection_id, token_hash)`, `UPDATE (revoked_at)` | reading hashes back, un-revoking |
+| `model_providers` | configure, enable, disable, approve level | `INSERT`/`UPDATE` of named columns; an approval *raise* only through the egress fenced function (it can widen egress) | `deployment` change of an existing record (refused today too) |
+| `provider_credentials` | set, rotate, revoke (metadata + reference) | `INSERT`, `UPDATE (status, revoked_at, last_test_at, last_test_code)` | the secret value (it is never in this table) |
+| `encrypted_secrets` | store ciphertext, destroy | `INSERT`, `UPDATE (ciphertext → NULL, destroyed_at)` (ADR-011 amendment; phase-12-plan C3) | reading plaintext (there is none in the database) |
+| `sources` | create, edit safe columns, pause/resume, disconnect request | `INSERT`/`UPDATE (name, default_sensitivity, default_departments, authority, account_scoped, status, config.channel_settings, import_id)`; restrictive policy: `connector_type` and `key` immutable, status transitions `active ⇄ paused`, `→ deleting` | arbitrary `config`, a host path |
+| `source_imports` | register an upload, mark validated/rejected/superseded | `INSERT`/`UPDATE (status, counts, digest)`; storage location derived from IDs, never a column the API writes as a path | paths |
+| `outbound_targets` | — (operator only) | — | API writes |
+| `step_up_grants` | create on step-up callback, consume | fenced functions in the OIDC callback and the egress function | — |
+
+`lattice_worker` gains only `SELECT` on `account_external_refs` and `source_imports` (to
+resolve mappings and an import's tree by ID). `lattice_auth` is unchanged except the
+step-up callback lookup. No RLS policy is weakened or removed.
+
+### Last administrator under concurrency
+
+Every transition that can reduce an organization's active administrators — revoking
+`is_admin`, suspending, removing, organization-admin demotion — runs in a fenced
+function (product) or an operator command that first takes
+`pg_advisory_xact_lock(<org admin-set key>)`, then counts active administrators **after**
+taking the lock (a new statement under READ COMMITTED sees every transaction that
+committed before the lock was granted), and refuses if the result would be zero. A
+deferred constraint trigger on `memberships` takes the same lock and re-counts for any
+`lattice_app` write that changes `is_admin` or `status`, so even a direct statement that
+slipped past the functions cannot commit a zero-admin organization from the product.
+
+The invariant binds **product actions only**. The identity provider (SCIM deactivation or
+removal of the last administrator) and operator commands may reduce the count to zero:
+a person who left must lose access even if they were the last administrator. The
+organization's setup record then shows *No active administrator* and only an operator can
+appoint one (runbook §9, "all administrators lost").
+
+## Consequences
+
+- A compromised API process can do what a compromised administrator session can do
+  through the product — and no more: it cannot set arbitrary columns, write a host path,
+  read a secret's plaintext from the database, bypass the last-admin rule, escalate egress
+  without a fresh identity-provider re-authentication (D-34), or rewrite the audit trail.
+- Each operation is listed in the privilege snapshot; adding one is a migration plus a
+  snapshot change reviewed like any other privilege change.
+- The event's actor and reason are still written by the API and not authenticated by the
+  database (unchanged residual risk from ADR-014).

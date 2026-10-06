@@ -560,3 +560,31 @@ refuses; parallel requests never exceed a limit (conditional upsert on a locked 
 every role is limited, administrators included, and no setting disables a limit (each
 must be ≥ 1); the only metric label is the bucket name; no address, identifier or
 content is logged or stored.
+
+## 12. Phase 12 setup surfaces — contracts, not implemented
+
+Status: decided in P12.0 (2026-10-06, [phase-12-plan](phase-12-plan.md) Part II and
+[ADR-017](decisions/017-setup-mutation-trust-boundary.md)); **none of this is built yet**.
+Everything above describes current behaviour.
+
+- **Mutation boundary.** Administrator setup writes go through per-operation fences
+  (column grants, restrictive policies, `SECURITY DEFINER` functions, audit-coupling
+  triggers); no setup role and no broad grant. The last-administrator rule binds product
+  actions under concurrency (ADR-017).
+- **Secrets.** Recoverable credentials entered by administrators are stored encrypted
+  (AES-256-GCM, associated data binding organization, record, type and key; master keys
+  only in the deployment environment); verification-only secrets stay hashed; only the
+  API decrypts, and only OIDC client secrets and generation-provider keys (C3).
+- **Egress.** Separate facts — credential, test, approval, trust class, ceiling,
+  question sensitivity, per-evidence authorization — never merge; a credential or a
+  passing test never widens egress. Any escalation needs a fresh IdP re-authentication
+  bound to the exact change (D-34, C6).
+- **Outbound requests.** Administrator-entered and discovery-returned URLs pass one
+  outbound policy enforced at connect time; private targets only when an operator
+  registered them (C4).
+- **Imports.** Uploaded exports are validated archives in an organization-scoped store
+  addressed by generated IDs, never paths; never served back or executed (C8).
+- **Administrators are not content readers** on setup surfaces either: counts, codes and
+  opaque references; private channel names, file names and content never shown; no
+  content-derived mapping suggestions (C9, C10).
+

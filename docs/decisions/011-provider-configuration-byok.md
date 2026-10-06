@@ -215,3 +215,19 @@ adapter (Phase 6). The architecture above is what they must implement.
   never on which keys happen to be present.
 - Phase 6 inherits one decision function for generation instead of inventing a second
   policy.
+
+## Amendment (2026-10-06, Phase 12 P12.0): custody of administrator-entered secrets (D-29)
+
+*Historical:* Phase 6 built the reference model (`env:`/`memory:` references; the database
+holds only a reference). Phase 7 shipped the provider page **read-only** by the product
+owner's instruction, so the "Phase 7 frontend" UX described above was not built.
+*Current:* unchanged — values come only from the deployment environment.
+*Phase 12 target (decided, not implemented):* recoverable credentials an administrator
+enters (provider API keys, OIDC client secrets) may be stored **encrypted at rest** in
+PostgreSQL — AES-256-GCM from `cryptography`, associated data binding each ciphertext to
+its organization, record, credential type and key ID, master keys only in the
+deployment's environment — as another `SecretStore` backend (`vault:<id>`); `env:`
+references stay supported. Verification-only secrets (SCIM tokens) stay hashed. The
+sentence "the database holds only a reference" becomes "the database never holds a
+credential in plaintext". Contract: phase-12-plan C3; mutation path: ADR-017. The admin
+UX this ADR assigned to Phase 7 is built in Phase 12 (P12.5).
