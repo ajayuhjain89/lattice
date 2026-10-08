@@ -1,10 +1,10 @@
-"""Secret management for organization-owned provider credentials (D-16, ADR-011).
+"""Secret management for organization-owned credentials (D-16, D-29, ADR-011).
 
-The database never holds a credential. A provider credential row
-(``provider_credentials``) holds a **secret reference**: a string naming where the
-value lives, resolved by a ``SecretStore`` only at invocation time, only after the
-invocation rule (``lattice.providers.egress``) has already allowed the call. A
-credential is necessary, never sufficient: nothing here is an egress input.
+The database never holds a credential **in plaintext**. A credential row
+(``provider_credentials``, ``oidc_connections``) holds a **secret reference**: a string
+naming where the value lives, resolved by a ``SecretStore`` only at invocation time,
+only after the invocation rule (``lattice.providers.egress``) has already allowed the
+call. A credential is necessary, never sufficient: nothing here is an egress input.
 
 Reference schemes:
 
@@ -15,10 +15,12 @@ Reference schemes:
   reference to any other variable -- a database URL, a session secret -- is refused,
   so a stored reference can never make a provider adapter send another secret of this
   process to a third party.
+* ``vault:<secret id>`` -- a recoverable credential encrypted at rest in
+  ``encrypted_secrets`` (AES-256-GCM, ``lattice.vault``; phase-12-plan C3). The caller
+  loads the sealed row with its own binding (organization, its record's ID, the kind of
+  credential it needs) and passes it as ``sealed``; the store opens it with the
+  deployment's master keys (``Keyring``). A store without keys cannot open anything.
 * ``memory:NAME`` -- an in-process store (tests only; refused in production).
-
-A production secret manager (Vault, a cloud secret manager) is another scheme behind
-the same ``SecretStore`` Protocol; nothing that calls it changes.
 
 Values are ``SecretStr`` end to end: never in ``repr``, logs, traces, prompts, API
 responses or exception text. Every failure is a ``SecretUnavailable`` with a fixed code
@@ -33,21 +35,16 @@ from typing import Final, Protocol
 
 from pydantic import SecretStr
 
+from lattice.vault.errors import SecretUnavailable as SecretUnavailable
+from lattice.vault.keys import Keyring
+from lattice.vault.sealing import SealedSecret, open_sealed, vault_secret_id
+
 _ENV_NAME: Final = re.compile(r"LATTICE_PROVIDER_SECRET_[A-Z0-9_]{1,64}")
 LEGACY_ENV_NAMES: Final = frozenset(
     {"LATTICE_GEMINI_API_KEY", "GEMINI_API_KEY", "LATTICE_OPENAI_API_KEY"}
 )
 _MEMORY_NAME: Final = re.compile(r"[a-z0-9][a-z0-9_.-]{0,63}")
-SCHEMES: Final = ("env", "memory")
-
-
-class SecretUnavailable(Exception):
-    """A reference could not be resolved. ``code`` is fixed: ``invalid_reference``,
-    ``scheme_not_allowed``, ``missing``, ``empty``. Never the value or the name."""
-
-    def __init__(self, code: str) -> None:
-        super().__init__(code)
-        self.code = code
+SCHEMES: Final = ("env", "memory", "vault")
 
 
 def parse_reference(reference: str) -> tuple[str, str]:
@@ -60,15 +57,18 @@ def parse_reference(reference: str) -> tuple[str, str]:
         raise SecretUnavailable("invalid_reference")
     if scheme == "memory" and not _MEMORY_NAME.fullmatch(name):
         raise SecretUnavailable("invalid_reference")
+    if scheme == "vault" and vault_secret_id(reference) is None:
+        raise SecretUnavailable("invalid_reference")
     return scheme, name
 
 
 class SecretStore(Protocol):
-    def resolve(self, reference: str) -> SecretStr:
-        """The secret, or ``SecretUnavailable``."""
+    def resolve(self, reference: str, sealed: SealedSecret | None = None) -> SecretStr:
+        """The secret, or ``SecretUnavailable``. ``sealed``: the loaded row of a
+        ``vault:`` reference, bound by the caller (``lattice.vault.records``)."""
         ...
 
-    def available(self, reference: str) -> bool:
+    def available(self, reference: str, sealed: SealedSecret | None = None) -> bool:
         """Whether ``resolve`` would succeed -- the masked "connected" state, without
         exposing anything about the value."""
         ...
@@ -77,13 +77,21 @@ class SecretStore(Protocol):
 @dataclass
 class EnvironmentSecretStore:
     """``env:`` references over a mapping (the process environment by default).
-    ``memory:`` references resolve only when ``memory`` is given (tests)."""
+    ``memory:`` references resolve only when ``memory`` is given (tests); ``vault:``
+    references only with a ``keyring`` (the API and operator tools, C3.4)."""
 
     environ: Mapping[str, str] = field(default_factory=lambda: os.environ)
     memory: dict[str, SecretStr] | None = None
+    keyring: Keyring | None = field(default=None, repr=False)
 
-    def resolve(self, reference: str) -> SecretStr:
+    def resolve(self, reference: str, sealed: SealedSecret | None = None) -> SecretStr:
         scheme, name = parse_reference(reference)
+        if scheme == "vault":
+            if self.keyring is None:
+                raise SecretUnavailable("scheme_not_allowed")
+            if sealed is None or reference != f"vault:{sealed.binding.secret_id}":
+                raise SecretUnavailable("missing")
+            return open_sealed(self.keyring, sealed)
         if scheme == "memory":
             if self.memory is None:
                 raise SecretUnavailable("scheme_not_allowed")
@@ -100,9 +108,9 @@ class EnvironmentSecretStore:
             raise SecretUnavailable("empty")
         return SecretStr(raw.strip())
 
-    def available(self, reference: str) -> bool:
+    def available(self, reference: str, sealed: SealedSecret | None = None) -> bool:
         try:
-            self.resolve(reference)
+            self.resolve(reference, sealed)
         except SecretUnavailable:
             return False
         return True

@@ -1374,3 +1374,43 @@ export const PREVIEW_MIXED: S["AccessPreview"] = {
   documents_gained: 7,
   documents_lost: 3,
 };
+
+// --- organization setup (Phase 12, P12.1) -------------------------------------------------
+
+const SETUP_ORGANIZATION: S["SetupOrganization"] = {
+  slug: "halden",
+  name: "Halden",
+  status: "active",
+  data_origin: "synthetic",
+  version: "2026-10-08T09:00:00.000000Z",
+};
+
+/** A freshly created organization: the operator's trust root, nothing else yet. */
+export const SETUP_FRESH: S["SetupStatus"] = {
+  organization: SETUP_ORGANIZATION,
+  categories: [
+    { key: "organization", state: "attention", reason: "single_administrator", message: "One active administrator. If they leave, only your Lattice operator can appoint another; a second administrator avoids that.", facts: { active_administrators: 1 }, action: null },
+    { key: "identity", state: "required", reason: "not_verified", message: "The identity provider is connected but nobody has signed in through it yet. The first successful sign-in verifies it.", facts: { connection: "active", last_success_at: null, last_failure_at: null }, action: null },
+    { key: "members", state: "required", reason: "only_administrators", message: "Only administrators are members so far. People join when your identity provider provisions them (SCIM) or when your Lattice operator adds them.", facts: { active_members: 1, active_administrators: 1 }, action: null },
+    { key: "provisioning", state: "optional", reason: "not_configured", message: "Automatic provisioning (SCIM) is not set up. It is optional; your Lattice operator issues the provisioning token.", facts: { live_tokens: 0, provisioned_members: 0 }, action: null },
+    { key: "ai_policy", state: "optional", reason: "evidence_only", message: "No generation provider is enabled: answers show their evidence without a written answer.", facts: { provider: null, model: null, default_question_sensitivity: "internal" }, action: { kind: "link", href: "/settings/providers", label: "View AI providers" } },
+    { key: "sources", state: "required", reason: "no_sources", message: "No source is connected yet.", facts: { connected_sources: 0, synced_sources: 0, failed_sources: 0, syncing_sources: 0 }, action: null },
+    { key: "accounts", state: "optional", reason: "not_needed", message: "No source maps records to accounts, so no account mapping is needed.", facts: { account_sources: 0, unmapped_references: 0 }, action: null },
+    { key: "first_answer", state: "blocked", reason: "sources_required", message: "The first question can be asked once a source has synced.", facts: { answered: false }, action: null },
+  ],
+};
+
+/** An organization in use, with two items that need attention. */
+export const SETUP_IN_USE: S["SetupStatus"] = {
+  organization: SETUP_ORGANIZATION,
+  categories: [
+    { key: "organization", state: "complete", reason: "active", message: "The organization is active and has more than one administrator.", facts: { active_administrators: 2 }, action: null },
+    { key: "identity", state: "complete", reason: "verified", message: "Sign-in through the identity provider works.", facts: { connection: "active", last_success_at: "2026-10-08T08:41:07Z", last_failure_at: null }, action: null },
+    { key: "members", state: "complete", reason: "members_active", message: "Members other than administrators are active.", facts: { active_members: 14, active_administrators: 2 }, action: { kind: "link", href: "/access", label: "Review access" } },
+    { key: "provisioning", state: "complete", reason: "in_use", message: "The identity provider provisions members.", facts: { live_tokens: 1, provisioned_members: 12 }, action: null },
+    { key: "ai_policy", state: "attention", reason: "credential_failed", message: "The generation provider's credential is missing or cannot be used: answers fall back to evidence only.", facts: { provider: "gemini", model: "gemini-3.5-flash-lite", default_question_sensitivity: "internal" }, action: { kind: "link", href: "/settings/providers", label: "View AI providers" } },
+    { key: "sources", state: "complete", reason: "synced", message: "At least one source has synced.", facts: { connected_sources: 3, synced_sources: 3, failed_sources: 0, syncing_sources: 0 }, action: { kind: "link", href: "/sources", label: "Open Sources" } },
+    { key: "accounts", state: "attention", reason: "unmapped_references", message: "Records reference accounts that are not mapped, and are not indexed until they are.", facts: { account_sources: 1, unmapped_references: 2 }, action: { kind: "link", href: "/sources", label: "See unmapped references" } },
+    { key: "first_answer", state: "complete", reason: "answered", message: "Members have received answers.", facts: { answered: true }, action: null },
+  ],
+};

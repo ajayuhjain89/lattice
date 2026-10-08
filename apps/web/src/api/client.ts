@@ -28,8 +28,11 @@ import type {
   MembersPage,
   MemberSourcesResponse,
   OperationalActivityResponse,
+  OrganizationChange,
+  SetupOrganization,
   OwnActivityResponse,
   ProvidersResponse,
+  SetupStatus,
   SyncJob,
   Trace,
 } from "./types";
@@ -97,6 +100,9 @@ export const api = {
     ),
   providers: (signal?: AbortSignal) =>
     call<ProvidersResponse>(() => http.GET("/v1/admin/providers", { signal })),
+  setup: (signal?: AbortSignal) => call<SetupStatus>(() => http.GET("/v1/admin/setup", { signal })),
+  renameOrganization: (body: OrganizationChange) =>
+    call<SetupOrganization>(() => http.PATCH("/v1/admin/organization", { body })),
   sources: (signal?: AbortSignal) =>
     call<MemberSourcesResponse>(() => http.GET("/v1/sources", { signal })),
   adminSources: (signal?: AbortSignal) =>

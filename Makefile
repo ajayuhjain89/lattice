@@ -168,7 +168,11 @@ prod-env: ## Generate deploy/.env.reference: random local-only passwords and dri
 	  VERIFY_OIDC_CLIENT_SECRET_NEXT VERIFY_IDP_ADMIN_TOKEN; do \
 	  grep -q "^$$name=" $(REFERENCE_ENV) || { echo "$$name=$$(openssl rand -hex 24)" >> $(REFERENCE_ENV); \
 	    echo "added $$name to $(REFERENCE_ENV)"; }; \
-	done
+	done; \
+	grep -q "^LATTICE_SECRET_KEYS=" $(REFERENCE_ENV) || { \
+	  echo "LATTICE_SECRET_KEYS=reference-1:$$(openssl rand -base64 32)" >> $(REFERENCE_ENV); \
+	  echo "LATTICE_SECRET_ACTIVE_KEY=reference-1" >> $(REFERENCE_ENV); \
+	  echo "added LATTICE_SECRET_KEYS and LATTICE_SECRET_ACTIVE_KEY to $(REFERENCE_ENV)"; }
 
 prod-build: ## Build lattice-backend:local and lattice-web:local, labelled with the git revision
 	docker build -f backend/Dockerfile --build-arg LATTICE_BUILD_REVISION=$(REVISION) -t lattice-backend:local .

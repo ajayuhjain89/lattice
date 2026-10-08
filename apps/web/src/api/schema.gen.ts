@@ -221,6 +221,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/admin/organization": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Rename the organization, with a reason (administrators; audited)
+     * @description `version` must be the organization's current version (409 otherwise). Requires the X-Lattice-Request: 1 header.
+     */
+    patch: operations["patch_organization_v1_admin_organization_patch"];
+    trace?: never;
+  };
   "/v1/admin/providers": {
     parameters: {
       query?: never;
@@ -230,6 +250,23 @@ export interface paths {
     };
     /** The organization's AI egress settings and provider configuration (masked) */
     get: operations["get_providers_v1_admin_providers_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/setup": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** The organization's setup record, derived by the backend (administrators) */
+    get: operations["get_setup_v1_admin_setup_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1719,6 +1756,18 @@ export interface components {
       /** Items */
       items: components["schemas"]["OperationalActivityOut"][];
     };
+    /** OrganizationChange */
+    OrganizationChange: {
+      /** Name */
+      name: string;
+      /** Reason */
+      reason: string;
+      /**
+       * Version
+       * Format: date-time
+       */
+      version: string;
+    };
     /** OrganizationOut */
     OrganizationOut: {
       /**
@@ -1854,6 +1903,70 @@ export interface components {
       started_at: string;
       /** Status */
       status: string;
+    };
+    /** SetupAction */
+    SetupAction: {
+      /** Href */
+      href: string;
+      /**
+       * Kind
+       * @constant
+       */
+      kind: "link";
+      /** Label */
+      label: string;
+    };
+    /** SetupCategory */
+    SetupCategory: {
+      action: components["schemas"]["SetupAction"] | null;
+      /** Facts */
+      facts: {
+        [key: string]: number | boolean | string | null;
+      };
+      /**
+       * Key
+       * @enum {string}
+       */
+      key:
+        | "organization"
+        | "identity"
+        | "members"
+        | "provisioning"
+        | "ai_policy"
+        | "sources"
+        | "accounts"
+        | "first_answer";
+      /** Message */
+      message: string;
+      /** Reason */
+      reason: string;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "complete" | "required" | "optional" | "in_progress" | "attention" | "blocked";
+    };
+    /** SetupOrganization */
+    SetupOrganization: {
+      /** Data Origin */
+      data_origin: string;
+      /** Name */
+      name: string;
+      /** Slug */
+      slug: string;
+      /** Status */
+      status: string;
+      /**
+       * Version
+       * Format: date-time
+       */
+      version: string;
+    };
+    /** SetupStatus */
+    SetupStatus: {
+      /** Categories */
+      categories: components["schemas"]["SetupCategory"][];
+      organization: components["schemas"]["SetupOrganization"];
     };
     /** Supersession */
     Supersession: {
@@ -2730,6 +2843,75 @@ export interface operations {
       };
     };
   };
+  patch_organization_v1_admin_organization_patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OrganizationChange"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SetupOrganization"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   get_providers_v1_admin_providers_get: {
     parameters: {
       query?: never;
@@ -2746,6 +2928,44 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ProvidersResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_setup_v1_admin_setup_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SetupStatus"];
         };
       };
       /** @description Unauthorized */

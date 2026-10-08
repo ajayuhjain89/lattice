@@ -1,7 +1,8 @@
 # ADR-017: Organization setup mutations by the API role, fenced per operation
 
-Status: **Accepted as the P12.0 contract (2026-10-06). Not implemented** — built
-checkpoint by checkpoint from P12.1 (phase-12-plan Part II).
+Status: **Accepted as the P12.0 contract (2026-10-06).** Built checkpoint by checkpoint
+from P12.1 (phase-12-plan Part II); **P12.1 (2026-10-08) built the first fence and the
+foundations** — see "Implemented in P12.1" at the end.
 
 ## Context
 
@@ -108,3 +109,33 @@ appoint one (runbook §9, "all administrators lost").
   snapshot change reviewed like any other privilege change.
 - The event's actor and reason are still written by the API and not authenticated by the
   database (unchanged residual risk from ADR-014).
+
+## Implemented in P12.1 (2026-10-08, migration 0016)
+
+Only what P12.1 needs; every other row of the table above is still a contract.
+
+- **`organizations` rename** — `GRANT UPDATE (name, updated_at)` to `lattice_app`, a
+  restrictive `FOR UPDATE` policy (`status = 'active'`), a name CHECK for every writer,
+  and the deferred constraint trigger `trg_organizations_setup_audit` running
+  `lattice_require_setup_audit(action, target key, subject column, organization
+  column)`: a generalisation of 0013's access trigger (same `txid` coupling, same
+  SECURITY INVOKER, fires only for `lattice_app`) that later fences reuse. The API path
+  (`PATCH /v1/admin/organization`) checks the capability first, the version (409) and a
+  reason, and writes the event in the same transaction.
+- **Audit insert policy** widened by exactly one action: `organization.updated` from
+  `member:` actors. Everything else in C11 waits for its checkpoint.
+- **`encrypted_secrets`** — `lattice_app` has `SELECT` only (it opens what it presents);
+  the `INSERT`/destroy rows of the table above come with the administrator credential UX
+  (P12.4/P12.5); operators write in P12.1. `lattice_auth` gained `SELECT (key_id,
+  destroyed_at)` and owns `lattice_secret_key_ids()` (IDs of live ciphertext across
+  organizations; EXECUTE for `lattice_app` and `lattice_owner`) — a small addition to
+  "`lattice_auth` is unchanged" above, needed for the start-up key check (C3.3).
+- **`outbound_targets`** — operator only, as in the table; no runtime role has any
+  privilege yet (the API will read it when it makes administrator-entered outbound calls).
+- **Reads for the setup record** — `lattice_app` may read `oidc_connections.last_success_at`
+  / `last_failure_at` (and set them at sign-in: sign-in facts, not setup writes, so not
+  audited) and `scim_tokens` without `token_hash`.
+
+The privilege snapshot records each change; `tests/test_app_role_access.py`,
+`tests/test_rls.py`, `tests/test_auth_role.py`, `tests/test_worker_role.py` and
+`tests/test_setup_status.py` pin them.

@@ -231,3 +231,19 @@ references stay supported. Verification-only secrets (SCIM tokens) stay hashed. 
 sentence "the database holds only a reference" becomes "the database never holds a
 credential in plaintext". Contract: phase-12-plan C3; mutation path: ADR-017. The admin
 UX this ADR assigned to Phase 7 is built in Phase 12 (P12.5).
+
+### Implemented in P12.1 (2026-10-08)
+
+The `vault:<id>` backend exists: `encrypted_secrets` (migration 0016), `lattice.vault`
+(keyring from `LATTICE_SECRET_KEYS` / `LATTICE_SECRET_ACTIVE_KEY`, AES-256-GCM sealing with
+the associated data above, `secrets rekey`). The `SecretStore` protocol gained an optional
+`sealed` argument: the caller loads the row with the binding *it* expects (its
+organization, its own record's ID, the credential kind it needs) and the store opens it
+only with keys; a store without keys refuses `vault:` (`scheme_not_allowed`). Writers in
+P12.1 are operator commands (`provider credential set --value-stdin`, `org create
+--client-secret-stdin`, `sso update --client-secret-stdin`); the administrator UX stays
+P12.5. Process access as verified on the call graph: the API opens OIDC client secrets
+(token exchange) and generation-provider keys (after the invocation rule); the worker
+presents no organization credential (its embedding provider is a deployment setting), so
+it holds no keys and has no privilege on the rows. **The database never holds a credential
+in plaintext** — and never a master key.

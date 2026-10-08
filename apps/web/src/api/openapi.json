@@ -3220,6 +3220,35 @@
         "title": "OperationalActivityResponse",
         "type": "object"
       },
+      "OrganizationChange": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "reason"
+        ],
+        "title": "OrganizationChange",
+        "type": "object"
+      },
       "OrganizationOut": {
         "properties": {
           "id": {
@@ -3550,6 +3579,162 @@
           "error_code"
         ],
         "title": "RunOut",
+        "type": "object"
+      },
+      "SetupAction": {
+        "properties": {
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "kind": {
+            "const": "link",
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "href",
+          "label"
+        ],
+        "title": "SetupAction",
+        "type": "object"
+      },
+      "SetupCategory": {
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "facts": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Facts",
+            "type": "object"
+          },
+          "key": {
+            "enum": [
+              "organization",
+              "identity",
+              "members",
+              "provisioning",
+              "ai_policy",
+              "sources",
+              "accounts",
+              "first_answer"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "complete",
+              "required",
+              "optional",
+              "in_progress",
+              "attention",
+              "blocked"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "state",
+          "reason",
+          "message",
+          "facts",
+          "action"
+        ],
+        "title": "SetupCategory",
+        "type": "object"
+      },
+      "SetupOrganization": {
+        "properties": {
+          "data_origin": {
+            "title": "Data Origin",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "status",
+          "data_origin",
+          "version"
+        ],
+        "title": "SetupOrganization",
+        "type": "object"
+      },
+      "SetupStatus": {
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/SetupCategory"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/SetupOrganization"
+          }
+        },
+        "required": [
+          "organization",
+          "categories"
+        ],
+        "title": "SetupStatus",
         "type": "object"
       },
       "Supersession": {
@@ -4810,6 +4995,88 @@
         ]
       }
     },
+    "/v1/admin/organization": {
+      "patch": {
+        "description": "`version` must be the organization's current version (409 otherwise). Requires the X-Lattice-Request: 1 header.",
+        "operationId": "patch_organization_v1_admin_organization_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupOrganization"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Rename the organization, with a reason (administrators; audited)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/providers": {
       "get": {
         "operationId": "get_providers_v1_admin_providers_get",
@@ -4846,6 +5113,47 @@
           }
         },
         "summary": "The organization's AI egress settings and provider configuration (masked)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/setup": {
+      "get": {
+        "operationId": "get_setup_v1_admin_setup_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "summary": "The organization's setup record, derived by the backend (administrators)",
         "tags": [
           "admin"
         ]

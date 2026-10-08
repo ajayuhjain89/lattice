@@ -186,4 +186,7 @@ async def test_openapi_documents_the_error_envelope(client: httpx.AsyncClient) -
         # Phase 10 (SCIM is outside the OpenAPI document: SCIM discovers itself)
         "/v1/auth/oidc/{login_key}/start",
         "/v1/auth/oidc/{login_key}/callback",
+        # Phase 12 (P12.1)
+        "/v1/admin/setup",
+        "/v1/admin/organization",
     }

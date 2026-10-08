@@ -70,6 +70,10 @@ APP_TABLES = {
     # lattice_pre_auth_hit (lattice_auth).
     "ask_slots": {"SELECT", "INSERT", "DELETE"},
     "pre_auth_rate_limits": set(),
+    # Phase 12 (P12.1, 0016): ciphertext the API opens to present a credential; private
+    # outbound targets are operator-only.
+    "encrypted_secrets": {"SELECT"},
+    "outbound_targets": set(),
 }
 # Column-level privileges (table-level ones above).
 COLUMN_PRIVILEGES = {
@@ -92,8 +96,26 @@ COLUMN_PRIVILEGES = {
     ("oidc_login_attempts", "UPDATE"): {"consumed_at"},
     ("rate_limit_counters", "UPDATE"): {"window_start", "count"},
     ("ask_slots", "UPDATE"): {"lease_id", "expires_at"},
-    # 0014: the session-creation check reads the connection's status only (D-25).
-    ("oidc_connections", "SELECT"): {"id", "organization_id", "status"},
+    # 0014: the session-creation check reads the connection's status only (D-25);
+    # 0016: and the setup record's sign-in facts, which sign-in writes.
+    ("oidc_connections", "SELECT"): {
+        "id",
+        "organization_id",
+        "status",
+        "last_success_at",
+        "last_failure_at",
+    },
+    ("oidc_connections", "UPDATE"): {"last_success_at", "last_failure_at"},
+    # 0016: the provisioning setup record -- never token_hash.
+    ("scim_tokens", "SELECT"): {
+        "id",
+        "organization_id",
+        "connection_id",
+        "created_at",
+        "revoked_at",
+    },
+    # 0016: rename (ADR-017), audit-coupled.
+    ("organizations", "UPDATE"): {"name", "updated_at"},
 }
 RLS_REFUSED = r"row-level security"
 

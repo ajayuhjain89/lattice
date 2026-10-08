@@ -17,13 +17,14 @@ import {
 
 import { api, MEMBERS_PAGE } from "./client";
 import { isApiError } from "./errors";
-import type { AdminSourcesResponse, AskRequest, MemberChange, MemberChangeRequest } from "./types";
+import type { AdminSourcesResponse, AskRequest, MemberChange, MemberChangeRequest, OrganizationChange } from "./types";
 
 export const queryKeys = {
   me: ["me"] as const,
   evidence: (id: string) => ["evidence", id] as const,
   trace: (id: string) => ["trace", id] as const,
   providers: ["admin", "providers"] as const,
+  setup: ["admin", "setup"] as const,
   sources: ["sources"] as const,
   adminSources: ["admin", "sources"] as const,
   sourceFailures: (id: string) => ["admin", "sources", id, "failures"] as const,
@@ -97,6 +98,28 @@ export function useProviders(enabled: boolean) {
     queryFn: ({ signal }) => api.providers(signal),
     enabled,
     ...REAUTHORIZED,
+  });
+}
+
+/** The setup record: derived by the API on every read, never cached across visits. */
+export function useSetup(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.setup,
+    queryFn: ({ signal }) => api.setup(signal),
+    enabled,
+    ...REAUTHORIZED,
+  });
+}
+
+/** Rename the organization; the setup record and the masthead (/v1/me) are read again. */
+export function useRenameOrganization() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: OrganizationChange) => api.renameOrganization(body),
+    onSettled: () => Promise.all([
+      client.invalidateQueries({ queryKey: queryKeys.setup }),
+      client.invalidateQueries({ queryKey: queryKeys.me }),
+    ]),
   });
 }
 

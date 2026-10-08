@@ -23,6 +23,10 @@ Flow (``OidcSignIn``):
    membership and user are active. No just-in-time creation, no e-mail linking, no other
    organization consulted. Anything else is one generic failure.
 
+Sign-in facts (P12.1, C12): a successful sign-in records the connection's
+``last_success_at`` (the setup record's "verified"); a failure on the provider's side or
+of the client secret records ``last_failure_at``. Timestamps only, at most once a minute.
+
 Network bounds: timeouts, no redirects followed, responses capped at 256 KiB, HTTPS
 required in production. Discovery and keys are cached per issuer for ten minutes (public
 data); an unknown key ID refreshes the keys at most once a minute. Nothing from the
@@ -50,10 +54,13 @@ import jwt
 from jwt import PyJWK
 from pydantic import SecretStr
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from lattice import metrics
 from lattice.db.engine import Database
 from lattice.log import log_event
+from lattice.providers.secrets import SecretStore, SecretUnavailable
+from lattice.vault.records import load_sealed
 
 logger = logging.getLogger(__name__)
 
@@ -79,15 +86,27 @@ ALGORITHMS: Final = {
 _SECRET_REF: Final = re.compile(r"^env:(LATTICE_OIDC_SECRET_[A-Z0-9_]{1,64})$")
 _TOKEN: Final = re.compile(r"^[A-Za-z0-9_-]{43,128}$")
 _CONNECTION_SQL = text("SELECT * FROM lattice_oidc_connection(:k)")
+_FROM_REFERENCE: Final = object()
+# The setup record's sign-in facts are written at most once a minute per connection.
+_SUCCESS_SQL = text(
+    "UPDATE oidc_connections SET last_success_at = now() WHERE organization_id = :o "
+    "AND id = :c AND (last_success_at IS NULL OR last_success_at < now() - interval '1 minute')"
+)
+_FAILURE_SQL = text(
+    "UPDATE oidc_connections SET last_failure_at = now() WHERE organization_id = :o "
+    "AND id = :c AND (last_failure_at IS NULL OR last_failure_at < now() - interval '1 minute')"
+)
 
 
 class OidcFailure(Exception):
     """A sign-in that did not succeed. ``outcome`` is a fixed code (metrics, logs);
     the user sees one of three generic messages (``public_error``)."""
 
-    def __init__(self, outcome: str) -> None:
+    def __init__(self, outcome: str, *, status_code: int | None = None) -> None:
         super().__init__(outcome)
         self.outcome = outcome
+        # The provider's HTTP status when it answered with an error (never shown).
+        self.status_code = status_code
 
     @property
     def public_error(self) -> str:
@@ -149,7 +168,8 @@ def safe_return_to(value: str | None) -> str:
 
 def resolve_client_secret(reference: str | None) -> SecretStr | None:
     """``env:LATTICE_OIDC_SECRET_<NAME>`` only: an OIDC reference can never name a
-    provider credential, the database URL or any other secret of this process."""
+    provider credential, the database URL or any other secret of this process.
+    (``vault:`` references are opened by ``OidcSignIn``, which reads the ciphertext.)"""
     if reference is None:
         return None
     found = _SECRET_REF.fullmatch(reference)
@@ -202,7 +222,7 @@ class OidcClient:
                     if len(body) > MAX_RESPONSE_BYTES:
                         raise OidcFailure("provider_error")
                 if response.status_code != 200:
-                    raise OidcFailure("provider_error")
+                    raise OidcFailure("provider_error", status_code=response.status_code)
         except httpx.HTTPError:
             raise OidcFailure("provider_error") from None
         try:
@@ -261,6 +281,7 @@ class OidcClient:
         code: str,
         verifier: str,
         redirect_uri: str,
+        client_secret: object = _FROM_REFERENCE,
     ) -> str:
         form = {
             "grant_type": "authorization_code",
@@ -268,9 +289,13 @@ class OidcClient:
             "redirect_uri": redirect_uri,
             "code_verifier": verifier,
         }
-        secret = resolve_client_secret(connection.client_secret_ref)
+        secret = (
+            resolve_client_secret(connection.client_secret_ref)
+            if client_secret is _FROM_REFERENCE
+            else client_secret
+        )
         auth: httpx.BasicAuth | None = None
-        if secret is None:
+        if not isinstance(secret, SecretStr):
             form["client_id"] = connection.client_id
         else:
             auth = httpx.BasicAuth(connection.client_id, secret.get_secret_value())
@@ -350,10 +375,57 @@ class OidcClient:
 
 
 class OidcSignIn:
-    def __init__(self, db: Database, client: OidcClient, *, web_origin: str) -> None:
+    def __init__(
+        self,
+        db: Database,
+        client: OidcClient,
+        *,
+        web_origin: str,
+        secrets: SecretStore | None = None,
+    ) -> None:
         self._db = db
         self._client = client
         self._web_origin = web_origin
+        # Opens vault: client secrets (the API holds the master keys, C3.4).
+        self._secrets = secrets
+
+    async def _client_secret(self, connection: Connection) -> SecretStr | None:
+        """The client secret to present, from its env: reference or its vault:
+        ciphertext bound to this connection; ``provider_error`` when unavailable."""
+        reference = connection.client_secret_ref
+        if reference is None or not reference.startswith("vault:"):
+            return resolve_client_secret(reference)
+        if self._secrets is None:
+            raise OidcFailure("provider_error")
+        async with self._db.tenant_snapshot(connection.organization_id) as session:
+            sealed = await load_sealed(
+                session,
+                reference,
+                organization_id=connection.organization_id,
+                owner_kind="oidc_client_secret",
+                owner_id=connection.id,
+            )
+        try:
+            return self._secrets.resolve(reference, sealed)
+        except SecretUnavailable:
+            raise OidcFailure("provider_error") from None
+
+    async def _record(
+        self, organization_id: uuid.UUID, connection_id: uuid.UUID, *, succeeded: bool
+    ) -> None:
+        """Best effort: a sign-in fact for the setup record (never fails a sign-in)."""
+        try:
+            async with self._db.tenant_transaction(organization_id) as session:
+                await session.execute(
+                    _SUCCESS_SQL if succeeded else _FAILURE_SQL,
+                    {"o": organization_id, "c": connection_id},
+                )
+        except (SQLAlchemyError, OSError):
+            log_event(logger, logging.WARNING, "auth.oidc.fact_not_recorded")
+
+    async def record_success(self, organization_id: uuid.UUID, connection_id: uuid.UUID) -> None:
+        """Called once the session exists: the connection is verified (C1, C12)."""
+        await self._record(organization_id, connection_id, succeeded=True)
 
     def redirect_uri(self, login_key: str) -> str:
         return f"{self._web_origin}/api/v1/auth/oidc/{login_key}/callback"
@@ -376,7 +448,12 @@ class OidcSignIn:
 
     async def start(self, login_key: str, return_to: str | None) -> Started:
         connection = await self._connection(login_key)
-        metadata = await self._client.metadata(connection.issuer)
+        try:
+            metadata = await self._client.metadata(connection.issuer)
+        except OidcFailure as failure:
+            if failure.outcome == "provider_error":
+                await self._record(connection.organization_id, connection.id, succeeded=False)
+            raise
         state = secrets.token_urlsafe(32)
         nonce = secrets.token_urlsafe(32)
         verifier = secrets.token_urlsafe(64)
@@ -463,14 +540,23 @@ class OidcSignIn:
             raise OidcFailure("invalid_state")
         if provider_error or code is None or not 1 <= len(code) <= 2048:
             raise OidcFailure("provider_error")
-        metadata = await self._client.metadata(connection.issuer)
-        id_token = await self._client.exchange(
-            metadata,
-            connection,
-            code=code,
-            verifier=attempt.code_verifier,
-            redirect_uri=self.redirect_uri(login_key),
-        )
+        try:
+            metadata = await self._client.metadata(connection.issuer)
+            secret = await self._client_secret(connection)
+            id_token = await self._client.exchange(
+                metadata,
+                connection,
+                code=code,
+                verifier=attempt.code_verifier,
+                redirect_uri=self.redirect_uri(login_key),
+                client_secret=secret,
+            )
+        except OidcFailure as failure:
+            # A 400 from the token endpoint is a bad or reused code -- anyone can send one
+            # with their own flow -- not the provider's fault: it never marks the record.
+            if failure.outcome == "provider_error" and failure.status_code != 400:
+                await self._record(connection.organization_id, connection.id, succeeded=False)
+            raise
         claims = await self._client.verify(id_token, metadata, connection, nonce=attempt.nonce)
         subject = claims.get(connection.subject_claim)
         if not isinstance(subject, str) or not 1 <= len(subject) <= 255:

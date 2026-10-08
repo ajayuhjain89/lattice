@@ -17,6 +17,7 @@ import {
   PREVIEW_ADD_KESTREL,
   NOT_FOUND,
   PROVIDERS,
+  SETUP_FRESH,
   SOURCES_ADMIN,
   SOURCES_MEMBER,
   TRACE_ADMIN,
@@ -57,6 +58,10 @@ export interface MockOptions {
   devLogin?: { status: number; body: unknown; headers?: Record<string, string> };
   /** The audit log, or a function of the `before` cursor (keyset paging). */
   audit?: S["AuditPage"] | ((before: string | null) => S["AuditPage"]);
+  /** The setup record (GET /v1/admin/setup). */
+  setup?: S["SetupStatus"] | "forbidden" | "fault";
+  /** Answer for PATCH /v1/admin/organization (default: 200 with the new name). */
+  rename?: (body: S["OrganizationChange"]) => { status: number; body: unknown };
 }
 
 export interface MockLog {
@@ -69,6 +74,7 @@ export interface MockLog {
   evidence: string[];
   traces: string[];
   headers: Record<string, string>[];
+  renames: S["OrganizationChange"][];
 }
 
 const json = (route: Route, status: number, body: unknown, headers: Record<string, string> = {}) =>
@@ -91,6 +97,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     evidence: [],
     traces: [],
     headers: [],
+    renames: [],
   };
   let adminSourceReads = 0;
   const forbidden = (route: Route) =>
@@ -151,6 +158,20 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
       return p === "forbidden"
         ? json(route, 403, { error: { code: "permission_denied", message: "You don't have permission to do this.", request_id: "req-403" } })
         : json(route, 200, p);
+    }
+    if (path === "/v1/admin/setup" && method === "GET") {
+      const setup = options.setup ?? SETUP_FRESH;
+      if (setup === "forbidden") return forbidden(route);
+      if (setup === "fault") return json(route, 500, { error: { code: "internal_error", message: "Something went wrong.", request_id: "req-500" } });
+      return json(route, 200, setup);
+    }
+    if (path === "/v1/admin/organization" && method === "PATCH") {
+      const body = request.postDataJSON() as S["OrganizationChange"];
+      log.renames.push(body);
+      const answer = options.rename?.(body);
+      if (answer) return json(route, answer.status, answer.body);
+      const current = options.setup && typeof options.setup === "object" ? options.setup : SETUP_FRESH;
+      return json(route, 200, { ...current.organization, name: body.name, version: "2026-10-08T09:05:00.000000Z" });
     }
     if (path === "/v1/sources" && method === "GET") return json(route, 200, options.sources ?? SOURCES_MEMBER);
     if (path === "/v1/admin/sources" && method === "GET") {

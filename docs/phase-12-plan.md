@@ -1,12 +1,12 @@
 # Phase 12 — Organization Setup, Identity Configuration & Integrations: plan
 
-Status: **Plan approved (2026-10-06). P12.0 (contracts, Part II) written; nothing is
-implemented.** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
+Status: **Plan approved (2026-10-06). P12.0 (contracts, Part II) written; P12.1
+(foundations) implemented 2026-10-08 (Part III).** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
 D-28–D-33, D-35, D-36 and D-37B are approved (§22, with the contracts of Part II);
 D-34 (raising egress ceilings: IdP step-up, C6) and D-37A (organization purge: semantics
 now, executable purge in Phase 15, C14) were decided by engineering under the product
-owner's delegation, as were corrections to D-31 and D-36 (C18). P12.1 waits for the
-product owner's go-ahead.
+owner's delegation, as were corrections to D-31 and D-36 (C18). **P12.1 delivered
+(2026-10-08, local commit; Part III).** P12.2 waits for the product owner's go-ahead.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 12. Phase 11
 is closed (143392f); real external staging validation stays deferred and remains a
@@ -1142,10 +1142,10 @@ Semantics fixed now:
 | Item | Historical | Current | Phase 12 target |
 | ---- | ---------- | ------- | --------------- |
 | D-16 "Phase 7 frontend builds the admin provider UX" | planned in Phase 5 closure | the Phase 7 page is **read-only** (product owner's instruction); configuration is CLI | P12.5 builds it; the register row is corrected (2026-10-06) |
-| Production organization creation | — | none: `seed` refuses production; runbook §9 starts after the organization exists | `lattice org create` (P12.1); runbook §1/§9 |
+| Production organization creation | — | **built (P12.1):** `lattice org create`; runbook §9 | — |
 | `sources.status = 'paused'` | allowed since 0005 | nothing sets it | pause/resume (P12.6) |
 | `account_external_refs` | deferred in connector-design §3.2 "until accounts are managed in Lattice" | mappings in `sources.config` JSON | the table (P12.3) |
-| `secrets.py`: "the database never holds a credential" | true since Phase 6 | true | becomes "never holds a credential in plaintext" when `vault:` lands (P12.1); ADR-011 amended |
+| `secrets.py`: "the database never holds a credential" | true since Phase 6 | **changed (P12.1):** "never holds a credential in plaintext" (`vault:` built) | — |
 | phase-11-plan D-25: "backend/operator only, no Phase 12 UI" | Phase 11 scope note | — | superseded by this plan (identity UX in P12.4) |
 
 ## C16. Answers to the P12.0 questions
@@ -1219,3 +1219,66 @@ The product owner asked for each decision to be checked. Result:
 | D-36 | sound, **with a documented divergence** | Least-access reinstatement is right for re-hire. The existing operator `member reinstate` restores prior access and stays that way as the incident-reversal path; both are documented so the difference is intentional, not accidental |
 | D-37A | **decided: B (Phase 15)** | Coherent purge evidence needs a new platform-level record — architecture that belongs with GA data-lifecycle commitments, not onboarding |
 | D-37B | sound | The issuer-change UI states the limitation (C5) |
+
+---
+
+# Part III — As built
+
+## P12.1 Foundations (2026-10-08)
+
+Delivered on `phase/12-org-setup-integrations` (local commit, not pushed). Migration
+**0016** (`SCHEMA_REVISION` 0016; irreversible: the downgrade drops the new tables).
+
+| Contract | Built | Where |
+| -------- | ----- | ----- |
+| ADR-017 (first fence) | organization rename: column grant + restrictive policy + deferred audit-coupling trigger (`lattice_require_setup_audit`, reusable); audit insert policy widened by `organization.updated` only; every other setup table still unwritable by the API (tested statement by statement) | 0016, `lattice.setup.organization`, `PATCH /v1/admin/organization`, ADR-017 "Implemented in P12.1" |
+| C3 secret model | `encrypted_secrets`, `vault:<id>`, AES-256-GCM with AAD `lattice-secret/v1\|org\|secret\|owner kind\|owner id\|key id`, keyring (`LATTICE_SECRET_KEYS`, `LATTICE_SECRET_ACTIVE_KEY`), production start-up key check, `check-deployment` "secret keys", `secrets new-key` / `secrets rekey` (audited `secret.rekeyed`), operator writers (`org create --client-secret-stdin`, `sso update --client-secret-stdin`, `provider credential set --value-stdin`), decrypt in the API's OIDC exchange and generation path, `lattice_secret_decrypt_failures_total` | `lattice.vault`, `lattice.cli_secrets`, `providers/secrets.py`, `identity/oidc.py`, `answering/policy.py` |
+| C3.4 process access | API: keys + `SELECT` on `encrypted_secrets`; worker: no keys (production refuses them), no privilege; migrate: `check-config migrate` refuses keys in production; web: nothing; compose gives keys to api and ops only | `vault.keys.misplaced_keys_problem`, `compose.production.yaml`, `test_deployment_files` |
+| C4 outbound policy | `lattice.outbound` (address classes, shape, connect-time `GuardedBackend`, no redirects/proxies, bounded, fixed codes); `outbound_targets` + `lattice outbound allow\|revoke\|list` (audited `outbound.target_added/removed`) | `lattice.outbound`, `lattice.orgs.outbound_targets`, `lattice.cli_org` |
+| C1 bootstrap | `lattice org create` (one transaction, idempotent on the slug under an advisory lock, differing retry refused naming fields, IdP client of another organization refused, issuer public or `--register-private-issuer`) | `lattice.orgs.bootstrap`, `lattice.cli_org` |
+| C12 setup status | `GET /v1/admin/setup`: pure `derive` (every reason tested) over `gather`ed facts read as the administrator's API role | `lattice.setup`, `api/routes/setup.py` |
+| §7 Organization page | `/settings` "Organization" (Administration section, masthead, Jump, More sheet): the organization's facts + Rename (reason, version, audit), the setup record as a ruled ledger; no controls for P12.2+ | `apps/web/src/components/settings/OrganizationScreen.tsx` |
+
+**Sign-in facts.** `oidc_connections.last_success_at` (set when an OIDC sign-in creates a
+session — the first administrator's first sign-in verifies the connection) and
+`last_failure_at` (discovery, keys, token exchange or client-secret failures; a person
+cancelling at the provider is not one), at most once a minute; not audited.
+
+**Deviations from Part II, and why**
+
+1. **Outbound policy not yet wired into the runtime OIDC client or provider adapters.**
+   C4 targets "every outbound call"; in P12.1 no URL is administrator-entered (issuers
+   are operator-entered via `org create` — checked — and `sso add`/`update`). Wiring the
+   connect-time backend into sign-in now would break existing private issuers (the
+   verification IdP `https://idp:9443`) until they are registered, i.e. change Phase 11
+   runtime behaviour for no P12.1 benefit. It is wired in P12.4 (OIDC settings) and P12.5
+   (provider endpoints), together with the runbook's registration step for existing
+   private issuers.
+2. **Setup status reasons.** Three reasons C12 did not name, because P12.1's data has
+   those states: `sources·required·not_synced` (a source with no run yet; C12's
+   `awaiting_import`/`import_rejected` need imports, P12.6), `accounts·blocked·
+   sources_required` (an account-scoped source not yet synced), `ai_policy·attention·
+   provider_unavailable` (the enabled provider cannot be built as configured).
+   Provisioning `in_use` is derived from audit events by the token's actor (C5's
+   `scim_tokens.last_used_at` is P12.4); "IdP-managed members" = memberships the identity
+   provider created (an `access.member_changed` creation event by a `scim:` actor) that are
+   not removed.
+3. **Bootstrap collision rule.** "Cross-org identity collision" is implemented as: an IdP
+   client (issuer + client ID) already used by another organization is refused — so a
+   token minted for one tenant's client never fits another's connection. E-mail never
+   collides (users are organization-owned, C1).
+4. **Identical-retry check of a `--client-secret-stdin` secret** opens the stored
+   ciphertext in the operator process and compares in constant time — the operator just
+   typed the value. C3.4 listed ops as "rekey only" for decryption; this is the one
+   addition.
+5. **`lattice_auth`** owns one more function, `lattice_secret_key_ids()` (key IDs only), for
+   the API's start-up check (ADR-017 said "`lattice_auth` is unchanged except the step-up
+   lookup").
+6. **`encrypted_secrets`** has no `updated_at`/rotation timestamp beyond `created_at` /
+   `destroyed_at` (rekey changes key ID, nonce and ciphertext in place; the event records
+   it). `cryptography` became a direct dependency (C3.2), version unchanged (50.0.2).
+
+**Not built (later checkpoints):** manual members, administrator capability, reinstatement
+(P12.2); accounts and mappings (P12.3); OIDC/SCIM settings, `scim_tokens.last_used_at`,
+test sign-in (P12.4); provider/credential/egress UX, step-up (P12.5); imports (P12.6).
+

@@ -32,6 +32,8 @@ import {
   MEMBER_WIDE,
   PREVIEW_MIXED,
   PROVIDERS_MANY,
+  SETUP_FRESH,
+  SETUP_IN_USE,
   SOURCES_ADMIN_LONG,
   FAILED,
   ID,
@@ -265,6 +267,16 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
     await at(page, { me: ME_LENA });
     await page.goto("/settings/providers");
     await page.getByTestId("egress-lattice").waitFor();
+  },
+  organization: async (page) => {
+    await at(page, { me: ME_LENA, setup: SETUP_FRESH });
+    await page.goto("/settings");
+    await page.getByTestId("setup-record").waitFor();
+  },
+  "organization-in-use": async (page) => {
+    await at(page, { me: ME_LENA, setup: SETUP_IN_USE });
+    await page.goto("/settings");
+    await page.getByTestId("setup-record").waitFor();
   },
   "providers-many": async (page) => {
     await at(page, { me: ME_LENA, providers: PROVIDERS_MANY });

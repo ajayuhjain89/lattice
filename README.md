@@ -11,7 +11,9 @@ v2](docs/design-system.md) is canonical. Phase 11 (Production Deployment, Identi
 Operations & Reliability) was verified on a local production-shaped stack only: real
 external staging validation is deferred and gates v1 GA ([plan](docs/phase-11-plan.md)
 §21.1). Phase 11 is merged (143392f). Phase 12 (Organization Setup, Identity
-Configuration & Integrations) is in planning and has not started.** What runs today: a FastAPI
+Configuration & Integrations) is in progress: P12.1 foundations are built (encrypted
+credentials, the outbound-target policy, `lattice org create`, the backend-owned setup
+record and the Organization page); P12.2–P12.8 are not started.** What runs today: a FastAPI
 backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced
 row-level security for organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -339,6 +341,20 @@ procedures: [runbook §2 and §9](docs/runbook.md); decisions: D-1, D-19, D-20 a
 [ADR-015](docs/decisions/015-oidc-sign-in-and-scim-provisioning.md). A database created
 before Phase 10 needs `make migrate` (0013); `make audit` checks the locked dependencies
 for known vulnerabilities.
+
+## How an organization is created (Phase 12, P12.1)
+
+An operator creates the tenant's trust root with one audited command, `lattice org
+create` (organization, safe settings, OIDC connection, and the first administrator bound
+to their exact identity-provider identifier — never by e-mail); the first administrator's
+first sign-in verifies the connection. Administrators then read the organization's setup
+record on the **Organization** page (`/settings`, `GET /v1/admin/setup`): every state is
+derived by the backend from live data. OIDC client secrets and provider keys may be stored
+encrypted at rest (AES-256-GCM, master keys only in the deployment environment;
+`lattice secrets rekey`), and private endpoints are reachable only when an operator
+registers them (`lattice outbound allow`). Procedures: [runbook §9 and
+§9.1](docs/runbook.md); contracts: [phase-12-plan](docs/phase-12-plan.md). A database created
+before P12.1 needs `make migrate` (0016).
 
 ## How deployment works (Phase 11)
 

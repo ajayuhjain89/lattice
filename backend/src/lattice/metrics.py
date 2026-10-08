@@ -200,6 +200,10 @@ REVOCATION_REASONS: Final = frozenset(
         "organization_suspended",
     }
 )
+# Phase 12 (P12.1): recoverable credentials that could not be opened (C3.5).
+SECRET_FAILURE_CODES: Final = frozenset(
+    {"missing", "destroyed", "key_unavailable", "decrypt_failed"}
+)
 
 
 def bounded(value: str | None, allowed: Iterable[str], *, none: str = "none") -> str:
@@ -227,6 +231,10 @@ def member_changed(before: str | None, after: str, actor_kind: str) -> None:
 def sessions_revoked(reason: str, count: int) -> None:
     if count > 0:
         SESSIONS_REVOKED.labels(reason=bounded(reason, REVOCATION_REASONS)).inc(count)
+
+
+def secret_decrypt_failed(code: str) -> None:
+    SECRET_DECRYPT_FAILURES.labels(code=bounded(code, SECRET_FAILURE_CODES)).inc()
 
 
 def outcome_of(code: str | None) -> str:
@@ -426,6 +434,12 @@ SESSIONS_REVOKED = Counter(
     "lattice_sessions_revoked_total",
     "Sessions revoked, by cause.",
     ["reason"],
+    registry=REGISTRY,
+)
+SECRET_DECRYPT_FAILURES = Counter(
+    "lattice_secret_decrypt_failures_total",
+    "Recoverable credentials (vault: references) that could not be opened, by fixed code.",
+    ["code"],
     registry=REGISTRY,
 )
 JOBS_OLDEST_WAITING = Gauge(

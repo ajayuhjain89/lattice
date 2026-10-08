@@ -194,6 +194,7 @@ async def oidc_callback(
         # The membership stopped being active between mapping and session creation, or
         # the connection was disabled meanwhile (D-25).
         return _oidc_failed(settings, "sso_failed", "inactive")
+    await _oidc(request).record_success(signed.organization_id, signed.connection_id)
     metrics.SSO_SIGN_INS.labels(outcome="succeeded").inc()
     log_event(
         logger,

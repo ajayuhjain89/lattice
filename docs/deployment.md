@@ -175,6 +175,7 @@ secret). Only settings that exist today are listed unless marked *target*.
 | `LATTICE_PROVIDER_SECRET_<NAME>` | secret | one per organization provider credential; referenced as `env:…` |
 | `LATTICE_GEMINI_API_KEY` / `GEMINI_API_KEY` / `LATTICE_OPENAI_API_KEY` | secret | legacy process-wide keys for query embedding only; avoid in production |
 | `LATTICE_MODEL_DIR`, `LATTICE_LOCAL_EMBEDDING_MODEL`, `LATTICE_LOCAL_EMBEDDING_THREADS` | config | only with `local` embeddings; the model directory is a read-only volume filled by `lattice models fetch` |
+| `LATTICE_SECRET_KEYS` / `LATTICE_SECRET_ACTIVE_KEY` | secret | **P12.1:** master keys for encrypted credentials (`id:<base64 32 bytes>`, comma-separated; the active ID). Optional until a `vault:` credential exists; then the API refuses to start in production without every key ID in use. Identical on every api instance; never on the worker or the migration job (runbook §9.1) |
 | `LATTICE_CLIENT_KEY_SECRET` | secret | **P11.4, required in production:** ≥ 32 bytes (`openssl rand -hex 32`), identical on every api instance; HMAC key for the shared pre-authentication counters (§12). Rotation resets those counters only. Outside production a fixed development key is used |
 | `LATTICE_BUILD_REVISION` / `LATTICE_BUILD_VERSION` | deployment | baked into the image at build (P11.1); never set by hand |
 | `LATTICE_TRUSTED_PROXIES` | deployment | **P11.1:** the ingress addresses or networks (comma-separated IPs/CIDRs; `*` refused); unset = trust no forwarding header. Run uvicorn with `--no-proxy-headers` (the image does) |
@@ -199,7 +200,8 @@ secret). Only settings that exist today are listed unless marked *target*.
 | Variable | Class | Rule |
 | -------- | ----- | ---- |
 | `LATTICE_MIGRATION_DATABASE_URL` | secret | `lattice_owner` credential; available **only** to the migration job and operators, never to api, worker or web. **Enforced (P11.2):** a production api or worker refuses to start when `LATTICE_MIGRATION_DATABASE_URL`, `LATTICE_OWNER_PASSWORD` or `POSTGRES_PASSWORD` is in its environment (`lattice.config.owner_credential_problem`; names only, never values); `lattice migrate` refuses a credential that does not own the schema, a superuser and a BYPASSRLS role |
-| `LATTICE_PUBLIC_URL` | deployment | printed by `lattice sso …` for redirect and SCIM URLs |
+| `LATTICE_PUBLIC_URL` | deployment | printed by `lattice sso …` / `lattice org create` for redirect and SCIM URLs |
+| `LATTICE_SECRET_KEYS` / `LATTICE_SECRET_ACTIVE_KEY` | secret | **operators only, P12.1:** the API's keys, for `org create --client-secret-stdin`, `provider credential set --value-stdin`, `sso update --client-secret-stdin` and `secrets rekey`. **Never for the migration job** (`check-config migrate` refuses them in production) |
 | `LATTICE_ENV` | config | `production` for commands that load the full settings |
 
 ### 5.4 web
@@ -241,7 +243,9 @@ secret**: session tokens are random and stored as SHA-256 hashes.
 | Platform admin DB credential | platform owner | bootstrap, restore, logical export | per platform policy | — | no |
 | `LATTICE_OIDC_SECRET_<NAME>` (OIDC client secret) | organization's IdP administrator + operator | api (token exchange) | IdP-driven (runbook §9): same reference with a new value — the provider keeps both secrets during the switch, rolling api restart, then the old one is removed at the provider; or a new reference — the variable into every api instance first (rolling restart), then `lattice sso update --client-secret-ref` (P11.3), then the old variable removed. No session impact | yes, for a new value | no: the database holds only the reference `env:…` |
 | SCIM bearer tokens | operator (`lattice scim token create`) | the organization's IdP | create new → switch the IdP → `lattice scim token revoke` | no | hash only (SHA-256) |
-| `LATTICE_PROVIDER_SECRET_<NAME>` (BYOK) | organization administrator via operator | api, worker | add new variable → rolling restart → `lattice provider credential set` (revokes the old reference) → remove old variable | yes, to add a variable | no: reference only |
+| `LATTICE_PROVIDER_SECRET_<NAME>` (BYOK) | organization administrator via operator | api (generation; the worker presents no organization credential — its embedding provider is a deployment setting, P12.1 call-graph check) | add new variable → rolling restart → `lattice provider credential set` (revokes the old reference) → remove old variable | yes, to add a variable | no: reference only |
+| Master keys `LATTICE_SECRET_KEYS` (P12.1) | operator | api, operators (never worker, migrate, web) | add new key + make it active + rolling restart → `lattice secrets rekey` → remove old key (keep it offline while old backups matter); runbook §9.1 | yes | **no** — and must be backed up separately: a restore without the key cannot open stored credentials |
+| Encrypted credentials (`vault:<id>`, P12.1) | operator today (`org create`, `sso update --client-secret-stdin`, `provider credential set --value-stdin`); administrators from P12.4/P12.5 | api (OIDC token exchange, generation) | a new value is sealed into a new row; the old ciphertext is destroyed (NULL); revocation destroys it | no | ciphertext only (AES-256-GCM, bound to organization, secret row, owner record, credential type and key ID) |
 | `LATTICE_CLIENT_KEY_SECRET` (P11.4) | operator | api | replace + rolling restart (resets pre-auth counters; during the roll the two key versions count separately, so a client may get up to twice the limit for a minute) | yes | no: the database holds only HMAC outputs |
 | Session tokens | — (generated) | browsers | rotated at every sign-in | no | hash only |
 | OIDC login state (state, nonce, PKCE verifier) | — (generated) | api | ten-minute single-use attempts | no | yes, transiently (`oidc_login_attempts`, deleted by retention, §11) |
@@ -251,8 +255,10 @@ secret**: session tokens are random and stored as SHA-256 hashes.
 Rules (current code): a credential never raises a sensitivity, trust class or approval
 (D-15, D-16); references are restricted to the `LATTICE_OIDC_SECRET_*` and
 `LATTICE_PROVIDER_SECRET_*` namespaces (plus three legacy provider names), so a stored
-reference cannot name a database URL; values never appear in API responses, logs, traces,
-prompts, errors or audit events.
+reference cannot name a database URL, or to `vault:<id>` (P12.1), which opens only for the
+record, organization and credential type it was sealed for; values never appear in API
+responses, logs, traces, prompts, errors or audit events. The database never holds a
+credential in plaintext and never holds a master key.
 
 ## 7. Database roles and bootstrap
 

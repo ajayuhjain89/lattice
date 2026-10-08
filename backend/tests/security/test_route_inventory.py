@@ -63,6 +63,9 @@ ADMIN = {
     ("POST", "/v1/admin/access/members/{membership_id}/grants"),
     ("POST", "/v1/admin/access/grants/{grant_id}/revoke"),
     ("GET", "/v1/admin/audit-events"),
+    # Phase 12 (P12.1): the setup record and the organization's name.
+    ("GET", "/v1/admin/setup"),
+    ("PATCH", "/v1/admin/organization"),
 }
 SCIM = {
     ("GET", "/scim/v2/ServiceProviderConfig"),
@@ -90,6 +93,11 @@ BODIES: dict[tuple[str, str], Any] = {
         "reason": "Probe",
     },
     ("POST", "/v1/admin/access/grants/{grant_id}/revoke"): {"reason": "Probe"},
+    ("PATCH", "/v1/admin/organization"): {
+        "name": "Probe",
+        "version": "2026-10-02T00:00:00Z",
+        "reason": "Probe",
+    },
 }
 QUERIES = {("GET", "/v1/admin/access/documents"): "?q=onboarding"}
 

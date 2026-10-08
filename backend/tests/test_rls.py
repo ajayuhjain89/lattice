@@ -59,10 +59,15 @@ TENANT_TABLES = (
     "rate_limit_counters",
     # Phase 11 (P11.4)
     "ask_slots",
+    # Phase 12 (P12.1)
+    "encrypted_secrets",
+    "outbound_targets",
 )
 # Tables the runtime role may not read (written and read by operator tools; of
 # oidc_connections it reads only id, organization_id and status since 0014).
-RUNTIME_UNREADABLE = frozenset({"audit_events", "oidc_connections", "scim_tokens"})
+RUNTIME_UNREADABLE = frozenset(
+    {"audit_events", "oidc_connections", "scim_tokens", "outbound_targets"}
+)
 GLOBAL_TABLES = ("organizations", "users", "external_identities")
 ALL_TABLES = (*GLOBAL_TABLES, *TENANT_TABLES)
 # No organization and no login role's privilege: reached only through lattice_auth
@@ -264,6 +269,22 @@ async def _populate(db: Database, member: Member) -> None:
             ),
             {"o": member.organization_id, "m": member.membership_id},
         )
+        await s.execute(
+            text(
+                "INSERT INTO encrypted_secrets (id, organization_id, owner_kind, owner_id, "
+                "key_id, nonce, ciphertext) VALUES (gen_random_uuid(), :o, 'provider_api_key', "
+                "gen_random_uuid(), 'a', '\\x000000000000000000000000'::bytea, "
+                "'\\x0000000000000000000000000000000000'::bytea)"
+            ),
+            {"o": member.organization_id},
+        )
+        await s.execute(
+            text(
+                "INSERT INTO outbound_targets (organization_id, purpose, scheme, host, port) "
+                "VALUES (:o, 'oidc', 'https', 'idp.internal', 9443)"
+            ),
+            {"o": member.organization_id},
+        )
 
 
 _HOUR = timedelta(hours=1)
@@ -453,7 +474,19 @@ async def test_cannot_update_another_organizations_sessions(
         "SELECT client_id FROM oidc_connections",
         "SELECT issuer, client_secret_ref, login_key FROM oidc_connections",
         "SELECT * FROM oidc_connections",
-        "SELECT 1 FROM scim_tokens",
+        "SELECT token_hash FROM scim_tokens",
+        "SELECT * FROM scim_tokens",
+        # 0016: the API reads ciphertext but never writes it; outbound targets are the
+        # operator's; only the organization's name is renamable.
+        "UPDATE encrypted_secrets SET key_id = key_id",
+        "DELETE FROM encrypted_secrets",
+        "SELECT 1 FROM outbound_targets",
+        "INSERT INTO outbound_targets (organization_id, purpose, scheme, host, port) VALUES "
+        "(lattice_current_org_id(), 'oidc', 'https', 'idp.internal', 443)",
+        "UPDATE organizations SET slug = 'x'",
+        "UPDATE organizations SET status = 'suspended'",
+        "UPDATE oidc_connections SET issuer = 'https://x.example'",
+        "UPDATE oidc_connections SET client_secret_ref = NULL",
         "UPDATE scim_tokens SET revoked_at = NULL",
         "UPDATE directory_identities SET external_id = 'x'",
         "UPDATE directory_identities SET membership_id = membership_id",

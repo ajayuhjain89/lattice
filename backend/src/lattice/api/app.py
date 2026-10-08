@@ -28,7 +28,18 @@ from lattice import metrics
 from lattice.answering.service import AskDependencies
 from lattice.api.handlers import register_exception_handlers
 from lattice.api.middleware import BodyLimitMiddleware, CsrfMiddleware, RequestContextMiddleware
-from lattice.api.routes import access, activity, admin, ask, auth, health, me, scim, sources
+from lattice.api.routes import (
+    access,
+    activity,
+    admin,
+    ask,
+    auth,
+    health,
+    me,
+    scim,
+    setup,
+    sources,
+)
 from lattice.build import report_startup
 from lattice.config import (
     ConfigurationError,
@@ -49,6 +60,8 @@ from lattice.providers.generation_factory import DefaultGenerationFactory
 from lattice.providers.secrets import EnvironmentSecretStore
 from lattice.provisioning.service import Provisioning
 from lattice.ratelimit import ApiLimits
+from lattice.vault.keys import Keyring, KeyringError
+from lattice.vault.startup import verify_secret_keys
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -56,6 +69,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if (problem := owner_credential_problem(settings.env, os.environ)) is not None:
         raise ConfigurationError(problem)
     production = settings.env is Environment.PRODUCTION
+    # Master keys for vault: credentials (C3.3): from the deployment environment only.
+    try:
+        keyring = Keyring.from_environment(os.environ)
+    except KeyringError as exc:
+        raise ConfigurationError(str(exc)) from None
+    secret_store = EnvironmentSecretStore(keyring=keyring)
     configure_logging(
         level=settings.log_level,
         include_exception_text=settings.env is Environment.DEVELOPMENT,
@@ -74,6 +93,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await verify_runtime_role(db.engine, forbid_content_writes=True)
+        await verify_secret_keys(db, keyring, production=production)
         report_startup("api", logging.getLogger("lattice.api"))
         server = metrics.serve(settings.metrics_address) if settings.metrics_address else None
         try:
@@ -100,6 +120,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db,
         OidcClient(timeout_seconds=settings.oidc_http_timeout_seconds, require_https=production),
         web_origin=settings.web_origin,
+        secrets=secret_store,
     )
     app.state.session_service = SessionService(
         db,
@@ -121,7 +142,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         generation=DefaultGenerationFactory(
             settings.env, fake_delay_seconds=settings.fake_generation_delay_seconds
         ),
-        secrets=EnvironmentSecretStore(),
+        secrets=secret_store,
         generation_enabled=settings.generation_enabled,
         generation_deadline_seconds=settings.generation_deadline_seconds,
     )
@@ -131,6 +152,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(me.router)
     app.include_router(ask.router)
     app.include_router(admin.router)
+    app.include_router(setup.router)
     app.include_router(sources.router)
     app.include_router(activity.router)
     app.include_router(access.router)

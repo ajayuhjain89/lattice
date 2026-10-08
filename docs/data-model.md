@@ -22,7 +22,10 @@ the `jobs` table, the `lattice_worker` role's grants and policies, and an
 **Phase 9** added the API role's fenced access writes (0012). **Phase 10** (migration
 0013, ADR-015) added `oidc_connections`, `oidc_login_attempts`, `directory_identities`,
 `scim_tokens`, `rate_limit_counters`, `users.home_organization_id` and
-`audit_events.txid` with the access-audit triggers (§2, §7).
+`audit_events.txid` with the access-audit triggers (§2, §7). **Phase 12 P12.1**
+(migration 0016) added `encrypted_secrets`, `outbound_targets`, the sign-in facts
+`oidc_connections.last_success_at`/`last_failure_at`, `vault:` secret references, the
+organization-name check and the first setup fence (rename, audit-coupled) (§2, §7).
 Related: `authorization-model.md`, `ingestion-design.md`, `retrieval-design.md`.
 
 Conventions:
@@ -82,7 +85,11 @@ Core typed domain objects (Pydantic, not tables) are listed in §9.
 
 RLS-protected despite being the tenant root (Phase 1 change): the runtime role sees
 only the bound organization's own row, so tenants cannot be enumerated. Operator tools
-(`lattice_owner`) may provision organizations.
+(`lattice_owner`) may provision organizations (`lattice org create`, P12.1). Since 0016
+`name` is 1–200 characters without control characters (CHECK), and the runtime role may
+update `name` (and `updated_at`) of its own **active** organization only — a deferred
+trigger refuses the commit unless the same transaction recorded `organization.updated`
+for it (ADR-017).
 
 ### users
 
@@ -122,10 +129,19 @@ Tenant tables, forced RLS (migration 0013; ADR-015).
 
 | Table | Fields | Notes |
 | ----- | ------ | ----- |
-| `oidc_connections` | `id, organization_id, login_key, issuer, client_id, client_secret_ref, subject_claim, status (active/disabled)`, timestamps | One active per organization. `login_key` opaque (22–64 URL-safe characters, globally unique): the sign-in URL names it, never the organization. `client_secret_ref` only `env:LATTICE_OIDC_SECRET_<NAME>`. Operator-written (`lattice sso add/disable/enable/update`, audited); the API reads the configuration only through `lattice_oidc_connection(login_key)` (owned by `lattice_auth`), and since 0014 may read `id, organization_id, status` of its own organization's connections (the session-creation check, D-25) |
+| `oidc_connections` | `id, organization_id, login_key, issuer, client_id, client_secret_ref, subject_claim, status (active/disabled)`, timestamps | One active per organization. `login_key` opaque (22–64 URL-safe characters, globally unique): the sign-in URL names it, never the organization. `client_secret_ref` is `env:LATTICE_OIDC_SECRET_<NAME>` or (0016) `vault:<uuid>` — an `encrypted_secrets` row sealed for this connection. `last_success_at` / `last_failure_at` (0016): the setup record's sign-in facts, written by the API (at most once a minute; a failure only on the provider's side or of the client secret). Operator-written otherwise (`lattice org create`, `lattice sso add/disable/enable/update`, audited); the API reads the configuration only through `lattice_oidc_connection(login_key)` (owned by `lattice_auth`), and may read `id, organization_id, status` (0014, the session-creation check, D-25) and `last_success_at, last_failure_at` (0016) of its own organization's connections |
 | `oidc_login_attempts` | `id, organization_id, connection_id, state_hash, binding_hash, nonce, code_verifier, return_to, created_at, expires_at, consumed_at` | One authorization-code flow: SHA-256 of `state` and of the browser-binding cookie, ten minutes, consumed once (`consumed_at`). The API inserts, consumes and deletes finished ones (restrictive policy: only consumed or expired) |
 | `directory_identities` | `id, organization_id, connection_id, membership_id, external_id, user_name, given_name, family_name, version`, timestamps | The provider's person: UQ `(connection_id, external_id)` (the OIDC claim value), UQ `(organization_id, membership_id)`, UQ `(connection_id, lower(user_name))`. Written by SCIM as the API role (no DELETE; `external_id` and `membership_id` not updatable). Its `id` is the SCIM resource ID. A membership with a directory identity is *provisioned*: its lifecycle belongs to the provider |
-| `scim_tokens` | `id, organization_id, connection_id, token_hash, created_at, revoked_at` | SHA-256 of `lsc_…` tokens; operator-written; resolved through `lattice_resolve_scim_token(hash)` only while the token, its connection and its organization are active |
+| `scim_tokens` | `id, organization_id, connection_id, token_hash, created_at, revoked_at` | SHA-256 of `lsc_…` tokens (verification-only: never decryptable); operator-written; resolved through `lattice_resolve_scim_token(hash)` only while the token, its connection and its organization are active. Since 0016 the API may read every column but `token_hash` (the provisioning setup record) |
+
+### encrypted_secrets, outbound_targets (Phase 12 P12.1, migration 0016)
+
+Tenant tables, forced RLS.
+
+| Table | Fields | Notes |
+| ----- | ------ | ----- |
+| `encrypted_secrets` | `id, organization_id, owner_kind (oidc_client_secret / provider_api_key), owner_id, key_id, nonce, ciphertext, hint, created_at, destroyed_at` | AES-256-GCM ciphertext of a recoverable credential (phase-12-plan C3), referenced as `vault:<id>` by its owner record (an OIDC connection, a provider credential). Associated data binds it to organization, secret ID, owner kind, owner ID and key ID; the plaintext and the master keys are never stored. 96-bit nonce per encryption; `nonce` and `ciphertext` are NULL once destroyed (rotation, revocation; CHECK). One live secret per owner (partial unique index). `hint`: the last four characters of a long provider key only. The API may read rows of its organization (it presents the credential); operators write; the worker and the web have no privilege. `lattice_secret_key_ids()` (owner `lattice_auth`) returns the distinct key IDs of live rows across organizations — IDs only — for the API's start-up check and `check-deployment` |
+| `outbound_targets` | `id, organization_id, purpose (oidc / generation), scheme (https / http), host, port, created_at, revoked_at` | A private endpoint an operator registered for one organization and purpose (C4; `lattice outbound allow`, audited). Exact origin only (no range, no wildcard); revoked, never deleted; one live registration per (organization, purpose, origin). No runtime role has any privilege (administrators cannot register targets) |
 
 ### rate_limit_counters (Phase 10)
 
@@ -523,9 +539,11 @@ There is deliberately no setting that lets admins read other members' content (D
 Organization-owned provider credentials **by reference only** (D-16, ADR-011):
 `id, organization_id, provider, secret_ref, data_use (unpaid|paid|NULL), status
 (active|revoked), created_at, revoked_at`. `secret_ref` must match
-`^(env|memory):[A-Za-z0-9_.-]{1,96}$` (CHECK); the code accepts only
-`env:LATTICE_PROVIDER_SECRET_<NAME>` and the documented legacy provider variables
-(`lattice.providers.secrets`). At most one active credential per organization and
+`^(env|memory):[A-Za-z0-9_.-]{1,96}$` or (0016) `^vault:<uuid>$` (CHECK); the code
+accepts only `env:LATTICE_PROVIDER_SECRET_<NAME>`, the documented legacy provider
+variables and `vault:` references to a ciphertext sealed for that credential
+(`lattice.providers.secrets`, `lattice provider credential set --value-stdin`); rotating or
+revoking a `vault:` credential destroys its ciphertext. At most one active credential per organization and
 provider (partial unique index); rotation revokes and inserts, history is kept. Forced
 RLS; the runtime role may SELECT only (to resolve the reference at invocation).
 

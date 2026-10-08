@@ -1,12 +1,12 @@
 /**
  * D5 operational surfaces together: Sources, Activity, Access (members, a member, the
- * audit log) and AI providers, under 200 % zoom, forced colours and reduced motion, and
+ * audit log), AI providers and the organization's setup record, under 200 % zoom, forced colours and reduced motion, and
  * by keyboard. Surface-specific behaviour lives in each surface's own spec.
  */
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-import { auditPages, FIXTURE_NOW, ID, ME_LENA, PROVIDERS_MANY, SOURCES_ADMIN_LONG, MANY_MEMBERS, MEMBER_MAYA } from "../src/test/fixtures";
+import { auditPages, FIXTURE_NOW, ID, ME_LENA, PROVIDERS_MANY, SETUP_IN_USE, SOURCES_ADMIN_LONG, MANY_MEMBERS, MEMBER_MAYA } from "../src/test/fixtures";
 
 import { expectNoHorizontalOverflow, settled } from "./helpers";
 import { mockApi } from "./mock-api";
@@ -19,6 +19,7 @@ const PAGES: [string, (page: Page) => Promise<void>][] = [
   [`/access/members/${ID.maya}`, (p) => expect(p.getByTestId("reach")).toBeVisible()],
   ["/access/audit", (p) => expect(p.getByTestId("audit-entry").first()).toBeVisible()],
   ["/settings/providers", (p) => expect(p.getByTestId("egress-lattice")).toBeVisible()],
+  ["/settings", (p) => expect(p.getByTestId("setup-record")).toBeVisible()],
 ];
 
 async function open(page: Page) {
@@ -30,6 +31,7 @@ async function open(page: Page) {
     member: { [ID.maya]: MEMBER_MAYA },
     audit: (b) => auditPages(b),
     providers: PROVIDERS_MANY,
+    setup: SETUP_IN_USE,
   });
 }
 

@@ -196,6 +196,8 @@ fetch metadata is still refused there.
   manager is another scheme behind the same Protocol (not built). The embedding
   providers of the operator CLI and `LATTICE_QUERY_EMBEDDING` still read the Phase 5
   process variables.
+- **Phase 12 P12.1:** a credential may also be stored encrypted at rest (`vault:<id>`,
+  AES-256-GCM, §12); the database never holds a credential in plaintext nor a master key.
 - A credential is never an approval: whether a provider may receive anything is the
   egress policy's decision (§6), and it does not consult credentials.
 - Startup validation (implemented) rejects: missing/invalid `LATTICE_*` settings;
@@ -561,30 +563,54 @@ every role is limited, administrators included, and no setting disables a limit 
 must be ≥ 1); the only metric label is the bucket name; no address, identifier or
 content is logged or stored.
 
-## 12. Phase 12 setup surfaces — contracts, not implemented
+## 12. Phase 12 setup surfaces
 
-Status: decided in P12.0 (2026-10-06, [phase-12-plan](phase-12-plan.md) Part II and
-[ADR-017](decisions/017-setup-mutation-trust-boundary.md)); **none of this is built yet**.
-Everything above describes current behaviour.
+Decided in P12.0 (2026-10-06, [phase-12-plan](phase-12-plan.md) Part II and
+[ADR-017](decisions/017-setup-mutation-trust-boundary.md)). **P12.1 (2026-10-08) built the
+foundations below; the rest is contract, not yet implemented.**
 
-- **Mutation boundary.** Administrator setup writes go through per-operation fences
-  (column grants, restrictive policies, `SECURITY DEFINER` functions, audit-coupling
-  triggers); no setup role and no broad grant. The last-administrator rule binds product
-  actions under concurrency (ADR-017).
-- **Secrets.** Recoverable credentials entered by administrators are stored encrypted
-  (AES-256-GCM, associated data binding organization, record, type and key; master keys
-  only in the deployment environment); verification-only secrets stay hashed; only the
-  API decrypts, and only OIDC client secrets and generation-provider keys (C3).
-- **Egress.** Separate facts — credential, test, approval, trust class, ceiling,
-  question sensitivity, per-evidence authorization — never merge; a credential or a
-  passing test never widens egress. Any escalation needs a fresh IdP re-authentication
-  bound to the exact change (D-34, C6).
-- **Outbound requests.** Administrator-entered and discovery-returned URLs pass one
-  outbound policy enforced at connect time; private targets only when an operator
-  registered them (C4).
-- **Imports.** Uploaded exports are validated archives in an organization-scoped store
-  addressed by generated IDs, never paths; never served back or executed (C8).
-- **Administrators are not content readers** on setup surfaces either: counts, codes and
-  opaque references; private channel names, file names and content never shown; no
-  content-derived mapping suggestions (C9, C10).
+**Built in P12.1:**
 
+- **Mutation boundary (first fence).** The runtime role may rename its own active
+  organization (column grant + restrictive policy) and the change cannot commit without an
+  `organization.updated` event in the same transaction (deferred constraint trigger); the
+  audit insert policy admits that one action from `member:` actors. Every other setup
+  table stays unwritable by the API (tested statement by statement); no setup role, no
+  broad grant.
+- **Recoverable credentials.** `encrypted_secrets` (`vault:<id>`): AES-256-GCM, a fresh
+  96-bit nonce per encryption, associated data binding organization, secret row, owner
+  record, credential kind and key ID — a ciphertext moved between rows, organizations,
+  records or kinds, relabelled with another key ID or altered in any byte fails closed.
+  Master keys (`LATTICE_SECRET_KEYS`, one active) only in the deployment environment;
+  the production API refuses to start when a stored key ID is not configured;
+  `lattice secrets rekey` re-encrypts under the active key (audited, counts only).
+  Opened only by the API, only when it presents the credential (OIDC token exchange;
+  generation after the invocation rule allowed the call); the worker, migration job and
+  web hold no keys and the worker has no privilege on the rows. SCIM tokens and session
+  tokens stay one-way hashes. Plaintext is accepted only by operator commands reading
+  stdin (never echoed) and never appears in output, logs, audit payloads, errors or API
+  responses (tested).
+- **Outbound policy** (`lattice.outbound`). Public targets: `https`, port 443, no
+  userinfo/query/fragment, every resolved address globally routable (IPv4 and IPv6
+  private, loopback, link-local/metadata, CGNAT, multicast, reserved, documentation,
+  benchmarking ranges and IPv4-embedding IPv6 forms refused; non-canonical IPv4 literals
+  refused). Enforced at connect time inside the HTTP client's network backend (the
+  address checked is the address connected to — DNS rebinding cannot pass), no redirects,
+  no environment proxies, bounded time and size, fixed codes. Private targets only when
+  an operator registered the exact origin for that organization and purpose
+  (`outbound_targets`, audited); never link-local or reserved. Used by `org create`
+  today; sign-in and provider calls adopt it with the product settings (P12.4, P12.5),
+  when administrator-entered URLs first exist.
+- **Organization bootstrap.** `lattice org create`: one audited transaction, exact IdP
+  identifier, no e-mail linking or JIT membership, an IdP client registered to another
+  organization refused, identical retries idempotent and differing ones refused.
+- **Setup status** (`GET /v1/admin/setup`): administrators only, derived from live data
+  on every read (never stored progress), counts, times and fixed messages only — no
+  names of people, sources, channels or documents, no secret or secret reference; reads
+  are not audited.
+
+**Contracts not yet implemented:** the last-administrator rule and manual members
+(P12.2), account mappings (P12.3), OIDC/SCIM settings in the product (P12.4), egress
+escalation with a fresh IdP re-authentication bound to the exact change (D-34, P12.5),
+imports (C8, P12.6); and on every setup surface administrators stay non-readers of
+content (C9, C10).

@@ -56,6 +56,10 @@ WORKER_TABLES = {
     # Phase 11 (P11.4): retention only.
     "ask_slots": {"DELETE"},
     "pre_auth_rate_limits": set(),
+    # Phase 12 (P12.1): the worker presents no organization credential (C3.4) and never
+    # reads outbound registrations.
+    "encrypted_secrets": set(),
+    "outbound_targets": set(),
 }
 
 

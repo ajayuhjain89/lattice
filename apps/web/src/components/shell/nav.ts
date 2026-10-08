@@ -8,7 +8,7 @@
  * its own authorization, and a page reached directly renders the same "not available"
  * state whether or not anything is behind it.
  */
-import { Database, History, Settings2, ShieldCheck, TextSearch, type LucideIcon } from "lucide-react";
+import { Building2, Database, History, Settings2, ShieldCheck, TextSearch, type LucideIcon } from "lucide-react";
 
 import type { Me } from "@/api/types";
 
@@ -74,6 +74,15 @@ export const DESTINATIONS: readonly Destination[] = [
     section: "workspace",
     phone: "tab",
     match: (p) => p.startsWith("/sources"),
+  },
+  {
+    // The organization's setup record (Phase 12, D-35): the administrators' home.
+    href: "/settings",
+    label: "Organization",
+    icon: Building2,
+    section: "admin",
+    phone: "more",
+    match: (p) => p === "/settings",
   },
   {
     href: "/access",

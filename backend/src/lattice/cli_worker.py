@@ -32,6 +32,7 @@ from lattice.jobs.retention import RetentionPolicy
 from lattice.jobs.worker import Heartbeat, Worker
 from lattice.log import configure_logging, scrub_text
 from lattice.providers.factory import build_embedding_provider
+from lattice.vault.keys import misplaced_keys_problem
 
 
 def add_parser(commands: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -42,6 +43,9 @@ def add_parser(commands: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 async def run(args: argparse.Namespace) -> int:
     settings = load_worker_settings()
     if (problem := owner_credential_problem(settings.env, os.environ)) is not None:
+        raise ConfigurationError(problem)
+    production = settings.env is Environment.PRODUCTION
+    if (problem := misplaced_keys_problem("worker", production, os.environ)) is not None:
         raise ConfigurationError(problem)
     configure_logging(
         level=settings.log_level,

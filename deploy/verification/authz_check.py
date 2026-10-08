@@ -56,6 +56,7 @@ from stack import (
 )
 
 from lattice.api.routes import access, activity, admin, ask, me, sources
+from lattice.api.routes import setup as setup_routes
 
 HALDEN_ADMIN = "lena.brandt@halden.example"
 HALDEN_MEMBER = "maya.okafor@halden.example"
@@ -84,6 +85,11 @@ BODIES: dict[tuple[str, str], Any] = {
         "reason": "Probe",
     },
     ("POST", "/v1/admin/access/grants/{grant_id}/revoke"): {"reason": "Probe"},
+    ("PATCH", "/v1/admin/organization"): {
+        "name": "Probe",
+        "version": "2026-10-02T00:00:00Z",
+        "reason": "Probe",
+    },
 }
 QUERIES = {("GET", "/v1/admin/access/documents"): "?q=onboarding"}
 
@@ -91,7 +97,7 @@ QUERIES = {("GET", "/v1/admin/access/documents"): "?q=onboarding"}
 def routes() -> list[tuple[str, str]]:
     """Every member and administrator route the API serves (its routers, not a list)."""
     found = set()
-    for module in (me, ask, admin, sources, activity, access):
+    for module in (me, ask, admin, setup_routes, sources, activity, access):
         for route in module.router.routes:
             if isinstance(route, APIRoute):
                 found |= {(method, route.path) for method in route.methods or ()}

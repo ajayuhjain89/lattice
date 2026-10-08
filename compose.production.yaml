@@ -43,6 +43,10 @@ x-api-environment: &api-environment
   LATTICE_TRUSTED_PROXIES: 172.31.250.10
   # Keys the shared pre-authentication counters (P11.4): the same on every api instance.
   LATTICE_CLIENT_KEY_SECRET: ${LATTICE_CLIENT_KEY_SECRET:?run make prod-env}
+  # Master keys for encrypted organization credentials (P12.1, C3.3): the API and the
+  # operator only -- never the worker or the migration job.
+  LATTICE_SECRET_KEYS: ${LATTICE_SECRET_KEYS:-}
+  LATTICE_SECRET_ACTIVE_KEY: ${LATTICE_SECRET_ACTIVE_KEY:-}
   # Two API processes share the database: a small pool each (docs/deployment.md §8).
   LATTICE_DB_POOL_SIZE: "3"
 
@@ -167,6 +171,9 @@ services:
       LATTICE_ENV: ${LATTICE_STACK_ENV:-production}
       LATTICE_MIGRATION_DATABASE_URL: postgresql+asyncpg://lattice_owner:${LATTICE_OWNER_PASSWORD:?run make prod-env}@postgres:5432/lattice
       LATTICE_PUBLIC_URL: https://localhost:8443
+      # `org create --client-secret-stdin`, `secrets rekey` (the same keys as the API).
+      LATTICE_SECRET_KEYS: ${LATTICE_SECRET_KEYS:-}
+      LATTICE_SECRET_ACTIVE_KEY: ${LATTICE_SECRET_ACTIVE_KEY:-}
     volumes:
       - ./data:/srv/lattice/data:ro
 

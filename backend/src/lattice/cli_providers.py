@@ -27,7 +27,9 @@ import logging
 import os
 import sys
 
-from lattice.config import load_migration_settings, load_provider_settings
+from lattice import cli_org
+from lattice.cli_secrets import operator_keyring, read_secret_stdin
+from lattice.config import ConfigurationError, load_migration_settings, load_provider_settings
 from lattice.db.engine import Database, create_engine
 from lattice.ingestion.store import organization_id
 from lattice.log import log_event
@@ -119,6 +121,16 @@ async def provider(args: argparse.Namespace) -> int:
     reason = getattr(args, "reason", None)
     if reason is not None and not reason.strip():
         return _fail("--reason is required")
+    try:
+        keyring = operator_keyring()
+    except ConfigurationError as exc:
+        return _fail(str(exc))
+    value = None
+    if getattr(args, "value_stdin", False):
+        try:
+            value = read_secret_stdin()
+        except ValueError as exc:
+            return _fail(str(exc))
     db = _owner()
     try:
         async with db.unscoped_transaction() as s:
@@ -128,7 +140,9 @@ async def provider(args: argparse.Namespace) -> int:
         command = args.provider_command if args.command == "provider" else "egress"
         async with db.tenant_transaction(org) as s:
             if command == "list":
-                views = await configuration.provider_overview(s, org, EnvironmentSecretStore())
+                views = await configuration.provider_overview(
+                    s, org, EnvironmentSecretStore(keyring=keyring)
+                )
                 for v in views:
                     c = v.credential
                     credential = (
@@ -210,11 +224,19 @@ async def provider(args: argparse.Namespace) -> int:
                     org,
                     provider=args.provider,
                     secret_ref=args.secret_ref,
+                    value=value,
+                    keyring=keyring,
                     data_use=args.data_use,
                     reason=args.reason,
                     actor=actor,
                 )
-                print(f"{args.org}: {args.provider} credential reference recorded (value not read)")
+                if value is None:
+                    print(
+                        f"{args.org}: {args.provider} credential reference recorded "
+                        "(value not read)"
+                    )
+                else:
+                    print(f"{args.org}: {args.provider} credential stored encrypted (not shown)")
             elif command == "credential":
                 revoked = await configuration.revoke_credential(
                     s, org, provider=args.provider, reason=args.reason, actor=actor
@@ -290,15 +312,23 @@ def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]")
     for name in ("enable", "disable"):
         named(provider_commands.add_parser(name, help=f"{name.title()} a provider record"))
     credential_cmd = provider_commands.add_parser(
-        "credential", help="Organization-owned credential references (never the value)"
+        "credential", help="Organization-owned credentials (references or encrypted values)"
     )
     credential_commands = credential_cmd.add_subparsers(dest="credential_command", required=True)
     set_cmd = credential_commands.add_parser(
-        "set", help="Record (or rotate to) a secret reference, e.g. env:LATTICE_PROVIDER_SECRET_X"
+        "set",
+        help="Record (or rotate to) a credential: a reference (env:LATTICE_PROVIDER_SECRET_X) "
+        "or a value read from stdin and encrypted at rest",
     )
     set_cmd.add_argument("--org", required=True)
     set_cmd.add_argument("--provider", required=True)
-    set_cmd.add_argument("--secret-ref", required=True)
+    source = set_cmd.add_mutually_exclusive_group(required=True)
+    source.add_argument("--secret-ref", help="env:LATTICE_PROVIDER_SECRET_<NAME>")
+    source.add_argument(
+        "--value-stdin",
+        action="store_true",
+        help="read the key from standard input and store it encrypted (vault:); never echoed",
+    )
     set_cmd.add_argument("--data-use", choices=["unpaid", "paid"])
     set_cmd.add_argument("--reason", required=True)
     revoke_cmd = credential_commands.add_parser("revoke", help="Revoke the active credential")
@@ -310,6 +340,7 @@ def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]")
 
     org_cmd = commands.add_parser("org", help="Organization settings (administrative, audited)")
     org_commands = org_cmd.add_subparsers(dest="org_command", required=True)
+    cli_org.add_create_parser(org_commands)
     egress_cmd = org_commands.add_parser("egress", help="The organization's AI egress ceilings")
     egress_cmd.add_argument("--org", required=True)
     egress_cmd.add_argument("--external-level", choices=LEVELS)

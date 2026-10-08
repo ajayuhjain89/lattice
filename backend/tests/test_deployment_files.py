@@ -40,6 +40,15 @@ def test_the_owner_credential_reaches_only_the_migration_job_and_operators() -> 
         assert "PLATFORM_ADMIN_PASSWORD" not in _environment(services[name]), name
 
 
+def test_master_keys_reach_only_the_api_and_operators() -> None:
+    """P12.1 (C3.4): only the processes that present organization credentials hold the
+    master keys -- never the worker, the migration job, the web or the database."""
+    services = _services()
+    keys = {"LATTICE_SECRET_KEYS", "LATTICE_SECRET_ACTIVE_KEY"}
+    holders = {name for name, s in services.items() if _environment(s) & keys}
+    assert holders == {"api1", "api2", "ops"}
+
+
 def test_the_platform_administrator_is_used_only_by_the_bootstrap() -> None:
     services = _services()
     holders = {

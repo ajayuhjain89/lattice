@@ -17,5 +17,6 @@ def metadata() -> MetaData:
     from lattice.ratelimit import models as ratelimit_models  # noqa: F401
     from lattice.sources import models as source_models  # noqa: F401
     from lattice.tracing import models as tracing_models  # noqa: F401
+    from lattice.vault import models as vault_models  # noqa: F401
 
     return Base.metadata

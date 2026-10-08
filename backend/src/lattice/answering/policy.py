@@ -39,6 +39,7 @@ from lattice.providers.generation import GenerationProvider
 from lattice.providers.generation_factory import GenerationFactory, GenerationUnavailable
 from lattice.providers.secrets import SecretStore, SecretUnavailable
 from lattice.retrieval import Evidence
+from lattice.vault.records import load_sealed
 
 
 @dataclass(frozen=True)
@@ -70,8 +71,9 @@ async def resolve_generation(
     invoke: bool = True,
 ) -> GenerationAccess:
     """Run inside the request's snapshot. Reads configuration and credential references;
-    resolves the secret (no database access) and builds the provider only when every
-    policy check has passed and ``invoke`` says a call will be made."""
+    resolves the secret (a ``vault:`` one is read from ``encrypted_secrets`` bound to
+    this credential) and builds the provider only when every policy check has passed
+    and ``invoke`` says a call will be made."""
     classifications = await readable_document_classifications(
         session, ctx, {e.document_id for e in evidence}
     )
@@ -119,8 +121,15 @@ async def resolve_generation(
     if declared.requires_credential:
         if credential is None:
             return refuse("credential_unavailable", decision.level)
+        sealed = await load_sealed(
+            session,
+            credential.secret_ref,
+            organization_id=ctx.organization_id,
+            owner_kind="provider_api_key",
+            owner_id=credential.id,
+        )
         try:
-            secret = secrets.resolve(credential.secret_ref)
+            secret = secrets.resolve(credential.secret_ref, sealed)
         except SecretUnavailable:
             return refuse("credential_unavailable", decision.level)
     try:

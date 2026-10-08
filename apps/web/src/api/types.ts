@@ -61,3 +61,11 @@ export type Level = NonNullable<AskRequest["classification"]>;
 
 export const SOURCE_TYPES = ["doc", "ticket", "chat"] as const satisfies readonly SourceType[];
 export const LEVELS = ["internal", "confidential", "restricted"] as const satisfies readonly Level[];
+
+// Organization setup (Phase 12, P12.1): the backend-owned setup record.
+export type SetupStatus = Schemas["SetupStatus"];
+export type SetupCategory = Schemas["SetupCategory"];
+export type SetupState = SetupCategory["state"];
+export type SetupCategoryKey = SetupCategory["key"];
+export type SetupOrganization = Schemas["SetupOrganization"];
+export type OrganizationChange = Schemas["OrganizationChange"];

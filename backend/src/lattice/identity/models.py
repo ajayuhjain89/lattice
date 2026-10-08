@@ -139,12 +139,16 @@ class OidcConnection(Base):
     login_key: Mapped[str] = mapped_column(Text)
     issuer: Mapped[str] = mapped_column(Text)
     client_id: Mapped[str] = mapped_column(Text)
-    # A reference (env:LATTICE_OIDC_SECRET_<NAME>), never the secret.
+    # A reference (env:LATTICE_OIDC_SECRET_<NAME> or vault:<id>), never the secret.
     client_secret_ref: Mapped[str | None] = mapped_column(Text)
     subject_claim: Mapped[str] = mapped_column(Text, server_default="sub")
     status: Mapped[str] = mapped_column(Text, server_default="active")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    # Sign-in facts for the setup record (0016, C12): the last successful sign-in, and
+    # the last one the provider (or the client secret) failed.
+    last_success_at: Mapped[datetime | None]
+    last_failure_at: Mapped[datetime | None]
 
 
 class OidcLoginAttempt(Base):

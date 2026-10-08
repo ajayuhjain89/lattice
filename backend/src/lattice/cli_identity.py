@@ -14,7 +14,8 @@ import os
 import sys
 import uuid
 
-from lattice.config import load_migration_settings
+from lattice.cli_secrets import operator_keyring, read_secret_stdin
+from lattice.config import ConfigurationError, load_migration_settings
 from lattice.db.engine import Database, create_engine
 from lattice.identity import admin
 from lattice.ingestion.store import organization_id
@@ -107,6 +108,7 @@ async def run(args: argparse.Namespace) -> int:
                 _print_connection(args.org, found)
             elif args.command == "sso":
                 secret: object = admin._UNSET
+                value = read_secret_stdin() if args.client_secret_stdin else None
                 if args.no_client_secret:
                     secret = None
                 elif args.client_secret_ref is not None:
@@ -120,6 +122,8 @@ async def run(args: argparse.Namespace) -> int:
                     issuer=args.issuer,
                     subject_claim=args.subject_claim,
                     subjects_unchanged=args.subjects_unchanged,
+                    secret_value=value,
+                    keyring=operator_keyring() if value is not None else None,
                     reason=reason,
                     actor=actor,
                 )
@@ -201,7 +205,11 @@ async def run(args: argparse.Namespace) -> int:
                 )
     except admin.OperatorRejected as exc:
         return _fail(str(exc))
-    except ValueError:
+    except ConfigurationError as exc:
+        return _fail(str(exc))
+    except ValueError as exc:
+        if getattr(args, "client_secret_stdin", False):
+            return _fail(str(exc))  # the secret is empty or too long (never its value)
         return _fail("--id / --connection-id must be an ID")
     finally:
         await db.dispose()
@@ -241,6 +249,11 @@ def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]")
     secret = update.add_mutually_exclusive_group()
     secret.add_argument("--client-secret-ref", help="env:LATTICE_OIDC_SECRET_<NAME> (rotation)")
     secret.add_argument("--no-client-secret", action="store_true", help="a public PKCE client")
+    secret.add_argument(
+        "--client-secret-stdin",
+        action="store_true",
+        help="read the new client secret from stdin and store it encrypted (never echoed)",
+    )
     update.add_argument("--issuer")
     update.add_argument("--subject-claim")
     update.add_argument(
