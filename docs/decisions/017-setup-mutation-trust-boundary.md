@@ -2,7 +2,8 @@
 
 Status: **Accepted as the P12.0 contract (2026-10-06).** Built checkpoint by checkpoint
 from P12.1 (phase-12-plan Part II); **P12.1 (2026-10-08) built the first fence and the
-foundations** — see "Implemented in P12.1" at the end.
+foundations; P12.2 (2026-10-09) the member and administrator fences** — see
+"Implemented in P12.1" and "Implemented in P12.2" at the end.
 
 ## Context
 
@@ -139,3 +140,46 @@ Only what P12.1 needs; every other row of the table above is still a contract.
 The privilege snapshot records each change; `tests/test_app_role_access.py`,
 `tests/test_rls.py`, `tests/test_auth_role.py`, `tests/test_worker_role.py` and
 `tests/test_setup_status.py` pin them.
+
+## Implemented in P12.2 (2026-10-09, migration 0017)
+
+The `memberships` rows of the operation table, and nothing else.
+
+- **`lattice_create_member(actor, email, display_name, given_name, family_name,
+  identifier)`**, **`lattice_set_admin(actor, membership, administrator)`**,
+  **`lattice_reinstate_member(actor, membership)`** — `SECURITY DEFINER`, owned by
+  `lattice_owner`, search path pinned, `EXECUTE` for `lattice_app` only (and the owner).
+  Each runs bound to `lattice_current_org_id()` (forced RLS applies to the owner too),
+  re-checks that the acting membership is an active administrator of that organization
+  (an actor from another organization is invisible, so refused identically) and refuses
+  with SQLSTATE `LA001` and a fixed reason as the message, which the API maps to its
+  error codes. Member creation is serialised per organization by an advisory lock so its
+  uniqueness checks are exact; `lattice_set_admin` takes the administrator-set lock.
+- **Audit coupling, refined.** The functions do not write events: the 0013 access-audit
+  triggers are deferred and fire at commit as the session's role (`lattice_app`),
+  including for rows a definer function wrote (verified on PostgreSQL 16), so the API's
+  `access.member_changed` event in the same transaction is required exactly as for direct
+  writes. No new audit action was needed: C11 records these as `access.member_changed`.
+- **Last administrator.** As specified: lock (`pg_advisory_xact_lock(b"LADM",
+  hashtext(org))`), then count; the deferred constraint trigger
+  `trg_memberships_administrator_set` (`AFTER UPDATE OF is_admin, status`) re-checks any
+  API-role write that takes an *active* administrator out of the set. The identity
+  provider is recognised by the transaction's event for that member being by one of the
+  organization's SCIM tokens (`scim:<token id>`); operators are not the API role. Because
+  an acting administrator is itself counted, a single product request cannot reach zero:
+  the rule holds against concurrent requests (tested: each pair of revoke/suspend) and
+  against statements that bypass the code (tested: two direct API-role suspensions).
+- **`directory_identities.managed_by`** (an addition the contract did not name): "a
+  member with a directory identity is provisioned" stopped being true once people can be
+  added by hand. `identity_provider` (SCIM; the default and the only value the API role
+  may insert directly — restrictive policy) or `organization` (hand-added, or the
+  operator's first administrator). `removed` stays reserved to identity-provider
+  members; SCIM reads only its own identities.
+- **Reads.** `lattice_app` may read `oidc_connections.issuer` and `subject_claim` (the
+  add-member form names the claim). No other privilege changed; `is_admin` still has no
+  column grant and `removed` cannot be left by a direct write.
+
+`tests/test_app_role_access.py` (the functions' ownership, settings and executors; the
+`managed_by` insert policy; removal only for identity-provider members; no direct
+reinstatement), `tests/access/test_lifecycle.py` (the API and the functions: refusals,
+audit coupling, concurrency, SCIM interplay) and the privilege snapshot pin them.

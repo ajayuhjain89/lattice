@@ -11,10 +11,14 @@ import {
   DOCUMENTS,
   EXPLANATION_DENIED,
   FAILURES,
+  IDENTITY_REQUIREMENT,
   ME_MAYA,
   MEMBER_MAYA,
+  MEMBER_NEW,
+  MEMBER_RAE_REINSTATED,
   MEMBERS_PAGE,
   PREVIEW_ADD_KESTREL,
+  PREVIEW_REINSTATE,
   NOT_FOUND,
   PROVIDERS,
   SETUP_FRESH,
@@ -54,6 +58,15 @@ export interface MockOptions {
   preview?: S["AccessPreview"];
   /** Answer for PATCH /v1/admin/access/members/{id}. */
   change?: (body: S["MemberChangeRequest"]) => S["MemberAccess"] | { status: number; body: unknown };
+  /** P12.2: the identity requirement (GET /v1/admin/access/identity-requirement), and a delay before it. */
+  identity?: S["IdentityRequirement"] | "fault";
+  identityDelay?: number;
+  /** Answer for POST /v1/admin/access/members (default: 201 with MEMBER_NEW). */
+  addMember?: (body: S["NewMemberRequest"]) => S["MemberAccess"] | { status: number; body: unknown } | "network";
+  /** Answer for POST .../administrator (default: the member with the capability flipped). */
+  administrator?: (id: string, body: S["AdministratorRequest"]) => S["MemberAccess"] | { status: number; body: unknown };
+  /** Answer for POST .../reinstate (default: 200 with MEMBER_RAE_REINSTATED). */
+  reinstate?: (id: string, body: S["ReinstateRequest"]) => S["MemberAccess"] | { status: number; body: unknown };
   /** Answer for POST /v1/auth/dev-login (default: 200 with `me`). */
   devLogin?: { status: number; body: unknown; headers?: Record<string, string> };
   /** The audit log, or a function of the `before` cursor (keyset paging). */
@@ -75,6 +88,9 @@ export interface MockLog {
   traces: string[];
   headers: Record<string, string>[];
   renames: S["OrganizationChange"][];
+  added: S["NewMemberRequest"][];
+  administrators: { id: string; body: S["AdministratorRequest"] }[];
+  reinstates: { id: string; body: S["ReinstateRequest"] }[];
 }
 
 const json = (route: Route, status: number, body: unknown, headers: Record<string, string> = {}) =>
@@ -98,8 +114,18 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     traces: [],
     headers: [],
     renames: [],
+    added: [],
+    administrators: [],
+    reinstates: [],
   };
+  const answer = (route: Route, ok: number, result: unknown) =>
+    typeof result === "object" && result !== null && "status" in result && "body" in result && typeof result.status === "number"
+      ? json(route, result.status, result.body)
+      : json(route, ok, result);
   let adminSourceReads = 0;
+  // Members by ID; P12.2 writes (add, administrator, reinstate) update it, so the page's
+  // reload after a write reads what the write returned.
+  const members: Record<string, S["MemberAccess"]> = { ...(options.member ?? { [MEMBER_MAYA.member.id]: MEMBER_MAYA }) };
   const forbidden = (route: Route) =>
     json(route, 403, { error: { code: "permission_denied", message: "You don't have permission to do this.", request_id: "req-403" } });
   const evidence = options.evidence ?? DETAILS;
@@ -214,15 +240,60 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
         const q = url.searchParams.get("q")?.toLowerCase();
         return json(route, 200, q ? { ...page, items: page.items.filter((m) => `${m.name} ${m.email}`.toLowerCase().includes(q)) } : page);
       }
+      if (path === "/v1/admin/access/identity-requirement" && method === "GET") {
+        if (options.identityDelay) await new Promise((done) => setTimeout(done, options.identityDelay));
+        if (options.identity === "fault") return json(route, 500, { error: { code: "internal_error", message: "Something went wrong.", request_id: "r" } });
+        return json(route, 200, options.identity ?? IDENTITY_REQUIREMENT);
+      }
+      if (path === "/v1/admin/access/members" && method === "POST") {
+        const body = request.postDataJSON() as S["NewMemberRequest"];
+        log.added.push(body);
+        const result = options.addMember?.(body) ?? MEMBER_NEW;
+        if (result === "network") return route.abort("connectionrefused");
+        if ("member" in result) members[result.member.id] = result;
+        return answer(route, 201, result);
+      }
       if (path === "/v1/admin/access/directory" && method === "GET") return json(route, 200, DIRECTORY);
       if (path === "/v1/admin/access/documents" && method === "GET") return json(route, 200, DOCUMENTS);
       if (path === "/v1/admin/audit-events" && method === "GET") {
         const a = options.audit ?? AUDIT;
         return json(route, 200, typeof a === "function" ? a(url.searchParams.get("before")) : a);
       }
-      const members = options.member ?? { [MEMBER_MAYA.member.id]: MEMBER_MAYA };
       const explain = /^\/v1\/admin\/access\/members\/([^/]+)\/documents\/([^/]+)$/.exec(path);
       if (explain && method === "GET") return json(route, 200, EXPLANATION_DENIED);
+      const adminPreview = /^\/v1\/admin\/access\/members\/([^/]+)\/administrator\/preview$/.exec(path);
+      if (adminPreview && method === "POST") {
+        const body = request.postDataJSON() as S["AdministratorChange"];
+        const found = members[adminPreview[1]!];
+        return found ? json(route, 200, { now: found.member.is_admin, after: body.administrator, content_access_changes: false }) : json(route, 404, NOT_FOUND);
+      }
+      const administrator = /^\/v1\/admin\/access\/members\/([^/]+)\/administrator$/.exec(path);
+      if (administrator && method === "POST") {
+        const id = administrator[1]!;
+        const body = request.postDataJSON() as S["AdministratorRequest"];
+        log.administrators.push({ id, body });
+        const found = members[id];
+        if (options.administrator) return answer(route, 200, options.administrator(id, body));
+        if (!found) return json(route, 404, NOT_FOUND);
+        const open = { available: true, blocked_by: null };
+        members[id] = {
+          ...found,
+          member: { ...found.member, is_admin: body.administrator },
+          lifecycle: { ...found.lifecycle, grant_administrator: body.administrator ? null : open, revoke_administrator: body.administrator ? open : null },
+        };
+        return json(route, 200, members[id]);
+      }
+      const reinstatePreview = /^\/v1\/admin\/access\/members\/([^/]+)\/reinstate\/preview$/.exec(path);
+      if (reinstatePreview && method === "POST") return json(route, 200, PREVIEW_REINSTATE);
+      const reinstate = /^\/v1\/admin\/access\/members\/([^/]+)\/reinstate$/.exec(path);
+      if (reinstate && method === "POST") {
+        const id = reinstate[1]!;
+        const body = request.postDataJSON() as S["ReinstateRequest"];
+        log.reinstates.push({ id, body });
+        const result = options.reinstate?.(id, body) ?? MEMBER_RAE_REINSTATED;
+        if ("member" in result) members[id] = result;
+        return answer(route, 200, result);
+      }
       const preview = /^\/v1\/admin\/access\/members\/([^/]+)\/preview$/.exec(path);
       if (preview && method === "POST") return json(route, 200, options.preview ?? PREVIEW_ADD_KESTREL);
       const grants = /^\/v1\/admin\/access\/members\/([^/]+)\/grants$/.exec(path);

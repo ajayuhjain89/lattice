@@ -66,6 +66,13 @@ ADMIN = {
     # Phase 12 (P12.1): the setup record and the organization's name.
     ("GET", "/v1/admin/setup"),
     ("PATCH", "/v1/admin/organization"),
+    # Phase 12 (P12.2): members added by hand, the administrator capability, reinstatement.
+    ("GET", "/v1/admin/access/identity-requirement"),
+    ("POST", "/v1/admin/access/members"),
+    ("POST", "/v1/admin/access/members/{membership_id}/administrator/preview"),
+    ("POST", "/v1/admin/access/members/{membership_id}/administrator"),
+    ("POST", "/v1/admin/access/members/{membership_id}/reinstate/preview"),
+    ("POST", "/v1/admin/access/members/{membership_id}/reinstate"),
 }
 SCIM = {
     ("GET", "/scim/v2/ServiceProviderConfig"),
@@ -95,6 +102,25 @@ BODIES: dict[tuple[str, str], Any] = {
     ("POST", "/v1/admin/access/grants/{grant_id}/revoke"): {"reason": "Probe"},
     ("PATCH", "/v1/admin/organization"): {
         "name": "Probe",
+        "version": "2026-10-02T00:00:00Z",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/members"): {
+        "email": "probe@halden.example",
+        "name": "Probe",
+        "identifier": "probe",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/members/{membership_id}/administrator/preview"): {
+        "administrator": True
+    },
+    ("POST", "/v1/admin/access/members/{membership_id}/administrator"): {
+        "administrator": True,
+        "version": "2026-10-02T00:00:00Z",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/members/{membership_id}/reinstate/preview"): None,
+    ("POST", "/v1/admin/access/members/{membership_id}/reinstate"): {
         "version": "2026-10-02T00:00:00Z",
         "reason": "Probe",
     },

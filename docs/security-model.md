@@ -567,7 +567,8 @@ content is logged or stored.
 
 Decided in P12.0 (2026-10-06, [phase-12-plan](phase-12-plan.md) Part II and
 [ADR-017](decisions/017-setup-mutation-trust-boundary.md)). **P12.1 (2026-10-08) built the
-foundations below; the rest is contract, not yet implemented.**
+foundations below and P12.2 (2026-10-09) members and administrators; the rest is
+contract, not yet implemented.**
 
 **Built in P12.1:**
 
@@ -609,8 +610,44 @@ foundations below; the rest is contract, not yet implemented.**
   names of people, sources, channels or documents, no secret or secret reference; reads
   are not audited.
 
-**Contracts not yet implemented:** the last-administrator rule and manual members
-(P12.2), account mappings (P12.3), OIDC/SCIM settings in the product (P12.4), egress
+**Built in P12.2 (migration 0017):**
+
+- **Members added by hand** (D-30, C2.1). Administrators only; bound to the exact value
+  of the active connection's identifying claim (NFC-normalised, trimmed, case kept,
+  compared byte for byte — an `email` claim is still an identifier, never an e-mail
+  match); least access written by the fenced `lattice_create_member` (the request cannot
+  carry access: unknown fields are 422); the identifier or e-mail of a member of this
+  organization — removed ones included — is 409 with the field named; another
+  organization's people are never read, so they neither collide nor show (owned users
+  and per-connection identifiers make that structural; tested). Not an invitation; no
+  just-in-time creation. The creation event records the bound identifier and e-mail.
+- **Administrator capability** (D-31, C2.2). Granted or revoked for another member only
+  (own membership: 403 at the API and in the function), never for a removed member,
+  through `lattice_set_admin`; content access never changes (the authorization context
+  is identical before and after; tested). The capability check of the actor is
+  repeated inside the function under the lock.
+- **Last active administrator** (ADR-017). Product writes that take an active
+  administrator out of the set (revoke, suspend) take the organization's advisory lock,
+  re-check the actor and count after the lock; a deferred trigger takes the same lock at
+  commit for any API-role write that does so and refuses zero. Two administrators
+  removing each other at once: exactly one succeeds (tested for revoke/revoke,
+  suspend/suspend, revoke/suspend, and for two direct API-role statements). The identity
+  provider (SCIM) and operators are not bound: the setup record then reads *No active
+  administrator* and only an operator appoints one.
+- **Reinstatement** (D-36, C2.3). A removed member on their original directory identity
+  (refused when that identity's connection is no longer active, when the user is
+  disabled or when another member has their e-mail), reset to least access, never an
+  administrator, sessions not revived; SCIM finds the same person by `externalId`
+  afterwards. The operator's `lattice member reinstate` still restores prior access
+  (incident reversal).
+- **Suspension in Access** now ends the member's sessions in the same transaction, as SCIM
+  and operator suspension do; reactivation restores the rules, never a session.
+- **Privileges.** `lattice_app` gains `EXECUTE` on the three functions and `SELECT
+  (issuer, subject_claim)` on `oidc_connections`; directory identities it inserts are
+  restricted to `managed_by = identity_provider`; `removed` only for those. No table or
+  column grant on memberships was added.
+
+**Contracts not yet implemented:** account mappings (P12.3), OIDC/SCIM settings in the product (P12.4), egress
 escalation with a fresh IdP re-authentication bound to the exact change (D-34, P12.5),
 imports (C8, P12.6); and on every setup surface administrators stay non-readers of
 content (C9, C10).

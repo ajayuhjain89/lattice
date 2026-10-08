@@ -466,7 +466,7 @@ async def _create(
     await session.execute(
         text(
             "INSERT INTO directory_identities (organization_id, connection_id, membership_id, "
-            "external_id, user_name) VALUES (:o, :c, :m, :x, :n)"
+            "external_id, user_name, managed_by) VALUES (:o, :c, :m, :x, :n, 'organization')"
         ),
         {
             "o": org,

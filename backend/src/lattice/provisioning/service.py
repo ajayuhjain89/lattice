@@ -7,6 +7,12 @@ Boundaries, each enforced in code *and* by the database (migration 0013):
   to its organization and connection; every statement then runs bound to that
   organization under row-level security and filtered by the connection. Another
   organization's resources are unknown (404), never listed.
+* **Its own people only.** SCIM reads and changes the identities it created
+  (``managed_by = identity_provider``). A member an administrator added by hand
+  (P12.2) is managed in the product: SCIM never lists or changes them, and a ``POST``
+  with their ``externalId``, ``userName`` or e-mail is a uniqueness conflict (409) --
+  nothing is adopted silently. A removed member reinstated in the product (D-36) is
+  the same identity again: SCIM finds it by ``externalId`` as before.
 * **Owned users only.** A provisioned person is a new user owned by the organization
   (``home_organization_id``). An e-mail already used by a member of this organization is
   a uniqueness conflict (409); users of *other* organizations are invisible, so they can
@@ -61,6 +67,7 @@ _FROM = """
     JOIN memberships m ON m.organization_id = d.organization_id AND m.id = d.membership_id
     JOIN users u ON u.id = m.user_id
     WHERE d.organization_id = :o AND d.connection_id = :c
+      AND d.managed_by = 'identity_provider'
 """
 
 REASONS: Final = {

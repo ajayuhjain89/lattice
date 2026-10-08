@@ -5,8 +5,10 @@ capability, call one service, map the result.
   (``authz.visible_accounts_predicate``; security-model §10 row 1).
 * ``/v1/admin/access/...`` -- administrators: the member directory, a member's access,
   previews and changes (each audited), grants of documents they can read, and
-  explanations over documents they can read. The capability is checked before anything
-  is read, so a non-administrator gets the same 403 whether or not the target exists.
+  explanations over documents they can read; members added by hand, the administrator
+  capability and reinstatement (P12.2, ``lattice.access.lifecycle``). The capability
+  is checked before anything is read, so a non-administrator gets the same 403 whether
+  or not the target exists.
 * ``GET /v1/admin/audit-events`` -- administrators: the audit trail, newest first.
 """
 
@@ -28,19 +30,33 @@ from lattice.access.directory import (
     search_documents,
 )
 from lattice.access.explain import explain_member_document
+from lattice.access.lifecycle import (
+    create_member,
+    identity_requirement,
+    preview_administrator,
+    preview_reinstatement,
+    reinstate_member,
+    set_administrator,
+)
 from lattice.access.models import (
     AccessPreview,
+    AdministratorChange,
+    AdministratorPreview,
+    AdministratorRequest,
     AuditPage,
     Directory,
     DocumentExplanation,
     DocumentsPage,
     GrantOut,
     GrantRequest,
+    IdentityRequirement,
     MemberAccess,
     MemberAccounts,
     MemberChange,
     MemberChangeRequest,
     MembersPage,
+    NewMemberRequest,
+    ReinstateRequest,
     RevokeRequest,
     VisibleAccount,
 )
@@ -212,6 +228,156 @@ async def patch_member(
 ) -> MemberAccess:
     await _admin_write(principal, limits)
     await change_member(
+        _db(request),
+        organization_id=principal.organization_id,
+        actor_membership_id=principal.membership_id,
+        membership_id=membership_id,
+        request=body,
+    )
+    return await _read_member(request, principal, membership_id)
+
+
+@router.get(
+    "/v1/admin/access/identity-requirement",
+    response_model=IdentityRequirement,
+    responses=_ERRORS,
+    summary="What a member added by hand is bound to: the identifying claim of the "
+    "organization's active OIDC connection (administrators)",
+)
+async def get_identity_requirement(
+    request: Request, principal: CurrentPrincipal
+) -> IdentityRequirement:
+    _require_admin(principal)
+    async with _db(request).tenant_snapshot(principal.organization_id) as session:
+        return await identity_requirement(session, principal.organization_id)
+
+
+@router.post(
+    "/v1/admin/access/members",
+    response_model=MemberAccess,
+    status_code=201,
+    responses=_CHANGE_ERRORS,
+    summary="Add a member by hand, bound to their exact identity-provider identifier, with "
+    "least access (administrators; audited)",
+    description="Not an invitation: nothing is sent. The person signs in through the "
+    "organization's identity provider, which must send exactly `identifier` in the "
+    "connection's identifying claim. Their access starts at least privilege; change it "
+    "afterwards. 409 when the identifier or e-mail already belongs to a member of this "
+    "organization. Requires the X-Lattice-Request: 1 header.",
+)
+async def post_member(
+    body: NewMemberRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+    limits: Limits,
+) -> MemberAccess:
+    await _admin_write(principal, limits)
+    membership_id = await create_member(
+        _db(request),
+        organization_id=principal.organization_id,
+        actor_membership_id=principal.membership_id,
+        request=body,
+    )
+    return await _read_member(request, principal, membership_id)
+
+
+@router.post(
+    "/v1/admin/access/members/{membership_id}/administrator/preview",
+    response_model=AdministratorPreview,
+    responses=_WRITE_ERRORS,
+    summary="Now → After for the administrator capability (administrators; nothing is changed)",
+    description="Refused like the change: your own membership (403), a removed member or "
+    "the last active administrator (422). Requires the X-Lattice-Request: 1 header.",
+)
+async def post_administrator_preview(
+    membership_id: uuid.UUID,
+    body: AdministratorChange,
+    request: Request,
+    principal: CurrentPrincipal,
+    limits: Limits,
+) -> AdministratorPreview:
+    await _admin_write(principal, limits)
+    async with _db(request).tenant_snapshot(principal.organization_id) as session:
+        viewer = await resolve_authorization_context(
+            session,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
+        return await preview_administrator(session, viewer, membership_id, body.administrator)
+
+
+@router.post(
+    "/v1/admin/access/members/{membership_id}/administrator",
+    response_model=MemberAccess,
+    responses=_CHANGE_ERRORS,
+    summary="Grant or revoke another member's administrator capability, with a reason "
+    "(administrators; audited). Content access does not change",
+    description="`version` must be the member's current version (409 otherwise). Never "
+    "your own (403); never leaving the organization without an active administrator "
+    "(422 `last_administrator`). Requires the X-Lattice-Request: 1 header.",
+)
+async def post_administrator(
+    membership_id: uuid.UUID,
+    body: AdministratorRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+    limits: Limits,
+) -> MemberAccess:
+    await _admin_write(principal, limits)
+    await set_administrator(
+        _db(request),
+        organization_id=principal.organization_id,
+        actor_membership_id=principal.membership_id,
+        membership_id=membership_id,
+        request=body,
+    )
+    return await _read_member(request, principal, membership_id)
+
+
+@router.post(
+    "/v1/admin/access/members/{membership_id}/reinstate/preview",
+    response_model=AccessPreview,
+    responses=_WRITE_ERRORS,
+    summary="What reinstating a removed member does: least access, nothing restored "
+    "(administrators; nothing is changed)",
+    description="Requires the X-Lattice-Request: 1 header.",
+)
+async def post_reinstate_preview(
+    membership_id: uuid.UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    limits: Limits,
+) -> AccessPreview:
+    await _admin_write(principal, limits)
+    async with _db(request).tenant_snapshot(principal.organization_id) as session:
+        viewer = await resolve_authorization_context(
+            session,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
+        return await preview_reinstatement(session, viewer, membership_id)
+
+
+@router.post(
+    "/v1/admin/access/members/{membership_id}/reinstate",
+    response_model=MemberAccess,
+    responses=_CHANGE_ERRORS,
+    summary="Reinstate a removed member on their original identity, with least access "
+    "(administrators; audited)",
+    description="The same membership and directory identity become active again; "
+    "clearance, account scope, accounts, departments, groups and grants start from least "
+    "access and the administrator capability is not restored. Previous sessions stay "
+    "ended. Requires the X-Lattice-Request: 1 header.",
+)
+async def post_reinstate(
+    membership_id: uuid.UUID,
+    body: ReinstateRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+    limits: Limits,
+) -> MemberAccess:
+    await _admin_write(principal, limits)
+    await reinstate_member(
         _db(request),
         organization_id=principal.organization_id,
         actor_membership_id=principal.membership_id,

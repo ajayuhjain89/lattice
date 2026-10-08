@@ -10,6 +10,8 @@ import { fromResponse, networkError } from "./errors";
 import type { paths } from "./schema.gen";
 import type {
   AccessPreview,
+  AdministratorPreview,
+  AdministratorRequest,
   AdminSourcesResponse,
   Answer,
   AskRequest,
@@ -20,6 +22,7 @@ import type {
   EvidenceDetail,
   FailuresResponse,
   GrantOut,
+  IdentityRequirement,
   Me,
   MemberAccess,
   MemberAccounts,
@@ -27,11 +30,13 @@ import type {
   MemberChangeRequest,
   MembersPage,
   MemberSourcesResponse,
+  NewMemberRequest,
   OperationalActivityResponse,
   OrganizationChange,
   SetupOrganization,
   OwnActivityResponse,
   ProvidersResponse,
+  ReinstateRequest,
   SetupStatus,
   SyncJob,
   Trace,
@@ -146,6 +151,28 @@ export const api = {
   changeMember: (id: string, body: MemberChangeRequest) =>
     call<MemberAccess>(() =>
       http.PATCH("/v1/admin/access/members/{membership_id}", { params: { path: { membership_id: id } }, body }),
+    ),
+  identityRequirement: (signal?: AbortSignal) =>
+    call<IdentityRequirement>(() => http.GET("/v1/admin/access/identity-requirement", { signal })),
+  addMember: (body: NewMemberRequest) => call<MemberAccess>(() => http.POST("/v1/admin/access/members", { body })),
+  previewAdministrator: (id: string, administrator: boolean) =>
+    call<AdministratorPreview>(() =>
+      http.POST("/v1/admin/access/members/{membership_id}/administrator/preview", {
+        params: { path: { membership_id: id } },
+        body: { administrator },
+      }),
+    ),
+  setAdministrator: (id: string, body: AdministratorRequest) =>
+    call<MemberAccess>(() =>
+      http.POST("/v1/admin/access/members/{membership_id}/administrator", { params: { path: { membership_id: id } }, body }),
+    ),
+  previewReinstatement: (id: string) =>
+    call<AccessPreview>(() =>
+      http.POST("/v1/admin/access/members/{membership_id}/reinstate/preview", { params: { path: { membership_id: id } } }),
+    ),
+  reinstate: (id: string, body: ReinstateRequest) =>
+    call<MemberAccess>(() =>
+      http.POST("/v1/admin/access/members/{membership_id}/reinstate", { params: { path: { membership_id: id } }, body }),
     ),
   accessDocuments: (q: string, signal?: AbortSignal) =>
     call<DocumentsPage>(() => http.GET("/v1/admin/access/documents", { params: { query: { q } }, signal })),

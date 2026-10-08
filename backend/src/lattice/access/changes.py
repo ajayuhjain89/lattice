@@ -20,11 +20,18 @@ Rules, checked in this order so that a refusal reveals nothing the caller may no
    document): administrators cannot grant -- or learn about -- what they cannot read.
 8. A member provisioned by the identity provider (SCIM, Phase 10) is suspended,
    reactivated and removed only by the identity provider (422
-   ``managed_by_identity_provider``, D-20); their access stays editable here.
+   ``managed_by_identity_provider``, D-20); their access stays editable here. A member
+   added by hand (P12.2) is suspended and reactivated here.
+9. Suspending a member ends their sessions in the same transaction (as SCIM and the
+   operator do); reactivating starts none -- they sign in again.
+10. Suspending the last active administrator is refused (422 ``last_administrator``),
+   under the organization's administrator-set lock (``lattice.access.lifecycle``); the
+   database re-checks it at commit (0017).
 
-The database enforces the same limits for the API role (migration 0012): no
-``is_admin``, no ``removed``, administrator membership grants and
-administrator-defined groups only.
+The database enforces the same limits for the API role (migrations 0012, 0017): no
+``is_admin`` (only through the fenced ``lattice_set_admin``), ``removed`` only for an
+identity-provider member, administrator membership grants and administrator-defined
+groups only, and never zero active administrators.
 """
 
 import uuid
@@ -41,6 +48,13 @@ from lattice.access.directory import (
     access_snapshot,
     document_references,
     entity_names,
+)
+from lattice.access.lifecycle import (
+    active_administrators,
+    fenced,
+    guard_administrator_set,
+    lock_administrator_set,
+    refusal,
 )
 from lattice.access.models import (
     AccessPreview,
@@ -115,13 +129,43 @@ async def _refuse_managed_lifecycle(
         await session.execute(
             text(
                 "SELECT EXISTS (SELECT 1 FROM directory_identities "
-                "WHERE organization_id = :o AND membership_id = :m)"
+                "WHERE organization_id = :o AND membership_id = :m "
+                "AND managed_by = 'identity_provider')"
             ),
             {"o": organization_id, "m": membership_id},
         )
     ).scalar_one()
     if provisioned:
         raise _invalid("status", "managed_by_identity_provider")
+
+
+async def _revoke_sessions(
+    session: AsyncSession, organization_id: uuid.UUID, membership_id: uuid.UUID
+) -> None:
+    ended = await session.execute(
+        text(
+            "UPDATE sessions SET revoked_at = now() WHERE organization_id = :o "
+            "AND revoked_at IS NULL AND user_id = "
+            "(SELECT user_id FROM memberships WHERE organization_id = :o AND id = :m)"
+        ),
+        {"o": organization_id, "m": membership_id},
+    )
+    metrics.sessions_revoked("member_suspended", getattr(ended, "rowcount", 0))
+
+
+async def _user_active(
+    session: AsyncSession, organization_id: uuid.UUID, membership_id: uuid.UUID
+) -> bool:
+    active: bool = (
+        await session.execute(
+            text(
+                "SELECT u.status = 'active' FROM memberships m JOIN users u ON u.id = m.user_id "
+                "WHERE m.organization_id = :o AND m.id = :m"
+            ),
+            {"o": organization_id, "m": membership_id},
+        )
+    ).scalar_one()
+    return active
 
 
 async def _validate_references(
@@ -192,6 +236,13 @@ async def preview_member_change(
     before, _ = found
     after = apply_change(before, change)
     await _refuse_managed_lifecycle(session, org, membership_id, before, after)
+    if (
+        before.is_admin
+        and before.status == "active"
+        and after.status != "active"
+        and await active_administrators(session, org) <= 1
+    ):
+        raise refusal("last_administrator")
     names = await entity_names(
         session,
         org,
@@ -288,9 +339,13 @@ async def change_member(
     membership_id: uuid.UUID,
     request: MemberChangeRequest,
 ) -> None:
-    async with db.tenant_transaction(organization_id) as session:
+    async with fenced(), db.tenant_transaction(organization_id) as session:
         viewer = await _viewer(session, organization_id, actor_membership_id)
         await _checked_member(session, viewer, membership_id)
+        if request.status is not None:
+            # A status change may take an administrator out of the administrator set:
+            # lock the set first (lock order: the set, then the membership row).
+            await lock_administrator_set(session, organization_id)
         # Lock the membership so that the version check and the write are one step.
         version = (
             await session.execute(
@@ -314,7 +369,19 @@ async def change_member(
         if after == before:
             raise _invalid("change", "no_change")
         await _refuse_managed_lifecycle(session, organization_id, membership_id, before, after)
+        await guard_administrator_set(
+            session,
+            organization_id,
+            actor_membership_id=actor_membership_id,
+            before=before,
+            after=after,
+            target_user_active=await _user_active(session, organization_id, membership_id),
+        )
         await write_snapshot(session, organization_id, membership_id, before, after)
+        if after.status == "suspended" and before.status != "suspended":
+            # As SCIM and operator suspension do (P11.3): end their sessions now, so a
+            # later reactivation never revives one.
+            await _revoke_sessions(session, organization_id, membership_id)
         metrics.member_changed(before.status, after.status, "administrator")
         await record_event(
             session,

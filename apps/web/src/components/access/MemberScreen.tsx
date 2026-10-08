@@ -1,12 +1,12 @@
 "use client";
 
-import { CheckCircle2, PauseCircle, PlayCircle, SlidersHorizontal, X } from "lucide-react";
+import { CheckCircle2, PauseCircle, PlayCircle, ShieldMinus, ShieldPlus, SlidersHorizontal, UserCheck, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { isApiError } from "@/api/errors";
 import { useAccessMember } from "@/api/queries";
-import type { DocumentRef, MemberAccess } from "@/api/types";
+import type { DocumentRef, LifecycleBlock, MemberAccess } from "@/api/types";
 import { BoundaryInline } from "@/components/primitives/Boundary";
 import { Button } from "@/components/primitives/Button";
 import { Icon } from "@/components/primitives/icons";
@@ -22,10 +22,11 @@ import { formatCount, formatTime, isUuid } from "@/lib/format";
 
 import styles from "./Access.module.css";
 import { ChangeAccessDialog, StatusDialog } from "./ChangeAccess";
-import { accessSummary, groupOrigin, listNames, scopeLabel, type Part } from "./copy";
+import { accessSummary, groupOrigin, lifecycleBlockSentence, listNames, scopeLabel, type Part } from "./copy";
 import { DocumentSearch } from "./DocumentSearch";
 import { GrantsSection, Verdict } from "./Grants";
 import { managedByIdentityProvider, MemberStatus } from "./MemberFacts";
+import { AdministratorDialog, ReinstateDialog } from "./MemberLifecycle";
 
 /** A write that has just been applied, kept on the page (the toast only echoes it). */
 export interface AppliedChange {
@@ -40,7 +41,8 @@ export interface AppliedChange {
  * with what it gives. Groups the administrator isn't in and grants on documents they can't
  * read are acknowledged once each -- never named, listed, counted or identified (D-18).
  * Changes are previewed as Now → After, need a reason and are audited; your own access
- * can't be changed here (D-17).
+ * can't be changed here (D-17). Lifecycle actions -- suspend, reactivate, reinstate, the
+ * administrator capability -- are offered exactly as the API's `lifecycle` says (P12.2).
  */
 export function MemberScreen({ id }: { id: string }) {
   const { isAdmin } = useWorkspace();
@@ -76,11 +78,26 @@ export function MemberScreen({ id }: { id: string }) {
 function Member({ access }: { access: MemberAccess }) {
   const [changing, setChanging] = useState(false);
   const [status, setStatus] = useState(false);
+  const [administrator, setAdministrator] = useState(false);
+  // Fixed when the dialog opens: the member reloads underneath it once the change applies.
+  const [granting, setGranting] = useState(true);
+  const [reinstating, setReinstating] = useState(false);
   const [applied, setApplied] = useState<AppliedChange | null>(null);
   const m = access.member;
+  const lc = access.lifecycle;
   const canChange = !access.is_self && m.status !== "removed";
   // Provisioned by the identity provider (SCIM): it owns suspension and reactivation.
   const managed = managedByIdentityProvider(m);
+  // Every lifecycle action is offered as the API decided (lifecycle), never inferred here.
+  const statusAction = lc.suspend ?? lc.reactivate;
+  const adminAction = lc.grant_administrator ?? lc.revoke_administrator;
+  const notes = [
+    ...new Set(
+      [statusAction, adminAction, lc.reinstate]
+        .map((a) => a?.blocked_by)
+        .filter((b): b is LifecycleBlock => Boolean(b) && b !== "own_membership" && b !== "managed_by_identity_provider"),
+    ),
+  ];
 
   return (
     <>
@@ -94,7 +111,13 @@ function Member({ access }: { access: MemberAccess }) {
           <MemberStatus status={m.status} />
           {m.is_admin && <span>Administrator — no content access from this</span>}
           {managed && <Tag tone="quiet">Identity provider</Tag>}
+          {lc.identity_managed_by === "organization" && <span>Added in Lattice</span>}
         </p>
+        {lc.sign_in_identifier && (
+          <p className={`${styles.secondary} ${styles.signIn}`} data-testid="sign-in-identifier">
+            Signs in as <code>{lc.sign_in_identifier}</code>
+          </p>
+        )}
       </header>
 
       <div className={styles.lead} data-testid="access-summary">
@@ -106,29 +129,54 @@ function Member({ access }: { access: MemberAccess }) {
       </div>
 
       <div className={styles.actions}>
-        {canChange ? (
-          <>
-            <Button variant="primary" icon={<Icon as={SlidersHorizontal} />} onClick={() => setChanging(true)}>
-              Change access
-            </Button>
-            {!managed && (
-              <Button icon={<Icon as={m.status === "active" ? PauseCircle : PlayCircle} />} onClick={() => setStatus(true)}>
-                {m.status === "active" ? "Suspend" : "Reactivate"}
-              </Button>
-            )}
-          </>
-        ) : null}
+        {canChange && (
+          <Button variant="primary" icon={<Icon as={SlidersHorizontal} />} onClick={() => setChanging(true)}>
+            Change access
+          </Button>
+        )}
+        {statusAction?.available && (
+          <Button icon={<Icon as={lc.suspend ? PauseCircle : PlayCircle} />} onClick={() => setStatus(true)}>
+            {lc.suspend ? "Suspend" : "Reactivate"}
+          </Button>
+        )}
+        {lc.reinstate?.available && (
+          <Button variant="primary" icon={<Icon as={UserCheck} />} onClick={() => setReinstating(true)}>
+            Reinstate
+          </Button>
+        )}
+        {adminAction?.available && (
+          <Button
+            icon={<Icon as={lc.grant_administrator ? ShieldPlus : ShieldMinus} />}
+            onClick={() => {
+              setGranting(Boolean(lc.grant_administrator));
+              setAdministrator(true);
+            }}
+          >
+            {lc.grant_administrator ? "Make administrator" : "Remove administrator capability"}
+          </Button>
+        )}
         {canChange && managed && (
           <p className={styles.note} data-testid="managed-note">
-            {m.name}&apos;s name, e-mail and whether they&apos;re active come from your identity provider. Suspend or reactivate them
-            there; access is managed here.
+            {lifecycleBlockSentence("managed_by_identity_provider", m.name)}
           </p>
         )}
-        {!canChange && (
+        {access.is_self && (
           <p className={styles.note} data-testid="no-change-note">
-            {access.is_self ? "This is you. Another administrator must change your access." : `${m.name} has been removed; access can't be changed.`}
+            {lifecycleBlockSentence("own_membership", m.name)}
           </p>
         )}
+        {m.status === "removed" && (
+          <p className={styles.note} data-testid="no-change-note">
+            {lc.reinstate?.available
+              ? `${m.name} has been removed; access can't be changed. Reinstating makes them active again on the same sign-in identity, starting from least access.`
+              : `${m.name} has been removed; access can't be changed.`}
+          </p>
+        )}
+        {notes.map((block) => (
+          <p key={block} className={styles.note} data-testid={`blocked-${block}`}>
+            {lifecycleBlockSentence(block, m.name)}
+          </p>
+        ))}
       </div>
 
       {applied && <AppliedLine change={applied} onDismiss={() => setApplied(null)} />}
@@ -138,7 +186,11 @@ function Member({ access }: { access: MemberAccess }) {
       <DocumentCheck access={access} />
 
       {canChange && <ChangeAccessDialog member={access} open={changing} onOpenChange={setChanging} onApplied={setApplied} />}
-      {canChange && !managed && <StatusDialog member={access} open={status} onOpenChange={setStatus} onApplied={setApplied} />}
+      {statusAction?.available && <StatusDialog member={access} open={status} onOpenChange={setStatus} onApplied={setApplied} />}
+      {(adminAction?.available || administrator) && (
+        <AdministratorDialog member={access} granting={granting} open={administrator} onOpenChange={setAdministrator} onApplied={setApplied} />
+      )}
+      {(lc.reinstate?.available || reinstating) && <ReinstateDialog member={access} open={reinstating} onOpenChange={setReinstating} onApplied={setApplied} />}
     </>
   );
 }

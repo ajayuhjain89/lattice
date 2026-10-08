@@ -1,12 +1,14 @@
 # Phase 12 — Organization Setup, Identity Configuration & Integrations: plan
 
 Status: **Plan approved (2026-10-06). P12.0 (contracts, Part II) written; P12.1
-(foundations) implemented 2026-10-08 (Part III).** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
+(foundations) implemented 2026-10-08 and P12.2 (members and administrators) 2026-10-09
+(Part III).** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
 D-28–D-33, D-35, D-36 and D-37B are approved (§22, with the contracts of Part II);
 D-34 (raising egress ceilings: IdP step-up, C6) and D-37A (organization purge: semantics
 now, executable purge in Phase 15, C14) were decided by engineering under the product
 owner's delegation, as were corrections to D-31 and D-36 (C18). **P12.1 delivered
-(2026-10-08, local commit; Part III).** P12.2 waits for the product owner's go-ahead.
+(2026-10-08) and P12.2 delivered (2026-10-09), local commits; Part III.** P12.3 waits for
+the product owner's go-ahead.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 12. Phase 11
 is closed (143392f); real external staging validation stays deferred and remains a
@@ -1282,3 +1284,48 @@ cancelling at the provider is not one), at most once a minute; not audited.
 (P12.2); accounts and mappings (P12.3); OIDC/SCIM settings, `scim_tokens.last_used_at`,
 test sign-in (P12.4); provider/credential/egress UX, step-up (P12.5); imports (P12.6).
 
+## P12.2 Members and administrators (2026-10-09)
+
+Delivered on `phase/12-org-setup-integrations` (local commit, not pushed), after the
+separate dependency-security commit that moved `next` to 16.3.8. Migration **0017**
+(`SCHEMA_REVISION` 0017; irreversible in production: without the marker, members added
+by hand would turn SCIM-managed).
+
+| Contract | Built | Where |
+| -------- | ----- | ----- |
+| C2.1 manual members (D-30) | `POST /v1/admin/access/members` → fenced `lattice_create_member`: an owned user, a least-access membership written by the function, the directory identity `(active connection, identifier)` with `managed_by = organization`; identifier NFC-normalised and trimmed, case kept, compared exactly (also for an `email` claim); 409 naming `identifier` or `email` for a member of this organization (removed ones included); 422 `no_active_connection`; unknown fields 422 (access cannot be requested). `GET /v1/admin/access/identity-requirement` names the claim and issuer for the form | `lattice.access.lifecycle`, 0017 |
+| C2.2 administrator capability (D-31 + C18) | `POST …/members/{id}/administrator/preview` (Now → After; `content_access_changes: false`) and `POST …/administrator` (version, reason) → fenced `lattice_set_admin`; never yourself (403), never a removed member (422), never zero active administrators (422 `last_administrator`) — lock-then-count in the function and the Access status change, re-checked at commit by a deferred trigger; SCIM and operators not bound | `lattice.access.lifecycle`, `lattice.access.changes`, 0017 |
+| C2.3 reinstatement (D-36 + C18) | `POST …/reinstate/preview` (what they had, and that it is not restored) and `POST …/reinstate` (version, reason) → fenced `lattice_reinstate_member`: same membership and directory identity, on the active connection; least access, never an administrator; sessions stay revoked; SCIM resolves the same `externalId` afterwards. Operator `member reinstate` unchanged (restores prior access) | as above |
+| Member lifecycle in the read model | `MemberAccess.lifecycle`: `sign_in_identifier`, `identity_managed_by`, and `suspend` / `reactivate` / `reinstate` / `grant_administrator` / `revoke_administrator`, each `null` (does not apply) or `{available, blocked_by}` (`own_membership`, `managed_by_identity_provider`, `last_administrator`, `identity_not_current`, `user_inactive`, `email_taken`). The page offers only these | `lattice.access.directory` |
+| C12 setup status | `members·required·only_administrators` links to Access ("Add a member") and reports `manual_members_available`; `organization·attention·single_administrator` links to Access; `provisioning`'s identity-provider members are counted from `managed_by` (replacing P12.1's audit derivation); `blocked·no_administrator` unchanged (reached only through the identity provider or an operator) | `lattice.setup` |
+| Access UI | *Add member* on the Access page (the trust model in plain words: not an invitation, the exact identifier for the named claim, least access; validation; conflicts on their field); on a member: *Make administrator* / *Remove administrator capability* (Now → After, "Content access doesn't change", a reason; no typed confirmation), *Reinstate* (Now → After of what is not restored, a reason), suspend/reactivate as before; blocked actions explained by the backend's reason; "Signs in as …" | `apps/web/src/components/access/MemberLifecycle.tsx`, `MemberScreen.tsx`, `AccessScreen.tsx` |
+
+**Deviations from Part II, and why**
+
+1. **`directory_identities.managed_by`** (not in C2/ADR-017): "has a directory identity"
+   meant "SCIM-managed" until now; hand-added members have one too. The marker keeps D-20
+   for SCIM members and lets administrators suspend hand-added ones; SCIM reads only its
+   own identities (a hand-added member's identifier still answers SCIM 409).
+2. **`scim.request_refused` not yet recorded.** C2.1 names it for a SCIM `POST` that
+   collides with a hand-added member; the 409 is built, the event (an audit-policy
+   widening for `scim:` actors, with its own rate rule) comes with the provisioning
+   activity view in P12.4.
+3. **Suspension in Access now ends the member's sessions** in the same transaction (as
+   SCIM and operator suspension do since P11.3); before, sessions were refused while
+   suspended and worked again after reactivation.
+4. **The creation event records the binding** (`after.identity`: identifier and e-mail),
+   so C18's "contained by the audit event" holds; the audit view shows them. Effect kinds
+   `created`, `removed` and `reinstated` were added — SCIM removals had been shown as
+   "Reactivated".
+5. **Reinstatement also refuses a disabled user** (`user_inactive`) and answers 409 when
+   another member now has the person's e-mail.
+6. **`lattice_app` may read `oidc_connections.issuer, subject_claim`** (the add-member
+   form names the claim; not secret).
+7. The functions do not write audit events themselves: the deferred access-audit
+   triggers already bind their writes to the API's event (ADR-017 "Implemented in
+   P12.2").
+
+**Not built (later checkpoints):** account administration and mappings (P12.3); OIDC and
+SCIM settings, SCIM token UI, `scim.request_refused` (P12.4); provider/BYOK settings and
+D-34 egress escalation (P12.5); source upload and first sync (P12.6); organization purge
+(Phase 15).

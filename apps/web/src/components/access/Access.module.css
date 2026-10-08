@@ -65,6 +65,16 @@
   color: var(--text-muted);
 }
 
+/* Add member sits at the end of the find row, aligned with the search control. */
+.addMember {
+  margin-bottom: calc(var(--type-caption-line) + var(--space-1));
+}
+
+.shownRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .who {
   display: grid;
   gap: var(--space-0-5);
@@ -508,6 +518,48 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* --- members and administrators (P12.2) ------------------------------------------------- */
+
+/* The trust model in plain words, above the add-member fields and the reinstatement review. */
+.trust {
+  display: grid;
+  gap: var(--space-2);
+  max-width: var(--measure);
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-secondary);
+}
+
+.trust strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* A claim name or an identifier: exact characters matter, so the ledger face. */
+.claim,
+.identifierInput,
+.signIn code {
+  font-family: var(--font-ledger);
+  font-variant-ligatures: none;
+  overflow-wrap: anywhere;
+}
+
+.contentUnchanged {
+  max-width: var(--measure);
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--rule);
+  color: var(--text-secondary);
+}
+
+.contentUnchanged strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.signIn {
+  overflow-wrap: anywhere;
+}
+
 /* --- loading ------------------------------------------------------------------------- */
 
 /* --- narrow layouts ------------------------------------------------------------------- */
@@ -608,6 +660,8 @@
 }
 
 @media (forced-colors: active) {
+  .trust,
+  .contentUnchanged,
   .compareRule,
   .compareRow,
   .applied,

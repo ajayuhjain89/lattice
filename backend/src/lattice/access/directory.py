@@ -30,7 +30,10 @@ from lattice.access.models import (
     DocumentRef,
     GrantOut,
     GroupAccess,
+    LifecycleAction,
+    LifecycleBlock,
     MemberAccess,
+    MemberLifecycle,
     MembersPage,
     MemberSummary,
     Named,
@@ -172,6 +175,7 @@ def _member_columns() -> list[Any]:
         .where(
             DIRECTORY.c.organization_id == MEMBERSHIPS.c.organization_id,
             DIRECTORY.c.membership_id == MEMBERSHIPS.c.id,
+            DIRECTORY.c.managed_by == "identity_provider",
         )
         .exists()
         .label("provisioned"),
@@ -514,6 +518,90 @@ async def actor_names(
     return {f"member:{membership_id}": name for membership_id, name in rows}
 
 
+_LIFECYCLE_SQL = text(
+    """
+    SELECT u.status = 'active' AS user_active, d.external_id, d.managed_by,
+           (c.status = 'active') AS identity_current,
+           EXISTS (
+             SELECT 1 FROM memberships o JOIN users ou ON ou.id = o.user_id
+             WHERE o.organization_id = m.organization_id AND o.id <> m.id
+               AND lower(ou.email) = lower(u.email)
+           ) AS email_taken,
+           (SELECT count(*) FROM memberships a JOIN users au ON au.id = a.user_id
+             WHERE a.organization_id = m.organization_id AND a.is_admin
+               AND a.status = 'active' AND au.status = 'active') AS active_administrators
+    FROM memberships m JOIN users u ON u.id = m.user_id
+    LEFT JOIN directory_identities d
+      ON d.organization_id = m.organization_id AND d.membership_id = m.id
+    LEFT JOIN oidc_connections c
+      ON c.organization_id = d.organization_id AND c.id = d.connection_id
+    WHERE m.organization_id = :o AND m.id = :m
+    """
+)
+
+
+def _action(blocked_by: LifecycleBlock | None) -> LifecycleAction:
+    return LifecycleAction(available=blocked_by is None, blocked_by=blocked_by)
+
+
+async def _lifecycle(
+    session: AsyncSession, viewer: AuthorizationContext, membership_id: uuid.UUID, member: Any
+) -> MemberLifecycle:
+    """The lifecycle actions the product offers for this member and why any is blocked
+    (the same rules ``lattice.access.lifecycle`` and the fenced functions enforce)."""
+    row = (
+        await session.execute(_LIFECYCLE_SQL, {"o": viewer.organization_id, "m": membership_id})
+    ).one()
+    status: str = member.status
+    is_self = membership_id == viewer.membership_id
+    idp = row.managed_by == "identity_provider"
+    sole_admin = (
+        member.is_admin
+        and status == "active"
+        and row.user_active
+        and int(row.active_administrators) <= 1
+    )
+
+    def status_change(applies: bool) -> LifecycleAction | None:
+        if not applies:
+            return None
+        if is_self:
+            return _action("own_membership")
+        if idp:
+            return _action("managed_by_identity_provider")
+        return _action(None)
+
+    suspend = status_change(status == "active")
+    if suspend is not None and suspend.available and sole_admin:
+        suspend = _action("last_administrator")
+    reinstate: LifecycleAction | None = None
+    if status == "removed":
+        if row.external_id is None or not row.identity_current:
+            reinstate = _action("identity_not_current")
+        elif not row.user_active:
+            reinstate = _action("user_inactive")
+        elif row.email_taken:
+            reinstate = _action("email_taken")
+        else:
+            reinstate = _action(None)
+    grant = revoke = None
+    if status != "removed":
+        own = _action("own_membership") if is_self else None
+        if member.is_admin:
+            revoke = own or _action("last_administrator" if sole_admin else None)
+        else:
+            grant = own or _action(None)
+    return MemberLifecycle(
+        sign_in_identifier=row.external_id,
+        identity_managed_by=row.managed_by,
+        suspend=suspend,
+        reactivate=status_change(status == "suspended"),
+        reinstate=reinstate,
+        grant_administrator=grant,
+        revoke_administrator=revoke,
+    )
+
+
 async def member_access(
     session: AsyncSession, viewer: AuthorizationContext, membership_id: uuid.UUID
 ) -> MemberAccess | None:
@@ -572,6 +660,7 @@ async def member_access(
     ]
     return MemberAccess(
         member=_summary(row, departments),
+        lifecycle=await _lifecycle(session, viewer, membership_id, row),
         version=version,
         is_self=membership_id == viewer.membership_id,
         accounts=accounts,

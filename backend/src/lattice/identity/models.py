@@ -180,7 +180,10 @@ class OidcLoginAttempt(Base):
 
 class DirectoryIdentity(Base):
     """The identity provider's person in one organization: (connection, external ID) ->
-    membership. Written by SCIM provisioning; read by OIDC sign-in."""
+    membership. Written by SCIM provisioning (``managed_by = identity_provider``) or, for
+    a member an administrator added by hand or the operator's first administrator, by
+    the fenced ``lattice_create_member`` / ``org create`` (``organization``); read by
+    OIDC sign-in."""
 
     __tablename__ = "directory_identities"
     __table_args__ = (
@@ -212,6 +215,7 @@ class DirectoryIdentity(Base):
     given_name: Mapped[str | None] = mapped_column(Text)
     family_name: Mapped[str | None] = mapped_column(Text)
     version: Mapped[int] = mapped_column(server_default=sql_text("1"))
+    managed_by: Mapped[str] = mapped_column(Text, server_default="identity_provider")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

@@ -189,4 +189,10 @@ async def test_openapi_documents_the_error_envelope(client: httpx.AsyncClient) -
         # Phase 12 (P12.1)
         "/v1/admin/setup",
         "/v1/admin/organization",
+        # Phase 12 (P12.2): members and administrators
+        "/v1/admin/access/identity-requirement",
+        "/v1/admin/access/members/{membership_id}/administrator/preview",
+        "/v1/admin/access/members/{membership_id}/administrator",
+        "/v1/admin/access/members/{membership_id}/reinstate/preview",
+        "/v1/admin/access/members/{membership_id}/reinstate",
     }

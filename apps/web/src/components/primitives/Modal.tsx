@@ -22,7 +22,7 @@ export interface ModalProps {
 /**
  * A centred dialog (design-system §4): 560 px (440 for confirmations), ink
  * border and overlay shadow, focus trapped by Radix, Escape closes, focus returns to the
- * control that opened it. Below 768 px it is a full-width sheet anchored to the bottom.
+ * control that opened it (or, if that control is gone, to the page's heading). Below 768 px it is a full-width sheet anchored to the bottom.
  */
 export function Modal({ open, onOpenChange, title, description, children, footer, size = "md" }: ModalProps) {
   // Radix returns focus only to a Dialog.Trigger; these dialogs open from ordinary
@@ -40,7 +40,11 @@ export function Modal({ open, onOpenChange, title, description, children, footer
           }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            opener.current?.focus();
+            // The opener may be gone once the change applied (a Reinstate button on a
+            // member who is active now): focus the page's heading instead of losing it.
+            const target = opener.current?.isConnected ? opener.current : document.querySelector<HTMLElement>("main h1");
+            if (target && !opener.current?.isConnected && !target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+            target?.focus();
           }}
           // Without a description the title alone names the dialog (no duplicate reading).
           {...(description ? {} : { "aria-describedby": undefined })}

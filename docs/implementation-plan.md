@@ -28,7 +28,8 @@ budget and remains a release gate before Phase 15 may declare v1 GA
 status log. **Next: Phase 12 — Organization Setup, Identity Configuration &
 Integrations** (§4 "Later phases") on `phase/12-org-setup-integrations`
 ([phase-12-plan.md](phase-12-plan.md)): plan approved, P12.0 contracts written,
-P12.1 foundations delivered (local commit, 2026-10-08); P12.2 waits for approval.
+P12.1 foundations delivered (local commit, 2026-10-08); P12.2 members and administrators
+delivered (local commit, 2026-10-09); P12.3 waits for approval.
 
 ---
 
@@ -1207,7 +1208,7 @@ service; real external staging stays a Phase 15 gate.
 | ---- | ----- | ------ |
 | P12.0 | Decisions and contracts (plan Part II, ADR-017, ADR-011 amendment) | Delivered (docs only) |
 | P12.1 | Foundations: ADR-017 fences, encrypted secret store, outbound policy, `org create`, setup status, Organization page | Delivered (local; phase-12-plan Part III) |
-| P12.2 | Members, administrators, reinstatement | Not started |
+| P12.2 | Members, administrators, reinstatement | Delivered (local; phase-12-plan Part III) |
 | P12.3 | Accounts and `account_external_refs` | Not started |
 | P12.4 | OIDC and SCIM setup | Not started |
 | P12.5 | Providers, credentials, egress with step-up | Not started |
@@ -1225,7 +1226,7 @@ service; real external staging stays a Phase 15 gate.
 | 10 | OIDC SSO + hardening | **Built, verified and approved** (Phase 10 section above; decisions D-1, D-19 revised, D-20 and D-21 accepted 2026-10-02): OIDC (D-1), SCIM provisioning (D-20), rate limits (D-21), database-enforced access audit, security headers review, dependency audit, threat-model review, pen-test style review of isolation |
 | — | Product-design overhaul (frontend only) | **Closed and merged** (27da421, 2026-10-03): D0–D7 complete and approved; `design-direction.md` is the historical record, `design-system.md` v2 is canonical. Inserted before Phase 11 |
 | 11 | Production Deployment, Identity Operations & Reliability | **Closed and merged (143392f, 2026-10-06): built and verified on the local reference stack (P11.0–P11.7); external staging validation deferred to the Phase 15 gate.** **Plan approved 2026-10-03** ([phase-11-plan.md](phase-11-plan.md); decisions D-22–D-27; checkpoints P11.0–P11.7). Production deployment (images, single region, migrations in CI/CD, rollback), production identity and session operations, shared limits, jobs and retention, backups/PITR with tested restore, observability and actionable alerts (including `security_invariant_violated`), production runbooks and drills |
-| 12 | Organization Setup, Identity Configuration & Integrations | **Plan approved and P12.0 contracts written (2026-10-06; [phase-12-plan.md](phase-12-plan.md)); P12.1 foundations delivered (2026-10-08).** Customer-facing organization onboarding, SSO and SCIM setup, source/integration and provider (BYOK) setup, zero-to-first-question. Also: **account administration** (creating accounts and mapping them to source account references, today manifest-only — from the former "Accounts workspace"), **evaluation of the next connectors** (call transcripts, CRM notes, GitHub issues, release notes) within integration setup, ~~organization deletion/purge (D-26)~~ → Phase 15 (D-37A), ~~identity-provider migration with differing subjects~~ → post-v1 (D-37B) |
+| 12 | Organization Setup, Identity Configuration & Integrations | **Plan approved and P12.0 contracts written (2026-10-06; [phase-12-plan.md](phase-12-plan.md)); P12.1 foundations delivered (2026-10-08); P12.2 members and administrators delivered (2026-10-09).** Customer-facing organization onboarding, SSO and SCIM setup, source/integration and provider (BYOK) setup, zero-to-first-question. Also: **account administration** (creating accounts and mapping them to source account references, today manifest-only — from the former "Accounts workspace"), **evaluation of the next connectors** (call transcripts, CRM notes, GitHub issues, release notes) within integration setup, ~~organization deletion/purge (D-26)~~ → Phase 15 (D-37A), ~~identity-provider migration with differing subjects~~ → post-v1 (D-37B) |
 | 13 | Retrieval and answer quality | Retrieval and answer-quality improvement |
 | 14 | Enterprise-scale hardening | Large-scale, load and adversarial hardening |
 | 15 | GA / v1 closure | Final general-availability closure. **Release gate (D-22 amended 2026-10-05):** real external staging validation (phase-11-plan §21.1: cloud staging deployment, managed-PostgreSQL privileges, managed backup/PITR, public TLS/origin, external OIDC callback, provider-specific deploy/rollback, cloud RPO/RTO) must be completed before v1 GA / production-ready is declared. Also: executable **organization purge** with a platform deletion record (D-37A; semantics in phase-12-plan C14) |

@@ -15,6 +15,7 @@ rules behind the fields are security-model §10:
 * document counts are computed only over documents the viewing administrator can read.
 """
 
+import unicodedata
 import uuid
 from datetime import datetime
 from typing import Literal
@@ -135,8 +136,50 @@ class GrantOut(_Out):
     )
 
 
+LifecycleBlock = Literal[
+    "own_membership",
+    "managed_by_identity_provider",
+    "last_administrator",
+    "identity_not_current",
+    "user_inactive",
+    "email_taken",
+]
+
+
+class LifecycleAction(_Out):
+    """One lifecycle action the product offers for this member, decided by the backend."""
+
+    available: bool
+    blocked_by: LifecycleBlock | None = Field(
+        description="Why it is not available now; null when it is."
+    )
+
+
+class MemberLifecycle(_Out):
+    """What may happen to the member's lifecycle and administrator capability here. An
+    action that does not apply to the member's state is null (e.g. ``reinstate`` for a
+    member who was not removed). The page shows these; it never infers them."""
+
+    sign_in_identifier: str | None = Field(
+        description="The exact value the organization's identity provider sends for them "
+        "(the connection's identifying claim); null when they have no directory identity."
+    )
+    identity_managed_by: Literal["identity_provider", "organization"] | None = Field(
+        description="Who owns their lifecycle: the identity provider (SCIM) or this "
+        "organization's administrators; null without a directory identity."
+    )
+    suspend: LifecycleAction | None
+    reactivate: LifecycleAction | None
+    reinstate: LifecycleAction | None = Field(
+        description="A removed member made active again with least access (D-36)."
+    )
+    grant_administrator: LifecycleAction | None
+    revoke_administrator: LifecycleAction | None
+
+
 class MemberAccess(_Out):
     member: MemberSummary
+    lifecycle: MemberLifecycle
     version: datetime = Field(
         description="Send back as `version` with a change; a stale value is refused (409)."
     )
@@ -182,7 +225,10 @@ class MemberChangeRequest(MemberChange):
 
 EffectKind = Literal[
     "provisioned",
+    "created",
     "suspended",
+    "removed",
+    "reinstated",
     "reactivated",
     "administrator",
     "clearance",
@@ -211,6 +257,116 @@ class AccessPreview(_Out):
     effects: list[AccessEffect]
     documents_gained: int = Field(description="Among documents you can read.")
     documents_lost: int = Field(description="Among documents you can read.")
+
+
+def _reason(value: str) -> str:
+    if not value.strip():
+        raise ValueError("reason must not be blank")
+    return value
+
+
+_CONTROL = frozenset(chr(c) for c in (*range(32), 127))
+
+
+def _plain(value: str | None, field: str) -> str | None:
+    """Trimmed; no control characters (the value is never echoed in an error)."""
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if any(c in _CONTROL for c in cleaned):
+        raise ValueError(f"{field} must not contain control characters")
+    return cleaned
+
+
+class IdentityRequirement(_Out):
+    """What a member added by hand must be bound to: the organization's active OIDC
+    connection and the claim whose exact value identifies a person."""
+
+    available: bool = Field(description="False until the organization has an active connection.")
+    subject_claim: str | None = Field(
+        description="The identifying claim (e.g. `sub` or `email`) whose exact value is the "
+        "member's identifier."
+    )
+    issuer: str | None
+
+
+class NewMemberRequest(_In):
+    """A person added by hand (D-30). Their access starts at least privilege: the request
+    cannot carry access."""
+
+    email: str = Field(min_length=3, max_length=255, description="Contact and display only.")
+    name: str = Field(min_length=1, max_length=200)
+    given_name: str | None = Field(default=None, max_length=200)
+    family_name: str | None = Field(default=None, max_length=200)
+    identifier: str = Field(
+        min_length=1,
+        max_length=255,
+        description="The exact value the identity provider sends in the connection's "
+        "identifying claim for this person. Compared exactly (case preserved), never "
+        "matched by e-mail.",
+    )
+    reason: str = Field(min_length=1, max_length=MAX_REASON)
+
+    @model_validator(mode="after")
+    def _normalise(self) -> "NewMemberRequest":
+        email = _plain(self.email, "email") or ""
+        if (
+            email.count("@") != 1
+            or email.startswith("@")
+            or email.endswith("@")
+            or any(c.isspace() for c in email)
+        ):
+            raise ValueError("email must be one address")
+        name = _plain(self.name, "name")
+        if not name:
+            raise ValueError("name must not be blank")
+        identifier = _plain(unicodedata.normalize("NFC", self.identifier), "identifier")
+        if not identifier:
+            raise ValueError("identifier must not be blank")
+        _reason(self.reason)
+        for field, value in (
+            ("email", email),
+            ("name", name),
+            ("given_name", _plain(self.given_name, "given_name") or None),
+            ("family_name", _plain(self.family_name, "family_name") or None),
+            ("identifier", identifier),
+        ):
+            object.__setattr__(self, field, value)
+        return self
+
+
+class AdministratorChange(_In):
+    administrator: bool = Field(description="True: grant the capability; false: revoke it.")
+
+
+class AdministratorRequest(AdministratorChange):
+    version: datetime
+    reason: str = Field(min_length=1, max_length=MAX_REASON)
+
+    @model_validator(mode="after")
+    def _reason_has_text(self) -> "AdministratorRequest":
+        _reason(self.reason)
+        return self
+
+
+class AdministratorPreview(_Out):
+    """Now → After for the administrator capability. Content access never changes."""
+
+    now: bool
+    after: bool
+    content_access_changes: Literal[False] = Field(
+        default=False, description="Always false: administration grants no access to content."
+    )
+
+
+class ReinstateRequest(_In):
+    version: datetime
+    reason: str = Field(min_length=1, max_length=MAX_REASON)
+
+    @model_validator(mode="after")
+    def _reason_has_text(self) -> "ReinstateRequest":
+        _reason(self.reason)
+        return self
 
 
 class GrantRequest(_In):

@@ -49,6 +49,15 @@ export type DocumentRef = Schemas["DocumentRef"];
 export type MemberChange = Schemas["MemberChange"];
 export type MemberChangeRequest = Schemas["MemberChangeRequest"];
 export type AccessPreview = Schemas["AccessPreview"];
+// Members and administrators (Phase 12, P12.2).
+export type IdentityRequirement = Schemas["IdentityRequirement"];
+export type NewMemberRequest = Schemas["NewMemberRequest"];
+export type MemberLifecycle = Schemas["MemberLifecycle"];
+export type LifecycleAction = Schemas["LifecycleAction"];
+export type LifecycleBlock = NonNullable<LifecycleAction["blocked_by"]>;
+export type AdministratorPreview = Schemas["AdministratorPreview"];
+export type AdministratorRequest = Schemas["AdministratorRequest"];
+export type ReinstateRequest = Schemas["ReinstateRequest"];
 export type AccessEffect = Schemas["AccessEffect"];
 export type DocumentsPage = Schemas["DocumentsPage"];
 export type DocumentExplanation = Schemas["DocumentExplanation"];

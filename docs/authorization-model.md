@@ -63,9 +63,13 @@ well-run Drive or Slack workspace.
   and, since Phase 10, SCIM 2.0 from the organization's identity provider (D-20). The
   provider owns a provisioned member's identity attributes and lifecycle (active,
   suspended, removed); Lattice owns their access (clearance, scope, assignments,
-  departments, groups, grants) and the administrator capability (operator command
-  only). A provisioned person is a user owned by the organization: they cannot be a
-  member anywhere else. New members start with the least access the policy models.
+  departments, groups, grants) and the administrator capability (operator command,
+  and since P12.2 another administrator in Access; never yourself, never the last active
+  administrator). Since P12.2 an administrator may also add a member by hand, bound to
+  the exact identifier the provider sends (no e-mail matching, no JIT), and reinstate a
+  removed member with least access. A provisioned person is a user owned by the
+  organization: they cannot be a member anywhere else. New members start with the least
+  access the policy models.
 
 ## 3. Authorization concepts (only what is needed)
 

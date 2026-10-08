@@ -92,6 +92,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/admin/access/identity-requirement": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** What a member added by hand is bound to: the identifying claim of the organization's active OIDC connection (administrators) */
+    get: operations["get_identity_requirement_v1_admin_access_identity_requirement_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/admin/access/members": {
     parameters: {
       query?: never;
@@ -102,7 +119,11 @@ export interface paths {
     /** The organization's members by name (administrators) */
     get: operations["get_members_v1_admin_access_members_get"];
     put?: never;
-    post?: never;
+    /**
+     * Add a member by hand, bound to their exact identity-provider identifier, with least access (administrators; audited)
+     * @description Not an invitation: nothing is sent. The person signs in through the organization's identity provider, which must send exactly `identifier` in the connection's identifying claim. Their access starts at least privilege; change it afterwards. 409 when the identifier or e-mail already belongs to a member of this organization. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_member_v1_admin_access_members_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -128,6 +149,46 @@ export interface paths {
      * @description `version` must be the member's current version (409 otherwise). You cannot change your own access (403). Requires the X-Lattice-Request: 1 header.
      */
     patch: operations["patch_member_v1_admin_access_members__membership_id__patch"];
+    trace?: never;
+  };
+  "/v1/admin/access/members/{membership_id}/administrator": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Grant or revoke another member's administrator capability, with a reason (administrators; audited). Content access does not change
+     * @description `version` must be the member's current version (409 otherwise). Never your own (403); never leaving the organization without an active administrator (422 `last_administrator`). Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_administrator_v1_admin_access_members__membership_id__administrator_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/members/{membership_id}/administrator/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Now → After for the administrator capability (administrators; nothing is changed)
+     * @description Refused like the change: your own membership (403), a removed member or the last active administrator (422). Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_administrator_preview_v1_admin_access_members__membership_id__administrator_preview_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   "/v1/admin/access/members/{membership_id}/documents/{document_id}": {
@@ -181,6 +242,46 @@ export interface paths {
      * @description Requires the X-Lattice-Request: 1 header.
      */
     post: operations["post_member_preview_v1_admin_access_members__membership_id__preview_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/members/{membership_id}/reinstate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reinstate a removed member on their original identity, with least access (administrators; audited)
+     * @description The same membership and directory identity become active again; clearance, account scope, accounts, departments, groups and grants start from least access and the administrator capability is not restored. Previous sessions stay ended. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_reinstate_v1_admin_access_members__membership_id__reinstate_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/members/{membership_id}/reinstate/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * What reinstating a removed member does: least access, nothing restored (administrators; nothing is changed)
+     * @description Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_reinstate_preview_v1_admin_access_members__membership_id__reinstate_preview_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -561,7 +662,10 @@ export interface components {
        */
       kind:
         | "provisioned"
+        | "created"
         | "suspended"
+        | "removed"
+        | "reinstated"
         | "reactivated"
         | "administrator"
         | "clearance"
@@ -701,6 +805,46 @@ export interface components {
        * @constant
        */
       view?: "operational";
+    };
+    /** AdministratorChange */
+    AdministratorChange: {
+      /**
+       * Administrator
+       * @description True: grant the capability; false: revoke it.
+       */
+      administrator: boolean;
+    };
+    /**
+     * AdministratorPreview
+     * @description Now → After for the administrator capability. Content access never changes.
+     */
+    AdministratorPreview: {
+      /** After */
+      after: boolean;
+      /**
+       * Content Access Changes
+       * @description Always false: administration grants no access to content.
+       * @default false
+       * @constant
+       */
+      content_access_changes?: false;
+      /** Now */
+      now: boolean;
+    };
+    /** AdministratorRequest */
+    AdministratorRequest: {
+      /**
+       * Administrator
+       * @description True: grant the capability; false: revoke it.
+       */
+      administrator: boolean;
+      /** Reason */
+      reason: string;
+      /**
+       * Version
+       * Format: date-time
+       */
+      version: string;
     };
     /** Answer */
     Answer: {
@@ -1428,6 +1572,25 @@ export interface components {
        */
       status: "ok";
     };
+    /**
+     * IdentityRequirement
+     * @description What a member added by hand must be bound to: the organization's active OIDC
+     *     connection and the claim whose exact value identifies a person.
+     */
+    IdentityRequirement: {
+      /**
+       * Available
+       * @description False until the organization has an active connection.
+       */
+      available: boolean;
+      /** Issuer */
+      issuer: string | null;
+      /**
+       * Subject Claim
+       * @description The identifying claim (e.g. `sub` or `email`) whose exact value is the member's identifier.
+       */
+      subject_claim: string | null;
+    };
     /** JobOut */
     JobOut: {
       /** Attempts */
@@ -1462,6 +1625,28 @@ export interface components {
       status: "queued" | "running" | "succeeded" | "failed";
       /** Sync Run Id */
       sync_run_id: string | null;
+    };
+    /**
+     * LifecycleAction
+     * @description One lifecycle action the product offers for this member, decided by the backend.
+     */
+    LifecycleAction: {
+      /** Available */
+      available: boolean;
+      /**
+       * Blocked By
+       * @description Why it is not available now; null when it is.
+       */
+      blocked_by:
+        | (
+            | "own_membership"
+            | "managed_by_identity_provider"
+            | "last_administrator"
+            | "identity_not_current"
+            | "user_inactive"
+            | "email_taken"
+          )
+        | null;
     };
     /** LiveResponse */
     LiveResponse: {
@@ -1513,6 +1698,7 @@ export interface components {
        * @description Your own membership: it cannot be changed here.
        */
       is_self: boolean;
+      lifecycle: components["schemas"]["MemberLifecycle"];
       member: components["schemas"]["MemberSummary"];
       /**
        * Version
@@ -1575,6 +1761,30 @@ export interface components {
        * Format: date-time
        */
       version: string;
+    };
+    /**
+     * MemberLifecycle
+     * @description What may happen to the member's lifecycle and administrator capability here. An
+     *     action that does not apply to the member's state is null (e.g. ``reinstate`` for a
+     *     member who was not removed). The page shows these; it never infers them.
+     */
+    MemberLifecycle: {
+      grant_administrator: components["schemas"]["LifecycleAction"] | null;
+      /**
+       * Identity Managed By
+       * @description Who owns their lifecycle: the identity provider (SCIM) or this organization's administrators; null without a directory identity.
+       */
+      identity_managed_by: ("identity_provider" | "organization") | null;
+      reactivate: components["schemas"]["LifecycleAction"] | null;
+      /** @description A removed member made active again with least access (D-36). */
+      reinstate: components["schemas"]["LifecycleAction"] | null;
+      revoke_administrator: components["schemas"]["LifecycleAction"] | null;
+      /**
+       * Sign In Identifier
+       * @description The exact value the organization's identity provider sends for them (the connection's identifying claim); null when they have no directory identity.
+       */
+      sign_in_identifier: string | null;
+      suspend: components["schemas"]["LifecycleAction"] | null;
     };
     /** MemberSourceOut */
     MemberSourceOut: {
@@ -1695,6 +1905,31 @@ export interface components {
       id: string;
       /** Name */
       name: string | null;
+    };
+    /**
+     * NewMemberRequest
+     * @description A person added by hand (D-30). Their access starts at least privilege: the request
+     *     cannot carry access.
+     */
+    NewMemberRequest: {
+      /**
+       * Email
+       * @description Contact and display only.
+       */
+      email: string;
+      /** Family Name */
+      family_name?: string | null;
+      /** Given Name */
+      given_name?: string | null;
+      /**
+       * Identifier
+       * @description The exact value the identity provider sends in the connection's identifying claim for this person. Compared exactly (case preserved), never matched by e-mail.
+       */
+      identifier: string;
+      /** Name */
+      name: string;
+      /** Reason */
+      reason: string;
     };
     /** Notice */
     Notice: {
@@ -1851,6 +2086,16 @@ export interface components {
        * @constant
        */
       status: "ready";
+    };
+    /** ReinstateRequest */
+    ReinstateRequest: {
+      /** Reason */
+      reason: string;
+      /**
+       * Version
+       * Format: date-time
+       */
+      version: string;
     };
     /**
      * RetrievalScope
@@ -2326,6 +2571,62 @@ export interface operations {
       };
     };
   };
+  get_identity_requirement_v1_admin_access_identity_requirement_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["IdentityRequirement"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   get_members_v1_admin_access_members_get: {
     parameters: {
       query?: {
@@ -2377,6 +2678,84 @@ export interface operations {
       };
       /** @description Unprocessable Entity */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_member_v1_admin_access_members_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["NewMemberRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MemberAccess"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
         headers: {
           [name: string]: unknown;
         };
@@ -2497,6 +2876,157 @@ export interface operations {
       };
       /** @description Conflict */
       409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_administrator_v1_admin_access_members__membership_id__administrator_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        membership_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AdministratorRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MemberAccess"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_administrator_preview_v1_admin_access_members__membership_id__administrator_preview_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        membership_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AdministratorChange"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdministratorPreview"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };
@@ -2677,6 +3207,153 @@ export interface operations {
         "application/json": components["schemas"]["MemberChange"];
       };
     };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AccessPreview"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_reinstate_v1_admin_access_members__membership_id__reinstate_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        membership_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReinstateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MemberAccess"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_reinstate_preview_v1_admin_access_members__membership_id__reinstate_preview_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        membership_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
     responses: {
       /** @description Successful Response */
       200: {

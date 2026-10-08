@@ -17,7 +17,16 @@ import {
 
 import { api, MEMBERS_PAGE } from "./client";
 import { isApiError } from "./errors";
-import type { AdminSourcesResponse, AskRequest, MemberChange, MemberChangeRequest, OrganizationChange } from "./types";
+import type {
+  AdministratorRequest,
+  AdminSourcesResponse,
+  AskRequest,
+  MemberChange,
+  MemberChangeRequest,
+  NewMemberRequest,
+  OrganizationChange,
+  ReinstateRequest,
+} from "./types";
 
 export const queryKeys = {
   me: ["me"] as const,
@@ -34,6 +43,7 @@ export const queryKeys = {
   accessMembers: (q: string) => ["admin", "access", "members", q] as const,
   accessDirectory: ["admin", "access", "directory"] as const,
   accessMember: (id: string) => ["admin", "access", "member", id] as const,
+  identityRequirement: ["admin", "access", "identity-requirement"] as const,
   accessDocuments: (q: string) => ["admin", "access", "documents", q] as const,
   explanation: (member: string, doc: string) => ["admin", "access", "explanation", member, doc] as const,
   audit: ["admin", "audit"] as const,
@@ -264,6 +274,60 @@ export function useChangeMember(id: string) {
   const changed = useAccessChanged(id);
   return useMutation({
     mutationFn: (body: MemberChangeRequest) => api.changeMember(id, body),
+    onSuccess: (member) => client.setQueryData(queryKeys.accessMember(id), member),
+    onSettled: changed,
+  });
+}
+
+/* --- members and administrators (P12.2) --- */
+
+/** What a member added by hand is bound to: the active connection's identifying claim. */
+export function useIdentityRequirement(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.identityRequirement,
+    queryFn: ({ signal }) => api.identityRequirement(signal),
+    enabled,
+    ...REAUTHORIZED,
+  });
+}
+
+export function useAddMember() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: NewMemberRequest) => api.addMember(body),
+    onSuccess: (member) => client.setQueryData(queryKeys.accessMember(member.member.id), member),
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: ["admin", "access", "members"] }),
+        client.invalidateQueries({ queryKey: queryKeys.audit }),
+        client.invalidateQueries({ queryKey: queryKeys.setup }),
+      ]),
+  });
+}
+
+export function usePreviewAdministrator(id: string) {
+  return useMutation({ mutationFn: (administrator: boolean) => api.previewAdministrator(id, administrator) });
+}
+
+export function useSetAdministrator(id: string) {
+  const client = useQueryClient();
+  const changed = useAccessChanged(id);
+  return useMutation({
+    mutationFn: (body: AdministratorRequest) => api.setAdministrator(id, body),
+    onSuccess: (member) => client.setQueryData(queryKeys.accessMember(id), member),
+    onSettled: () => Promise.all([changed(), client.invalidateQueries({ queryKey: queryKeys.setup })]),
+  });
+}
+
+export function usePreviewReinstatement(id: string) {
+  return useMutation({ mutationFn: () => api.previewReinstatement(id) });
+}
+
+export function useReinstate(id: string) {
+  const client = useQueryClient();
+  const changed = useAccessChanged(id);
+  return useMutation({
+    mutationFn: (body: ReinstateRequest) => api.reinstate(id, body),
     onSuccess: (member) => client.setQueryData(queryKeys.accessMember(id), member),
     onSettled: changed,
   });

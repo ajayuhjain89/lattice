@@ -29,7 +29,10 @@
           "kind": {
             "enum": [
               "provisioned",
+              "created",
               "suspended",
+              "removed",
+              "reinstated",
               "reactivated",
               "administrator",
               "clearance",
@@ -422,6 +425,75 @@
           "usage"
         ],
         "title": "AdminTrace",
+        "type": "object"
+      },
+      "AdministratorChange": {
+        "additionalProperties": false,
+        "properties": {
+          "administrator": {
+            "description": "True: grant the capability; false: revoke it.",
+            "title": "Administrator",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "administrator"
+        ],
+        "title": "AdministratorChange",
+        "type": "object"
+      },
+      "AdministratorPreview": {
+        "description": "Now \u2192 After for the administrator capability. Content access never changes.",
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "boolean"
+          },
+          "content_access_changes": {
+            "const": false,
+            "default": false,
+            "description": "Always false: administration grants no access to content.",
+            "title": "Content Access Changes",
+            "type": "boolean"
+          },
+          "now": {
+            "title": "Now",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "now",
+          "after"
+        ],
+        "title": "AdministratorPreview",
+        "type": "object"
+      },
+      "AdministratorRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "administrator": {
+            "description": "True: grant the capability; false: revoke it.",
+            "title": "Administrator",
+            "type": "boolean"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "administrator",
+          "version",
+          "reason"
+        ],
+        "title": "AdministratorRequest",
         "type": "object"
       },
       "Answer": {
@@ -2316,6 +2388,46 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "IdentityRequirement": {
+        "description": "What a member added by hand must be bound to: the organization's active OIDC\nconnection and the claim whose exact value identifies a person.",
+        "properties": {
+          "available": {
+            "description": "False until the organization has an active connection.",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "issuer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issuer"
+          },
+          "subject_claim": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The identifying claim (e.g. `sub` or `email`) whose exact value is the member's identifier.",
+            "title": "Subject Claim"
+          }
+        },
+        "required": [
+          "available",
+          "subject_claim",
+          "issuer"
+        ],
+        "title": "IdentityRequirement",
+        "type": "object"
+      },
       "JobOut": {
         "properties": {
           "attempts": {
@@ -2414,6 +2526,41 @@
         "title": "JobOut",
         "type": "object"
       },
+      "LifecycleAction": {
+        "description": "One lifecycle action the product offers for this member, decided by the backend.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "blocked_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "own_membership",
+                  "managed_by_identity_provider",
+                  "last_administrator",
+                  "identity_not_current",
+                  "user_inactive",
+                  "email_taken"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it is not available now; null when it is.",
+            "title": "Blocked By"
+          }
+        },
+        "required": [
+          "available",
+          "blocked_by"
+        ],
+        "title": "LifecycleAction",
+        "type": "object"
+      },
       "LiveResponse": {
         "properties": {
           "status": {
@@ -2505,6 +2652,9 @@
             "title": "Is Self",
             "type": "boolean"
           },
+          "lifecycle": {
+            "$ref": "#/components/schemas/MemberLifecycle"
+          },
           "member": {
             "$ref": "#/components/schemas/MemberSummary"
           },
@@ -2517,6 +2667,7 @@
         },
         "required": [
           "member",
+          "lifecycle",
           "version",
           "is_self",
           "accounts",
@@ -2769,6 +2920,101 @@
           "reason"
         ],
         "title": "MemberChangeRequest",
+        "type": "object"
+      },
+      "MemberLifecycle": {
+        "description": "What may happen to the member's lifecycle and administrator capability here. An\naction that does not apply to the member's state is null (e.g. ``reinstate`` for a\nmember who was not removed). The page shows these; it never infers them.",
+        "properties": {
+          "grant_administrator": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LifecycleAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity_managed_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "identity_provider",
+                  "organization"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who owns their lifecycle: the identity provider (SCIM) or this organization's administrators; null without a directory identity.",
+            "title": "Identity Managed By"
+          },
+          "reactivate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LifecycleAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reinstate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LifecycleAction"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A removed member made active again with least access (D-36)."
+          },
+          "revoke_administrator": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LifecycleAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sign_in_identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The exact value the organization's identity provider sends for them (the connection's identifying claim); null when they have no directory identity.",
+            "title": "Sign In Identifier"
+          },
+          "suspend": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LifecycleAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "sign_in_identifier",
+          "identity_managed_by",
+          "suspend",
+          "reactivate",
+          "reinstate",
+          "grant_administrator",
+          "revoke_administrator"
+        ],
+        "title": "MemberLifecycle",
         "type": "object"
       },
       "MemberSourceOut": {
@@ -3054,6 +3300,70 @@
           "name"
         ],
         "title": "NamedRef",
+        "type": "object"
+      },
+      "NewMemberRequest": {
+        "additionalProperties": false,
+        "description": "A person added by hand (D-30). Their access starts at least privilege: the request\ncannot carry access.",
+        "properties": {
+          "email": {
+            "description": "Contact and display only.",
+            "maxLength": 255,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "family_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Family Name"
+          },
+          "given_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Given Name"
+          },
+          "identifier": {
+            "description": "The exact value the identity provider sends in the connection's identifying claim for this person. Compared exactly (case preserved), never matched by e-mail.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Identifier",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "identifier",
+          "reason"
+        ],
+        "title": "NewMemberRequest",
         "type": "object"
       },
       "Notice": {
@@ -3437,6 +3747,28 @@
           "schema_revision"
         ],
         "title": "ReadyResponse",
+        "type": "object"
+      },
+      "ReinstateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "reason"
+        ],
+        "title": "ReinstateRequest",
         "type": "object"
       },
       "RetrievalScope": {
@@ -4256,6 +4588,67 @@
         ]
       }
     },
+    "/v1/admin/access/identity-requirement": {
+      "get": {
+        "operationId": "get_identity_requirement_v1_admin_access_identity_requirement_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityRequirement"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "What a member added by hand is bound to: the identifying claim of the organization's active OIDC connection (administrators)",
+        "tags": [
+          "access"
+        ]
+      }
+    },
     "/v1/admin/access/members": {
       "get": {
         "operationId": "get_members_v1_admin_access_members_get",
@@ -4360,6 +4753,96 @@
           }
         },
         "summary": "The organization's members by name (administrators)",
+        "tags": [
+          "access"
+        ]
+      },
+      "post": {
+        "description": "Not an invitation: nothing is sent. The person signs in through the organization's identity provider, which must send exactly `identifier` in the connection's identifying claim. Their access starts at least privilege; change it afterwards. 409 when the identifier or e-mail already belongs to a member of this organization. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_member_v1_admin_access_members_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberAccess"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Add a member by hand, bound to their exact identity-provider identifier, with least access (administrators; audited)",
         "tags": [
           "access"
         ]
@@ -4535,6 +5018,204 @@
           }
         },
         "summary": "Change a member's access, with a reason (administrators; audited)",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/v1/admin/access/members/{membership_id}/administrator": {
+      "post": {
+        "description": "`version` must be the member's current version (409 otherwise). Never your own (403); never leaving the organization without an active administrator (422 `last_administrator`). Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_administrator_v1_admin_access_members__membership_id__administrator_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Membership Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdministratorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberAccess"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Grant or revoke another member's administrator capability, with a reason (administrators; audited). Content access does not change",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/v1/admin/access/members/{membership_id}/administrator/preview": {
+      "post": {
+        "description": "Refused like the change: your own membership (403), a removed member or the last active administrator (422). Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_administrator_preview_v1_admin_access_members__membership_id__administrator_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Membership Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdministratorChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdministratorPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Now \u2192 After for the administrator capability (administrators; nothing is changed)",
         "tags": [
           "access"
         ]
@@ -4816,6 +5497,194 @@
           }
         },
         "summary": "What a change would do: effects as rules, counts only over documents you can read (administrators; nothing is changed)",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/v1/admin/access/members/{membership_id}/reinstate": {
+      "post": {
+        "description": "The same membership and directory identity become active again; clearance, account scope, accounts, departments, groups and grants start from least access and the administrator capability is not restored. Previous sessions stay ended. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_reinstate_v1_admin_access_members__membership_id__reinstate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Membership Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReinstateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberAccess"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Reinstate a removed member on their original identity, with least access (administrators; audited)",
+        "tags": [
+          "access"
+        ]
+      }
+    },
+    "/v1/admin/access/members/{membership_id}/reinstate/preview": {
+      "post": {
+        "description": "Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_reinstate_preview_v1_admin_access_members__membership_id__reinstate_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Membership Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "What reinstating a removed member does: least access, nothing restored (administrators; nothing is changed)",
         "tags": [
           "access"
         ]

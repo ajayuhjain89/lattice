@@ -32,7 +32,7 @@ _CONNECTION_SQL = text(
 )
 # SCIM tokens: live and ever issued; whether a live one has been used (the identity
 # provider changed a member with it: an audit event by that token's actor); members
-# the identity provider created that are still present.
+# the identity provider manages (0017 ``managed_by``) that are still present.
 _SCIM_SQL = text(
     """
     SELECT
@@ -44,10 +44,9 @@ _SCIM_SQL = text(
          AND e.actor = 'scim:' || l.id::text
         WHERE e.organization_id = :o
       ) AS token_used,
-      (SELECT count(DISTINCT m.id) FROM memberships m
-        JOIN audit_events e ON e.organization_id = m.organization_id
-         AND e.action = 'access.member_changed' AND e.actor LIKE 'scim:%'
-         AND e.before IS NULL AND e.target ->> 'membership_id' = m.id::text
+      (SELECT count(*) FROM memberships m
+        JOIN directory_identities d ON d.organization_id = m.organization_id
+         AND d.membership_id = m.id AND d.managed_by = 'identity_provider'
         WHERE m.organization_id = :o AND m.status <> 'removed') AS provisioned_members
     FROM scim_tokens t WHERE t.organization_id = :o
     """

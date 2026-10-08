@@ -143,34 +143,40 @@ function Subject({ event: e }: { event: AuditEvent }) {
   if (e.document) return <DocumentLine doc={e.document} />;
   if (e.effects.length > 0) {
     return (
-      <ul className={styles.changes}>
-        {e.effects.map((x, i) => (
-          <li key={`${x.kind}-${x.subject?.id ?? i}`}>{auditPhrase(x)}</li>
-        ))}
-      </ul>
+      <>
+        <ul className={styles.changes}>
+          {e.effects.map((x, i) => (
+            <li key={`${x.kind}-${x.subject?.id ?? i}`}>{auditPhrase(x)}</li>
+          ))}
+        </ul>
+        {/* A member added by hand: the identifier and e-mail they were bound to. */}
+        {e.details.length > 0 && <Fields event={e} />}
+      </>
     );
   }
-  if (e.details.length > 0) {
-    return (
-      <dl className={styles.fields}>
-        {e.details.map((d) => (
-          <div key={d.field} className={styles.field}>
-            <dt>{humanize(d.field)}</dt>
-            <dd>
-              {d.before !== null && (
-                <>
-                  <span className={styles.value}>{detailValue(d.before)}</span>
-                  <span aria-hidden="true"> → </span>
-                  <span className="visually-hidden"> changed to </span>
-                </>
-              )}
-              <span className={styles.value}>{detailValue(d.after)}</span>
-            </dd>
-          </div>
-        ))}
-      </dl>
-    );
-  }
+  if (e.details.length > 0) return <Fields event={e} />;
   return null;
+}
+
+function Fields({ event: e }: { event: AuditEvent }) {
+  return (
+    <dl className={styles.fields}>
+      {e.details.map((d) => (
+        <div key={d.field} className={styles.field}>
+          <dt>{humanize(d.field)}</dt>
+          <dd>
+            {d.before !== null && (
+              <>
+                <span className={styles.value}>{detailValue(d.before)}</span>
+                <span aria-hidden="true"> → </span>
+                <span className="visually-hidden"> changed to </span>
+              </>
+            )}
+            <span className={styles.value}>{detailValue(d.after)}</span>
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 

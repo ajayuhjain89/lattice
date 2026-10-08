@@ -104,6 +104,9 @@ COLUMN_PRIVILEGES = {
         "status",
         "last_success_at",
         "last_failure_at",
+        # 0017: the add-member form names the identifying claim.
+        "issuer",
+        "subject_claim",
     },
     ("oidc_connections", "UPDATE"): {"last_success_at", "last_failure_at"},
     # 0016: the provisioning setup record -- never token_hash.
@@ -595,6 +598,136 @@ async def test_app_links_directory_identities_inside_its_organization_only(
             app_db, world.org, insert, audit_for=world.member, o=world.org, c=own, m=world.member
         )
         == 1
+    )
+
+
+# --- Phase 12 (P12.2, 0017): members added by hand, the capability, reinstatement --------
+
+FENCED_FUNCTIONS = {
+    "lattice_create_member(uuid,text,text,text,text,text)",
+    "lattice_set_admin(uuid,uuid,boolean)",
+    "lattice_reinstate_member(uuid,uuid)",
+}
+
+
+async def test_the_member_functions_are_narrow_definer_functions(
+    superuser_engine: AsyncEngine,
+) -> None:
+    async with superuser_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    """
+                    SELECT p.oid::regprocedure::text, pg_get_userbyid(p.proowner), p.prosecdef,
+                           p.proconfig,
+                           array(SELECT DISTINCT coalesce(r.rolname, 'PUBLIC')
+                                 FROM aclexplode(p.proacl) a
+                                 LEFT JOIN pg_roles r ON r.oid = a.grantee
+                                 WHERE a.privilege_type = 'EXECUTE' ORDER BY 1)
+                    FROM pg_proc p
+                    WHERE p.proname IN ('lattice_create_member', 'lattice_set_admin',
+                                        'lattice_reinstate_member')
+                    """
+                )
+            )
+        ).all()
+        callers = (
+            await conn.execute(
+                text(
+                    "SELECT r.rolname, p.oid::regprocedure::text FROM pg_roles r, pg_proc p "
+                    "WHERE p.proname IN ('lattice_create_member', 'lattice_set_admin', "
+                    "'lattice_reinstate_member') AND NOT r.rolsuper "
+                    "AND has_function_privilege(r.oid, p.oid, 'EXECUTE')"
+                )
+            )
+        ).all()
+    assert {r[0].replace(", ", ",") for r in rows} == FENCED_FUNCTIONS
+    for signature, owner, definer, config, executors in rows:
+        assert owner == "lattice_owner", signature
+        assert definer, signature
+        assert config == ["search_path=pg_catalog, public, pg_temp"], signature
+        assert executors == ["lattice_app", "lattice_owner"], signature
+    # Never the worker, the pre-authentication role or PUBLIC.
+    assert {role for role, _ in callers} == {"lattice_app", "lattice_owner"}
+
+
+async def test_app_inserts_only_identity_provider_identities(
+    app_db: Database, owner_db: Database, world: World
+) -> None:
+    """A person managed by the organization is created only by the fenced function."""
+    connection = await create_oidc_connection(owner_db, world.org)
+    insert = (
+        "INSERT INTO directory_identities (organization_id, connection_id, membership_id, "
+        "external_id, user_name, managed_by) VALUES (:o, :c, :m, 'x', 'x', :by)"
+    )
+    with pytest.raises(DBAPIError, match=RLS_REFUSED):
+        await _run(
+            app_db,
+            world.org,
+            insert,
+            audit_for=world.member,
+            o=world.org,
+            c=connection,
+            m=world.member,
+            by="organization",
+        )
+    assert (
+        await _run(
+            app_db,
+            world.org,
+            insert,
+            audit_for=world.member,
+            o=world.org,
+            c=connection,
+            m=world.member,
+            by="identity_provider",
+        )
+        == 1
+    )
+    # The marker is not an updatable column.
+    with pytest.raises(DBAPIError, match="permission denied"):
+        await _run(
+            app_db,
+            world.org,
+            "UPDATE directory_identities SET managed_by = 'organization'",
+            audit_for=world.member,
+        )
+
+
+async def test_app_never_removes_a_member_the_organization_manages(
+    app_db: Database, owner_db: Database, world: World
+) -> None:
+    connection = await create_oidc_connection(owner_db, world.org)
+    member = await create_provisioned_member(
+        owner_db, world.org, connection, "h@halden.example", "ext-h"
+    )
+    async with owner_db.tenant_transaction(world.org) as s:
+        await s.execute(
+            text("UPDATE directory_identities SET managed_by = 'organization'"),
+        )
+    with pytest.raises(DBAPIError, match=RLS_REFUSED):
+        await _run(
+            app_db,
+            world.org,
+            "UPDATE memberships SET status = 'removed' WHERE id = :m",
+            audit_for=member.membership_id,
+            m=member.membership_id,
+        )
+
+
+async def test_app_cannot_reinstate_a_removed_member_directly(
+    app_db: Database, world: World
+) -> None:
+    """Only ``lattice_reinstate_member`` leaves ``removed`` (and only with least access)."""
+    assert (
+        await _run(
+            app_db,
+            world.org,
+            "UPDATE memberships SET status = 'active' WHERE id = :m",
+            audit_for=world.removed,
+            m=world.removed,
+        )
+        == 0
     )
 
 

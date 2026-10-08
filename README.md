@@ -13,7 +13,10 @@ external staging validation is deferred and gates v1 GA ([plan](docs/phase-11-pl
 §21.1). Phase 11 is merged (143392f). Phase 12 (Organization Setup, Identity
 Configuration & Integrations) is in progress: P12.1 foundations are built (encrypted
 credentials, the outbound-target policy, `lattice org create`, the backend-owned setup
-record and the Organization page); P12.2–P12.8 are not started.** What runs today: a FastAPI
+record and the Organization page) and P12.2 members and administrators (members added by
+hand on their exact identity-provider identifier, the administrator capability with a
+last-administrator rule that holds under concurrency, least-access reinstatement);
+P12.3–P12.8 are not started.** What runs today: a FastAPI
 backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced
 row-level security for organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -335,7 +338,9 @@ organization's provider provisioned — never by e-mail, never into another
 organization. New members get the least access the policy models; administrators
 grant the rest on the Access page, where such members are marked as managed by the
 identity provider (it alone suspends or reactivates them). `lattice member admin`
-gives an organization its first administrator. Asks, access changes, SCIM and sign-in
+gives an organization its first administrator; since P12.2 administrators add members
+by hand (bound to the exact identifier the provider sends), choose other administrators
+and reinstate removed members with least access on the Access page. Asks, access changes, SCIM and sign-in
 are rate limited (429 with `Retry-After`; no role is exempt). Setup and incident
 procedures: [runbook §2 and §9](docs/runbook.md); decisions: D-1, D-19, D-20 and
 [ADR-015](docs/decisions/015-oidc-sign-in-and-scim-provisioning.md). A database created
@@ -354,7 +359,7 @@ encrypted at rest (AES-256-GCM, master keys only in the deployment environment;
 `lattice secrets rekey`), and private endpoints are reachable only when an operator
 registers them (`lattice outbound allow`). Procedures: [runbook §9 and
 §9.1](docs/runbook.md); contracts: [phase-12-plan](docs/phase-12-plan.md). A database created
-before P12.1 needs `make migrate` (0016).
+before P12.1 needs `make migrate` (0016); P12.2 adds 0017.
 
 ## How deployment works (Phase 11)
 

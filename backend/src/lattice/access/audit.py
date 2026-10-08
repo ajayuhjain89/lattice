@@ -2,8 +2,10 @@
 transaction as every access change, read by administrators.
 
 Actions written here: ``access.member_changed`` (target ``membership_id``; before/after
-are ``AccessSnapshot``s), ``access.grant_created`` and ``access.grant_revoked`` (target
-``membership_id``, ``document_id``, ``grant_id`` and the document's opaque ``reference``).
+are ``AccessSnapshot``s; a member added by hand also records, in ``after.identity``, the
+identifier and e-mail they were bound to), ``access.grant_created`` and
+``access.grant_revoked`` (target ``membership_id``, ``document_id``, ``grant_id`` and the
+document's opaque ``reference``).
 The Phase 6 provider and egress events (``provider.*``, ``credential.*``,
 ``egress.levels_changed``) are written by ``lattice.providers.configuration``.
 
@@ -210,8 +212,17 @@ async def audit_page(
                 document = refs.get(d)  # readable: the query listed only such events
             if e.action == MEMBER_CHANGED:
                 after = _snapshot(e.after)
+                identity = e.after.get("identity") if isinstance(e.after, dict) else None
+                if e.before is None and isinstance(identity, dict):
+                    # A member added by hand (P12.2): the identifier they were bound to.
+                    details = [
+                        AuditDetail(field=k, before=None, after=_scalar(identity.get(v)))
+                        for k, v in (("sign_in_identifier", "identifier"), ("email", "email"))
+                    ]
                 if after is not None:
-                    found_effects = effects(_snapshot(e.before), after, names)
+                    found_effects = effects(
+                        _snapshot(e.before), after, names, created=kind == "member"
+                    )
             elif e.action == IDENTITY_CHANGED:
                 details = _details({}, e.before, e.after)
         else:

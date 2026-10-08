@@ -30,11 +30,12 @@ export function renderInWorkspace(ui: ReactElement, { me = ME_MAYA, state = crea
 
 /** Replace fetch with a router over path → [status, body]. Returns the calls made. */
 export function mockFetch(routes: Record<string, [number, unknown]>) {
-  const calls: { url: string; method: string; headers: Headers }[] = [];
+  const calls: { url: string; method: string; headers: Headers; body: string }[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init);
     const path = new URL(request.url).pathname.replace(/^\/api/, "");
-    calls.push({ url: path, method: request.method, headers: request.headers });
+    const sent = request.method === "GET" ? "" : await request.clone().text();
+    calls.push({ url: path, method: request.method, headers: request.headers, body: sent });
     const [status, body] = routes[`${request.method} ${path}`] ?? [404, { error: { code: "not_found", message: "Not found.", request_id: "r" } }];
     return new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   });

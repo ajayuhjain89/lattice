@@ -217,6 +217,12 @@
    "privilege": "SELECT"
   },
   {
+   "column": "issuer",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
    "column": "last_failure_at",
    "grantee": "lattice_app",
    "name": "oidc_connections",
@@ -248,6 +254,12 @@
   },
   {
    "column": "status",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "subject_claim",
    "grantee": "lattice_app",
    "name": "oidc_connections",
    "privilege": "SELECT"
@@ -470,6 +482,18 @@
   },
   {
    "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_create_member(uuid,text,text,text,text,text)"
+  },
+  {
+   "grants": [
     "lattice_owner:EXECUTE",
     "PUBLIC:EXECUTE"
    ],
@@ -539,6 +563,18 @@
   },
   {
    "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_reinstate_member(uuid,uuid)"
+  },
+  {
+   "grants": [
     "lattice_owner:EXECUTE",
     "PUBLIC:EXECUTE"
    ],
@@ -548,6 +584,17 @@
     "search_path=pg_catalog, public, pg_temp"
    ],
    "signature": "lattice_require_access_audit()"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_require_an_administrator()"
   },
   {
    "grants": [
@@ -596,6 +643,18 @@
     "search_path=pg_catalog, public, pg_temp"
    ],
    "signature": "lattice_secret_key_ids()"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_set_admin(uuid,uuid,boolean)"
   },
   {
    "grants": [
@@ -839,6 +898,17 @@
    "with_check": "(organization_id = lattice_current_org_id())"
   },
   {
+   "command": "a",
+   "name": "directory_identities",
+   "permissive": false,
+   "policy": "app_identity_provider_insert",
+   "roles": [
+    "lattice_app"
+   ],
+   "using": null,
+   "with_check": "(managed_by = 'identity_provider'::text)"
+  },
+  {
    "command": "*",
    "name": "directory_identities",
    "permissive": true,
@@ -1067,7 +1137,7 @@
     "lattice_app"
    ],
    "using": "(status <> 'removed'::text)",
-   "with_check": "((status = ANY (ARRAY['active'::text, 'suspended'::text])) OR ((status = 'removed'::text) AND (EXISTS ( SELECT 1\n   FROM directory_identities d\n  WHERE ((d.organization_id = memberships.organization_id) AND (d.membership_id = memberships.id))))))"
+   "with_check": "((status = ANY (ARRAY['active'::text, 'suspended'::text])) OR ((status = 'removed'::text) AND (EXISTS ( SELECT 1\n   FROM directory_identities d\n  WHERE ((d.organization_id = memberships.organization_id) AND (d.membership_id = memberships.id) AND (d.managed_by = 'identity_provider'::text))))))"
   },
   {
    "command": "r",
@@ -2521,6 +2591,14 @@
    "initially_deferred": true,
    "name": "memberships",
    "trigger": "trg_memberships_access_audit"
+  },
+  {
+   "deferrable": true,
+   "enabled": "O",
+   "function": "lattice_require_an_administrator()",
+   "initially_deferred": true,
+   "name": "memberships",
+   "trigger": "trg_memberships_administrator_set"
   },
   {
    "deferrable": false,

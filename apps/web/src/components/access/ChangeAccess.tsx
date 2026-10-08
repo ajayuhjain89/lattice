@@ -389,7 +389,7 @@ function ReviewChange({
   );
 }
 
-function Preview({ member, preview }: { member: MemberAccess; preview: AccessPreview }) {
+export function Preview({ member, preview }: { member: MemberAccess; preview: AccessPreview }) {
   const rows = comparisonRows(member, preview.effects);
   const name = member.member.name;
   return (
@@ -419,7 +419,7 @@ function Preview({ member, preview }: { member: MemberAccess; preview: AccessPre
 }
 
 /** Now → After, one rule per row; a changed row carries its direction in a margin bar and in words. */
-function Comparison({ rows }: { rows: ComparisonRow[] }) {
+export function Comparison({ rows }: { rows: ComparisonRow[] }) {
   return (
     <table className={styles.compare}>
       <caption className="visually-hidden">Now and after this change, rule by rule</caption>

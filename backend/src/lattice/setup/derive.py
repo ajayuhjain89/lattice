@@ -105,7 +105,7 @@ MESSAGES: Final[dict[tuple[str, str], str]] = {
     ("organization", "active"): "The organization is active and has more than one administrator.",
     ("organization", "single_administrator"): (
         "One active administrator. If they leave, only your Lattice operator can appoint "
-        "another; a second administrator avoids that."
+        "another; make a second member an administrator on the Access page to avoid that."
     ),
     ("organization", "suspended"): (
         "The organization is suspended: sign-in, provisioning and syncs are stopped. Only "
@@ -136,8 +136,9 @@ MESSAGES: Final[dict[tuple[str, str], str]] = {
         "identity_required",
     ): "Members can be added once an identity provider is connected.",
     ("members", "only_administrators"): (
-        "Only administrators are members so far. People join when your identity provider "
-        "provisions them (SCIM) or when your Lattice operator adds them."
+        "Only administrators are members so far. Add members on the Access page with the "
+        "exact identifier your identity provider sends for them, or let the identity "
+        "provider provision them (SCIM)."
     ),
     ("members", "members_active"): "Members other than administrators are active.",
     ("provisioning", "not_configured"): (
@@ -217,7 +218,13 @@ def _organization(f: SetupFacts) -> Category:
     if f.active_administrators == 0:
         return _category("organization", "blocked", "no_administrator", facts)
     if f.active_administrators == 1:
-        return _category("organization", "attention", "single_administrator", facts)
+        return _category(
+            "organization",
+            "attention",
+            "single_administrator",
+            facts,
+            Action("/access", "Choose a second administrator"),
+        )
     return _category("organization", "complete", "active", facts)
 
 
@@ -242,11 +249,15 @@ def _members(f: SetupFacts) -> Category:
     facts: dict[str, FactValue] = {
         "active_members": f.active_members,
         "active_administrators": f.active_administrators,
+        # Adding a member by hand needs the active connection (C2.1).
+        "manual_members_available": f.connection == "active",
     }
     if f.connection != "active":
         return _category("members", "blocked", "identity_required", facts)
     if f.active_members - f.active_administrators <= 0:
-        return _category("members", "required", "only_administrators", facts)
+        return _category(
+            "members", "required", "only_administrators", facts, Action("/access", "Add a member")
+        )
     return _category(
         "members", "complete", "members_active", facts, Action("/access", "Review access")
     )

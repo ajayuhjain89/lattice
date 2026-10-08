@@ -131,7 +131,7 @@ Tenant tables, forced RLS (migration 0013; ADR-015).
 | ----- | ------ | ----- |
 | `oidc_connections` | `id, organization_id, login_key, issuer, client_id, client_secret_ref, subject_claim, status (active/disabled)`, timestamps | One active per organization. `login_key` opaque (22–64 URL-safe characters, globally unique): the sign-in URL names it, never the organization. `client_secret_ref` is `env:LATTICE_OIDC_SECRET_<NAME>` or (0016) `vault:<uuid>` — an `encrypted_secrets` row sealed for this connection. `last_success_at` / `last_failure_at` (0016): the setup record's sign-in facts, written by the API (at most once a minute; a failure only on the provider's side or of the client secret). Operator-written otherwise (`lattice org create`, `lattice sso add/disable/enable/update`, audited); the API reads the configuration only through `lattice_oidc_connection(login_key)` (owned by `lattice_auth`), and may read `id, organization_id, status` (0014, the session-creation check, D-25) and `last_success_at, last_failure_at` (0016) of its own organization's connections |
 | `oidc_login_attempts` | `id, organization_id, connection_id, state_hash, binding_hash, nonce, code_verifier, return_to, created_at, expires_at, consumed_at` | One authorization-code flow: SHA-256 of `state` and of the browser-binding cookie, ten minutes, consumed once (`consumed_at`). The API inserts, consumes and deletes finished ones (restrictive policy: only consumed or expired) |
-| `directory_identities` | `id, organization_id, connection_id, membership_id, external_id, user_name, given_name, family_name, version`, timestamps | The provider's person: UQ `(connection_id, external_id)` (the OIDC claim value), UQ `(organization_id, membership_id)`, UQ `(connection_id, lower(user_name))`. Written by SCIM as the API role (no DELETE; `external_id` and `membership_id` not updatable). Its `id` is the SCIM resource ID. A membership with a directory identity is *provisioned*: its lifecycle belongs to the provider |
+| `directory_identities` | `id, organization_id, connection_id, membership_id, external_id, user_name, given_name, family_name, version, managed_by`, timestamps | The provider's person: UQ `(connection_id, external_id)` (the OIDC claim value), UQ `(organization_id, membership_id)`, UQ `(connection_id, lower(user_name))`. Written by SCIM as the API role (no DELETE; `external_id`, `membership_id` and `managed_by` not updatable). Its `id` is the SCIM resource ID. `managed_by` (0017, P12.2): `identity_provider` — SCIM created them and owns their lifecycle (D-20; the only value the API role may insert directly) — or `organization` — an administrator added them by hand (`lattice_create_member`) or the operator's `org create` made them the first administrator; they are suspended and reactivated in Access and never removed by the API. SCIM reads and changes only `identity_provider` identities (an `organization` identity's identifier and user name still count for SCIM's uniqueness: 409). Backfilled from the audit trail when 0017 ran |
 | `scim_tokens` | `id, organization_id, connection_id, token_hash, created_at, revoked_at` | SHA-256 of `lsc_…` tokens (verification-only: never decryptable); operator-written; resolved through `lattice_resolve_scim_token(hash)` only while the token, its connection and its organization are active. Since 0016 the API may read every column but `token_hash` (the provisioning setup record) |
 
 ### encrypted_secrets, outbound_targets (Phase 12 P12.1, migration 0016)
@@ -184,6 +184,26 @@ connection). The runtime role may insert sessions and update only `last_seen_at`
 | account_scope    | enum    | ACCT   | `all` \| `assigned`                                          |
 | role_label       | text    | DBG    | "Account Manager", "Support"… Display only; policy never reads it |
 | authz_updated_at | timestamptz | AUTHZ | Bumped on any access-affecting change; recorded in traces   |
+
+**Members and administrators in the product (P12.2, migration 0017; ADR-017).** The API
+role still has no column privilege on `is_admin` and cannot move a membership out of
+`removed`. Three fenced `SECURITY DEFINER` functions (owned by `lattice_owner`, search
+path pinned, `EXECUTE` for `lattice_app` only, bound to `lattice_current_org_id()`, each
+re-checking that the acting membership is an active administrator there) make the
+transitions; refusals are SQLSTATE `LA001` with a fixed reason:
+`lattice_create_member` (an owned user, a least-access membership written by the
+function, the directory identity on the active connection, `managed_by = organization`;
+identifier NFC-normalised, trimmed, case kept, unique on the connection; e-mail unique
+among the organization's people), `lattice_set_admin` (another member, not removed; under
+the organization's administrator-set advisory lock, never leaving zero active
+administrators) and `lattice_reinstate_member` (a removed member, on their original
+identity on the active connection, reset to least access, never an administrator). The
+0013 audit triggers fire at commit as `lattice_app`, so each function's writes need the
+`access.member_changed` event the API writes in the same transaction. A deferred
+constraint trigger (`trg_memberships_administrator_set`) re-checks every API-role write
+that takes an active administrator out of the set and refuses zero, unless the
+transaction's event for that member is by one of the organization's SCIM tokens (the
+identity provider may remove the last administrator; C18).
 
 ### departments, membership_departments
 

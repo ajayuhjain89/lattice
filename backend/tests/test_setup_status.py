@@ -176,6 +176,27 @@ def test_actions_link_only_to_pages_that_exist() -> None:
     assert hrefs <= {"/access", "/settings/providers", "/sources", "/ask"}
 
 
+def test_members_and_administrators_point_to_the_access_page() -> None:
+    """P12.2: members are added and administrators chosen in Access; the record says
+    whether adding by hand is possible (it needs the active connection)."""
+    by_key = {c.key: c for c in derive(replace(BASE, active_members=2, active_administrators=2))}
+    members = by_key["members"]
+    assert (members.state, members.reason) == ("required", "only_administrators")
+    assert members.action is not None
+    assert (members.action.href, members.action.label) == ("/access", "Add a member")
+    assert members.facts["manual_members_available"] is True
+    blocked = {c.key: c for c in derive(replace(BASE, connection="none"))}["members"]
+    assert (blocked.reason, blocked.facts["manual_members_available"]) == (
+        "identity_required",
+        False,
+    )
+    single = {c.key: c for c in derive(replace(BASE, active_administrators=1))}["organization"]
+    assert single.action is not None
+    assert single.action.href == "/access"
+    none = {c.key: c for c in derive(replace(BASE, active_administrators=0))}["organization"]
+    assert (none.state, none.reason, none.action) == ("blocked", "no_administrator", None)
+
+
 # --- the endpoint ------------------------------------------------------------------------
 
 

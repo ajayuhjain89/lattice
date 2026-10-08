@@ -1153,8 +1153,23 @@ const HANDBOOK: S["DocumentRef"] = {
   classification: "internal",
 };
 
+const OPEN = { available: true, blocked_by: null } as const;
+const blocked = (reason: S["LifecycleAction"]["blocked_by"]): S["LifecycleAction"] => ({ available: false, blocked_by: reason });
+
+/** A member the organization manages (added by hand, or seeded): suspendable here. */
+export const LIFECYCLE_ACTIVE: S["MemberLifecycle"] = {
+  sign_in_identifier: "00u8maya-okafor",
+  identity_managed_by: "organization",
+  suspend: OPEN,
+  reactivate: null,
+  reinstate: null,
+  grant_administrator: OPEN,
+  revoke_administrator: null,
+};
+
 export const MEMBER_MAYA: S["MemberAccess"] = {
   member: MEMBERS_PAGE.items[2]!,
+  lifecycle: LIFECYCLE_ACTIVE,
   version: "2026-09-29T08:00:00.123456Z",
   is_self: false,
   accounts: [
@@ -1205,6 +1220,15 @@ export const MEMBER_PAT_MANAGED: S["MemberAccess"] = {
     departments: [],
     managed_by: "identity_provider",
   },
+  lifecycle: {
+    sign_in_identifier: "pat.rivera@halden.example",
+    identity_managed_by: "identity_provider",
+    suspend: blocked("managed_by_identity_provider"),
+    reactivate: null,
+    reinstate: null,
+    grant_administrator: OPEN,
+    revoke_administrator: null,
+  },
   version: "2026-10-02T09:00:00Z",
   is_self: false,
   accounts: [],
@@ -1217,6 +1241,15 @@ export const MEMBER_PAT_MANAGED: S["MemberAccess"] = {
 
 export const MEMBER_LENA_SELF: S["MemberAccess"] = {
   member: MEMBERS_PAGE.items[1]!,
+  lifecycle: {
+    sign_in_identifier: "00u1lena-brandt",
+    identity_managed_by: "organization",
+    suspend: blocked("own_membership"),
+    reactivate: null,
+    reinstate: null,
+    grant_administrator: null,
+    revoke_administrator: blocked("own_membership"),
+  },
   version: "2026-09-29T08:00:00Z",
   is_self: true,
   accounts: [],
@@ -1225,6 +1258,120 @@ export const MEMBER_LENA_SELF: S["MemberAccess"] = {
   has_hidden_groups: false,
   grants: [],
   has_other_grants: false,
+};
+
+// --- members and administrators (Phase 12, P12.2) -----------------------------------------
+
+export const IDENTITY_REQUIREMENT: S["IdentityRequirement"] = {
+  available: true,
+  subject_claim: "sub",
+  issuer: "https://halden.okta.example",
+};
+
+export const IDENTITY_REQUIREMENT_EMAIL: S["IdentityRequirement"] = { ...IDENTITY_REQUIREMENT, subject_claim: "email" };
+
+export const IDENTITY_NOT_CONNECTED: S["IdentityRequirement"] = { available: false, subject_claim: null, issuer: null };
+
+/** Someone an administrator has just added: least access, managed by the organization. */
+export const MEMBER_NEW: S["MemberAccess"] = {
+  member: {
+    id: "a1000000-0000-4000-8000-0000000000bb",
+    name: "Sam Achebe",
+    email: "sam.achebe@halden.example",
+    role_label: null,
+    status: "active",
+    is_admin: false,
+    clearance: "internal",
+    account_scope: "assigned",
+    assigned_accounts: 0,
+    departments: [],
+    managed_by: null,
+  },
+  lifecycle: { ...LIFECYCLE_ACTIVE, sign_in_identifier: "00u9sam-achebe" },
+  version: "2026-10-09T09:00:00Z",
+  is_self: false,
+  accounts: [],
+  departments: [],
+  groups: [],
+  has_hidden_groups: false,
+  grants: [],
+  has_other_grants: false,
+};
+
+/** Grace is an administrator (not the viewer); the capability can be revoked. */
+export const MEMBER_GRACE_ADMIN: S["MemberAccess"] = {
+  ...MEMBER_NEW,
+  member: { ...MEMBERS_PAGE.items[0]!, is_admin: true },
+  lifecycle: { ...LIFECYCLE_ACTIVE, sign_in_identifier: "00u3grace", grant_administrator: null, revoke_administrator: OPEN },
+};
+
+/** Removed by the identity provider; reinstating starts again from least access. */
+export const MEMBER_RAE_REMOVED: S["MemberAccess"] = {
+  ...MEMBER_NEW,
+  member: {
+    ...MEMBER_NEW.member,
+    id: "a1000000-0000-4000-8000-0000000000cc",
+    name: "Rae Lindqvist",
+    email: "rae.lindqvist@halden.example",
+    status: "removed",
+    clearance: "confidential",
+    account_scope: "all",
+    managed_by: "identity_provider",
+  },
+  lifecycle: {
+    sign_in_identifier: "00u4rae",
+    identity_managed_by: "identity_provider",
+    suspend: null,
+    reactivate: null,
+    reinstate: OPEN,
+    grant_administrator: null,
+    revoke_administrator: null,
+  },
+  departments: [SALES],
+};
+
+export const MEMBER_RAE_REINSTATED: S["MemberAccess"] = {
+  ...MEMBER_RAE_REMOVED,
+  member: { ...MEMBER_RAE_REMOVED.member, status: "active", clearance: "internal", account_scope: "assigned" },
+  lifecycle: { ...MEMBER_RAE_REMOVED.lifecycle, reinstate: null, suspend: blocked("managed_by_identity_provider"), grant_administrator: OPEN },
+  departments: [],
+};
+
+export const PREVIEW_REINSTATE: S["AccessPreview"] = {
+  effects: [
+    { kind: "reinstated", before: null, after: null, subject: null },
+    { kind: "administrator", before: "true", after: "false", subject: null },
+    { kind: "clearance", before: "confidential", after: "internal", subject: null },
+    { kind: "account_scope", before: "all", after: "assigned", subject: null },
+    { kind: "department_removed", before: null, after: null, subject: { id: ID.sales, name: "Sales" } },
+  ],
+  documents_gained: 3,
+  documents_lost: 0,
+};
+
+/** The audit entry of a member added by hand: least access, and the binding itself. */
+export const AUDIT_MEMBER_ADDED: S["AuditPage"] = {
+  items: [
+    {
+      id: "a0d10000-0000-4000-8000-000000000009",
+      created_at: "2026-10-09T09:00:00Z",
+      action: "access.member_changed",
+      actor: { kind: "member", name: "Lena Brandt", operator: null },
+      reason: "Joined the support team",
+      member: { id: "a1000000-0000-4000-8000-0000000000bb", name: "Sam Achebe" },
+      document: null,
+      effects: [
+        { kind: "created", before: null, after: "active", subject: null },
+        { kind: "clearance", before: null, after: "internal", subject: null },
+        { kind: "account_scope", before: null, after: "assigned", subject: null },
+      ],
+      details: [
+        { field: "sign_in_identifier", before: null, after: "00u9sam-achebe" },
+        { field: "email", before: null, after: "sam.achebe@halden.example" },
+      ],
+    },
+  ],
+  next_before: null,
 };
 
 export const PREVIEW_ADD_KESTREL: S["AccessPreview"] = {
