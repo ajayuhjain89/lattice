@@ -38,6 +38,188 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/admin/access/account-references": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Map an unmapped reference to an active account, with a reason (administrators; audited)
+     * @description 409 when the reference is already mapped (remap it instead); 422 `account_archived` for an archived account. Applies at the next sync. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_mapping_v1_admin_access_account_references_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/account-references/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Now → After for one reference: map, remap or unmap (administrators; nothing is changed)
+     * @description Nothing indexed changes until the source's next sync. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_mapping_preview_v1_admin_access_account_references_preview_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/account-references/remap": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Move a reference from its current account to another active account, with a reason (administrators; audited)
+     * @description `current_account_id` must be the account it maps to now (409 otherwise). Records move at the next sync. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_remap_v1_admin_access_account_references_remap_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/account-references/unmap": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Remove a reference's mapping, with a reason (administrators; audited)
+     * @description `current_account_id` must be the account it maps to now (409 otherwise). At the next sync its records are quarantined (account-scoped source) or lose the account. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_unmap_v1_admin_access_account_references_unmap_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/account-references/unmapped": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * References the latest syncs could not map to an account, with the number of records waiting (administrators)
+     * @description The exact reference only (a ticketing organization ID or a channel ID): never a channel name, a title or anything from a record.
+     */
+    get: operations["get_unmapped_v1_admin_access_account_references_unmapped_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/accounts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** The organization's accounts by name (administrators) */
+    get: operations["get_accounts_v1_admin_access_accounts_get"];
+    put?: never;
+    /**
+     * Create an account, with a reason (administrators; audited). Nobody is assigned it
+     * @description The key is immutable (document front matter and Ask scopes name it); 409 when another account has it. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_account_v1_admin_access_accounts_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/accounts/{account_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** An account: its metadata, lifecycle and external-reference mappings (administrators) */
+    get: operations["get_account_v1_admin_access_accounts__account_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Change an account's name, aliases or business status, with a reason (administrators; audited)
+     * @description `version` must be the account's current version (409 otherwise). An archived account is read-only until reactivated (422 `archived`). Requires the X-Lattice-Request: 1 header.
+     */
+    patch: operations["patch_account_v1_admin_access_accounts__account_id__patch"];
+    trace?: never;
+  };
+  "/v1/admin/access/accounts/{account_id}/archive": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Archive an account, with a reason (administrators; audited)
+     * @description Nothing is deleted or hidden: documents, assignments, traces and existing mappings stay, and existing mappings keep resolving. The account accepts no new mappings until reactivated. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_archive_v1_admin_access_accounts__account_id__archive_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/access/accounts/{account_id}/reactivate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reactivate an archived account, with a reason (administrators; audited)
+     * @description The same account, with its history and mappings. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_reactivate_v1_admin_access_accounts__account_id__reactivate_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/admin/access/directory": {
     parameters: {
       query?: never;
@@ -694,6 +876,179 @@ export interface components {
       /** Effects */
       effects: components["schemas"]["AccessEffect"][];
     };
+    /**
+     * AccountChangeRequest
+     * @description Only what is sent changes. The key, lifecycle and mappings have operations of
+     *     their own.
+     */
+    AccountChangeRequest: {
+      /** Aliases */
+      aliases?: string[] | null;
+      /** Name */
+      name?: string | null;
+      /** Reason */
+      reason: string;
+      /** Status */
+      status?: ("active" | "churned" | "prospect") | null;
+      /**
+       * Version
+       * Format: date-time
+       */
+      version: string;
+    };
+    /** AccountDetail */
+    AccountDetail: {
+      /** Aliases */
+      aliases: string[];
+      /** Archived At */
+      archived_at: string | null;
+      /**
+       * Assigned Members
+       * @description Members assigned this account (directory).
+       */
+      assigned_members: number;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Key
+       * @description Immutable: what document front matter and an Ask scope name.
+       */
+      key: string;
+      /**
+       * Lifecycle
+       * @description archived: kept with its history and mappings; refuses new mappings.
+       * @enum {string}
+       */
+      lifecycle: "active" | "archived";
+      /** Mappings */
+      mappings: components["schemas"]["AccountMapping"][];
+      /** Name */
+      name: string;
+      /**
+       * References
+       * @description External references mapped to this account.
+       */
+      references: number;
+      /**
+       * Status
+       * @description A business label with no effect on access.
+       * @enum {string}
+       */
+      status: "active" | "churned" | "prospect";
+      /**
+       * Version
+       * Format: date-time
+       * @description Send back with a change (409 when it moved on).
+       */
+      version: string;
+    };
+    /** AccountLifecycleRequest */
+    AccountLifecycleRequest: {
+      /** Reason */
+      reason: string;
+      /**
+       * Version
+       * Format: date-time
+       */
+      version: string;
+    };
+    /** AccountMapping */
+    AccountMapping: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** External Ref */
+      external_ref: string;
+      /**
+       * Ref Kind
+       * @enum {string}
+       */
+      ref_kind: "ticketing_organization" | "chat_channel";
+      source: components["schemas"]["SourceRef"];
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /** AccountRef */
+    AccountRef: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Key */
+      key: string;
+      /**
+       * Lifecycle
+       * @enum {string}
+       */
+      lifecycle: "active" | "archived";
+      /** Name */
+      name: string;
+    };
+    /** AccountSummary */
+    AccountSummary: {
+      /** Aliases */
+      aliases: string[];
+      /** Archived At */
+      archived_at: string | null;
+      /**
+       * Assigned Members
+       * @description Members assigned this account (directory).
+       */
+      assigned_members: number;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Key
+       * @description Immutable: what document front matter and an Ask scope name.
+       */
+      key: string;
+      /**
+       * Lifecycle
+       * @description archived: kept with its history and mappings; refuses new mappings.
+       * @enum {string}
+       */
+      lifecycle: "active" | "archived";
+      /** Name */
+      name: string;
+      /**
+       * References
+       * @description External references mapped to this account.
+       */
+      references: number;
+      /**
+       * Status
+       * @description A business label with no effect on access.
+       * @enum {string}
+       */
+      status: "active" | "churned" | "prospect";
+    };
+    /** AccountsPage */
+    AccountsPage: {
+      /** Items */
+      items: components["schemas"]["AccountSummary"][];
+      /**
+       * Next After
+       * @description Pass as `after` for the next page; null on the last page.
+       */
+      next_after: string | null;
+    };
     /** Actor */
     Actor: {
       /**
@@ -1153,6 +1508,11 @@ export interface components {
     };
     /** DirectoryAccount */
     DirectoryAccount: {
+      /**
+       * Archived
+       * @description Archived (P12.3): kept with its history; assignments are unaffected.
+       */
+      archived: boolean;
       /**
        * Id
        * Format: uuid
@@ -1656,6 +2016,114 @@ export interface components {
        */
       status: "ok";
     };
+    /** MapRequest */
+    MapRequest: {
+      /**
+       * Account Id
+       * Format: uuid
+       */
+      account_id: string;
+      /** External Ref */
+      external_ref: string;
+      /** Reason */
+      reason: string;
+      /**
+       * Ref Kind
+       * @enum {string}
+       */
+      ref_kind: "ticketing_organization" | "chat_channel";
+      /**
+       * Source Id
+       * Format: uuid
+       */
+      source_id: string;
+    };
+    /**
+     * MappingPreview
+     * @description Now → After for one reference. Nothing indexed changes until the source syncs.
+     */
+    MappingPreview: {
+      /**
+       * Account Scoped
+       * @description Records of an account-scoped source need a mapping to be indexed.
+       */
+      account_scoped: boolean;
+      after: components["schemas"]["AccountRef"] | null;
+      /**
+       * Effect
+       * @description At the next sync: indexed (waiting records are indexed under the account), scoped (records become scoped to the account), moved (records move to the new account), quarantined (records become unreadable until mapped again), unscoped (records lose their account: readable under the source's other rules).
+       * @enum {string}
+       */
+      effect: "indexed" | "scoped" | "moved" | "quarantined" | "unscoped";
+      /** External Ref */
+      external_ref: string;
+      now: components["schemas"]["AccountRef"] | null;
+      /**
+       * Operation
+       * @enum {string}
+       */
+      operation: "map" | "remap" | "unmap";
+      /**
+       * Records Waiting
+       * @description Records of the latest run waiting for this reference (0 if none).
+       */
+      records_waiting: number;
+      /**
+       * Ref Kind
+       * @enum {string}
+       */
+      ref_kind: "ticketing_organization" | "chat_channel";
+      source: components["schemas"]["SourceRef"];
+      /**
+       * Takes Effect
+       * @default next_sync
+       * @constant
+       */
+      takes_effect?: "next_sync";
+    };
+    /** MappingPreviewRequest */
+    MappingPreviewRequest: {
+      /**
+       * Account Id
+       * @description The account after; null to unmap.
+       */
+      account_id: string | null;
+      /** External Ref */
+      external_ref: string;
+      /**
+       * Ref Kind
+       * @enum {string}
+       */
+      ref_kind: "ticketing_organization" | "chat_channel";
+      /**
+       * Source Id
+       * Format: uuid
+       */
+      source_id: string;
+    };
+    /** MappingResult */
+    MappingResult: {
+      account: components["schemas"]["AccountRef"] | null;
+      /** External Ref */
+      external_ref: string;
+      /**
+       * Operation
+       * @enum {string}
+       */
+      operation: "map" | "remap" | "unmap";
+      /**
+       * Ref Kind
+       * @enum {string}
+       */
+      ref_kind: "ticketing_organization" | "chat_channel";
+      source: components["schemas"]["SourceRef"];
+      /**
+       * Takes Effect
+       * @default next_sync
+       * @constant
+       */
+      takes_effect?: "next_sync";
+    };
     /** MeResponse */
     MeResponse: {
       /**
@@ -1906,6 +2374,26 @@ export interface components {
       /** Name */
       name: string | null;
     };
+    /** NewAccountRequest */
+    NewAccountRequest: {
+      /** Aliases */
+      aliases?: string[];
+      /**
+       * Key
+       * @description Lowercase letters, digits and hyphens; immutable once created.
+       */
+      key: string;
+      /** Name */
+      name: string;
+      /** Reason */
+      reason: string;
+      /**
+       * Status
+       * @default active
+       * @enum {string}
+       */
+      status?: "active" | "churned" | "prospect";
+    };
     /**
      * NewMemberRequest
      * @description A person added by hand (D-30). Their access starts at least privilege: the request
@@ -2097,6 +2585,34 @@ export interface components {
        */
       version: string;
     };
+    /** RemapRequest */
+    RemapRequest: {
+      /**
+       * Account Id
+       * Format: uuid
+       */
+      account_id: string;
+      /**
+       * Current Account Id
+       * Format: uuid
+       * @description The account it maps to now (409 if not).
+       */
+      current_account_id: string;
+      /** External Ref */
+      external_ref: string;
+      /** Reason */
+      reason: string;
+      /**
+       * Ref Kind
+       * @enum {string}
+       */
+      ref_kind: "ticketing_organization" | "chat_channel";
+      /**
+       * Source Id
+       * Format: uuid
+       */
+      source_id: string;
+    };
     /**
      * RetrievalScope
      * @description Optional filters. Each is ANDed with the authorization predicate: it can narrow
@@ -2213,6 +2729,18 @@ export interface components {
       categories: components["schemas"]["SetupCategory"][];
       organization: components["schemas"]["SetupOrganization"];
     };
+    /** SourceRef */
+    SourceRef: {
+      /** Connector Type */
+      connector_type: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+    };
     /** Supersession */
     Supersession: {
       /** Since */
@@ -2236,6 +2764,66 @@ export interface components {
        * @enum {string}
        */
       mode?: "full" | "acl_only";
+    };
+    /** UnmapRequest */
+    UnmapRequest: {
+      /**
+       * Current Account Id
+       * Format: uuid
+       * @description The account it maps to now (409 if not).
+       */
+      current_account_id: string;
+      /** External Ref */
+      external_ref: string;
+      /** Reason */
+      reason: string;
+      /**
+       * Ref Kind
+       * @enum {string}
+       */
+      ref_kind: "ticketing_organization" | "chat_channel";
+      /**
+       * Source Id
+       * Format: uuid
+       */
+      source_id: string;
+    };
+    /** UnmappedReference */
+    UnmappedReference: {
+      /** @description The account it is now mapped to, if mapped since that run. */
+      account: components["schemas"]["AccountRef"] | null;
+      /**
+       * External Ref
+       * @description The exact reference the source reported: a ticketing organization ID or a channel ID -- never a channel name or anything from a record.
+       */
+      external_ref: string;
+      /**
+       * Records Waiting
+       * @description Records of the source's latest run not indexed for want of a mapping.
+       */
+      records_waiting: number;
+      /**
+       * Ref Kind
+       * @enum {string}
+       */
+      ref_kind: "ticketing_organization" | "chat_channel";
+      /**
+       * Seen At
+       * Format: date-time
+       * @description When that run started.
+       */
+      seen_at: string;
+      source: components["schemas"]["SourceRef"];
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "unmapped" | "mapped_pending_sync";
+    };
+    /** UnmappedReferences */
+    UnmappedReferences: {
+      /** Items */
+      items: components["schemas"]["UnmappedReference"][];
     };
     /** UserOut */
     UserOut: {
@@ -2264,6 +2852,11 @@ export interface components {
     };
     /** VisibleAccount */
     VisibleAccount: {
+      /**
+       * Archived
+       * @description Archived by an administrator: still readable as before, kept for history.
+       */
+      archived: boolean;
       /**
        * Key
        * @description What an Ask scope names (`scope.account`).
@@ -2378,6 +2971,802 @@ export interface operations {
       };
       /** @description Unprocessable Entity */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_mapping_v1_admin_access_account_references_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MapRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MappingResult"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_mapping_preview_v1_admin_access_account_references_preview_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MappingPreviewRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MappingPreview"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_remap_v1_admin_access_account_references_remap_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RemapRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MappingResult"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_unmap_v1_admin_access_account_references_unmap_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UnmapRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MappingResult"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_unmapped_v1_admin_access_account_references_unmapped_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UnmappedReferences"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_accounts_v1_admin_access_accounts_get: {
+    parameters: {
+      query?: {
+        q?: string | null;
+        lifecycle?: ("active" | "archived") | null;
+        limit?: number;
+        after?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AccountsPage"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_account_v1_admin_access_accounts_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["NewAccountRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AccountDetail"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_account_v1_admin_access_accounts__account_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        account_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AccountDetail"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  patch_account_v1_admin_access_accounts__account_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        account_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AccountChangeRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AccountDetail"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_archive_v1_admin_access_accounts__account_id__archive_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        account_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AccountLifecycleRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AccountDetail"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_reactivate_v1_admin_access_accounts__account_id__reactivate_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        account_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AccountLifecycleRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AccountDetail"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
         headers: {
           [name: string]: unknown;
         };

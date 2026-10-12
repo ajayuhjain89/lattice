@@ -73,6 +73,18 @@ ADMIN = {
     ("POST", "/v1/admin/access/members/{membership_id}/administrator"),
     ("POST", "/v1/admin/access/members/{membership_id}/reinstate/preview"),
     ("POST", "/v1/admin/access/members/{membership_id}/reinstate"),
+    # Phase 12 (P12.3): accounts and their external-reference mappings.
+    ("GET", "/v1/admin/access/accounts"),
+    ("POST", "/v1/admin/access/accounts"),
+    ("GET", "/v1/admin/access/accounts/{account_id}"),
+    ("PATCH", "/v1/admin/access/accounts/{account_id}"),
+    ("POST", "/v1/admin/access/accounts/{account_id}/archive"),
+    ("POST", "/v1/admin/access/accounts/{account_id}/reactivate"),
+    ("GET", "/v1/admin/access/account-references/unmapped"),
+    ("POST", "/v1/admin/access/account-references/preview"),
+    ("POST", "/v1/admin/access/account-references"),
+    ("POST", "/v1/admin/access/account-references/remap"),
+    ("POST", "/v1/admin/access/account-references/unmap"),
 }
 SCIM = {
     ("GET", "/scim/v2/ServiceProviderConfig"),
@@ -84,6 +96,11 @@ SCIM = {
     ("PUT", "/scim/v2/Users/{resource_id}"),
     ("PATCH", "/scim/v2/Users/{resource_id}"),
     ("DELETE", "/scim/v2/Users/{resource_id}"),
+}
+_REFERENCE = {
+    "source_id": str(uuid.uuid4()),
+    "ref_kind": "ticketing_organization",
+    "external_ref": "360001001",
 }
 # Valid bodies, so that a refusal is about authority, never about the request's shape.
 BODIES: dict[tuple[str, str], Any] = {
@@ -124,6 +141,40 @@ BODIES: dict[tuple[str, str], Any] = {
         "version": "2026-10-02T00:00:00Z",
         "reason": "Probe",
     },
+    ("POST", "/v1/admin/access/accounts"): {"key": "probe", "name": "Probe", "reason": "Probe"},
+    ("PATCH", "/v1/admin/access/accounts/{account_id}"): {
+        "version": "2026-10-02T00:00:00Z",
+        "name": "Probe",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/accounts/{account_id}/archive"): {
+        "version": "2026-10-02T00:00:00Z",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/accounts/{account_id}/reactivate"): {
+        "version": "2026-10-02T00:00:00Z",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/account-references/preview"): {
+        **_REFERENCE,
+        "account_id": None,
+    },
+    ("POST", "/v1/admin/access/account-references"): {
+        **_REFERENCE,
+        "account_id": str(uuid.uuid4()),
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/account-references/remap"): {
+        **_REFERENCE,
+        "current_account_id": str(uuid.uuid4()),
+        "account_id": str(uuid.uuid4()),
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/account-references/unmap"): {
+        **_REFERENCE,
+        "current_account_id": str(uuid.uuid4()),
+        "reason": "Probe",
+    },
 }
 QUERIES = {("GET", "/v1/admin/access/documents"): "?q=onboarding"}
 
@@ -151,7 +202,15 @@ def _url(path: str, ids: dict[str, str]) -> str:
 
 
 def _random_ids() -> dict[str, str]:
-    names = ("evidence_id", "trace_id", "source_id", "membership_id", "document_id", "grant_id")
+    names = (
+        "evidence_id",
+        "trace_id",
+        "source_id",
+        "membership_id",
+        "document_id",
+        "grant_id",
+        "account_id",
+    )
     return {name: str(uuid.uuid4()) for name in names} | {"resource_id": str(uuid.uuid4())}
 
 
@@ -224,6 +283,7 @@ async def worlds(owner_db: Database, app_client: AppFactory) -> Worlds:
         "UPDATE memberships SET is_admin = true WHERE id = :m", m=veridian.members["victor"]
     )
     await halden.document("checklist", "Onboarding checklist", ["Five steps to onboard."])
+    await halden.account("acme", "Acme Corp")
     await add_grant(
         owner_db, halden.id, halden.documents["checklist"], "membership", halden.members["maya"]
     )
@@ -248,6 +308,7 @@ async def worlds(owner_db: Database, app_client: AppFactory) -> Worlds:
         "document_id": str(halden.documents["checklist"]),
         "grant_id": str(grant),
         "resource_id": str(resource),
+        "account_id": str(halden.accounts["acme"]),
     }
     return Worlds(halden, veridian, ids)
 
@@ -280,7 +341,8 @@ async def test_another_organizations_identifiers_are_unknown(
                 text(
                     "SELECT (SELECT count(*) FROM document_grants), (SELECT clearance FROM "
                     "memberships WHERE id = :m), (SELECT count(*) FROM jobs), "
-                    "(SELECT count(*) FROM audit_events WHERE action LIKE 'access.%')"
+                    "(SELECT count(*) FROM audit_events WHERE action LIKE 'access.%' "
+                    "OR action LIKE 'account.%')"
                 ),
                 {"m": uuid.UUID(worlds.halden_ids["membership_id"])},
             )

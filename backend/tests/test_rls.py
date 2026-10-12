@@ -62,6 +62,8 @@ TENANT_TABLES = (
     # Phase 12 (P12.1)
     "encrypted_secrets",
     "outbound_targets",
+    # Phase 12 (P12.3)
+    "account_external_refs",
 )
 # Tables the runtime role may not read (written and read by operator tools; of
 # oidc_connections it reads only id, organization_id and status since 0014).
@@ -82,7 +84,8 @@ class TwoOrgs:
 
 
 async def _populate(db: Database, member: Member) -> None:
-    source = await create_source(db, member.organization_id)
+    # A ticketing source (P12.3): its reference mapping is one of the tenant rows.
+    source = await create_source(db, member.organization_id, connector_type="ticketing")
     async with db.tenant_transaction(member.organization_id) as s:
         dept: uuid.UUID = (
             await s.execute(
@@ -285,6 +288,15 @@ async def _populate(db: Database, member: Member) -> None:
             ),
             {"o": member.organization_id},
         )
+        # Phase 12 (P12.3): the same reference in both organizations, for their own account.
+        await s.execute(
+            text(
+                "INSERT INTO account_external_refs (organization_id, source_id, ref_kind, "
+                "external_ref, account_id, created_by) VALUES (:o, :s, 'ticketing_organization', "
+                "'360001001', :a, 'operator:test')"
+            ),
+            {"o": member.organization_id, "s": source, "a": account},
+        )
 
 
 _HOUR = timedelta(hours=1)
@@ -483,6 +495,16 @@ async def test_cannot_update_another_organizations_sessions(
         "SELECT 1 FROM outbound_targets",
         "INSERT INTO outbound_targets (organization_id, purpose, scheme, host, port) VALUES "
         "(lattice_current_org_id(), 'oidc', 'https', 'idp.internal', 443)",
+        # 0018: mappings only through lattice_set_account_ref; accounts never deleted, the
+        # key and the lifecycle never written directly.
+        "INSERT INTO account_external_refs (organization_id, source_id, ref_kind, "
+        "external_ref, account_id, created_by) SELECT organization_id, source_id, ref_kind, "
+        "'1', account_id, 'member:x' FROM account_external_refs",
+        "UPDATE account_external_refs SET external_ref = external_ref",
+        "DELETE FROM account_external_refs",
+        "DELETE FROM accounts",
+        "UPDATE accounts SET key = key",
+        "UPDATE accounts SET archived_at = now()",
         "UPDATE organizations SET slug = 'x'",
         "UPDATE organizations SET status = 'suspended'",
         "UPDATE oidc_connections SET issuer = 'https://x.example'",
@@ -547,8 +569,9 @@ async def test_cannot_update_another_organizations_sessions(
         "UPDATE document_grants SET origin = 'admin'",
         "UPDATE access_group_members SET group_id = group_id",
         "UPDATE account_assignments SET account_id = account_id",
-        "INSERT INTO accounts (organization_id, key, name) VALUES (lattice_current_org_id(), "
-        "'x', 'x')",
+        # 0018: administrators create accounts (audit-coupled), never archived ones.
+        "INSERT INTO accounts (organization_id, key, name, archived_at) VALUES "
+        "(lattice_current_org_id(), 'x', 'x', now())",
         "INSERT INTO departments (organization_id, key, name) VALUES "
         "(lattice_current_org_id(), 'x', 'x')",
     ],

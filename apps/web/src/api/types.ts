@@ -78,3 +78,26 @@ export type SetupState = SetupCategory["state"];
 export type SetupCategoryKey = SetupCategory["key"];
 export type SetupOrganization = Schemas["SetupOrganization"];
 export type OrganizationChange = Schemas["OrganizationChange"];
+
+// Accounts and external-reference mappings (Phase 12, P12.3).
+export type AccountsPage = Schemas["AccountsPage"];
+export type AccountSummary = Schemas["AccountSummary"];
+export type AccountDetail = Schemas["AccountDetail"];
+export type AccountMapping = Schemas["AccountMapping"];
+export type AccountRef = Schemas["AccountRef"];
+export type SourceRef = Schemas["SourceRef"];
+export type NewAccountRequest = Schemas["NewAccountRequest"];
+export type AccountChangeRequest = Schemas["AccountChangeRequest"];
+export type AccountLifecycleRequest = Schemas["AccountLifecycleRequest"];
+export type BusinessStatus = AccountSummary["status"];
+export type AccountLifecycle = AccountSummary["lifecycle"];
+export type UnmappedReferences = Schemas["UnmappedReferences"];
+export type UnmappedReference = Schemas["UnmappedReference"];
+export type RefKind = UnmappedReference["ref_kind"];
+export type MappingPreviewRequest = Schemas["MappingPreviewRequest"];
+export type MappingPreview = Schemas["MappingPreview"];
+export type MappingEffect = MappingPreview["effect"];
+export type MappingResult = Schemas["MappingResult"];
+export type MapRequest = Schemas["MapRequest"];
+export type RemapRequest = Schemas["RemapRequest"];
+export type UnmapRequest = Schemas["UnmapRequest"];

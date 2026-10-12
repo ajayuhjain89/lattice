@@ -144,6 +144,12 @@ CASES: list[tuple[str, SetupFacts, str, str]] = [
         "attention",
         "unmapped_references",
     ),
+    (
+        "accounts",
+        replace(BASE, account_sources=1, references_awaiting_sync=1),
+        "attention",
+        "sync_required",
+    ),
     ("accounts", replace(BASE, account_sources=1), "complete", "mapped"),
     ("first_answer", replace(BASE, synced_sources=0), "blocked", "sources_required"),
     ("first_answer", BASE, "required", "no_answer_yet"),
@@ -173,7 +179,9 @@ def test_actions_link_only_to_pages_that_exist() -> None:
     hrefs = set()
     for _, facts, _, _ in CASES:
         hrefs |= {c.action.href for c in derive(facts) if c.action is not None}
-    assert hrefs <= {"/access", "/settings/providers", "/sources", "/ask"}
+    pages = {"/access", "/settings/providers", "/sources", "/ask"}
+    # P12.3: the account pages under Access.
+    assert hrefs <= pages | {"/access/accounts", "/access/accounts/references"}
 
 
 def test_members_and_administrators_point_to_the_access_page() -> None:

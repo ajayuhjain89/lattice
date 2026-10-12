@@ -336,7 +336,7 @@ policy); `lattice.sources.config`; `lattice.admin_grants`; CLI `lattice sync`,
 | Deletion guard: > 20% unseen | Also an empty snapshot; and any record that failed before it could be identified blocks the sweep (not overridable) and quarantines the unseen documents | A corrupt line could be any document, including one whose access changed |
 | Sync modes full, incremental, acl_only | full, acl_only, reindex (`--rechunk`, `--reembed`); no incremental | No connector supports checkpoints; reindex is the planned re-chunk/re-embed operation |
 | Connector contract: async iterators, `message` on errors, config models per connector | Synchronous iterators; `RecordError` has code + validated identifier params + an operator-only location, **no message**; connector config is just the export path | Local exports; a free-text field is where content would leak |
-| `account_external_refs` table for ticketing organization IDs | `account_refs` in `sources.yaml` | Lattice-side configuration of one source; a table is needed once accounts are managed in Lattice |
+| `account_external_refs` table for ticketing organization IDs | `account_refs` in `sources.yaml` | Lattice-side configuration of one source; a table is needed once accounts are managed in Lattice — **built in P12.3** (migration 0018; `sources.yaml` mappings are written into it) |
 | `sources.default_department_ids uuid[]` | Default departments by key in `config`, validated each sync | Arrays cannot carry foreign keys |
 | Contextual header with account name and date | Kind, title, heading path (D-10); per-part time is rendered in chat chunk text | D-10; dates are per chunk (`occurred_at`) |
 | Grants: one per (document, principal) | One per (document, origin, principal) | D-12: separate permission origins |
@@ -1209,7 +1209,7 @@ service; real external staging stays a Phase 15 gate.
 | P12.0 | Decisions and contracts (plan Part II, ADR-017, ADR-011 amendment) | Delivered (docs only) |
 | P12.1 | Foundations: ADR-017 fences, encrypted secret store, outbound policy, `org create`, setup status, Organization page | Delivered (local; phase-12-plan Part III) |
 | P12.2 | Members, administrators, reinstatement | Delivered (local; phase-12-plan Part III) |
-| P12.3 | Accounts and `account_external_refs` | Not started |
+| P12.3 | Accounts and `account_external_refs` | Delivered (local; phase-12-plan Part III) |
 | P12.4 | OIDC and SCIM setup | Not started |
 | P12.5 | Providers, credentials, egress with step-up | Not started |
 | P12.6 | Export-based sources, imports, first sync | Not started |

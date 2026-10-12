@@ -57,7 +57,7 @@ _SOURCES_SQL = text(
       SELECT id, account_scoped, config FROM sources
       WHERE organization_id = :o AND status IN ('active', 'paused')
     ), latest AS (
-      SELECT DISTINCT ON (r.source_id) r.source_id, r.id, r.status
+      SELECT DISTINCT ON (r.source_id) r.source_id, r.id, r.status, r.started_at
       FROM source_sync_runs r JOIN connected c ON c.id = r.source_id
       WHERE r.organization_id = :o
       ORDER BY r.source_id, r.started_at DESC, r.id
@@ -68,13 +68,24 @@ _SOURCES_SQL = text(
       (SELECT count(*) FROM latest WHERE status = 'failed') AS failed_sources,
       (SELECT count(DISTINCT j.source_id) FROM jobs j JOIN connected c ON c.id = j.source_id
         WHERE j.organization_id = :o AND j.status IN ('queued', 'running')) AS syncing_sources,
-      (SELECT count(*) FROM connected
-        WHERE account_scoped OR coalesce(config -> 'account_refs', '{}'::jsonb) <> '{}'::jsonb
-           OR jsonb_path_exists(config, '$.channels.*.account')) AS account_sources,
-      (SELECT count(DISTINCT f.message_params ->> 'external_account_ref')
+      (SELECT count(*) FROM connected c
+        WHERE c.account_scoped OR EXISTS (
+          SELECT 1 FROM account_external_refs m
+          WHERE m.organization_id = :o AND m.source_id = c.id)) AS account_sources,
+      -- Still unmapped now: one mapped since the run waits for the next sync instead.
+      (SELECT count(*) FROM (
+         SELECT DISTINCT f.sync_run_id, f.message_params ->> 'external_account_ref' AS ref,
+                l.source_id
          FROM sync_record_failures f JOIN latest l ON l.id = f.sync_run_id
-        WHERE f.organization_id = :o AND f.error_code = 'access_unmappable:account')
-        AS unmapped_references
+         WHERE f.organization_id = :o AND f.error_code = 'access_unmappable:account'
+           AND f.message_params ? 'external_account_ref') w
+        WHERE NOT EXISTS (
+          SELECT 1 FROM account_external_refs m
+          WHERE m.organization_id = :o AND m.source_id = w.source_id
+            AND m.external_ref = w.ref)) AS unmapped_references,
+      (SELECT count(*) FROM account_external_refs m JOIN latest l ON l.source_id = m.source_id
+        WHERE m.organization_id = :o AND m.updated_at > l.started_at)
+        AS references_awaiting_sync
     """
 )
 _ANSWERED_SQL = text(
@@ -175,5 +186,6 @@ async def gather(
         syncing_sources=sources.syncing_sources,
         account_sources=sources.account_sources,
         unmapped_references=sources.unmapped_references,
+        references_awaiting_sync=sources.references_awaiting_sync,
         answered=answered,
     )

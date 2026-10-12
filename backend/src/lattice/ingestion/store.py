@@ -134,13 +134,16 @@ async def upsert_source(
             raise SourceConfigurationError("source_config:connector_type_changed")
         if existing.status != "active":
             raise SourceConfigurationError(f"source_config:source_{existing.status}")
+    # Account mappings live in account_external_refs (P12.3), not in the configuration:
+    # ``lattice.accounts.refs.apply_file_mappings`` writes the file's, audited.
+    channels = {
+        k: c.model_dump(exclude_none=True, exclude={"account"})
+        for k, c in sorted(config.channels.items())
+    }
     settings = {
         "path": export_path,
         "default_departments": config.default_departments,
-        "account_refs": {str(k): v for k, v in sorted(config.account_refs.items())},
-        "channels": {
-            k: c.model_dump(exclude_none=True) for k, c in sorted(config.channels.items())
-        },
+        "channels": {k: v for k, v in channels.items() if v},
     }
     await session.execute(
         text(

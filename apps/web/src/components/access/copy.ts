@@ -180,6 +180,12 @@ const ACTIONS: Record<string, string> = {
   "organization.reactivated": "Organization reactivated",
   "scim.token_created": "Provisioning token created",
   "scim.token_revoked": "Provisioning token revoked",
+  "organization.updated": "Organization updated",
+  "account.created": "Account created",
+  "account.updated": "Account updated",
+  "account.archived": "Account archived",
+  "account.reactivated": "Account reactivated",
+  "account.mapping_changed": "Account reference mapping changed",
 };
 
 export function actionLabel(action: string): string {
@@ -190,6 +196,8 @@ const OPERATORS: Record<string, string> = {
   seed: "Organization manifest (seed)",
   "admin-grants": "admin-grants.yaml",
   cli: "Operator command",
+  sync: "Operator sources file (lattice sync)",
+  migration: "Database migration",
 };
 
 export function actorLabel(event: AuditEvent): string {

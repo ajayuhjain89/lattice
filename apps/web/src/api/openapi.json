@@ -93,6 +93,374 @@
         "title": "AccessPreview",
         "type": "object"
       },
+      "AccountChangeRequest": {
+        "additionalProperties": false,
+        "description": "Only what is sent changes. The key, lifecycle and mappings have operations of\ntheir own.",
+        "properties": {
+          "aliases": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aliases"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "churned",
+                  "prospect"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "version": {
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "reason"
+        ],
+        "title": "AccountChangeRequest",
+        "type": "object"
+      },
+      "AccountDetail": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "assigned_members": {
+            "description": "Members assigned this account (directory).",
+            "title": "Assigned Members",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "description": "Immutable: what document front matter and an Ask scope name.",
+            "title": "Key",
+            "type": "string"
+          },
+          "lifecycle": {
+            "description": "archived: kept with its history and mappings; refuses new mappings.",
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "title": "Lifecycle",
+            "type": "string"
+          },
+          "mappings": {
+            "items": {
+              "$ref": "#/components/schemas/AccountMapping"
+            },
+            "title": "Mappings",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "references": {
+            "description": "External references mapped to this account.",
+            "title": "References",
+            "type": "integer"
+          },
+          "status": {
+            "description": "A business label with no effect on access.",
+            "enum": [
+              "active",
+              "churned",
+              "prospect"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "description": "Send back with a change (409 when it moved on).",
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "aliases",
+          "status",
+          "lifecycle",
+          "archived_at",
+          "references",
+          "assigned_members",
+          "version",
+          "created_at",
+          "mappings"
+        ],
+        "title": "AccountDetail",
+        "type": "object"
+      },
+      "AccountLifecycleRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "reason"
+        ],
+        "title": "AccountLifecycleRequest",
+        "type": "object"
+      },
+      "AccountMapping": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "external_ref": {
+            "title": "External Ref",
+            "type": "string"
+          },
+          "ref_kind": {
+            "enum": [
+              "ticketing_organization",
+              "chat_channel"
+            ],
+            "title": "Ref Kind",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceRef"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "ref_kind",
+          "external_ref",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AccountMapping",
+        "type": "object"
+      },
+      "AccountRef": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "lifecycle": {
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "title": "Lifecycle",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "lifecycle"
+        ],
+        "title": "AccountRef",
+        "type": "object"
+      },
+      "AccountSummary": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "assigned_members": {
+            "description": "Members assigned this account (directory).",
+            "title": "Assigned Members",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "description": "Immutable: what document front matter and an Ask scope name.",
+            "title": "Key",
+            "type": "string"
+          },
+          "lifecycle": {
+            "description": "archived: kept with its history and mappings; refuses new mappings.",
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "title": "Lifecycle",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "references": {
+            "description": "External references mapped to this account.",
+            "title": "References",
+            "type": "integer"
+          },
+          "status": {
+            "description": "A business label with no effect on access.",
+            "enum": [
+              "active",
+              "churned",
+              "prospect"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "aliases",
+          "status",
+          "lifecycle",
+          "archived_at",
+          "references",
+          "assigned_members"
+        ],
+        "title": "AccountSummary",
+        "type": "object"
+      },
+      "AccountsPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AccountSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_after": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `after` for the next page; null on the last page.",
+            "title": "Next After"
+          }
+        },
+        "required": [
+          "items",
+          "next_after"
+        ],
+        "title": "AccountsPage",
+        "type": "object"
+      },
       "Actor": {
         "properties": {
           "kind": {
@@ -1332,6 +1700,11 @@
       },
       "DirectoryAccount": {
         "properties": {
+          "archived": {
+            "description": "Archived (P12.3): kept with its history; assignments are unaffected.",
+            "title": "Archived",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -1354,7 +1727,8 @@
           "id",
           "key",
           "name",
-          "status"
+          "status",
+          "archived"
         ],
         "title": "DirectoryAccount",
         "type": "object"
@@ -2575,6 +2949,238 @@
         "title": "LiveResponse",
         "type": "object"
       },
+      "MapRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "external_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "External Ref",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "ref_kind": {
+            "enum": [
+              "ticketing_organization",
+              "chat_channel"
+            ],
+            "title": "Ref Kind",
+            "type": "string"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "ref_kind",
+          "external_ref",
+          "account_id",
+          "reason"
+        ],
+        "title": "MapRequest",
+        "type": "object"
+      },
+      "MappingPreview": {
+        "description": "Now \u2192 After for one reference. Nothing indexed changes until the source syncs.",
+        "properties": {
+          "account_scoped": {
+            "description": "Records of an account-scoped source need a mapping to be indexed.",
+            "title": "Account Scoped",
+            "type": "boolean"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effect": {
+            "description": "At the next sync: indexed (waiting records are indexed under the account), scoped (records become scoped to the account), moved (records move to the new account), quarantined (records become unreadable until mapped again), unscoped (records lose their account: readable under the source's other rules).",
+            "enum": [
+              "indexed",
+              "scoped",
+              "moved",
+              "quarantined",
+              "unscoped"
+            ],
+            "title": "Effect",
+            "type": "string"
+          },
+          "external_ref": {
+            "title": "External Ref",
+            "type": "string"
+          },
+          "now": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation": {
+            "enum": [
+              "map",
+              "remap",
+              "unmap"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "records_waiting": {
+            "description": "Records of the latest run waiting for this reference (0 if none).",
+            "title": "Records Waiting",
+            "type": "integer"
+          },
+          "ref_kind": {
+            "enum": [
+              "ticketing_organization",
+              "chat_channel"
+            ],
+            "title": "Ref Kind",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceRef"
+          },
+          "takes_effect": {
+            "const": "next_sync",
+            "default": "next_sync",
+            "title": "Takes Effect",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "source",
+          "ref_kind",
+          "external_ref",
+          "account_scoped",
+          "now",
+          "after",
+          "effect",
+          "records_waiting"
+        ],
+        "title": "MappingPreview",
+        "type": "object"
+      },
+      "MappingPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The account after; null to unmap.",
+            "title": "Account Id"
+          },
+          "external_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "External Ref",
+            "type": "string"
+          },
+          "ref_kind": {
+            "enum": [
+              "ticketing_organization",
+              "chat_channel"
+            ],
+            "title": "Ref Kind",
+            "type": "string"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "ref_kind",
+          "external_ref",
+          "account_id"
+        ],
+        "title": "MappingPreviewRequest",
+        "type": "object"
+      },
+      "MappingResult": {
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "external_ref": {
+            "title": "External Ref",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "map",
+              "remap",
+              "unmap"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "ref_kind": {
+            "enum": [
+              "ticketing_organization",
+              "chat_channel"
+            ],
+            "title": "Ref Kind",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceRef"
+          },
+          "takes_effect": {
+            "const": "next_sync",
+            "default": "next_sync",
+            "title": "Takes Effect",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "source",
+          "ref_kind",
+          "external_ref",
+          "account"
+        ],
+        "title": "MappingResult",
+        "type": "object"
+      },
       "MeResponse": {
         "properties": {
           "capabilities": {
@@ -3302,6 +3908,55 @@
         "title": "NamedRef",
         "type": "object"
       },
+      "NewAccountRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Aliases",
+            "type": "array"
+          },
+          "key": {
+            "description": "Lowercase letters, digits and hyphens; immutable once created.",
+            "maxLength": 63,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "default": "active",
+            "enum": [
+              "active",
+              "churned",
+              "prospect"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "reason"
+        ],
+        "title": "NewAccountRequest",
+        "type": "object"
+      },
       "NewMemberRequest": {
         "additionalProperties": false,
         "description": "A person added by hand (D-30). Their access starts at least privilege: the request\ncannot carry access.",
@@ -3771,6 +4426,57 @@
         "title": "ReinstateRequest",
         "type": "object"
       },
+      "RemapRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "current_account_id": {
+            "description": "The account it maps to now (409 if not).",
+            "format": "uuid",
+            "title": "Current Account Id",
+            "type": "string"
+          },
+          "external_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "External Ref",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "ref_kind": {
+            "enum": [
+              "ticketing_organization",
+              "chat_channel"
+            ],
+            "title": "Ref Kind",
+            "type": "string"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "ref_kind",
+          "external_ref",
+          "account_id",
+          "reason",
+          "current_account_id"
+        ],
+        "title": "RemapRequest",
+        "type": "object"
+      },
       "RetrievalScope": {
         "additionalProperties": false,
         "description": "Optional filters. Each is ANDed with the authorization predicate: it can narrow\nwhat the reader may see, never widen it. ``account`` must name an account the\nreader may know exists (``authz.visible_accounts_predicate``); a hidden or unknown\naccount is refused identically.",
@@ -4069,6 +4775,30 @@
         "title": "SetupStatus",
         "type": "object"
       },
+      "SourceRef": {
+        "properties": {
+          "connector_type": {
+            "title": "Connector Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "connector_type"
+        ],
+        "title": "SourceRef",
+        "type": "object"
+      },
       "Supersession": {
         "additionalProperties": false,
         "properties": {
@@ -4117,6 +4847,128 @@
           }
         },
         "title": "SyncRequest",
+        "type": "object"
+      },
+      "UnmapRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "current_account_id": {
+            "description": "The account it maps to now (409 if not).",
+            "format": "uuid",
+            "title": "Current Account Id",
+            "type": "string"
+          },
+          "external_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "External Ref",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "ref_kind": {
+            "enum": [
+              "ticketing_organization",
+              "chat_channel"
+            ],
+            "title": "Ref Kind",
+            "type": "string"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "ref_kind",
+          "external_ref",
+          "current_account_id",
+          "reason"
+        ],
+        "title": "UnmapRequest",
+        "type": "object"
+      },
+      "UnmappedReference": {
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The account it is now mapped to, if mapped since that run."
+          },
+          "external_ref": {
+            "description": "The exact reference the source reported: a ticketing organization ID or a channel ID -- never a channel name or anything from a record.",
+            "title": "External Ref",
+            "type": "string"
+          },
+          "records_waiting": {
+            "description": "Records of the source's latest run not indexed for want of a mapping.",
+            "title": "Records Waiting",
+            "type": "integer"
+          },
+          "ref_kind": {
+            "enum": [
+              "ticketing_organization",
+              "chat_channel"
+            ],
+            "title": "Ref Kind",
+            "type": "string"
+          },
+          "seen_at": {
+            "description": "When that run started.",
+            "format": "date-time",
+            "title": "Seen At",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceRef"
+          },
+          "state": {
+            "enum": [
+              "unmapped",
+              "mapped_pending_sync"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "ref_kind",
+          "external_ref",
+          "records_waiting",
+          "seen_at",
+          "state",
+          "account"
+        ],
+        "title": "UnmappedReference",
+        "type": "object"
+      },
+      "UnmappedReferences": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UnmappedReference"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "UnmappedReferences",
         "type": "object"
       },
       "UserOut": {
@@ -4185,6 +5037,11 @@
       },
       "VisibleAccount": {
         "properties": {
+          "archived": {
+            "description": "Archived by an administrator: still readable as before, kept for history.",
+            "title": "Archived",
+            "type": "boolean"
+          },
           "key": {
             "description": "What an Ask scope names (`scope.account`).",
             "title": "Key",
@@ -4197,7 +5054,8 @@
         },
         "required": [
           "key",
-          "name"
+          "name",
+          "archived"
         ],
         "title": "VisibleAccount",
         "type": "object"
@@ -4351,6 +5209,1028 @@
         "summary": "Your own recent questions, newest first (open one with /v1/traces/{id})",
         "tags": [
           "activity"
+        ]
+      }
+    },
+    "/v1/admin/access/account-references": {
+      "post": {
+        "description": "409 when the reference is already mapped (remap it instead); 422 `account_archived` for an archived account. Applies at the next sync. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_mapping_v1_admin_access_account_references_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MapRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MappingResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Map an unmapped reference to an active account, with a reason (administrators; audited)",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/v1/admin/access/account-references/preview": {
+      "post": {
+        "description": "Nothing indexed changes until the source's next sync. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_mapping_preview_v1_admin_access_account_references_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MappingPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MappingPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Now \u2192 After for one reference: map, remap or unmap (administrators; nothing is changed)",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/v1/admin/access/account-references/remap": {
+      "post": {
+        "description": "`current_account_id` must be the account it maps to now (409 otherwise). Records move at the next sync. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_remap_v1_admin_access_account_references_remap_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemapRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MappingResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Move a reference from its current account to another active account, with a reason (administrators; audited)",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/v1/admin/access/account-references/unmap": {
+      "post": {
+        "description": "`current_account_id` must be the account it maps to now (409 otherwise). At the next sync its records are quarantined (account-scoped source) or lose the account. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_unmap_v1_admin_access_account_references_unmap_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnmapRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MappingResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Remove a reference's mapping, with a reason (administrators; audited)",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/v1/admin/access/account-references/unmapped": {
+      "get": {
+        "description": "The exact reference only (a ticketing organization ID or a channel ID): never a channel name, a title or anything from a record.",
+        "operationId": "get_unmapped_v1_admin_access_account_references_unmapped_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnmappedReferences"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "References the latest syncs could not map to an account, with the number of records waiting (administrators)",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/v1/admin/access/accounts": {
+      "get": {
+        "operationId": "get_accounts_v1_admin_access_accounts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lifecycle",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "archived"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lifecycle"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "The organization's accounts by name (administrators)",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "post": {
+        "description": "The key is immutable (document front matter and Ask scopes name it); 409 when another account has it. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_account_v1_admin_access_accounts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Create an account, with a reason (administrators; audited). Nobody is assigned it",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/v1/admin/access/accounts/{account_id}": {
+      "get": {
+        "operationId": "get_account_v1_admin_access_accounts__account_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "An account: its metadata, lifecycle and external-reference mappings (administrators)",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "patch": {
+        "description": "`version` must be the account's current version (409 otherwise). An archived account is read-only until reactivated (422 `archived`). Requires the X-Lattice-Request: 1 header.",
+        "operationId": "patch_account_v1_admin_access_accounts__account_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Change an account's name, aliases or business status, with a reason (administrators; audited)",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/v1/admin/access/accounts/{account_id}/archive": {
+      "post": {
+        "description": "Nothing is deleted or hidden: documents, assignments, traces and existing mappings stay, and existing mappings keep resolving. The account accepts no new mappings until reactivated. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_archive_v1_admin_access_accounts__account_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Archive an account, with a reason (administrators; audited)",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/v1/admin/access/accounts/{account_id}/reactivate": {
+      "post": {
+        "description": "The same account, with its history and mappings. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_reactivate_v1_admin_access_accounts__account_id__reactivate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Reactivate an archived account, with a reason (administrators; audited)",
+        "tags": [
+          "accounts"
         ]
       }
     },

@@ -223,18 +223,48 @@ dimension and a core query dimension ("What did we promise Acme?").
 | key             | citext   |       | `acme-corp`; UQ per org                              |
 | name            | text     | ACCT  | Used for query account-mention detection             |
 | aliases         | text[]   | ACCT  | "Acme", "ACME Corp"; used for mention detection      |
-| status          | enum     |       | `active`, `churned`, `prospect`                      |
+| status          | enum     |       | `active`, `churned`, `prospect`: a business label with no effect anywhere |
+| archived_at     | timestamptz |    | P12.3 setup lifecycle: NULL = active; set = archived (kept, refuses new mappings) |
+
+Checks for every writer (0018): key `^[a-z0-9][a-z0-9-]{0,62}$` (immutable for the API),
+name 1–200 characters trimmed without control characters, at most 20 distinct aliases
+(case-insensitively) of 1–100 characters. Accounts are never deleted by the product:
+documents (no ON DELETE action), assignments and mappings (`ON DELETE RESTRICT`)
+reference them.
+
+**Lifecycle (P12.3).** Archiving is an administration state, not content deletion and not
+authorization revocation: documents keep their account, assignments stay, traces stay
+valid, existing mappings keep resolving at sync (dropping them would quarantine an
+account-scoped source's records or unscope — and so widen — the others'). An archived
+account refuses new mappings and is read-only to the API role until reactivated, which
+keeps the same row (no duplicate identity). The Ask account picker labels it *archived*.
 
 `account_assignments(organization_id, membership_id, account_id, assigned_at)` —
 which accounts an `assigned`-scope member can see.
 
-*Not built (Phase 0 draft; as built, mappings live in `sources.config`). Phase 12 target
-(P12.3): the table as contracted in phase-12-plan C10, with `ref_kind`, a composite
-source FK (cascade) and an account FK (restrict); `accounts.status` gains `archived`.*
-`account_external_refs(organization_id, account_id, source_id, external_ref)` — maps
-e.g. a ticketing "organization id" or a Slack channel to an account. UQ
-(organization_id, source_id, external_ref). Unmapped references on account-scoped
-sources **fail closed** (see `ingestion-design.md` §6).
+`account_external_refs` (P12.3, migration 0018; phase-12-plan C10):
+
+| field           | Type        | Notes |
+| --------------- | ----------- | ----- |
+| id              | uuid PK     | |
+| organization_id | uuid        | ISO; forced RLS `tenant_isolation` |
+| source_id       | uuid        | FK `(organization_id, source_id)` → sources **ON DELETE CASCADE** |
+| ref_kind        | text        | `ticketing_organization` (ticketing sources) · `chat_channel` (chat_export sources); must fit the source's connector (check trigger) |
+| external_ref    | text        | exactly as the connector reports it: trimmed, NFC, case kept, 1–256, no control characters; a ticketing organization ID in canonical decimal |
+| account_id      | uuid        | FK `(organization_id, account_id)` → accounts **ON DELETE RESTRICT** |
+| created_by      | text        | `member:<id>`, `operator:sync`, `operator:migration` |
+| created_at, updated_at | timestamptz | `updated_at` moves on a remap (the setup record's `sync_required`) |
+
+UQ `(organization_id, source_id, ref_kind, external_ref)`: one reference → at most one
+account; one account → many references, across sources. Index `(organization_id,
+account_id)`. A BEFORE trigger (`lattice_check_account_ref`, every writer) refuses a kind
+that does not fit the connector, a source being deleted, a change of the reference's
+identity columns, and a new or changed mapping to an archived account (read under a
+share lock that serialises with archiving). Ingestion reads the source's mappings at
+sync (`lattice.accounts.refs.load_mappings`); unmapped references on account-scoped
+sources **fail closed** (`ingestion-design.md` §6). Migration 0018 moved
+`sources.config.account_refs` and `channels.*.account` here; channel *sensitivity* stays
+in `sources.config.channels`.
 
 Account visibility (A-3, revised): account existence can itself be sensitive, so a
 member sees only accounts inside their account scope (`all` → every account;

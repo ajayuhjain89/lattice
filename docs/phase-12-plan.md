@@ -1,14 +1,14 @@
 # Phase 12 — Organization Setup, Identity Configuration & Integrations: plan
 
 Status: **Plan approved (2026-10-06). P12.0 (contracts, Part II) written; P12.1
-(foundations) implemented 2026-10-08 and P12.2 (members and administrators) 2026-10-09
-(Part III).** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
+(foundations) implemented 2026-10-08, P12.2 (members and administrators) 2026-10-09 and
+P12.3 (accounts and external-reference mapping) 2026-10-12 (Part III).** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
 D-28–D-33, D-35, D-36 and D-37B are approved (§22, with the contracts of Part II);
 D-34 (raising egress ceilings: IdP step-up, C6) and D-37A (organization purge: semantics
 now, executable purge in Phase 15, C14) were decided by engineering under the product
 owner's delegation, as were corrections to D-31 and D-36 (C18). **P12.1 delivered
-(2026-10-08) and P12.2 delivered (2026-10-09), local commits; Part III.** P12.3 waits for
-the product owner's go-ahead.
+(2026-10-08), P12.2 (2026-10-09) and P12.3 (2026-10-12), local commits; Part III.** P12.4
+waits for the product owner's go-ahead.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 12. Phase 11
 is closed (143392f); real external staging validation stays deferred and remains a
@@ -1325,7 +1325,67 @@ by hand would turn SCIM-managed).
    triggers already bind their writes to the API's event (ADR-017 "Implemented in
    P12.2").
 
-**Not built (later checkpoints):** account administration and mappings (P12.3); OIDC and
-SCIM settings, SCIM token UI, `scim.request_refused` (P12.4); provider/BYOK settings and
+**Not built (later checkpoints):** account administration and mappings (P12.3, built
+2026-10-12 below); OIDC and SCIM settings, SCIM token UI, `scim.request_refused` (P12.4); provider/BYOK settings and
 D-34 egress escalation (P12.5); source upload and first sync (P12.6); organization purge
 (Phase 15).
+
+## P12.3 Accounts and external-reference mapping (2026-10-12)
+
+Delivered on `phase/12-org-setup-integrations` (local commit, not pushed). Migration
+**0018** (`SCHEMA_REVISION` 0018; irreversible in production: the downgrade moves the
+mappings back into `sources.config` but drops the archived lifecycle). The development
+database was migrated from 0013 through 0018 by the normal path (`make migrate`): the
+same 343 Halden and 57 Veridian documents with the same accounts, and 13 and 4 mappings
+equal to the old configuration.
+
+| Contract | Built | Where |
+| -------- | ----- | ----- |
+| Account lifecycle | `accounts.archived_at` (NULL = active): archive keeps documents, assignments, traces and existing mappings (which keep resolving at sync); refuses new mappings; read-only to the API role until reactivated; reactivate keeps the same row. Business `status` (active / churned / prospect) stays a label with no effect. Never deleted | 0018, `lattice.accounts.service` |
+| Create and edit | `POST /v1/admin/access/accounts` (key, name, aliases, business status, reason; key immutable afterwards; 409 `key` taken; nobody assigned) · `PATCH …/accounts/{id}` (name, aliases, status, version, reason) · `POST …/{id}/archive` · `POST …/{id}/reactivate` (version, reason). Names and aliases NFC-normalised, whitespace collapsed, aliases de-duplicated ignoring case (≤ 20 × 100) | `api/routes/accounts.py` |
+| C10 `account_external_refs` | as contracted (composite FKs, cascade from the source, restrict to the account, unique reference, forced RLS) plus a check trigger for every writer (kind fits the connector, no identity change, no new mapping to an archived account, source not being deleted) | 0018 |
+| Exact identifiers | `ticketing_organization`: the ticket's `organization_id` as canonical decimal text (`^(0\|[1-9][0-9]{0,18})$`); `chat_channel`: the Slack channel ID. Trimmed, NFC, case kept, matched byte for byte; documents name account keys and take no mapping | `lattice.accounts.refs`, `ingestion.access` |
+| Map, remap, unmap | `POST …/account-references/preview` (Now → After: operation, accounts, `effect` ∈ indexed · scoped · moved · quarantined · unscoped, records waiting, `takes_effect: next_sync`); `POST …/account-references` (map; 409 `already_mapped`), `…/remap` and `…/unmap` (with `current_account_id`; 409 `mapping_changed`), each with a reason, through `lattice_set_account_ref` | `lattice.accounts.service` |
+| Sync | the sync reads the source's mappings (owner for the CLI, `lattice_worker` for requested syncs); behaviour as Phase 4: unmapped on an account-scoped source = not indexed, a previously indexed record quarantined; a remap is an access update at the next sync; nothing indexed is rewritten by the mapping change itself. Idempotent (a re-sync with the same mappings changes nothing) | `ingestion.sync`, `ingestion.store` |
+| Unmapped references | `GET …/account-references/unmapped`: from each ticketing/chat source's latest run's `access_unmappable:account` failures, grouped by reference: source, kind, the reference, records waiting, the run's start, and `unmapped` / `mapped_pending_sync` (with the account). Nothing from the records | `lattice.accounts.service` |
+| Operator file | `lattice sync --sources` writes the references the file names into the table (`account.mapping_changed` by `operator:sync`), leaves the others, refuses a new reference to an archived account (`source_config:account_archived`); `sources.config` keeps channel sensitivity only | `lattice.accounts.refs` |
+| Disconnect | the purge cascades the source's mappings; the CLI reports `account mappings N`; accounts and other sources' mappings stay; reconnecting writes the file's mappings once | `ingestion.lifecycle` |
+| C11 audit | `account.created`, `account.updated`, `account.archived`, `account.reactivated` (target `account_id`, before/after metadata), `account.mapping_changed` (target source, kind, reference; before/after `account_id`); audit-coupled by deferred triggers; the audit view names the account and source at read time | 0018, `access.audit` |
+| C12 setup status | `accounts`: `optional·not_needed` (no account-scoped source and no mapping) · `attention·unmapped_references` (references of the latest runs still unmapped → `/access/accounts/references`) · `blocked·sources_required` · `attention·sync_required` (mappings created or changed after their source's latest run → `/sources`) · `complete·mapped`. Facts: counts only | `lattice.setup` |
+| Access UI | Access gains an *Accounts* view: the accounts ledger (name, key, other names, business status, lifecycle, references, members assigned; search; lifecycle filter; *Create account*), an account's record (*Add a reference*, *Edit*, *Archive*/*Reactivate*, references with *Move*/*Remove*), *Unmapped references* (map to an active account or create one first; no suggestion). Every change: an API preview, a reason, an applied line with *Sync now*. The member editor and the Ask picker label archived accounts | `apps/web/src/components/access/Account*.tsx`, `MappingDialog.tsx`, `ReferencesScreen.tsx` |
+
+**Deviations from Part II, and why**
+
+1. **Lifecycle, not an `archived` status; administrators may reactivate.** The product
+   owner's P12.3 instruction: business statuses must not be overloaded, and a reactivated
+   account is the same account. C10 made un-archiving operator-only.
+2. **Assignments to an archived account stay allowed** (C10: "no new … assignments").
+   Archiving is an administration state, not an access change; an administrator may need
+   to give someone the history of an archived customer. The member editor labels it.
+3. **A sources file is authoritative for the references it names only** (C7: "makes the
+   source and its mappings match it again"). Removing a reference an administrator mapped
+   in the product because a file does not mention it would silently undo audited
+   product work; every file change is still audited (`operator:sync`).
+4. **No channel names at all**, public ones included (C10 allowed public channel names).
+   Lattice stores no public channel names; reading them from the export would mean
+   reading source data in an administrative view. Channel IDs only (D-18 holds trivially).
+5. **The preview counts records waiting, not documents.** C9.3 asked for counts over
+   documents the administrator can read; documents do not record the reference that
+   mapped them, so a per-reference document count is not available without new
+   ingestion state. The preview states the effect exactly and that nothing changes before
+   the next sync.
+6. **One new setup reason**, `accounts·attention·sync_required`, so a mapping change
+   that waits for a sync is visible; migrated mappings are dated with their source so the
+   migration does not raise it.
+7. **`source.disconnected` is not recorded yet** (source events come with P12.6); the CLI
+   disconnect report counts the mappings removed.
+8. **`archived` on `GET /v1/accounts` and the access directory** (additive fields) so the
+   Ask picker and the member editor can label archived accounts.
+9. **Unmapped references exist only for account-scoped sources**: elsewhere an unmapped
+   reference is indexed without an account (Phase 4 behaviour), so there is nothing
+   waiting. The page says so.
+
+**Not built (later checkpoints):** OIDC and SCIM settings, SCIM token UI,
+`scim.request_refused` (P12.4); provider/BYOK settings and D-34 egress escalation
+(P12.5); source upload, first sync and `source.*` events (P12.6); organization purge
+(Phase 15). The account timeline stays post-v1.

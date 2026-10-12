@@ -301,7 +301,8 @@ async def _disconnect(args: argparse.Namespace) -> int:
         f"{args.org}/{args.source}: disconnected and purged -- documents {report.documents}, "
         f"chunks {report.chunks} (vectors {report.vectors}), source grants "
         f"{report.source_grants}, admin grants {report.admin_grants}, synced groups "
-        f"{report.groups}, sync runs {report.sync_runs}"
+        f"{report.groups}, sync runs {report.sync_runs}, account mappings "
+        f"{report.account_mappings}"
     )
     return 0
 

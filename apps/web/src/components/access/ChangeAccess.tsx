@@ -170,7 +170,7 @@ function EditFields({ member, directory, draft, onChange }: { member: MemberAcce
       <Checklist
         legend="Assigned accounts"
         help={draft.account_scope === "all" ? "Assignments are kept, but don't matter while the scope is all accounts." : undefined}
-        items={directory.accounts.map((a) => ({ id: a.id, label: a.name }))}
+        items={directory.accounts.map((a) => ({ id: a.id, label: a.archived ? `${a.name} (archived)` : a.name }))}
         checked={draft.accounts}
         onToggle={(v) => toggle("accounts", v)}
         emptyText="No accounts exist yet."

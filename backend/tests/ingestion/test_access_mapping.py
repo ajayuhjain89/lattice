@@ -7,6 +7,7 @@ dataset oracle over every real record is in ``test_ingested_access.py``.
 """
 
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -55,11 +56,11 @@ def _record(kind: str = "doc", account_ref: str | None = None, **hints: Any) -> 
 
 
 DOCS = _config("document_repository")
-TICKETS = _config("ticketing", account_scoped=True, account_refs={360001001: "acme-corp"})
-SLACK = _config(
-    "chat_export",
-    channels={"C0ACME": {"account": "acme-corp"}, "G0ESC": {"sensitivity": "confidential"}},
-)
+TICKETS = _config("ticketing", account_scoped=True)
+SLACK = _config("chat_export", channels={"G0ESC": {"sensitivity": "confidential"}})
+# The synced source's account_external_refs (P12.3): ticketing organizations and channels.
+TICKET_REFS = replace(DIRECTORY, account_refs={"360001001": A_ACME})
+CHANNEL_REFS = replace(DIRECTORY, account_refs={"C0ACME": A_ACME})
 
 
 def _ok(result: MappedAccess | AccessFailure) -> MappedAccess:
@@ -83,33 +84,31 @@ def _ok(result: MappedAccess | AccessFailure) -> MappedAccess:
         (SLACK, _record("chat_thread", "C0OTHER", group_refs=("G0UNDECLARED",)), "group"),
         # A document claiming an account that does not exist: never "no account".
         (DOCS, _record(account_ref="globex"), "account"),
-        # Account-scoped ticketing: unmapped organization, missing organization, junk.
+        # Account-scoped ticketing: unmapped organization, missing organization, junk,
+        # and a reference that differs from a mapped one only in form (exact match).
         (TICKETS, _record("ticket", "360009913"), "account"),
         (TICKETS, _record("ticket", None), "account"),
         (TICKETS, _record("ticket", "not-a-number"), "account"),
-        # A channel mapped to an account that does not exist in the organization.
-        (
-            _config("chat_export", channels={"C0X": {"account": "globex"}}),
-            _record("chat_thread", "C0X"),
-            "account",
-        ),
+        (TICKETS, _record("ticket", "0360001001"), "account"),
         (
             _config("chat_export", account_scoped=True),
             _record("chat_thread", "C0UNMAPPED"),
             "account",
         ),
+        (_config("chat_export", account_scoped=True), _record("chat_thread", "c0acme"), "account"),
     ],
 )
 def test_unmappable_access_fails_the_record(
     config: SourceConfig, record: SourceRecord, code: str
 ) -> None:
-    result = map_access(record, config, DIRECTORY)
+    directory = TICKET_REFS if config.connector_type == "ticketing" else CHANNEL_REFS
+    result = map_access(record, config, directory)
     assert isinstance(result, AccessFailure)
     assert result.code == f"access_unmappable:{code}"
 
 
 def test_an_unmapped_ticket_reports_only_the_external_reference() -> None:
-    result = map_access(_record("ticket", "360009913"), TICKETS, DIRECTORY)
+    result = map_access(_record("ticket", "360009913"), TICKETS, TICKET_REFS)
     assert isinstance(result, AccessFailure)
     assert result.params == {"external_account_ref": "360009913"}
 
@@ -158,25 +157,36 @@ def test_source_defaults_apply_when_the_record_is_silent() -> None:
 
 
 def test_tickets_map_their_organization_to_an_account() -> None:
-    access = _ok(map_access(_record("ticket", "360001001"), TICKETS, DIRECTORY))
+    access = _ok(map_access(_record("ticket", "360001001"), TICKETS, TICKET_REFS))
     assert access.account_id == A_ACME
 
 
-def test_channels_take_their_configured_account_and_sensitivity() -> None:
-    acme = _ok(map_access(_record("chat_thread", "C0ACME"), SLACK, DIRECTORY))
+def test_a_mapping_resolves_only_for_its_own_source_kind() -> None:
+    """Mappings are per source: a document naming a channel ID is not an account key, and
+    a ticketing mapping does not resolve a document's key."""
+    failed = map_access(_record(account_ref="360001001"), DOCS, TICKET_REFS)
+    assert isinstance(failed, AccessFailure)
+    assert failed.code == "access_unmappable:account"
+    # A non-account-scoped chat source with no mapping: no account (the source's rules).
+    plain = _ok(map_access(_record("chat_thread", "C0ACME"), SLACK, DIRECTORY))
+    assert plain.account_id is None
+
+
+def test_channels_take_their_mapped_account_and_configured_sensitivity() -> None:
+    acme = _ok(map_access(_record("chat_thread", "C0ACME"), SLACK, CHANNEL_REFS))
     assert (acme.account_id, acme.sensitivity) == (A_ACME, "internal")
     escalations = _ok(
         map_access(
             _record("chat_thread", "G0ESC", grants_only=True, group_refs=("G0PRIVATE",)),
             SLACK,
-            DIRECTORY,
+            CHANNEL_REFS,
         )
     )
     assert escalations.sensitivity == "confidential"
     assert escalations.access_mode == "grants_only"
     assert escalations.source_grants == (("group", G_CHANNEL),)
     # A public channel with no configuration: the source default, no account.
-    plain = _ok(map_access(_record("chat_channel_day", "C0GENERAL"), SLACK, DIRECTORY))
+    plain = _ok(map_access(_record("chat_channel_day", "C0GENERAL"), SLACK, CHANNEL_REFS))
     assert (plain.account_id, plain.sensitivity, plain.access_mode) == (None, "internal", "policy")
 
 

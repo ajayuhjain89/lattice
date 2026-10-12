@@ -567,8 +567,8 @@ content is logged or stored.
 
 Decided in P12.0 (2026-10-06, [phase-12-plan](phase-12-plan.md) Part II and
 [ADR-017](decisions/017-setup-mutation-trust-boundary.md)). **P12.1 (2026-10-08) built the
-foundations below and P12.2 (2026-10-09) members and administrators; the rest is
-contract, not yet implemented.**
+foundations below, P12.2 (2026-10-09) members and administrators and P12.3 (2026-10-12)
+accounts and their external references; the rest is contract, not yet implemented.**
 
 **Built in P12.1:**
 
@@ -647,7 +647,43 @@ contract, not yet implemented.**
   restricted to `managed_by = identity_provider`; `removed` only for those. No table or
   column grant on memberships was added.
 
-**Contracts not yet implemented:** account mappings (P12.3), OIDC/SCIM settings in the product (P12.4), egress
+**Built in P12.3 (migration 0018):**
+
+- **Accounts.** Administrators create accounts and edit their name, aliases and business
+  status (column grants `INSERT (organization_id, key, name, aliases, status)`, `UPDATE
+  (name, aliases, status)`; the key, the organization and the lifecycle are never
+  writable directly); archive and reactivate only through the fenced
+  `lattice_set_account_archived` (active administrator re-checked, row lock). An
+  archived account is read-only to the API role (restrictive policy). Creating an account
+  assigns it to nobody; archiving deletes, hides and revokes nothing (documents keep their
+  account, assignments stay, existing mappings keep resolving). Accounts are never
+  deleted by the product.
+- **External references** (`account_external_refs`). Written by the API only through the
+  fenced `lattice_set_account_ref` with the mapping the administrator reviewed (409 when
+  it moved on); `lattice_app` and the worker read it, nothing else. Composite foreign keys
+  and forced RLS keep source and account in the row's organization; another
+  organization's source or account answers exactly as a random ID. A check trigger binds
+  every writer, operators included: kind fits the connector, no change of identity, no
+  new mapping to an archived account. Exact, source-provided identifiers only — no fuzzy
+  match, no suggestion from names or content.
+- **Admin ≠ content.** The mapping views show the reference as the source sent it (a
+  ticketing organization ID, a channel **ID** — never a channel name, public or private,
+  D-18), counts of records waiting and operational times; never titles, text, file names
+  or content-derived suggestions (C9, D-10). Mapping changes which account a record
+  belongs to at the next sync; the record's own rules (grants-only private channels,
+  sensitivity, departments, the tenant) still decide who may read it, and the
+  administrator gains nothing (tested over the synthetic export). Unmapping on a
+  non-account-scoped source widens readers to the source's other rules; the preview
+  states it before the reason is asked.
+- **D-10.** Names and aliases stay administrative metadata: editing them touches no
+  document, chunk, search text or embedding (tested); mention detection still matches
+  only accounts the asker may see.
+- **Audit coupling.** Deferred triggers refuse to commit an API-role account or mapping
+  write without the matching `account.created` / `updated` / `archived` / `reactivated` /
+  `mapping_changed` event of the same transaction; the audit insert policy admits those
+  five actions from `member:` actors only.
+
+**Contracts not yet implemented:** OIDC/SCIM settings in the product (P12.4), egress
 escalation with a fresh IdP re-authentication bound to the exact change (D-34, P12.5),
 imports (C8, P12.6); and on every setup surface administrators stay non-readers of
 content (C9, C10).

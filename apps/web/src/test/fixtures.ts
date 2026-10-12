@@ -1064,8 +1064,8 @@ export const ACTIVITY_ADMIN: S["OperationalActivityResponse"] = {
 export const ACCOUNTS_MAYA: S["MemberAccounts"] = {
   account_scope: "assigned",
   accounts: [
-    { key: "acme-corp", name: "Acme Corp" },
-    { key: "northpeak-logistics", name: "Northpeak Logistics" },
+    { key: "acme-corp", name: "Acme Corp", archived: false },
+    { key: "northpeak-logistics", name: "Northpeak Logistics", archived: false },
   ],
 };
 
@@ -1133,9 +1133,9 @@ export const MEMBERS_PAGE: S["MembersPage"] = {
 
 export const DIRECTORY: S["Directory"] = {
   accounts: [
-    { id: ID.acme, key: "acme-corp", name: "Acme Corp", status: "active" },
-    { id: ID.kestrel, key: "kestrel-bank", name: "Kestrel Bank", status: "active" },
-    { id: ID.northpeak, key: "northpeak-logistics", name: "Northpeak Logistics", status: "active" },
+    { id: ID.acme, key: "acme-corp", name: "Acme Corp", status: "active", archived: false },
+    { id: ID.kestrel, key: "kestrel-bank", name: "Kestrel Bank", status: "active", archived: false },
+    { id: ID.northpeak, key: "northpeak-logistics", name: "Northpeak Logistics", status: "active", archived: false },
   ],
   departments: [
     { id: ID.leadership, key: "leadership", name: "Leadership" },
@@ -1560,4 +1560,139 @@ export const SETUP_IN_USE: S["SetupStatus"] = {
     { key: "accounts", state: "attention", reason: "unmapped_references", message: "Records reference accounts that are not mapped, and are not indexed until they are.", facts: { account_sources: 1, unmapped_references: 2 }, action: { kind: "link", href: "/sources", label: "See unmapped references" } },
     { key: "first_answer", state: "complete", reason: "answered", message: "Members have received answers.", facts: { answered: true }, action: null },
   ],
+};
+
+// --- accounts and external-reference mappings (Phase 12, P12.3) ---------------------------------
+
+export const ACCOUNT_IDS = {
+  acme: ID.acme,
+  kestrel: ID.kestrel,
+  orbital: "ac000000-0000-4000-8000-000000000008",
+  fernhill: "ac000000-0000-4000-8000-000000000009",
+};
+
+const SUPPORT_REF: S["SourceRef"] = { id: SOURCE.support, name: "Halden Support (Zendesk)", connector_type: "ticketing" };
+const SLACK_REF: S["SourceRef"] = { id: SOURCE.slack, name: "Halden Slack", connector_type: "chat_export" };
+
+export const ACCOUNT_ACME: S["AccountDetail"] = {
+  id: ACCOUNT_IDS.acme,
+  key: "acme-corp",
+  name: "Acme Corp",
+  aliases: ["Acme", "ACME Corp"],
+  status: "active",
+  lifecycle: "active",
+  archived_at: null,
+  references: 3,
+  assigned_members: 2,
+  version: "2026-10-12T09:00:00.000000Z",
+  created_at: "2026-09-27T08:00:00Z",
+  mappings: [
+    { source: SLACK_REF, ref_kind: "chat_channel", external_ref: "C0EXTACME01", created_at: "2026-09-27T08:00:00Z", updated_at: "2026-09-27T08:00:00Z" },
+    { source: SLACK_REF, ref_kind: "chat_channel", external_ref: "G0ACCTACME1", created_at: "2026-09-27T08:00:00Z", updated_at: "2026-09-27T08:00:00Z" },
+    { source: SUPPORT_REF, ref_kind: "ticketing_organization", external_ref: "360001001", created_at: "2026-09-27T08:00:00Z", updated_at: "2026-09-27T08:00:00Z" },
+  ],
+};
+
+export const ACCOUNT_ORBITAL_ARCHIVED: S["AccountDetail"] = {
+  id: ACCOUNT_IDS.orbital,
+  key: "orbital-freight",
+  name: "Orbital Freight",
+  aliases: ["Orbital"],
+  status: "prospect",
+  lifecycle: "archived",
+  archived_at: "2026-10-10T12:00:00Z",
+  references: 1,
+  assigned_members: 0,
+  version: "2026-10-10T12:00:00.000000Z",
+  created_at: "2026-09-27T08:00:00Z",
+  mappings: [
+    { source: SUPPORT_REF, ref_kind: "ticketing_organization", external_ref: "360001008", created_at: "2026-09-27T08:00:00Z", updated_at: "2026-09-27T08:00:00Z" },
+  ],
+};
+
+export const ACCOUNT_FERNHILL: S["AccountDetail"] = {
+  id: ACCOUNT_IDS.fernhill,
+  key: "fernhill-studios",
+  name: "Fernhill Studios",
+  aliases: [],
+  status: "active",
+  lifecycle: "active",
+  archived_at: null,
+  references: 0,
+  assigned_members: 0,
+  version: "2026-10-12T10:00:00.000000Z",
+  created_at: "2026-10-12T10:00:00Z",
+  mappings: [],
+};
+
+const summary = ({ version: _v, created_at: _c, mappings: _m, ...rest }: S["AccountDetail"]): S["AccountSummary"] => rest;
+
+export const ACCOUNTS_PAGE: S["AccountsPage"] = {
+  items: [
+    summary(ACCOUNT_ACME),
+    summary({
+      ...ACCOUNT_ACME,
+      id: ACCOUNT_IDS.kestrel,
+      key: "kestrel-bank",
+      name: "Kestrel Bank",
+      aliases: ["Kestrel"],
+      references: 2,
+      assigned_members: 1,
+    }),
+    summary(ACCOUNT_ORBITAL_ARCHIVED),
+  ],
+  next_after: null,
+};
+
+export const UNMAPPED: S["UnmappedReferences"] = {
+  items: [
+    {
+      source: SUPPORT_REF,
+      ref_kind: "ticketing_organization",
+      external_ref: "360009913",
+      records_waiting: 1,
+      seen_at: "2026-10-12T08:30:00Z",
+      state: "unmapped",
+      account: null,
+    },
+  ],
+};
+
+export const PREVIEW_MAP_FERNHILL: S["MappingPreview"] = {
+  operation: "map",
+  source: SUPPORT_REF,
+  ref_kind: "ticketing_organization",
+  external_ref: "360009913",
+  account_scoped: true,
+  now: null,
+  after: { id: ACCOUNT_IDS.fernhill, key: "fernhill-studios", name: "Fernhill Studios", lifecycle: "active" },
+  effect: "indexed",
+  records_waiting: 1,
+  takes_effect: "next_sync",
+};
+
+export const PREVIEW_REMAP_ACME_KESTREL: S["MappingPreview"] = {
+  operation: "remap",
+  source: SUPPORT_REF,
+  ref_kind: "ticketing_organization",
+  external_ref: "360001001",
+  account_scoped: true,
+  now: { id: ACCOUNT_IDS.acme, key: "acme-corp", name: "Acme Corp", lifecycle: "active" },
+  after: { id: ACCOUNT_IDS.kestrel, key: "kestrel-bank", name: "Kestrel Bank", lifecycle: "active" },
+  effect: "moved",
+  records_waiting: 0,
+  takes_effect: "next_sync",
+};
+
+export const PREVIEW_UNMAP_CHANNEL: S["MappingPreview"] = {
+  operation: "unmap",
+  source: SLACK_REF,
+  ref_kind: "chat_channel",
+  external_ref: "C0EXTACME01",
+  account_scoped: false,
+  now: { id: ACCOUNT_IDS.acme, key: "acme-corp", name: "Acme Corp", lifecycle: "active" },
+  after: null,
+  effect: "unscoped",
+  records_waiting: 0,
+  takes_effect: "next_sync",
 };

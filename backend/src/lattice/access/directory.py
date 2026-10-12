@@ -260,7 +260,13 @@ async def members_page(
 
 async def directory(session: AsyncSession, organization_id: uuid.UUID) -> Directory:
     accounts = await session.execute(
-        select(ACCOUNTS.c.id, ACCOUNTS.c.key, ACCOUNTS.c.name, ACCOUNTS.c.status)
+        select(
+            ACCOUNTS.c.id,
+            ACCOUNTS.c.key,
+            ACCOUNTS.c.name,
+            ACCOUNTS.c.status,
+            ACCOUNTS.c.archived_at,
+        )
         .where(ACCOUNTS.c.organization_id == organization_id)
         .order_by(ACCOUNTS.c.name, ACCOUNTS.c.id)
     )
@@ -280,7 +286,13 @@ async def directory(session: AsyncSession, organization_id: uuid.UUID) -> Direct
     )
     return Directory(
         accounts=[
-            DirectoryAccount(id=r.id, key=str(r.key), name=r.name, status=r.status)
+            DirectoryAccount(
+                id=r.id,
+                key=str(r.key),
+                name=r.name,
+                status=r.status,
+                archived=r.archived_at is not None,
+            )
             for r in accounts
         ],
         departments=[

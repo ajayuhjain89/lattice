@@ -127,11 +127,14 @@ async def get_accounts(request: Request, principal: CurrentPrincipal) -> MemberA
             membership_id=principal.membership_id,
         )
         rows = await session.execute(
-            select(ACCOUNTS.c.key, ACCOUNTS.c.name)
+            select(ACCOUNTS.c.key, ACCOUNTS.c.name, ACCOUNTS.c.archived_at)
             .where(visible_accounts_predicate(ctx, ACCOUNTS))
             .order_by(ACCOUNTS.c.name, ACCOUNTS.c.key)
         )
-        accounts = [VisibleAccount(key=str(key), name=name) for key, name in rows]
+        accounts = [
+            VisibleAccount(key=str(key), name=name, archived=archived_at is not None)
+            for key, name, archived_at in rows
+        ]
     return MemberAccounts(account_scope=ctx.account_scope, accounts=accounts)
 
 

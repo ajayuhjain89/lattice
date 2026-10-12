@@ -44,7 +44,7 @@ APP_TABLES = {
     "sessions": {"SELECT", "INSERT"},
     "departments": {"SELECT"},
     "membership_departments": {"SELECT", "INSERT", "DELETE"},
-    "accounts": {"SELECT"},
+    "accounts": {"SELECT"},  # INSERT and UPDATE are column grants (0018, below)
     "account_assignments": {"SELECT", "INSERT", "DELETE"},
     "access_groups": {"SELECT"},
     "access_group_members": {"SELECT", "INSERT", "DELETE"},
@@ -74,6 +74,8 @@ APP_TABLES = {
     # outbound targets are operator-only.
     "encrypted_secrets": {"SELECT"},
     "outbound_targets": set(),
+    # Phase 12 (P12.3, 0018): mappings are read; written only by lattice_set_account_ref.
+    "account_external_refs": {"SELECT"},
 }
 # Column-level privileges (table-level ones above).
 COLUMN_PRIVILEGES = {
@@ -119,6 +121,10 @@ COLUMN_PRIVILEGES = {
     },
     # 0016: rename (ADR-017), audit-coupled.
     ("organizations", "UPDATE"): {"name", "updated_at"},
+    # 0018: accounts created and edited by administrators, audit-coupled; never the key
+    # after creation, never the lifecycle (lattice_set_account_archived).
+    ("accounts", "INSERT"): {"organization_id", "key", "name", "aliases", "status"},
+    ("accounts", "UPDATE"): {"name", "aliases", "status"},
 }
 RLS_REFUSED = r"row-level security"
 
@@ -752,3 +758,82 @@ async def test_app_deletes_only_finished_sign_in_attempts(
                 {"o": world.org, "c": connection, "k": key},
             )
     assert await _run(app_db, world.org, "DELETE FROM oidc_login_attempts") == 2
+
+
+# --- Phase 12 (P12.3, 0018): accounts and their external references -----------------------
+
+ACCOUNT_FUNCTIONS = {
+    "lattice_set_account_archived(uuid,uuid,boolean)",
+    "lattice_set_account_ref(uuid,uuid,text,text,uuid,uuid)",
+}
+
+
+async def test_the_account_functions_are_narrow_definer_functions(
+    superuser_engine: AsyncEngine,
+) -> None:
+    async with superuser_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    """
+                    SELECT p.oid::regprocedure::text, pg_get_userbyid(p.proowner), p.prosecdef,
+                           p.proconfig,
+                           array(SELECT DISTINCT coalesce(r.rolname, 'PUBLIC')
+                                 FROM aclexplode(p.proacl) a
+                                 LEFT JOIN pg_roles r ON r.oid = a.grantee
+                                 WHERE a.privilege_type = 'EXECUTE' ORDER BY 1)
+                    FROM pg_proc p
+                    WHERE p.proname IN ('lattice_set_account_archived', 'lattice_set_account_ref')
+                    """
+                )
+            )
+        ).all()
+        # The trigger functions are not callable, and run as the writer (not definers).
+        triggers = (
+            await conn.execute(
+                text(
+                    "SELECT p.proname, p.prosecdef, has_function_privilege('lattice_app', p.oid, "
+                    "'EXECUTE') FROM pg_proc p WHERE p.proname IN ('lattice_check_account_ref', "
+                    "'lattice_require_account_audit', 'lattice_require_mapping_audit')"
+                )
+            )
+        ).all()
+    assert {r[0].replace(", ", ",") for r in rows} == ACCOUNT_FUNCTIONS
+    for signature, owner, definer, config, executors in rows:
+        assert owner == "lattice_owner", signature
+        assert definer, signature
+        assert config == ["search_path=pg_catalog, public, pg_temp"], signature
+        assert executors == ["lattice_app", "lattice_owner"], signature
+    assert sorted((name, definer, callable_) for name, definer, callable_ in triggers) == [
+        ("lattice_check_account_ref", False, False),
+        ("lattice_require_account_audit", False, False),
+        ("lattice_require_mapping_audit", False, False),
+    ]
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "account.created",
+        "account.updated",
+        "account.archived",
+        "account.reactivated",
+        "account.mapping_changed",
+    ],
+)
+async def test_app_records_account_events_by_a_member_only(
+    app_db: Database, world: World, action: str
+) -> None:
+    insert = (
+        "INSERT INTO audit_events (organization_id, actor, action, target, reason) "
+        "VALUES (:o, :actor, :action, '{}', 'because')"
+    )
+    for actor in (f"scim:{uuid.uuid4()}", "operator:sync"):
+        with pytest.raises(DBAPIError, match=RLS_REFUSED):
+            await _run(app_db, world.org, insert, o=world.org, actor=actor, action=action)
+    assert (
+        await _run(
+            app_db, world.org, insert, o=world.org, actor=f"member:{world.member}", action=action
+        )
+        == 1
+    )

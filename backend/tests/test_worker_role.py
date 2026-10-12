@@ -60,6 +60,8 @@ WORKER_TABLES = {
     # reads outbound registrations.
     "encrypted_secrets": set(),
     "outbound_targets": set(),
+    # Phase 12 (P12.3): a sync resolves references through the mappings, read-only.
+    "account_external_refs": {"SELECT"},
 }
 
 

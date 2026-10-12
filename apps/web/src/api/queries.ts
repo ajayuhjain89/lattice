@@ -18,14 +18,22 @@ import {
 import { api, MEMBERS_PAGE } from "./client";
 import { isApiError } from "./errors";
 import type {
+  AccountChangeRequest,
+  AccountLifecycle,
+  AccountLifecycleRequest,
   AdministratorRequest,
   AdminSourcesResponse,
   AskRequest,
   MemberChange,
   MemberChangeRequest,
+  MappingPreviewRequest,
+  MapRequest,
+  NewAccountRequest,
   NewMemberRequest,
   OrganizationChange,
   ReinstateRequest,
+  RemapRequest,
+  UnmapRequest,
 } from "./types";
 
 export const queryKeys = {
@@ -47,6 +55,9 @@ export const queryKeys = {
   accessDocuments: (q: string) => ["admin", "access", "documents", q] as const,
   explanation: (member: string, doc: string) => ["admin", "access", "explanation", member, doc] as const,
   audit: ["admin", "audit"] as const,
+  accountsList: (q: string, lifecycle: string) => ["admin", "access", "accounts", "list", q, lifecycle] as const,
+  account: (id: string) => ["admin", "access", "accounts", "one", id] as const,
+  unmappedReferences: ["admin", "access", "account-references", "unmapped"] as const,
 };
 
 export const queryClientConfig: QueryClientConfig = {
@@ -345,6 +356,95 @@ export function useRevokeGrant(memberId: string) {
   const changed = useAccessChanged(memberId);
   return useMutation({
     mutationFn: ({ grantId, reason }: { grantId: string; reason: string }) => api.revokeGrant(grantId, reason),
+    onSettled: changed,
+  });
+}
+
+/* --- accounts and external-reference mappings (P12.3) --- */
+
+export function useAccountsList(q: string, lifecycle: AccountLifecycle | null, enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.accountsList(q, lifecycle ?? "all"),
+    queryFn: ({ pageParam, signal }) => api.accountsList(q, lifecycle, pageParam, signal),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next_after ?? undefined,
+    enabled,
+    ...REAUTHORIZED,
+  });
+}
+
+export function useAccount(id: string, enabled: boolean) {
+  return useQuery({ queryKey: queryKeys.account(id), queryFn: ({ signal }) => api.account(id, signal), enabled, ...REAUTHORIZED });
+}
+
+export function useUnmappedReferences(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.unmappedReferences,
+    queryFn: ({ signal }) => api.unmappedReferences(signal),
+    enabled,
+    ...REAUTHORIZED,
+  });
+}
+
+/** Accounts and mappings feed the account pages, the member editor's directory, the
+ *  setup record and the audit trail: every change refreshes them all. */
+function useAccountsChanged() {
+  const client = useQueryClient();
+  return () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: ["admin", "access", "accounts"] }),
+      client.invalidateQueries({ queryKey: ["admin", "access", "account-references"] }),
+      client.invalidateQueries({ queryKey: queryKeys.accessDirectory }),
+      client.invalidateQueries({ queryKey: queryKeys.setup }),
+      client.invalidateQueries({ queryKey: queryKeys.audit }),
+    ]);
+}
+
+export function useCreateAccount() {
+  const client = useQueryClient();
+  const changed = useAccountsChanged();
+  return useMutation({
+    mutationFn: (body: NewAccountRequest) => api.createAccount(body),
+    onSuccess: (account) => client.setQueryData(queryKeys.account(account.id), account),
+    onSettled: changed,
+  });
+}
+
+export function useUpdateAccount(id: string) {
+  const client = useQueryClient();
+  const changed = useAccountsChanged();
+  return useMutation({
+    mutationFn: (body: AccountChangeRequest) => api.updateAccount(id, body),
+    onSuccess: (account) => client.setQueryData(queryKeys.account(id), account),
+    onSettled: changed,
+  });
+}
+
+export function useAccountLifecycle(id: string, archive: boolean) {
+  const client = useQueryClient();
+  const changed = useAccountsChanged();
+  return useMutation({
+    mutationFn: (body: AccountLifecycleRequest) => (archive ? api.archiveAccount(id, body) : api.reactivateAccount(id, body)),
+    onSuccess: (account) => client.setQueryData(queryKeys.account(id), account),
+    onSettled: changed,
+  });
+}
+
+export function usePreviewMapping() {
+  return useMutation({ mutationFn: (body: MappingPreviewRequest) => api.previewMapping(body) });
+}
+
+export type MappingChange = { operation: "map"; body: MapRequest } | { operation: "remap"; body: RemapRequest } | { operation: "unmap"; body: UnmapRequest };
+
+export function useChangeMapping() {
+  const changed = useAccountsChanged();
+  return useMutation({
+    mutationFn: (change: MappingChange) =>
+      change.operation === "map"
+        ? api.mapReference(change.body)
+        : change.operation === "remap"
+          ? api.remapReference(change.body)
+          : api.unmapReference(change.body),
     onSettled: changed,
   });
 }

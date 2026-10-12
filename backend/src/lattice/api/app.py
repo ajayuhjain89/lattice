@@ -30,6 +30,7 @@ from lattice.api.handlers import register_exception_handlers
 from lattice.api.middleware import BodyLimitMiddleware, CsrfMiddleware, RequestContextMiddleware
 from lattice.api.routes import (
     access,
+    accounts,
     activity,
     admin,
     ask,
@@ -156,6 +157,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sources.router)
     app.include_router(activity.router)
     app.include_router(access.router)
+    app.include_router(accounts.router)
     scim.register(app)
     if settings.dev_auth_active:
         app.state.dev_identity_provider = DevIdentityProvider(settings, db)

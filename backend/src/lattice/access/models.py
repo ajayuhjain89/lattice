@@ -80,6 +80,9 @@ class DirectoryAccount(_Out):
     key: str
     name: str
     status: str
+    archived: bool = Field(
+        description="Archived (P12.3): kept with its history; assignments are unaffected."
+    )
 
 
 class DirectoryDepartment(_Out):
@@ -449,6 +452,9 @@ class AuditPage(_Out):
 class VisibleAccount(_Out):
     key: str = Field(description="What an Ask scope names (`scope.account`).")
     name: str
+    archived: bool = Field(
+        description="Archived by an administrator: still readable as before, kept for history."
+    )
 
 
 class MemberAccounts(_Out):

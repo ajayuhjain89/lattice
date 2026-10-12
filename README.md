@@ -15,8 +15,11 @@ Configuration & Integrations) is in progress: P12.1 foundations are built (encry
 credentials, the outbound-target policy, `lattice org create`, the backend-owned setup
 record and the Organization page) and P12.2 members and administrators (members added by
 hand on their exact identity-provider identifier, the administrator capability with a
-last-administrator rule that holds under concurrency, least-access reinstatement);
-P12.3–P12.8 are not started.** What runs today: a FastAPI
+last-administrator rule that holds under concurrency, least-access reinstatement) and
+P12.3 accounts and their external-reference mappings (create, edit, archive and
+reactivate accounts; map, remap and unmap exact ticketing-organization and channel IDs
+with a preview and a reason, applied at the next sync; unmapped references);
+P12.4–P12.8 are not started.** What runs today: a FastAPI
 backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced
 row-level security for organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -359,7 +362,9 @@ encrypted at rest (AES-256-GCM, master keys only in the deployment environment;
 `lattice secrets rekey`), and private endpoints are reachable only when an operator
 registers them (`lattice outbound allow`). Procedures: [runbook §9 and
 §9.1](docs/runbook.md); contracts: [phase-12-plan](docs/phase-12-plan.md). A database created
-before P12.1 needs `make migrate` (0016); P12.2 adds 0017.
+before P12.1 needs `make migrate` (0016); P12.2 adds 0017 and P12.3 0018 (account
+mappings move from `sources.config` into `account_external_refs`). Customer accounts and
+their references are administered under **Access → Accounts**.
 
 ## How deployment works (Phase 11)
 

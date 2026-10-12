@@ -7,7 +7,11 @@ identifier and e-mail they were bound to), ``access.grant_created`` and
 ``access.grant_revoked`` (target ``membership_id``, ``document_id``, ``grant_id`` and the
 document's opaque ``reference``).
 The Phase 6 provider and egress events (``provider.*``, ``credential.*``,
-``egress.levels_changed``) are written by ``lattice.providers.configuration``.
+``egress.levels_changed``) are written by ``lattice.providers.configuration``; the
+account events (``account.created`` / ``updated`` / ``archived`` / ``reactivated``, target
+``account_id``; ``account.mapping_changed``, target ``source_id``, ``ref_kind``,
+``external_ref``, before/after ``account_id``) by ``lattice.accounts`` (P12.3), shown with
+the account and source names resolved at read time.
 
 Actors: ``member:<membership id>`` (the API), ``scim:<token id>`` (the identity
 provider's provisioning, Phase 10: ``access.member_changed`` and
@@ -32,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lattice.access.directory import (
     DOCUMENTS,
+    SOURCES,
     AccessSnapshot,
     actor_names,
     entity_names,
@@ -132,6 +137,68 @@ def _details(target: dict[str, Any], before: Any, after: Any) -> list[AuditDetai
     return found
 
 
+_REF_KINDS: Final = {"ticketing_organization": "Ticketing organization", "chat_channel": "Channel"}
+_ACCOUNT_FIELDS: Final = ("key", "name", "aliases", "status", "lifecycle")
+
+
+async def _source_names(
+    session: AsyncSession, organization_id: uuid.UUID, ids: set[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    if not ids:
+        return {}
+    rows = await session.execute(
+        select(SOURCES.c.id, SOURCES.c.name).where(
+            SOURCES.c.organization_id == organization_id, SOURCES.c.id.in_(sorted(ids))
+        )
+    )
+    return {r.id: r.name for r in rows}
+
+
+def _account_value(value: Any) -> str | None:
+    if isinstance(value, list):
+        return ", ".join(str(v) for v in value) or "none"
+    return _scalar(value)
+
+
+def _account_details(
+    e: AuditEvent, names: dict[uuid.UUID, str], sources: dict[uuid.UUID, str]
+) -> list[AuditDetail]:
+    """Account events with names, resolved now (``None`` once a source is gone)."""
+    before = e.before if isinstance(e.before, dict) else {}
+    after = e.after if isinstance(e.after, dict) else {}
+
+    def account(part: dict[str, Any]) -> str | None:
+        found = _uuid(part.get("account_id"))
+        return None if found is None else names.get(found)
+
+    if e.action == "account.mapping_changed":
+        source = _uuid(e.target.get("source_id"))
+        kind = _REF_KINDS.get(str(e.target.get("ref_kind")), "Reference")
+        return [
+            AuditDetail(field="source", before=None, after=sources.get(source) if source else None),
+            AuditDetail(
+                field="reference", before=None, after=f"{kind} {e.target.get('external_ref')}"
+            ),
+            AuditDetail(
+                field="account",
+                before=account(before) if before else None,
+                after=account(after) if after else "Not mapped",
+            ),
+        ]
+    found = [AuditDetail(field="account", before=None, after=account(e.target))]
+    for key in _ACCOUNT_FIELDS:
+        old, new = before.get(key), after.get(key)
+        if key in after and (not before or old != new):
+            found.append(
+                AuditDetail(
+                    field=key,
+                    before=_account_value(old) if before else None,
+                    after=_account_value(new),
+                )
+            )
+    return found
+
+
 def _visible_to(viewer: AuthorizationContext) -> ColumnElement[bool]:
     """Events without a target document, or whose document ``viewer`` can read now."""
     document_id = AuditEvent.target["document_id"].astext
@@ -186,6 +253,17 @@ async def audit_page(
         for snap in (_snapshot(e.before), _snapshot(e.after)):
             if snap is not None:
                 entities |= snap.accounts | snap.departments | snap.groups
+    accounts: set[uuid.UUID] = set()
+    sources: set[uuid.UUID] = set()
+    for e in events:
+        if e.action.startswith("account."):
+            for part in (e.target, e.before, e.after):
+                if isinstance(part, dict) and (a := _uuid(part.get("account_id"))) is not None:
+                    accounts.add(a)
+            if (src := _uuid(e.target.get("source_id"))) is not None:
+                sources.add(src)
+    entities |= accounts
+    source_names = await _source_names(session, org, sources)
     member_names = await actor_names(
         session, org, [*(e.actor for e in events), *(f"member:{m}" for m in members)]
     )
@@ -225,6 +303,8 @@ async def audit_page(
                     )
             elif e.action == IDENTITY_CHANGED:
                 details = _details({}, e.before, e.after)
+        elif e.action.startswith("account."):
+            details = _account_details(e, names, source_names)
         else:
             details = _details(e.target, e.before, e.after)
         items.append(

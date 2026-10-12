@@ -148,11 +148,11 @@ also carry Zendesk's `type`, `via` and `group`; `requester`/`assignee`/`author` 
 `{name, email}`; `author_role` is `end-user` or `agent`.
 Parts: a header part (subject, status, priority, requester) + one part per comment.
 Internal (non-public) comments are included; they are internal-level content.
-`account_ref` = ticketing organization ID → mapped by the source configuration's
-`account_refs` (as built; the draft's `account_external_refs` table is not needed until
-accounts are managed in Lattice). *Phase 12 target (P12.3, not built):* accounts are now
-product-managed, so mappings move into `account_external_refs` — contract in
-phase-12-plan C10. Source is `account_scoped = true`: unmapped tickets
+`account_ref` = ticketing organization ID (canonical decimal text) → mapped **exactly** by
+the source's `account_external_refs` rows of kind `ticketing_organization` (P12.3; the
+operator's `sources.yaml` `account_refs` are written there by `lattice sync`, audited as
+`operator:sync`; administrators map, remap and unmap in Access → Accounts). Source is
+`account_scoped = true`: unmapped tickets
 are not indexed (`access_unmappable:account`, e.g. HAL-4951 in the dataset).
 `display_ref` = the ticket ID. People appear by name only; emails are never copied into
 content. A ticket ID that appears twice is rejected in every occurrence.
@@ -167,9 +167,11 @@ The real Slack export layout: `channels.json`, `groups.json` (private channels, 
 - Threads (messages with replies) → one `chat_thread` record per thread root.
 - Non-threaded messages → one `chat_channel_day` record per channel per day.
 - `external_id`: `<channel_id>:<thread_ts>` or `<channel_id>:day:<date>`.
-- Account mapping by channel ID via the source configuration
-  (`channels: {C0ACCTKES01: {account: kestrel-bank}}`); channels not mapped have no
-  account. (As built: no naming rule — an explicit mapping only.)
+- Account mapping by channel ID through the source's `account_external_refs` rows of kind
+  `chat_channel` (P12.3; a `sources.yaml` `channels: {C0ACCTKES01: {account:
+  kestrel-bank}}` entry is written there by `lattice sync`); channels not mapped have no
+  account. No naming rule — an explicit mapping only, by ID. Channel *names* never appear
+  in the mapping workflow (D-18).
 - Public channels: source default sensitivity (internal).
 - Private channels: `ExternalGroup` per private channel; records get a `group` grant
   and `access_mode = grants_only` so **only channel members** can read them —

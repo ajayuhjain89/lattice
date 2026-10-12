@@ -163,7 +163,8 @@ def source_config(row: Any) -> tuple[SourceConfig, Path]:
         default_departments=list(stored.get("default_departments") or []),
         account_scoped=bool(row.account_scoped),
         authority=row.authority,
-        account_refs={int(k): v for k, v in (stored.get("account_refs") or {}).items()},
+        # Channel settings only: account mappings are read from account_external_refs by
+        # the sync (P12.3).
         channels={k: ChannelConfig(**v) for k, v in (stored.get("channels") or {}).items()},
     )
     return config, Path(path)

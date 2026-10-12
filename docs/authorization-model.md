@@ -14,7 +14,11 @@ a proposed change would make it, never a request's own) and built the administra
 account directory; the policy is still `authz-2` (no fingerprinted module changed).
 **Phase 10** implemented OIDC sign-in and SCIM provisioning (§2, ADR-015); the policy is
 unchanged (`authz-2`): provisioning only creates memberships with the least-access
-defaults the policy already models.
+defaults the policy already models. **Phase 12 (P12.3)** made accounts and their
+external-reference mappings administrable (migration 0018); the policy is unchanged
+(`authz-2`): an archived account is still an account (its documents, assignments and
+visibility are as before), and a mapping only decides which account a record belongs to
+at the next sync — the record's own rules still decide who may read it.
 Related: `data-model.md` §2–5, `security-model.md`, ADR-003, ADR-005.
 
 ---

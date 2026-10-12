@@ -2,8 +2,9 @@
 
 Status: **Accepted as the P12.0 contract (2026-10-06).** Built checkpoint by checkpoint
 from P12.1 (phase-12-plan Part II); **P12.1 (2026-10-08) built the first fence and the
-foundations; P12.2 (2026-10-09) the member and administrator fences** — see
-"Implemented in P12.1" and "Implemented in P12.2" at the end.
+foundations; P12.2 (2026-10-09) the member and administrator fences; P12.3 (2026-10-12) the
+account and mapping fences** — see "Implemented in P12.1", "Implemented in P12.2" and
+"Implemented in P12.3" at the end.
 
 ## Context
 
@@ -66,7 +67,7 @@ else becomes writable. The privilege snapshot records each one, and
 | `memberships` | create a member by hand (with `users`, `directory_identities`) | fenced function `lattice_create_member` (least-access defaults written by the function, identifier unique per connection) | choosing access at creation |
 | `memberships.is_admin` | grant / revoke for another member | fenced function `lattice_set_admin` (§"Last administrator") | self, last active admin |
 | `memberships.status` | suspend / reactivate (non-provisioned), reinstate removed (D-36) | existing restrictive policy extended; reinstatement via fenced function `lattice_reinstate_member` (resets access, D-36) | `removed` by the API; suspending/demoting the last active admin |
-| `accounts` | create, rename, aliases, archive | `INSERT (key, name, aliases)`, `UPDATE (name, aliases, status, updated_at)`; restrictive policy: status among `active`/`churned`/`prospect`/`archived`, never out of `archived` (C10) | delete, un-archive by the API (operator) |
+| `accounts` | create, rename, aliases, business status, archive, reactivate | `INSERT (organization_id, key, name, aliases, status)`, `UPDATE (name, aliases, status)` under a restrictive policy (never an archived row); archive/reactivate through fenced function `lattice_set_account_archived` (the `archived_at` lifecycle, P12.3 — not a status value) | delete, key or lifecycle by direct write |
 | `account_external_refs` | map, remap, unmap | fenced function `lattice_set_account_ref` (one reference → one account, archived target refused) | direct writes |
 | `oidc_connections` | add (none active), update client ID/secret, issuer/claim change, disable, enable | `INSERT`/`UPDATE` of named columns; disable/issuer change through fenced function `lattice_change_connection` which revokes the connection's sessions in the same transaction (P11.3 semantics, the advisory lock) | `login_key`, deleting, a second active connection, `--new-identity-namespace` (operator) |
 | `scim_tokens` | create (hash only), revoke | `INSERT (organization_id, connection_id, token_hash)`, `UPDATE (revoked_at)` | reading hashes back, un-revoking |
@@ -183,3 +184,41 @@ The `memberships` rows of the operation table, and nothing else.
 `managed_by` insert policy; removal only for identity-provider members; no direct
 reinstatement), `tests/access/test_lifecycle.py` (the API and the functions: refusals,
 audit coupling, concurrency, SCIM interplay) and the privilege snapshot pin them.
+
+## Implemented in P12.3 (2026-10-12, migration 0018)
+
+The `accounts` and `account_external_refs` rows of the operation table, as amended there.
+
+- **Lifecycle, not a status.** The product owner's P12.3 instruction replaced C10's
+  `archived` status value: `accounts.archived_at` is a separate setup lifecycle (business
+  statuses stay labels with no effect), and administrators may **reactivate** (C10 made
+  un-archiving operator-only). `lattice_set_account_archived(actor, account, archived)` —
+  `SECURITY DEFINER`, owned by `lattice_owner`, search path pinned, `EXECUTE` for
+  `lattice_app` only — re-checks the active administrator, locks the row and sets or clears
+  `archived_at`; the API role has no grant on the column.
+- **Direct writes.** `INSERT (organization_id, key, name, aliases, status)` and `UPDATE
+  (name, aliases, status)` on `accounts`; restrictive policies refuse inserting an archived
+  row and touching an archived one. Checks for every writer: key shape, name, aliases.
+- **`lattice_set_account_ref(actor, source, kind, value, expected, account)`** — the only
+  API write path to `account_external_refs`: validates the reference, takes a per-reference
+  advisory lock (`b"LREF"`), compares the current mapping with `expected` (`mapping_changed`
+  otherwise), then inserts, updates or deletes. A BEFORE trigger
+  (`lattice_check_account_ref`) binds every writer, operators included: the kind fits the
+  source's connector, the source is not being deleted, the reference's identity never
+  changes, and a new or changed mapping never targets an archived account (read `FOR
+  SHARE`, serialising with archiving's row lock).
+- **Audit coupling.** `lattice_require_account_audit` (accounts: `account.created`,
+  `account.updated`, `account.archived`, `account.reactivated`, chosen from the row
+  change) and `lattice_require_mapping_audit` (references: `account.mapping_changed` for
+  the same source, kind and value) — deferred, SECURITY INVOKER, `lattice_app` only, as
+  0016's. The audit insert policy admits these five actions from `member:` actors.
+  `account.reactivated` is new (C11 had no reactivation).
+- **Reads.** `lattice_app` and `lattice_worker` `SELECT` on `account_external_refs` (as the
+  contract said); the worker reads mappings at sync instead of `sources.config`.
+- **Operators.** `lattice sync --sources` writes the file's mappings directly as the owner
+  (the check trigger applies), with `account.mapping_changed` events by `operator:sync`.
+
+`tests/test_app_role_access.py` (grants, the functions' ownership and executors, the
+audit actions), `tests/test_rls.py`, `tests/test_worker_role.py`,
+`tests/accounts/*` (the API, the functions, the triggers, direct-SQL bypass attempts,
+concurrency, ingestion) and the privilege snapshot pin them.

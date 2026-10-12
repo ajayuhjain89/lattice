@@ -2,6 +2,8 @@ import type { Page, Route } from "@playwright/test";
 
 import type { components } from "../src/api/schema.gen";
 import {
+  ACCOUNT_ACME,
+  ACCOUNT_ORBITAL_ARCHIVED,
   ACCOUNTS_MAYA,
   ACTIVITY_ADMIN,
   ACTIVITY_OWN,
@@ -27,6 +29,7 @@ import {
   TRACE_ADMIN,
   TRACE_ASKER,
   TRACE_HIDDEN,
+  UNMAPPED,
 } from "../src/test/fixtures";
 
 type S = components["schemas"];
@@ -75,6 +78,11 @@ export interface MockOptions {
   setup?: S["SetupStatus"] | "forbidden" | "fault";
   /** Answer for PATCH /v1/admin/organization (default: 200 with the new name). */
   rename?: (body: S["OrganizationChange"]) => { status: number; body: unknown };
+  /** P12.3: accounts by ID (default: Acme and archived Orbital), and the unmapped references. */
+  accountRecords?: Record<string, S["AccountDetail"]>;
+  unmapped?: S["UnmappedReferences"];
+  /** Answer for every account or mapping write instead of applying it (e.g. a 409). */
+  accountWrite?: (path: string, body: unknown) => { status: number; body: unknown } | undefined;
 }
 
 export interface MockLog {
@@ -91,6 +99,7 @@ export interface MockLog {
   added: S["NewMemberRequest"][];
   administrators: { id: string; body: S["AdministratorRequest"] }[];
   reinstates: { id: string; body: S["ReinstateRequest"] }[];
+  accountWrites: { path: string; body: unknown }[];
 }
 
 const json = (route: Route, status: number, body: unknown, headers: Record<string, string> = {}) =>
@@ -117,6 +126,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     added: [],
     administrators: [],
     reinstates: [],
+    accountWrites: [],
   };
   const answer = (route: Route, ok: number, result: unknown) =>
     typeof result === "object" && result !== null && "status" in result && "body" in result && typeof result.status === "number"
@@ -133,6 +143,123 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     [TRACE_ASKER.trace_id]: TRACE_ASKER,
     [TRACE_HIDDEN.trace_id]: TRACE_HIDDEN,
     [TRACE_ADMIN.trace_id]: TRACE_ADMIN,
+  };
+
+  // Accounts (P12.3), applied in memory so the page's reload reads what a write returned.
+  const accounts: Record<string, S["AccountDetail"]> = {
+    ...(options.accountRecords ?? { [ACCOUNT_ACME.id]: ACCOUNT_ACME, [ACCOUNT_ORBITAL_ARCHIVED.id]: ACCOUNT_ORBITAL_ARCHIVED }),
+  };
+  let unmapped: S["UnmappedReferences"] = options.unmapped ?? UNMAPPED;
+  const ref = (a: S["AccountDetail"]): S["AccountRef"] => ({ id: a.id, key: a.key, name: a.name, lifecycle: a.lifecycle });
+  const summary = ({ version: _v, created_at: _c, mappings: _m, ...rest }: S["AccountDetail"]): S["AccountSummary"] => rest;
+  const sources: Record<string, S["SourceRef"]> = Object.fromEntries(
+    SOURCES_ADMIN.sources.map((x) => [x.id, { id: x.id, name: x.name, connector_type: x.connector_type }]),
+  );
+  const owner = (sourceId: string, kind: string, value: string) =>
+    Object.values(accounts).find((a) => a.mappings.some((m) => m.source.id === sourceId && m.ref_kind === kind && m.external_ref === value));
+  const touched = (a: S["AccountDetail"]): S["AccountDetail"] => ({ ...a, version: `2026-10-12T10:${String(log.accountWrites.length).padStart(2, "0")}:00.000000Z` });
+  const accountsRoute = (route: Route, path: string, method: string, url: URL, body: Record<string, unknown> | null) => {
+    if (method !== "GET") {
+      log.accountWrites.push({ path, body });
+      const answerWith = options.accountWrite?.(path, body);
+      if (answerWith) return json(route, answerWith.status, answerWith.body);
+    }
+    if (path === "/v1/admin/access/accounts" && method === "GET") {
+      const q = url.searchParams.get("q")?.toLowerCase();
+      const lifecycle = url.searchParams.get("lifecycle");
+      const items = Object.values(accounts)
+        .filter((a) => !q || `${a.name} ${a.key} ${a.aliases.join(" ")}`.toLowerCase().includes(q))
+        .filter((a) => !lifecycle || a.lifecycle === lifecycle)
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(summary);
+      return json(route, 200, { items, next_after: null });
+    }
+    if (path === "/v1/admin/access/accounts" && method === "POST") {
+      const id = `ac000000-0000-4000-8000-0000000000${String(10 + log.accountWrites.length).padStart(2, "0")}`;
+      const b = body as S["NewAccountRequest"];
+      accounts[id] = {
+        id,
+        key: b.key,
+        name: b.name,
+        aliases: b.aliases ?? [],
+        status: b.status ?? "active",
+        lifecycle: "active",
+        archived_at: null,
+        references: 0,
+        assigned_members: 0,
+        version: "2026-10-12T10:00:00.000000Z",
+        created_at: "2026-10-12T10:00:00Z",
+        mappings: [],
+      };
+      return json(route, 201, accounts[id]);
+    }
+    if (path === "/v1/admin/access/account-references/unmapped" && method === "GET") return json(route, 200, unmapped);
+    if (path === "/v1/admin/access/account-references/preview" && method === "POST") {
+      const b = body as S["MappingPreviewRequest"];
+      const source = sources[b.source_id]!;
+      const now = owner(b.source_id, b.ref_kind, b.external_ref);
+      const after = b.account_id ? accounts[b.account_id] : undefined;
+      const scoped = source.connector_type === "ticketing";
+      const operation = !now ? "map" : after ? "remap" : "unmap";
+      const waiting = unmapped.items.find((r) => r.external_ref === b.external_ref && r.source.id === b.source_id)?.records_waiting ?? 0;
+      return json(route, 200, {
+        operation,
+        source,
+        ref_kind: b.ref_kind,
+        external_ref: b.external_ref,
+        account_scoped: scoped,
+        now: now ? ref(now) : null,
+        after: after ? ref(after) : null,
+        effect: operation === "map" ? (scoped ? "indexed" : "scoped") : operation === "remap" ? "moved" : scoped ? "quarantined" : "unscoped",
+        records_waiting: waiting,
+        takes_effect: "next_sync",
+      } satisfies S["MappingPreview"]);
+    }
+    const mapping = /^\/v1\/admin\/access\/account-references(\/remap|\/unmap)?$/.exec(path);
+    if (mapping && method === "POST") {
+      const b = body as S["RemapRequest"] & S["UnmapRequest"];
+      const source = sources[b.source_id]!;
+      const now = owner(b.source_id, b.ref_kind, b.external_ref);
+      if (now) {
+        accounts[now.id] = touched({ ...now, mappings: now.mappings.filter((m) => !(m.source.id === b.source_id && m.external_ref === b.external_ref)) });
+        accounts[now.id]!.references = accounts[now.id]!.mappings.length;
+      }
+      const target = mapping[1] === "/unmap" ? undefined : accounts[b.account_id];
+      if (target) {
+        const m: S["AccountMapping"] = { source, ref_kind: b.ref_kind, external_ref: b.external_ref, created_at: "2026-10-12T10:00:00Z", updated_at: "2026-10-12T10:00:00Z" };
+        accounts[target.id] = touched({ ...target, mappings: [...target.mappings, m], references: target.mappings.length + 1 });
+      }
+      unmapped = {
+        items: unmapped.items.map((r) =>
+          r.source.id === b.source_id && r.external_ref === b.external_ref
+            ? { ...r, state: target ? "mapped_pending_sync" : "unmapped", account: target ? ref(accounts[target.id]!) : null }
+            : r,
+        ),
+      };
+      return json(route, mapping[1] ? 200 : 201, {
+        operation: mapping[1] === "/remap" ? "remap" : mapping[1] === "/unmap" ? "unmap" : "map",
+        source,
+        ref_kind: b.ref_kind,
+        external_ref: b.external_ref,
+        account: target ? ref(accounts[target.id]!) : null,
+        takes_effect: "next_sync",
+      } satisfies S["MappingResult"]);
+    }
+    const one = /^\/v1\/admin\/access\/accounts\/([^/]+)(\/archive|\/reactivate)?$/.exec(path);
+    const found = one ? accounts[one[1]!] : undefined;
+    if (!one || !found) return json(route, 404, NOT_FOUND);
+    if (method === "GET" && !one[2]) return json(route, 200, found);
+    if (method === "PATCH") {
+      const b = body as S["AccountChangeRequest"];
+      accounts[found.id] = touched({ ...found, ...(b.name ? { name: b.name } : {}), ...(b.aliases ? { aliases: b.aliases } : {}), ...(b.status ? { status: b.status } : {}) });
+      return json(route, 200, accounts[found.id]);
+    }
+    if (method === "POST" && one[2]) {
+      const archive = one[2] === "/archive";
+      accounts[found.id] = touched({ ...found, lifecycle: archive ? "archived" : "active", archived_at: archive ? "2026-10-12T10:00:00Z" : null });
+      return json(route, 200, accounts[found.id]);
+    }
+    return json(route, 404, NOT_FOUND);
   };
 
   await page.route("**/api/**", async (route) => {
@@ -259,6 +386,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
         const a = options.audit ?? AUDIT;
         return json(route, 200, typeof a === "function" ? a(url.searchParams.get("before")) : a);
       }
+      if (path.startsWith("/v1/admin/access/account")) return accountsRoute(route, path, method, url, request.postDataJSON?.() ?? null);
       const explain = /^\/v1\/admin\/access\/members\/([^/]+)\/documents\/([^/]+)$/.exec(path);
       if (explain && method === "GET") return json(route, 200, EXPLANATION_DENIED);
       const adminPreview = /^\/v1\/admin\/access\/members\/([^/]+)\/administrator\/preview$/.exec(path);

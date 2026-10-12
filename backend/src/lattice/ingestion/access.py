@@ -18,10 +18,13 @@ Rules:
   An unknown key fails the record (``access_unmappable:department``) -- never dropped,
   because dropping a restriction widens access.
 * account: a document names an account key, which must exist; a ticket names the
-  ticketing organization, mapped by ``account_refs``; a chat record names its channel,
-  mapped by ``channels``. On an account-scoped source an unmapped reference fails the
-  record (``access_unmappable:account``); a reference that claims an account that does
-  not exist always fails it. Never "no account", which would widen access.
+  ticketing organization and a chat record its channel, each mapped exactly by the
+  source's ``account_external_refs`` (P12.3; ``lattice.accounts.refs``). On an
+  account-scoped source an unmapped reference fails the record
+  (``access_unmappable:account``); a document key that names no account always fails it.
+  Never "no account", which would widen access. A mapping to an *archived* account keeps
+  resolving: dropping it would quarantine (account-scoped) or unscope (otherwise) the
+  account's records, and unscoping widens access.
 * source grants: department and admin-group grants by key (unknown ->
   ``access_unmappable:department`` / ``:group``); groups the connector declared
   (private channels) by external reference (undeclared -> ``access_unmappable:group``).
@@ -49,6 +52,8 @@ class OrgDirectory:
     admin_groups: dict[str, uuid.UUID]
     # External reference (e.g. a private channel ID) -> the source-synced group.
     source_groups: dict[str, uuid.UUID] = field(default_factory=dict)
+    # The synced source's account mappings: external reference -> account.
+    account_refs: dict[str, uuid.UUID] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -103,9 +108,7 @@ def map_access(
         return AccessFailure("access_unmappable:department")
     department_ids = tuple(sorted({directory.departments[k] for k in department_keys}))
 
-    account = _account(
-        record, config, directory, channel_account=channel.account if channel else None
-    )
+    account = _account(record, config, directory)
     if isinstance(account, AccessFailure):
         return account
 
@@ -133,28 +136,23 @@ def map_access(
 
 
 def _account(
-    record: SourceRecord,
-    config: SourceConfig,
-    directory: OrgDirectory,
-    *,
-    channel_account: str | None,
+    record: SourceRecord, config: SourceConfig, directory: OrgDirectory
 ) -> uuid.UUID | AccessFailure | None:
     ref = record.account_ref
     if config.connector_type == "document_repository":
-        key = ref
-    elif config.connector_type == "ticketing":
-        key = config.account_refs.get(int(ref)) if ref and ref.isdigit() else None
+        if ref is None:
+            account_id = None
+        elif ref in directory.accounts:
+            return directory.accounts[ref]
+        else:
+            return AccessFailure("access_unmappable:account")
     else:
-        key = channel_account
-    if key is None:
-        if config.account_scoped:
-            params: dict[str, str | int] = {}
-            if ref and config.connector_type != "document_repository":
-                # The unmapped *external* reference: mapping it is the admin's task
-                # (security-model §10). Never the record's title or content.
-                params["external_account_ref"] = ref
-            return AccessFailure("access_unmappable:account", params)
-        return None
-    if key not in directory.accounts:
-        return AccessFailure("access_unmappable:account")
-    return directory.accounts[key]
+        account_id = directory.account_refs.get(ref) if ref else None
+    if account_id is None and config.account_scoped:
+        params: dict[str, str | int] = {}
+        if ref and config.connector_type != "document_repository":
+            # The unmapped *external* reference: mapping it is the admin's task
+            # (security-model §10). Never the record's title or content.
+            params["external_account_ref"] = ref
+        return AccessFailure("access_unmappable:account", params)
+    return account_id

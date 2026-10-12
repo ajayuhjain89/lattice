@@ -2,7 +2,7 @@
 
 import { CheckCircle2, PauseCircle, PlayCircle, ShieldMinus, ShieldPlus, SlidersHorizontal, UserCheck, X } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { isApiError } from "@/api/errors";
 import { useAccessMember } from "@/api/queries";
@@ -196,7 +196,7 @@ function Member({ access }: { access: MemberAccess }) {
 }
 
 /** The result of the last write, on the page until dismissed or replaced. */
-function AppliedLine({ change, onDismiss }: { change: AppliedChange; onDismiss: () => void }) {
+export function AppliedLine({ change, onDismiss, children }: { change: AppliedChange; onDismiss: () => void; children?: ReactNode }) {
   return (
     <div className={styles.applied} role="status" data-testid="applied-change">
       <span className={styles.appliedIcon}>
@@ -208,6 +208,7 @@ function AppliedLine({ change, onDismiss }: { change: AppliedChange; onDismiss: 
         <span className={styles.appliedDetail}>
           Recorded in the <Link href="/access/audit">audit log</Link> with your name and reason.
         </span>
+        {children}
       </p>
       <Button size="sm" variant="quiet" icon={<Icon as={X} />} aria-label="Dismiss" onClick={onDismiss} />
     </div>

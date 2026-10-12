@@ -12,8 +12,9 @@ States: ``complete``, ``required``, ``optional``, ``in_progress``, ``attention``
 name (documented in the plan's P12.1 notes): ``sources·required·not_synced`` (a source
 exists without any run yet), ``accounts·blocked·sources_required`` and
 ``ai_policy·attention·provider_unavailable`` (the enabled provider cannot be used as
-configured). ``sources·awaiting_import`` / ``import_rejected`` arrive with imports
-(P12.6).
+configured); and one P12.3 adds: ``accounts·attention·sync_required`` (mappings created or
+changed since their source's latest sync, which applies them). ``sources·awaiting_import``
+/ ``import_rejected`` arrive with imports (P12.6).
 """
 
 from dataclasses import dataclass, field
@@ -97,7 +98,10 @@ class SetupFacts:
     failed_sources: int = 0
     syncing_sources: int = 0
     account_sources: int = 0
+    # References the latest runs could not map and that are still unmapped (P12.3).
     unmapped_references: int = 0
+    # Mappings created or changed after their source's latest run started.
+    references_awaiting_sync: int = 0
     answered: bool = False
 
 
@@ -186,6 +190,9 @@ MESSAGES: Final[dict[tuple[str, str], str]] = {
     ),
     ("accounts", "unmapped_references"): (
         "Records reference accounts that are not mapped, and are not indexed until they are."
+    ),
+    ("accounts", "sync_required"): (
+        "Account mappings changed after the latest sync. They apply when the source syncs again."
     ),
     ("accounts", "mapped"): "Every account reference in the latest syncs is mapped.",
     (
@@ -319,6 +326,7 @@ def _accounts(f: SetupFacts) -> Category:
     facts: dict[str, FactValue] = {
         "account_sources": f.account_sources,
         "unmapped_references": f.unmapped_references,
+        "references_awaiting_sync": f.references_awaiting_sync,
     }
     if f.account_sources == 0:
         return _category("accounts", "optional", "not_needed", facts)
@@ -328,11 +336,17 @@ def _accounts(f: SetupFacts) -> Category:
             "attention",
             "unmapped_references",
             facts,
-            Action("/sources", "See unmapped references"),
+            Action("/access/accounts/references", "Map references"),
         )
     if f.synced_sources == 0:
         return _category("accounts", "blocked", "sources_required", facts)
-    return _category("accounts", "complete", "mapped", facts)
+    if f.references_awaiting_sync > 0:
+        return _category(
+            "accounts", "attention", "sync_required", facts, Action("/sources", "Open Sources")
+        )
+    return _category(
+        "accounts", "complete", "mapped", facts, Action("/access/accounts", "Open Accounts")
+    )
 
 
 def _first_answer(f: SetupFacts, sources: Category) -> Category:

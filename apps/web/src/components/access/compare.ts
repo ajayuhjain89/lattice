@@ -20,7 +20,7 @@ export interface Item {
 }
 
 export interface ComparisonRow {
-  key: "status" | "administrator" | "clearance" | "account_scope" | "accounts" | "departments" | "groups";
+  key: "status" | "administrator" | "clearance" | "account_scope" | "accounts" | "departments" | "groups" | "account" | "lifecycle";
   rule: string;
   now: Item[];
   after: Item[];

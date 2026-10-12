@@ -12,8 +12,10 @@
    *and* admin-origin, because an admin grant is a grant on a document and ends with
    it (re-applying ``admin-grants.yaml`` after a reconnect restores them); its
    source-synced groups and their members; its sync runs and record failures (which
-   hold its external identifiers). Query traces do not exist yet (Phase 6); when they
-   do, their references to purged chunks stop resolving and are re-authorized on read.
+   hold its external identifiers); its account mappings (``account_external_refs``,
+   P12.3) -- the accounts themselves, and other sources' mappings, stay. Query traces
+   do not exist yet (Phase 6); when they do, their references to purged chunks stop
+   resolving and are re-authorized on read.
 
 If the purge fails, the source stays ``deleting`` (invisible, unsyncable) and
 re-running the command resumes it.
@@ -37,6 +39,7 @@ class DisconnectReport:
     admin_grants: int
     groups: int
     sync_runs: int
+    account_mappings: int
 
 
 class SourceNotFound(Exception):
@@ -82,6 +85,8 @@ async def disconnect_source(db: Database, org: uuid.UUID, key: str) -> Disconnec
                     "(SELECT count(*) FROM access_groups WHERE organization_id = :o "
                     " AND source_id = :s), "
                     "(SELECT count(*) FROM source_sync_runs WHERE organization_id = :o "
+                    " AND source_id = :s), "
+                    "(SELECT count(*) FROM account_external_refs WHERE organization_id = :o "
                     " AND source_id = :s)"
                 ),
                 params,

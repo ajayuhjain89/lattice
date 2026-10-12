@@ -10,6 +10,19 @@ import { fromResponse, networkError } from "./errors";
 import type { paths } from "./schema.gen";
 import type {
   AccessPreview,
+  AccountChangeRequest,
+  AccountDetail,
+  AccountLifecycle,
+  AccountLifecycleRequest,
+  AccountsPage,
+  MappingPreview,
+  MappingPreviewRequest,
+  MappingResult,
+  MapRequest,
+  NewAccountRequest,
+  RemapRequest,
+  UnmappedReferences,
+  UnmapRequest,
   AdministratorPreview,
   AdministratorRequest,
   AdminSourcesResponse,
@@ -195,6 +208,31 @@ export const api = {
       http.POST("/v1/admin/access/grants/{grant_id}/revoke", { params: { path: { grant_id: grantId } }, body: { reason } }),
     );
   },
+  accountsList: (q: string, lifecycle: AccountLifecycle | null, after?: string, signal?: AbortSignal) =>
+    call<AccountsPage>(() =>
+      http.GET("/v1/admin/access/accounts", {
+        params: {
+          query: { ...(q ? { q } : {}), ...(lifecycle ? { lifecycle } : {}), ...(after ? { after } : {}), limit: ACCOUNTS_PAGE },
+        },
+        signal,
+      }),
+    ),
+  account: (id: string, signal?: AbortSignal) =>
+    call<AccountDetail>(() => http.GET("/v1/admin/access/accounts/{account_id}", { params: { path: { account_id: id } }, signal })),
+  createAccount: (body: NewAccountRequest) => call<AccountDetail>(() => http.POST("/v1/admin/access/accounts", { body })),
+  updateAccount: (id: string, body: AccountChangeRequest) =>
+    call<AccountDetail>(() => http.PATCH("/v1/admin/access/accounts/{account_id}", { params: { path: { account_id: id } }, body })),
+  archiveAccount: (id: string, body: AccountLifecycleRequest) =>
+    call<AccountDetail>(() => http.POST("/v1/admin/access/accounts/{account_id}/archive", { params: { path: { account_id: id } }, body })),
+  reactivateAccount: (id: string, body: AccountLifecycleRequest) =>
+    call<AccountDetail>(() => http.POST("/v1/admin/access/accounts/{account_id}/reactivate", { params: { path: { account_id: id } }, body })),
+  unmappedReferences: (signal?: AbortSignal) =>
+    call<UnmappedReferences>(() => http.GET("/v1/admin/access/account-references/unmapped", { signal })),
+  previewMapping: (body: MappingPreviewRequest) =>
+    call<MappingPreview>(() => http.POST("/v1/admin/access/account-references/preview", { body })),
+  mapReference: (body: MapRequest) => call<MappingResult>(() => http.POST("/v1/admin/access/account-references", { body })),
+  remapReference: (body: RemapRequest) => call<MappingResult>(() => http.POST("/v1/admin/access/account-references/remap", { body })),
+  unmapReference: (body: UnmapRequest) => call<MappingResult>(() => http.POST("/v1/admin/access/account-references/unmap", { body })),
   auditEvents: (before?: string, signal?: AbortSignal) =>
     call<AuditPage>(() =>
       http.GET("/v1/admin/audit-events", { params: { query: before ? { before } : {} }, signal }),
@@ -202,3 +240,4 @@ export const api = {
 };
 
 export const MEMBERS_PAGE = 50;
+export const ACCOUNTS_PAGE = 50;

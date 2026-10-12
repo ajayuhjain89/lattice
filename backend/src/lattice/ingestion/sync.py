@@ -38,6 +38,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lattice import metrics
+from lattice.accounts import refs
 from lattice.connectors.contract import Connector, RecordError, SourceRecord, SourceUnavailable
 from lattice.connectors.registry import build_connector
 from lattice.db.engine import Database
@@ -281,8 +282,18 @@ class Syncer:
                         raise store.SourceConfigurationError("source_config:source_missing")
                 else:
                     source = await store.upsert_source(s, self.org, self.config, str(self.path))
+                    # The file's account mappings, audited as operator:sync (P12.3).
+                    await refs.apply_file_mappings(
+                        s,
+                        self.org,
+                        source_id=source.id,
+                        config=self.config,
+                        accounts=directory.accounts,
+                    )
             except store.SourceConfigurationError as exc:
                 raise SyncError(exc.code) from None
+            except refs.MappingRefused as exc:
+                raise SyncError(f"source_config:{exc.code}") from None
         self.source = source
 
         if self.options.dry_run:
@@ -422,6 +433,17 @@ class Syncer:
                     if source is not None
                     else {}
                 )
+                account_refs = (
+                    await refs.load_mappings(s, self.org, source.id, self.config.connector_type)
+                    if source is not None
+                    else {}
+                )
+                if self.options.record_config:
+                    # What the real run would record first: the file's mappings.
+                    account_refs |= {
+                        ref: directory.accounts[key]
+                        for ref, key in refs.file_mappings(self.config).items()
+                    }
             else:
                 assert source is not None  # noqa: S101
                 source_groups, regrouped = await store.sync_groups(
@@ -429,7 +451,10 @@ class Syncer:
                 )
                 self.result.memberships_regrouped += regrouped
                 existing = await store.existing_documents(s, self.org, source.id)
-        directory = replace(directory, source_groups=source_groups)
+                account_refs = await refs.load_mappings(
+                    s, self.org, source.id, self.config.connector_type
+                )
+        directory = replace(directory, source_groups=source_groups, account_refs=account_refs)
 
         seen: set[str] = set()
         unidentified = 0

@@ -195,4 +195,14 @@ async def test_openapi_documents_the_error_envelope(client: httpx.AsyncClient) -
         "/v1/admin/access/members/{membership_id}/administrator",
         "/v1/admin/access/members/{membership_id}/reinstate/preview",
         "/v1/admin/access/members/{membership_id}/reinstate",
+        # Phase 12 (P12.3): accounts and their external-reference mappings
+        "/v1/admin/access/accounts",
+        "/v1/admin/access/accounts/{account_id}",
+        "/v1/admin/access/accounts/{account_id}/archive",
+        "/v1/admin/access/accounts/{account_id}/reactivate",
+        "/v1/admin/access/account-references/unmapped",
+        "/v1/admin/access/account-references/preview",
+        "/v1/admin/access/account-references",
+        "/v1/admin/access/account-references/remap",
+        "/v1/admin/access/account-references/unmap",
     }
