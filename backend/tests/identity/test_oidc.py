@@ -29,7 +29,7 @@ from lattice.identity.oidc import (
     safe_return_to,
 )
 
-from ..conftest import AppFactory
+from ..conftest import AppFactory, FreshWindow
 from ..factories import (
     Member,
     create_member,
@@ -510,9 +510,10 @@ def test_safe_return_to() -> None:
 
 
 async def test_sign_in_is_rate_limited_per_client(
-    app_client: AppFactory, idp: FakeIdp, world: World
+    app_client: AppFactory, idp: FakeIdp, world: World, fresh_window: FreshWindow
 ) -> None:
     async with app_client(_configure(idp), rate_limit_sign_in_per_minute=2) as client:
+        await fresh_window()
         assert (await _sign_in(client, idp)).headers["location"] == "/ask"  # start + callback
         start = await client.get(f"/v1/auth/oidc/{KEY}/start")
         assert start.headers["location"] == "/sign-in?error=rate_limited"
