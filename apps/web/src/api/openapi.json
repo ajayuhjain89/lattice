@@ -1371,6 +1371,43 @@
         "title": "AuditPage",
         "type": "object"
       },
+      "CheckOut": {
+        "properties": {
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "valid",
+              "invalid_configuration",
+              "credentials_rejected",
+              "provider_unavailable",
+              "outbound_blocked"
+            ],
+            "title": "Result",
+            "type": "string"
+          },
+          "step": {
+            "enum": [
+              "issuer",
+              "discovery",
+              "keys",
+              "client"
+            ],
+            "title": "Step",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result",
+          "step",
+          "checked_at"
+        ],
+        "title": "CheckOut",
+        "type": "object"
+      },
       "Citation": {
         "additionalProperties": false,
         "properties": {
@@ -1480,6 +1517,96 @@
           "name"
         ],
         "title": "ClarificationChoice",
+        "type": "object"
+      },
+      "ClientIdRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "title": "Client Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "version",
+          "client_id"
+        ],
+        "title": "ClientIdRequest",
+        "type": "object"
+      },
+      "ClientSecretInfo": {
+        "properties": {
+          "set_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the encrypted secret was set.",
+            "title": "Set At"
+          },
+          "state": {
+            "description": "encrypted (set in the product, kept as ciphertext), environment (an operator's deployment reference) or none (a public client: PKCE only).",
+            "enum": [
+              "encrypted",
+              "environment",
+              "none"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "set_at"
+        ],
+        "title": "ClientSecretInfo",
+        "type": "object"
+      },
+      "ClientSecretRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "client_secret": {
+            "description": "Encrypted at once; never returned.",
+            "format": "password",
+            "title": "Client Secret",
+            "type": "string",
+            "writeOnly": true
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "version",
+          "client_secret"
+        ],
+        "title": "ClientSecretRequest",
         "type": "object"
       },
       "Conflict": {
@@ -2762,6 +2889,171 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "IdentityChangePreview": {
+        "properties": {
+          "claim_changed": {
+            "title": "Claim Changed",
+            "type": "boolean"
+          },
+          "ends_own_session": {
+            "default": false,
+            "description": "Your own session came through this connection.",
+            "title": "Ends Own Session",
+            "type": "boolean"
+          },
+          "issuer": {
+            "title": "Issuer",
+            "type": "string"
+          },
+          "issuer_access": {
+            "enum": [
+              "public",
+              "operator_approved",
+              "not_permitted"
+            ],
+            "title": "Issuer Access",
+            "type": "string"
+          },
+          "issuer_changed": {
+            "title": "Issuer Changed",
+            "type": "boolean"
+          },
+          "members_bound": {
+            "title": "Members Bound",
+            "type": "integer"
+          },
+          "proof": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentityProof"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Your matched test sign-in under exactly these values, unused and unexpired: the change needs one."
+          },
+          "sessions_ending": {
+            "title": "Sessions Ending",
+            "type": "integer"
+          },
+          "subject_claim": {
+            "title": "Subject Claim",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issuer",
+          "subject_claim",
+          "issuer_changed",
+          "claim_changed",
+          "issuer_access",
+          "sessions_ending",
+          "members_bound",
+          "proof"
+        ],
+        "title": "IdentityChangePreview",
+        "type": "object"
+      },
+      "IdentityChangePreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "issuer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issuer"
+          },
+          "subject_claim": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Claim"
+          }
+        },
+        "title": "IdentityChangePreviewRequest",
+        "type": "object"
+      },
+      "IdentityChangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "description": "Typed by the administrator: the new issuer when it changes, else the new claim name.",
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "issuer": {
+            "title": "Issuer",
+            "type": "string"
+          },
+          "proof_id": {
+            "format": "uuid",
+            "title": "Proof Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "subject_claim": {
+            "title": "Subject Claim",
+            "type": "string"
+          },
+          "version": {
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "version",
+          "issuer",
+          "subject_claim",
+          "proof_id",
+          "confirmation"
+        ],
+        "title": "IdentityChangeRequest",
+        "type": "object"
+      },
+      "IdentityProof": {
+        "properties": {
+          "completed_at": {
+            "format": "date-time",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "test_id": {
+            "format": "uuid",
+            "title": "Test Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "test_id",
+          "completed_at",
+          "expires_at"
+        ],
+        "title": "IdentityProof",
+        "type": "object"
+      },
       "IdentityRequirement": {
         "description": "What a member added by hand must be bound to: the organization's active OIDC\nconnection and the claim whose exact value identifies a person.",
         "properties": {
@@ -2800,6 +3092,72 @@
           "issuer"
         ],
         "title": "IdentityRequirement",
+        "type": "object"
+      },
+      "IdentitySettings": {
+        "properties": {
+          "can_add_connection": {
+            "description": "No active connection and no disabled one that still signs members in.",
+            "title": "Can Add Connection",
+            "type": "boolean"
+          },
+          "oidc": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OidcConnectionOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The active connection, else the most recent disabled one, else none."
+          },
+          "scim": {
+            "$ref": "#/components/schemas/ScimSettings"
+          },
+          "sign_in_status": {
+            "$ref": "#/components/schemas/IdentitySetupStatus"
+          }
+        },
+        "required": [
+          "oidc",
+          "can_add_connection",
+          "sign_in_status",
+          "scim"
+        ],
+        "title": "IdentitySettings",
+        "type": "object"
+      },
+      "IdentitySetupStatus": {
+        "description": "The setup record's category for this page (C12): derived by the API.",
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "complete",
+              "required",
+              "optional",
+              "in_progress",
+              "attention",
+              "blocked"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "reason",
+          "message"
+        ],
+        "title": "IdentitySetupStatus",
         "type": "object"
       },
       "JobOut": {
@@ -2898,6 +3256,53 @@
           "sync_run_id"
         ],
         "title": "JobOut",
+        "type": "object"
+      },
+      "LastFailure": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "at"
+        ],
+        "title": "LastFailure",
+        "type": "object"
+      },
+      "LastTest": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "check",
+              "sign_in"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "result",
+          "at"
+        ],
+        "title": "LastTest",
         "type": "object"
       },
       "LifecycleAction": {
@@ -3956,6 +4361,51 @@
         "title": "NewAccountRequest",
         "type": "object"
       },
+      "NewConnectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "title": "Client Id",
+            "type": "string"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Omit for a public client (PKCE only). Encrypted; never returned.",
+            "title": "Client Secret"
+          },
+          "issuer": {
+            "title": "Issuer",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "subject_claim": {
+            "default": "sub",
+            "title": "Subject Claim",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "issuer",
+          "client_id"
+        ],
+        "title": "NewConnectionRequest",
+        "type": "object"
+      },
       "NewMemberRequest": {
         "additionalProperties": false,
         "description": "A person added by hand (D-30). Their access starts at least privilege: the request\ncannot carry access.",
@@ -4055,6 +4505,122 @@
           "message"
         ],
         "title": "Notice",
+        "type": "object"
+      },
+      "OidcConnectionOut": {
+        "properties": {
+          "client_id": {
+            "title": "Client Id",
+            "type": "string"
+          },
+          "client_secret": {
+            "$ref": "#/components/schemas/ClientSecretInfo"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "issuer": {
+            "title": "Issuer",
+            "type": "string"
+          },
+          "issuer_access": {
+            "description": "public (https, port 443, checked against public addresses at each connection), operator_approved (a private target your Lattice operator registered for this organization) or not_permitted (the outbound policy refuses it).",
+            "enum": [
+              "public",
+              "operator_approved",
+              "not_permitted"
+            ],
+            "title": "Issuer Access",
+            "type": "string"
+          },
+          "last_failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "last_test": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastTest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "live_sessions": {
+            "description": "Sessions this connection issued that are live.",
+            "title": "Live Sessions",
+            "type": "integer"
+          },
+          "members_bound": {
+            "description": "Members (not removed) this connection signs in.",
+            "title": "Members Bound",
+            "type": "integer"
+          },
+          "redirect_uri": {
+            "title": "Redirect Uri",
+            "type": "string"
+          },
+          "sign_in_url": {
+            "title": "Sign In Url",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject_claim": {
+            "title": "Subject Claim",
+            "type": "string"
+          },
+          "version": {
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "issuer",
+          "client_id",
+          "subject_claim",
+          "client_secret",
+          "issuer_access",
+          "sign_in_url",
+          "redirect_uri",
+          "last_success_at",
+          "last_failure",
+          "last_test",
+          "members_bound",
+          "live_sessions",
+          "version"
+        ],
+        "title": "OidcConnectionOut",
         "type": "object"
       },
       "OperationalActivityOut": {
@@ -4476,6 +5042,28 @@
         "title": "RemapRequest",
         "type": "object"
       },
+      "RemoveSecretRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "version"
+        ],
+        "title": "RemoveSecretRequest",
+        "type": "object"
+      },
       "RetrievalScope": {
         "additionalProperties": false,
         "description": "Optional filters. Each is ANDed with the authorization predicate: it can narrow\nwhat the reader may see, never widen it. ``account`` must name an account the\nreader may know exists (``authz.visible_accounts_predicate``); a hidden or unknown\naccount is refused identically.",
@@ -4532,6 +5120,42 @@
           }
         },
         "title": "RetrievalScope",
+        "type": "object"
+      },
+      "RevealedScimToken": {
+        "properties": {
+          "revealed_token": {
+            "description": "The bearer token. Shown in this response only: Lattice keeps a hash.",
+            "title": "Revealed Token",
+            "type": "string"
+          },
+          "token": {
+            "$ref": "#/components/schemas/ScimTokenOut"
+          }
+        },
+        "required": [
+          "token",
+          "revealed_token"
+        ],
+        "title": "RevealedScimToken",
+        "type": "object"
+      },
+      "RevokePreview": {
+        "properties": {
+          "last_live_token": {
+            "title": "Last Live Token",
+            "type": "boolean"
+          },
+          "provisioned_members": {
+            "title": "Provisioned Members",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "last_live_token",
+          "provisioned_members"
+        ],
+        "title": "RevokePreview",
         "type": "object"
       },
       "RevokeRequest": {
@@ -4616,6 +5240,121 @@
           "error_code"
         ],
         "title": "RunOut",
+        "type": "object"
+      },
+      "ScimSettings": {
+        "properties": {
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "identifying_claim": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "externalId must equal this claim of the same person.",
+            "title": "Identifying Claim"
+          },
+          "provisioned_members": {
+            "title": "Provisioned Members",
+            "type": "integer"
+          },
+          "refused_recently": {
+            "description": "Refused provisioning requests, last 24 hours.",
+            "title": "Refused Recently",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/IdentitySetupStatus"
+          },
+          "tokens": {
+            "items": {
+              "$ref": "#/components/schemas/ScimTokenOut"
+            },
+            "title": "Tokens",
+            "type": "array"
+          }
+        },
+        "required": [
+          "base_url",
+          "identifying_claim",
+          "tokens",
+          "provisioned_members",
+          "refused_recently",
+          "status"
+        ],
+        "title": "ScimSettings",
+        "type": "object"
+      },
+      "ScimTokenOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_connection": {
+            "description": "Issued for the active connection (only those authenticate).",
+            "title": "Current Connection",
+            "type": "boolean"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The token's last four characters (newer tokens).",
+            "title": "Hint"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Minute precision.",
+            "title": "Last Used At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "required": [
+          "id",
+          "hint",
+          "created_at",
+          "revoked_at",
+          "last_used_at",
+          "current_connection"
+        ],
+        "title": "ScimTokenOut",
         "type": "object"
       },
       "SetupAction": {
@@ -4798,6 +5537,76 @@
         "title": "SourceRef",
         "type": "object"
       },
+      "StatusPreview": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "ends_own_session": {
+            "default": false,
+            "description": "Your own session came through this connection.",
+            "title": "Ends Own Session",
+            "type": "boolean"
+          },
+          "members_bound": {
+            "title": "Members Bound",
+            "type": "integer"
+          },
+          "sessions_ending": {
+            "title": "Sessions Ending",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "sessions_ending",
+          "members_bound"
+        ],
+        "title": "StatusPreview",
+        "type": "object"
+      },
+      "StatusPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "StatusPreviewRequest",
+        "type": "object"
+      },
+      "StatusRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "format": "date-time",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "version",
+          "enabled"
+        ],
+        "title": "StatusRequest",
+        "type": "object"
+      },
       "Supersession": {
         "additionalProperties": false,
         "properties": {
@@ -4846,6 +5655,170 @@
           }
         },
         "title": "SyncRequest",
+        "type": "object"
+      },
+      "TestSignInOut": {
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Your own identifier under the tested claim (matched or mismatched).",
+            "title": "Identifier"
+          },
+          "issuer": {
+            "title": "Issuer",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "matched",
+                  "mismatched",
+                  "not_provisioned",
+                  "sign_in_failed",
+                  "token_invalid",
+                  "provider_unavailable",
+                  "invalid_configuration",
+                  "outbound_blocked",
+                  "credentials_rejected"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "proof_available": {
+            "description": "matched under proposed values, unused and unexpired: usable once to apply exactly that change.",
+            "title": "Proof Available",
+            "type": "boolean"
+          },
+          "proposed": {
+            "title": "Proposed",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "completed",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject_claim": {
+            "title": "Subject Claim",
+            "type": "string"
+          },
+          "test_id": {
+            "format": "uuid",
+            "title": "Test Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "test_id",
+          "status",
+          "outcome",
+          "identifier",
+          "issuer",
+          "subject_claim",
+          "proposed",
+          "completed_at",
+          "expires_at",
+          "proof_available"
+        ],
+        "title": "TestSignInOut",
+        "type": "object"
+      },
+      "TestSignInRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "issuer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issuer"
+          },
+          "subject_claim": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Claim"
+          }
+        },
+        "title": "TestSignInRequest",
+        "type": "object"
+      },
+      "TestSignInStarted": {
+        "properties": {
+          "authorization_url": {
+            "title": "Authorization Url",
+            "type": "string"
+          },
+          "test_id": {
+            "format": "uuid",
+            "title": "Test Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "test_id",
+          "authorization_url"
+        ],
+        "title": "TestSignInStarted",
+        "type": "object"
+      },
+      "TokenRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "TokenRequest",
         "type": "object"
       },
       "UnmapRequest": {
@@ -7683,6 +8656,25 @@
               ],
               "title": "Before"
             }
+          },
+          {
+            "description": "identity_provider: the provisioning activity only (SCIM).",
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "identity_provider",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "identity_provider: the provisioning activity only (SCIM).",
+              "title": "Actor"
+            }
           }
         ],
         "responses": {
@@ -7740,6 +8732,1461 @@
         "summary": "Access and provider changes, newest first (administrators)",
         "tags": [
           "access"
+        ]
+      }
+    },
+    "/v1/admin/identity": {
+      "get": {
+        "description": "Never a client secret, its reference or a SCIM token: whether a secret is set and how it is kept, token hints and times.",
+        "operationId": "get_identity_v1_admin_identity_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentitySettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "The organization's identity provider connection and SCIM provisioning (administrators)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/oidc": {
+      "post": {
+        "description": "Only when no connection is active, and no disabled connection still signs members in (re-enable that one: a new connection would not sign them in). The issuer must pass the outbound policy: a public https address, or a private one your Lattice operator registered for this organization (422 `outbound_blocked`). Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_connection_v1_admin_identity_oidc_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewConnectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentitySettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Add the organization's OIDC connection, with a reason (administrators; audited)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/oidc/test-sign-in": {
+      "post": {
+        "description": "Open `authorization_url` in a new tab and sign in as yourself. No session is created; you return to the identity settings, which read the result by `test_id`. Optional `issuer` / `subject_claim`: test proposed values (the proof an issuer or claim change needs). Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_test_sign_in_v1_admin_identity_oidc_test_sign_in_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestSignInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestSignInStarted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Start a test sign-in through the active connection (administrators)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/oidc/test-sign-in/{test_id}": {
+      "get": {
+        "operationId": "get_test_sign_in_v1_admin_identity_oidc_test_sign_in__test_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "test_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Test Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestSignInOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Your test sign-in's result (administrators; only the one who started it)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/oidc/{connection_id}": {
+      "patch": {
+        "description": "Sessions are kept. `version` must be current (409 otherwise). Requires the X-Lattice-Request: 1 header.",
+        "operationId": "patch_connection_v1_admin_identity_oidc__connection_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientIdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentitySettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Change the connection's client ID, with a reason (administrators; audited)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/oidc/{connection_id}/check": {
+      "post": {
+        "description": "Discovery, keys and the client credentials, through the outbound policy: `valid`, `invalid_configuration`, `credentials_rejected`, `provider_unavailable` or `outbound_blocked`, and the step that decided. The result is recorded on the connection. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_check_v1_admin_identity_oidc__connection_id__check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Check the connection without signing in (administrators)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/oidc/{connection_id}/client-secret": {
+      "put": {
+        "description": "Encrypted at once (AES-256-GCM) for this connection; the previous encrypted secret is destroyed. Never returned, logged or audited. Sessions are kept. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "put_client_secret_v1_admin_identity_oidc__connection_id__client_secret_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientSecretRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentitySettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Set or replace the client secret, with a reason (administrators; audited)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/oidc/{connection_id}/client-secret/remove": {
+      "post": {
+        "description": "The encrypted secret is destroyed. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_remove_client_secret_v1_admin_identity_oidc__connection_id__client_secret_remove_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveSecretRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentitySettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Remove the client secret: a public client (PKCE only) from now on (administrators; audited)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/oidc/{connection_id}/identity": {
+      "post": {
+        "description": "`proof_id`: your matched test sign-in under exactly these values (422 `identity_unverified` otherwise: a changed-subject migration is not supported). `confirmation`: the new issuer, or the new claim name when only the claim changes. Every session of the connection ends. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_identity_v1_admin_identity_oidc__connection_id__identity_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentitySettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Change the issuer or identifying claim, with proof, confirmation and a reason (administrators; audited)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/oidc/{connection_id}/identity/preview": {
+      "post": {
+        "description": "Every session of the connection ends. The change needs your own test sign-in under exactly these values, matching your directory identity (`proof`): only the same identity provider at a new address, or a claim carrying the same values, is supported -- never a provider whose subjects differ. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_identity_preview_v1_admin_identity_oidc__connection_id__identity_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityChangePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityChangePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Preview an issuer or identifying-claim change (administrators; changes nothing)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/oidc/{connection_id}/status": {
+      "post": {
+        "description": "Disable: sign-in through it stops and its sessions end at once (yours too, when you signed in through it). Enable: the same connection and members again; 409 `connection_exists` while another is active. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_status_v1_admin_identity_oidc__connection_id__status_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentitySettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Disable or enable the connection, with a reason (administrators; audited)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/oidc/{connection_id}/status/preview": {
+      "post": {
+        "description": "Disabling stops sign-in at once and ends the connection's live sessions. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_status_preview_v1_admin_identity_oidc__connection_id__status_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Preview disabling or enabling the connection (administrators; changes nothing)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/scim/tokens": {
+      "post": {
+        "description": "The token is in this response only (`Cache-Control: no-store`); Lattice keeps its SHA-256 hash and last four characters. It does not expire: revoke it when the provider no longer uses it. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_token_v1_admin_identity_scim_tokens_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevealedScimToken"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Create a SCIM token, shown once, with a reason (administrators; audited)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/scim/tokens/{token_id}/revoke": {
+      "post": {
+        "description": "Final: a revoked token is never valid again. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_revoke_v1_admin_identity_scim_tokens__token_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Token Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimTokenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Revoke a SCIM token, with a reason (administrators; audited)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/scim/tokens/{token_id}/revoke/preview": {
+      "post": {
+        "description": "The provider's next request with it is refused. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_revoke_preview_v1_admin_identity_scim_tokens__token_id__revoke_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Token Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Preview revoking a SCIM token (administrators; changes nothing)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/admin/identity/scim/tokens/{token_id}/rotate": {
+      "post": {
+        "description": "No overlap: the provider is refused until the new token is pasted in. For an overlap, create a second token, switch the provider, then revoke the old one. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_rotate_v1_admin_identity_scim_tokens__token_id__rotate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Token Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevealedScimToken"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Rotate a SCIM token: a replacement shown once; the old token is refused from now on (administrators; audited)",
+        "tags": [
+          "identity"
         ]
       }
     },

@@ -42,7 +42,9 @@ test("a fresh organization: truthful states, who acts next, and no controls for 
   await mockApi(page, { me: ME_LENA, setup: SETUP_FRESH });
   await page.goto("/settings");
   await expect(row(page, "Identity provider")).toContainText("Required");
-  await expect(row(page, "Identity provider")).toContainText("Your Lattice operator acts on this");
+  // P12.4: the Identity page owns it; Sources still waits for the operator (P12.6).
+  await expect(row(page, "Identity provider").getByRole("link", { name: "Test sign-in" })).toHaveAttribute("href", "/settings/identity");
+  await expect(row(page, "Sources")).toContainText("Your Lattice operator acts on this");
   await expect(row(page, "First answer")).toContainText("Blocked");
   await expect(row(page, "Provisioning (SCIM)")).toContainText("Optional");
   // Rename is the one control; the rest are links to pages that exist.

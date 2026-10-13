@@ -29,7 +29,23 @@ import type {
   Answer,
   AskRequest,
   AuditPage,
+  ClientIdRequest,
+  ClientSecretRequest,
+  ConnectionCheck,
   Directory,
+  IdentityChangePreview,
+  IdentityChangeRequest,
+  IdentitySettings,
+  NewConnectionRequest,
+  RemoveSecretRequest,
+  RevealedScimToken,
+  RevokePreview,
+  ScimToken,
+  StatusPreview,
+  StatusRequest,
+  TestSignIn,
+  TestSignInRequest,
+  TestSignInStarted,
   DocumentExplanation,
   DocumentsPage,
   EvidenceDetail,
@@ -236,6 +252,57 @@ export const api = {
   auditEvents: (before?: string, signal?: AbortSignal) =>
     call<AuditPage>(() =>
       http.GET("/v1/admin/audit-events", { params: { query: before ? { before } : {} }, signal }),
+    ),
+  /** The identity provider's provisioning activity (SCIM): its own events only. */
+  provisioningActivity: (signal?: AbortSignal) =>
+    call<AuditPage>(() =>
+      http.GET("/v1/admin/audit-events", { params: { query: { actor: "identity_provider", limit: 10 } }, signal }),
+    ),
+  identity: (signal?: AbortSignal) => call<IdentitySettings>(() => http.GET("/v1/admin/identity", { signal })),
+  addConnection: (body: NewConnectionRequest) => call<IdentitySettings>(() => http.POST("/v1/admin/identity/oidc", { body })),
+  updateClientId: (id: string, body: ClientIdRequest) =>
+    call<IdentitySettings>(() =>
+      http.PATCH("/v1/admin/identity/oidc/{connection_id}", { params: { path: { connection_id: id } }, body }),
+    ),
+  setClientSecret: (id: string, body: ClientSecretRequest) =>
+    call<IdentitySettings>(() =>
+      http.PUT("/v1/admin/identity/oidc/{connection_id}/client-secret", { params: { path: { connection_id: id } }, body }),
+    ),
+  removeClientSecret: (id: string, body: RemoveSecretRequest) =>
+    call<IdentitySettings>(() =>
+      http.POST("/v1/admin/identity/oidc/{connection_id}/client-secret/remove", { params: { path: { connection_id: id } }, body }),
+    ),
+  previewConnectionStatus: (id: string, enabled: boolean) =>
+    call<StatusPreview>(() =>
+      http.POST("/v1/admin/identity/oidc/{connection_id}/status/preview", { params: { path: { connection_id: id } }, body: { enabled } }),
+    ),
+  setConnectionStatus: (id: string, body: StatusRequest) =>
+    call<IdentitySettings>(() =>
+      http.POST("/v1/admin/identity/oidc/{connection_id}/status", { params: { path: { connection_id: id } }, body }),
+    ),
+  previewIdentityChange: (id: string, body: { issuer?: string | null; subject_claim?: string | null }) =>
+    call<IdentityChangePreview>(() =>
+      http.POST("/v1/admin/identity/oidc/{connection_id}/identity/preview", { params: { path: { connection_id: id } }, body }),
+    ),
+  changeIdentity: (id: string, body: IdentityChangeRequest) =>
+    call<IdentitySettings>(() =>
+      http.POST("/v1/admin/identity/oidc/{connection_id}/identity", { params: { path: { connection_id: id } }, body }),
+    ),
+  checkConnection: (id: string) =>
+    call<ConnectionCheck>(() => http.POST("/v1/admin/identity/oidc/{connection_id}/check", { params: { path: { connection_id: id } } })),
+  startTestSignIn: (body: TestSignInRequest) => call<TestSignInStarted>(() => http.POST("/v1/admin/identity/oidc/test-sign-in", { body })),
+  testSignIn: (id: string, signal?: AbortSignal) =>
+    call<TestSignIn>(() => http.GET("/v1/admin/identity/oidc/test-sign-in/{test_id}", { params: { path: { test_id: id } }, signal })),
+  createScimToken: (reason: string) => call<RevealedScimToken>(() => http.POST("/v1/admin/identity/scim/tokens", { body: { reason } })),
+  rotateScimToken: (id: string, reason: string) =>
+    call<RevealedScimToken>(() =>
+      http.POST("/v1/admin/identity/scim/tokens/{token_id}/rotate", { params: { path: { token_id: id } }, body: { reason } }),
+    ),
+  previewRevokeScimToken: (id: string) =>
+    call<RevokePreview>(() => http.POST("/v1/admin/identity/scim/tokens/{token_id}/revoke/preview", { params: { path: { token_id: id } } })),
+  revokeScimToken: (id: string, reason: string) =>
+    call<ScimToken>(() =>
+      http.POST("/v1/admin/identity/scim/tokens/{token_id}/revoke", { params: { path: { token_id: id } }, body: { reason } }),
     ),
 };
 

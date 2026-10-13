@@ -13,7 +13,7 @@ capability, call one service, map the result.
 """
 
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query, Request, Response
 from sqlalchemy import select
@@ -511,6 +511,10 @@ async def get_audit_events(
     principal: CurrentPrincipal,
     limit: Annotated[int, Query(ge=1, le=MAX_AUDIT_PAGE)] = 50,
     before: uuid.UUID | None = None,
+    actor: Annotated[
+        Literal["identity_provider"] | None,
+        Query(description="identity_provider: the provisioning activity only (SCIM)."),
+    ] = None,
 ) -> AuditPage:
     _require_admin(principal)
     async with _db(request).tenant_snapshot(principal.organization_id) as session:
@@ -519,4 +523,4 @@ async def get_audit_events(
             organization_id=principal.organization_id,
             membership_id=principal.membership_id,
         )
-        return await audit_page(session, viewer, limit=limit, before=before)
+        return await audit_page(session, viewer, limit=limit, before=before, actor_kind=actor)

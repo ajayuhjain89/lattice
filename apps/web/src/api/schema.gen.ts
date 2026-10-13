@@ -504,6 +504,323 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/admin/identity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The organization's identity provider connection and SCIM provisioning (administrators)
+     * @description Never a client secret, its reference or a SCIM token: whether a secret is set and how it is kept, token hints and times.
+     */
+    get: operations["get_identity_v1_admin_identity_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/oidc": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Add the organization's OIDC connection, with a reason (administrators; audited)
+     * @description Only when no connection is active, and no disabled connection still signs members in (re-enable that one: a new connection would not sign them in). The issuer must pass the outbound policy: a public https address, or a private one your Lattice operator registered for this organization (422 `outbound_blocked`). Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_connection_v1_admin_identity_oidc_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/oidc/test-sign-in": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start a test sign-in through the active connection (administrators)
+     * @description Open `authorization_url` in a new tab and sign in as yourself. No session is created; you return to the identity settings, which read the result by `test_id`. Optional `issuer` / `subject_claim`: test proposed values (the proof an issuer or claim change needs). Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_test_sign_in_v1_admin_identity_oidc_test_sign_in_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/oidc/test-sign-in/{test_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Your test sign-in's result (administrators; only the one who started it) */
+    get: operations["get_test_sign_in_v1_admin_identity_oidc_test_sign_in__test_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/oidc/{connection_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Change the connection's client ID, with a reason (administrators; audited)
+     * @description Sessions are kept. `version` must be current (409 otherwise). Requires the X-Lattice-Request: 1 header.
+     */
+    patch: operations["patch_connection_v1_admin_identity_oidc__connection_id__patch"];
+    trace?: never;
+  };
+  "/v1/admin/identity/oidc/{connection_id}/check": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Check the connection without signing in (administrators)
+     * @description Discovery, keys and the client credentials, through the outbound policy: `valid`, `invalid_configuration`, `credentials_rejected`, `provider_unavailable` or `outbound_blocked`, and the step that decided. The result is recorded on the connection. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_check_v1_admin_identity_oidc__connection_id__check_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/oidc/{connection_id}/client-secret": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Set or replace the client secret, with a reason (administrators; audited)
+     * @description Encrypted at once (AES-256-GCM) for this connection; the previous encrypted secret is destroyed. Never returned, logged or audited. Sessions are kept. Requires the X-Lattice-Request: 1 header.
+     */
+    put: operations["put_client_secret_v1_admin_identity_oidc__connection_id__client_secret_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/oidc/{connection_id}/client-secret/remove": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Remove the client secret: a public client (PKCE only) from now on (administrators; audited)
+     * @description The encrypted secret is destroyed. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_remove_client_secret_v1_admin_identity_oidc__connection_id__client_secret_remove_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/oidc/{connection_id}/identity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Change the issuer or identifying claim, with proof, confirmation and a reason (administrators; audited)
+     * @description `proof_id`: your matched test sign-in under exactly these values (422 `identity_unverified` otherwise: a changed-subject migration is not supported). `confirmation`: the new issuer, or the new claim name when only the claim changes. Every session of the connection ends. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_identity_v1_admin_identity_oidc__connection_id__identity_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/oidc/{connection_id}/identity/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Preview an issuer or identifying-claim change (administrators; changes nothing)
+     * @description Every session of the connection ends. The change needs your own test sign-in under exactly these values, matching your directory identity (`proof`): only the same identity provider at a new address, or a claim carrying the same values, is supported -- never a provider whose subjects differ. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_identity_preview_v1_admin_identity_oidc__connection_id__identity_preview_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/oidc/{connection_id}/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Disable or enable the connection, with a reason (administrators; audited)
+     * @description Disable: sign-in through it stops and its sessions end at once (yours too, when you signed in through it). Enable: the same connection and members again; 409 `connection_exists` while another is active. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_status_v1_admin_identity_oidc__connection_id__status_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/oidc/{connection_id}/status/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Preview disabling or enabling the connection (administrators; changes nothing)
+     * @description Disabling stops sign-in at once and ends the connection's live sessions. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_status_preview_v1_admin_identity_oidc__connection_id__status_preview_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/scim/tokens": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create a SCIM token, shown once, with a reason (administrators; audited)
+     * @description The token is in this response only (`Cache-Control: no-store`); Lattice keeps its SHA-256 hash and last four characters. It does not expire: revoke it when the provider no longer uses it. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_token_v1_admin_identity_scim_tokens_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/scim/tokens/{token_id}/revoke": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Revoke a SCIM token, with a reason (administrators; audited)
+     * @description Final: a revoked token is never valid again. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_revoke_v1_admin_identity_scim_tokens__token_id__revoke_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/scim/tokens/{token_id}/revoke/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Preview revoking a SCIM token (administrators; changes nothing)
+     * @description The provider's next request with it is refused. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_revoke_preview_v1_admin_identity_scim_tokens__token_id__revoke_preview_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity/scim/tokens/{token_id}/rotate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Rotate a SCIM token: a replacement shown once; the old token is refused from now on (administrators; audited)
+     * @description No overlap: the provider is refused until the new token is pasted in. For an overlap, create a second token, switch the provider, then revoke the old one. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_rotate_v1_admin_identity_scim_tokens__token_id__rotate_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/admin/organization": {
     parameters: {
       query?: never;
@@ -1377,6 +1694,29 @@ export interface components {
       /** Next Before */
       next_before: string | null;
     };
+    /** CheckOut */
+    CheckOut: {
+      /**
+       * Checked At
+       * Format: date-time
+       */
+      checked_at: string;
+      /**
+       * Result
+       * @enum {string}
+       */
+      result:
+        | "valid"
+        | "invalid_configuration"
+        | "credentials_rejected"
+        | "provider_unavailable"
+        | "outbound_blocked";
+      /**
+       * Step
+       * @enum {string}
+       */
+      step: "issuer" | "discovery" | "keys" | "client";
+    };
     /** Citation */
     Citation: {
       /**
@@ -1428,6 +1768,48 @@ export interface components {
       key: string;
       /** Name */
       name: string;
+    };
+    /** ClientIdRequest */
+    ClientIdRequest: {
+      /** Client Id */
+      client_id: string;
+      /** Reason */
+      reason: string;
+      /**
+       * Version
+       * Format: date-time
+       */
+      version: string;
+    };
+    /** ClientSecretInfo */
+    ClientSecretInfo: {
+      /**
+       * Set At
+       * @description When the encrypted secret was set.
+       */
+      set_at: string | null;
+      /**
+       * State
+       * @description encrypted (set in the product, kept as ciphertext), environment (an operator's deployment reference) or none (a public client: PKCE only).
+       * @enum {string}
+       */
+      state: "encrypted" | "environment" | "none";
+    };
+    /** ClientSecretRequest */
+    ClientSecretRequest: {
+      /**
+       * Client Secret
+       * Format: password
+       * @description Encrypted at once; never returned.
+       */
+      client_secret: string;
+      /** Reason */
+      reason: string;
+      /**
+       * Version
+       * Format: date-time
+       */
+      version: string;
     };
     /** Conflict */
     Conflict: {
@@ -1932,6 +2314,83 @@ export interface components {
        */
       status: "ok";
     };
+    /** IdentityChangePreview */
+    IdentityChangePreview: {
+      /** Claim Changed */
+      claim_changed: boolean;
+      /**
+       * Ends Own Session
+       * @description Your own session came through this connection.
+       * @default false
+       */
+      ends_own_session?: boolean;
+      /** Issuer */
+      issuer: string;
+      /**
+       * Issuer Access
+       * @enum {string}
+       */
+      issuer_access: "public" | "operator_approved" | "not_permitted";
+      /** Issuer Changed */
+      issuer_changed: boolean;
+      /** Members Bound */
+      members_bound: number;
+      /** @description Your matched test sign-in under exactly these values, unused and unexpired: the change needs one. */
+      proof: components["schemas"]["IdentityProof"] | null;
+      /** Sessions Ending */
+      sessions_ending: number;
+      /** Subject Claim */
+      subject_claim: string;
+    };
+    /** IdentityChangePreviewRequest */
+    IdentityChangePreviewRequest: {
+      /** Issuer */
+      issuer?: string | null;
+      /** Subject Claim */
+      subject_claim?: string | null;
+    };
+    /** IdentityChangeRequest */
+    IdentityChangeRequest: {
+      /**
+       * Confirmation
+       * @description Typed by the administrator: the new issuer when it changes, else the new claim name.
+       */
+      confirmation: string;
+      /** Issuer */
+      issuer: string;
+      /**
+       * Proof Id
+       * Format: uuid
+       */
+      proof_id: string;
+      /** Reason */
+      reason: string;
+      /** Subject Claim */
+      subject_claim: string;
+      /**
+       * Version
+       * Format: date-time
+       */
+      version: string;
+    };
+    /** IdentityProof */
+    IdentityProof: {
+      /**
+       * Completed At
+       * Format: date-time
+       */
+      completed_at: string;
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /**
+       * Test Id
+       * Format: uuid
+       */
+      test_id: string;
+    };
     /**
      * IdentityRequirement
      * @description What a member added by hand must be bound to: the organization's active OIDC
@@ -1950,6 +2409,33 @@ export interface components {
        * @description The identifying claim (e.g. `sub` or `email`) whose exact value is the member's identifier.
        */
       subject_claim: string | null;
+    };
+    /** IdentitySettings */
+    IdentitySettings: {
+      /**
+       * Can Add Connection
+       * @description No active connection and no disabled one that still signs members in.
+       */
+      can_add_connection: boolean;
+      /** @description The active connection, else the most recent disabled one, else none. */
+      oidc: components["schemas"]["OidcConnectionOut"] | null;
+      scim: components["schemas"]["ScimSettings"];
+      sign_in_status: components["schemas"]["IdentitySetupStatus"];
+    };
+    /**
+     * IdentitySetupStatus
+     * @description The setup record's category for this page (C12): derived by the API.
+     */
+    IdentitySetupStatus: {
+      /** Message */
+      message: string;
+      /** Reason */
+      reason: string;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "complete" | "required" | "optional" | "in_progress" | "attention" | "blocked";
     };
     /** JobOut */
     JobOut: {
@@ -1985,6 +2471,31 @@ export interface components {
       status: "queued" | "running" | "succeeded" | "failed";
       /** Sync Run Id */
       sync_run_id: string | null;
+    };
+    /** LastFailure */
+    LastFailure: {
+      /**
+       * At
+       * Format: date-time
+       */
+      at: string;
+      /** Code */
+      code: string;
+    };
+    /** LastTest */
+    LastTest: {
+      /**
+       * At
+       * Format: date-time
+       */
+      at: string;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "check" | "sign_in";
+      /** Result */
+      result: string;
     };
     /**
      * LifecycleAction
@@ -2394,6 +2905,25 @@ export interface components {
        */
       status?: "active" | "churned" | "prospect";
     };
+    /** NewConnectionRequest */
+    NewConnectionRequest: {
+      /** Client Id */
+      client_id: string;
+      /**
+       * Client Secret
+       * @description Omit for a public client (PKCE only). Encrypted; never returned.
+       */
+      client_secret?: string | null;
+      /** Issuer */
+      issuer: string;
+      /** Reason */
+      reason: string;
+      /**
+       * Subject Claim
+       * @default sub
+       */
+      subject_claim?: string;
+    };
     /**
      * NewMemberRequest
      * @description A person added by hand (D-30). Their access starts at least privilege: the request
@@ -2435,6 +2965,55 @@ export interface components {
       count?: number | null;
       /** Message */
       message: string;
+    };
+    /** OidcConnectionOut */
+    OidcConnectionOut: {
+      /** Client Id */
+      client_id: string;
+      client_secret: components["schemas"]["ClientSecretInfo"];
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Issuer */
+      issuer: string;
+      /**
+       * Issuer Access
+       * @description public (https, port 443, checked against public addresses at each connection), operator_approved (a private target your Lattice operator registered for this organization) or not_permitted (the outbound policy refuses it).
+       * @enum {string}
+       */
+      issuer_access: "public" | "operator_approved" | "not_permitted";
+      last_failure: components["schemas"]["LastFailure"] | null;
+      /** Last Success At */
+      last_success_at: string | null;
+      last_test: components["schemas"]["LastTest"] | null;
+      /**
+       * Live Sessions
+       * @description Sessions this connection issued that are live.
+       */
+      live_sessions: number;
+      /**
+       * Members Bound
+       * @description Members (not removed) this connection signs in.
+       */
+      members_bound: number;
+      /** Redirect Uri */
+      redirect_uri: string;
+      /** Sign In Url */
+      sign_in_url: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "active" | "disabled";
+      /** Subject Claim */
+      subject_claim: string;
+      /**
+       * Version
+       * Format: date-time
+       */
+      version: string;
     };
     /** OperationalActivityOut */
     OperationalActivityOut: {
@@ -2613,6 +3192,16 @@ export interface components {
        */
       source_id: string;
     };
+    /** RemoveSecretRequest */
+    RemoveSecretRequest: {
+      /** Reason */
+      reason: string;
+      /**
+       * Version
+       * Format: date-time
+       */
+      version: string;
+    };
     /**
      * RetrievalScope
      * @description Optional filters. Each is ANDed with the authorization predicate: it can narrow
@@ -2632,6 +3221,22 @@ export interface components {
       source_types?: ("doc" | "ticket" | "chat")[];
       /** Until */
       until?: string | null;
+    };
+    /** RevealedScimToken */
+    RevealedScimToken: {
+      /**
+       * Revealed Token
+       * @description The bearer token. Shown in this response only: Lattice keeps a hash.
+       */
+      revealed_token: string;
+      token: components["schemas"]["ScimTokenOut"];
+    };
+    /** RevokePreview */
+    RevokePreview: {
+      /** Last Live Token */
+      last_live_token: boolean;
+      /** Provisioned Members */
+      provisioned_members: number;
     };
     /** RevokeRequest */
     RevokeRequest: {
@@ -2664,6 +3269,56 @@ export interface components {
       started_at: string;
       /** Status */
       status: string;
+    };
+    /** ScimSettings */
+    ScimSettings: {
+      /** Base Url */
+      base_url: string;
+      /**
+       * Identifying Claim
+       * @description externalId must equal this claim of the same person.
+       */
+      identifying_claim: string | null;
+      /** Provisioned Members */
+      provisioned_members: number;
+      /**
+       * Refused Recently
+       * @description Refused provisioning requests, last 24 hours.
+       */
+      refused_recently: number;
+      status: components["schemas"]["IdentitySetupStatus"];
+      /** Tokens */
+      tokens: components["schemas"]["ScimTokenOut"][];
+    };
+    /** ScimTokenOut */
+    ScimTokenOut: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Current Connection
+       * @description Issued for the active connection (only those authenticate).
+       */
+      current_connection: boolean;
+      /**
+       * Hint
+       * @description The token's last four characters (newer tokens).
+       */
+      hint: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Last Used At
+       * @description Minute precision.
+       */
+      last_used_at: string | null;
+      /** Revoked At */
+      revoked_at: string | null;
     };
     /** SetupAction */
     SetupAction: {
@@ -2741,6 +3396,38 @@ export interface components {
       /** Name */
       name: string;
     };
+    /** StatusPreview */
+    StatusPreview: {
+      /** Enabled */
+      enabled: boolean;
+      /**
+       * Ends Own Session
+       * @description Your own session came through this connection.
+       * @default false
+       */
+      ends_own_session?: boolean;
+      /** Members Bound */
+      members_bound: number;
+      /** Sessions Ending */
+      sessions_ending: number;
+    };
+    /** StatusPreviewRequest */
+    StatusPreviewRequest: {
+      /** Enabled */
+      enabled: boolean;
+    };
+    /** StatusRequest */
+    StatusRequest: {
+      /** Enabled */
+      enabled: boolean;
+      /** Reason */
+      reason: string;
+      /**
+       * Version
+       * Format: date-time
+       */
+      version: string;
+    };
     /** Supersession */
     Supersession: {
       /** Since */
@@ -2764,6 +3451,78 @@ export interface components {
        * @enum {string}
        */
       mode?: "full" | "acl_only";
+    };
+    /** TestSignInOut */
+    TestSignInOut: {
+      /** Completed At */
+      completed_at: string | null;
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /**
+       * Identifier
+       * @description Your own identifier under the tested claim (matched or mismatched).
+       */
+      identifier: string | null;
+      /** Issuer */
+      issuer: string;
+      /** Outcome */
+      outcome:
+        | (
+            | "matched"
+            | "mismatched"
+            | "not_provisioned"
+            | "sign_in_failed"
+            | "token_invalid"
+            | "provider_unavailable"
+            | "invalid_configuration"
+            | "outbound_blocked"
+            | "credentials_rejected"
+          )
+        | null;
+      /**
+       * Proof Available
+       * @description matched under proposed values, unused and unexpired: usable once to apply exactly that change.
+       */
+      proof_available: boolean;
+      /** Proposed */
+      proposed: boolean;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "pending" | "completed" | "expired";
+      /** Subject Claim */
+      subject_claim: string;
+      /**
+       * Test Id
+       * Format: uuid
+       */
+      test_id: string;
+    };
+    /** TestSignInRequest */
+    TestSignInRequest: {
+      /** Issuer */
+      issuer?: string | null;
+      /** Subject Claim */
+      subject_claim?: string | null;
+    };
+    /** TestSignInStarted */
+    TestSignInStarted: {
+      /** Authorization Url */
+      authorization_url: string;
+      /**
+       * Test Id
+       * Format: uuid
+       */
+      test_id: string;
+    };
+    /** TokenRequest */
+    TokenRequest: {
+      /** Reason */
+      reason: string;
     };
     /** UnmapRequest */
     UnmapRequest: {
@@ -4855,6 +5614,8 @@ export interface operations {
       query?: {
         limit?: number;
         before?: string | null;
+        /** @description identity_provider: the provisioning activity only (SCIM). */
+        actor?: "identity_provider" | null;
       };
       header?: never;
       path?: never;
@@ -4900,6 +5661,1154 @@ export interface operations {
       };
       /** @description Unprocessable Entity */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_identity_v1_admin_identity_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["IdentitySettings"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_connection_v1_admin_identity_oidc_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["NewConnectionRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["IdentitySettings"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_test_sign_in_v1_admin_identity_oidc_test_sign_in_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TestSignInRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TestSignInStarted"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_test_sign_in_v1_admin_identity_oidc_test_sign_in__test_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        test_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TestSignInOut"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  patch_connection_v1_admin_identity_oidc__connection_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        connection_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ClientIdRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["IdentitySettings"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_check_v1_admin_identity_oidc__connection_id__check_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        connection_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CheckOut"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  put_client_secret_v1_admin_identity_oidc__connection_id__client_secret_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        connection_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ClientSecretRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["IdentitySettings"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_remove_client_secret_v1_admin_identity_oidc__connection_id__client_secret_remove_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        connection_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RemoveSecretRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["IdentitySettings"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_identity_v1_admin_identity_oidc__connection_id__identity_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        connection_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["IdentityChangeRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["IdentitySettings"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_identity_preview_v1_admin_identity_oidc__connection_id__identity_preview_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        connection_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["IdentityChangePreviewRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["IdentityChangePreview"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_status_v1_admin_identity_oidc__connection_id__status_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        connection_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StatusRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["IdentitySettings"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_status_preview_v1_admin_identity_oidc__connection_id__status_preview_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        connection_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StatusPreviewRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StatusPreview"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_token_v1_admin_identity_scim_tokens_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TokenRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RevealedScimToken"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_revoke_v1_admin_identity_scim_tokens__token_id__revoke_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        token_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TokenRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScimTokenOut"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_revoke_preview_v1_admin_identity_scim_tokens__token_id__revoke_preview_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        token_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RevokePreview"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_rotate_v1_admin_identity_scim_tokens__token_id__rotate_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        token_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TokenRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RevealedScimToken"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
         headers: {
           [name: string]: unknown;
         };

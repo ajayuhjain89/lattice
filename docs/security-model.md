@@ -599,9 +599,10 @@ accounts and their external references; the rest is contract, not yet implemente
   address checked is the address connected to — DNS rebinding cannot pass), no redirects,
   no environment proxies, bounded time and size, fixed codes. Private targets only when
   an operator registered the exact origin for that organization and purpose
-  (`outbound_targets`, audited); never link-local or reserved. Used by `org create`
-  today; sign-in and provider calls adopt it with the product settings (P12.4, P12.5),
-  when administrator-entered URLs first exist.
+  (`outbound_targets`, audited); never link-local or reserved. Used by `org create`,
+  and since P12.4 by every OIDC request — sign-in, test sign-in, the connection check —
+  under the organization's `oidc` policy (a revoked registration stops sign-in at once);
+  provider calls adopt it in P12.5.
 - **Organization bootstrap.** `lattice org create`: one audited transaction, exact IdP
   identifier, no e-mail linking or JIT membership, an IdP client registered to another
   organization refused, identical retries idempotent and differing ones refused.
@@ -687,7 +688,32 @@ accounts and their external references; the rest is contract, not yet implemente
   `mapping_changed` event of the same transaction; the audit insert policy admits those
   five actions from `member:` actors only.
 
-**Contracts not yet implemented:** OIDC/SCIM settings in the product (P12.4), egress
+**Identity administration (P12.4, phase-12-plan Part III).**
+- **Administrators only**, capability checked before any read; another organization's
+  connection, token or test answers as a random ID (route inventory). Writes only through
+  the 0020 fenced functions, each audit-coupled; the version (409) and a reason on every
+  change.
+- **Client secret**: plaintext only in the request (`SecretStr`), sealed at once
+  (AES-256-GCM, bound to the connection), the previous ciphertext destroyed; never in a
+  response, log, audit event, trace or 422 body (tested with a marker value). Responses
+  say only whether it is set, how it is kept and when it was set.
+- **SCIM tokens** stay verification-only: SHA-256 plus the last four characters; the
+  value only in the creating response; rotation revokes the old token in the same
+  transaction; revocation is final. `last_used_at` at minute precision.
+- **Issuer or claim change** needs the administrator's own matched test sign-in under
+  exactly the new values (database-checked, single use, ten minutes), a typed
+  confirmation and a reason, and ends every session of the connection. A provider whose
+  subjects differ is refused (changed-subject migration, post-v1); nobody is remapped by
+  e-mail. Disabling ends the connection's sessions at once; client-ID and secret changes
+  keep them; organization suspension still overrides everything.
+- **Test sign-in** creates no session, is bound to the administrator's membership and
+  browser, forces a fresh authentication, and shows only their own identifier. A rejected
+  authorization code never marks the provider unavailable.
+- **`scim.request_refused`** only for authenticated, actionable refusals (uniqueness,
+  `externalId` changes), with the reason and the colliding member, never a request value;
+  rate-limited in SQL so it cannot become a logging flood.
+
+**Contracts not yet implemented:** egress
 escalation with a fresh IdP re-authentication bound to the exact change (D-34, P12.5),
 imports (C8, P12.6); and on every setup surface administrators stay non-readers of
 content (C9, C10).

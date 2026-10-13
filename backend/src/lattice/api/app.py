@@ -36,6 +36,7 @@ from lattice.api.routes import (
     ask,
     auth,
     health,
+    identity,
     me,
     scim,
     setup,
@@ -117,9 +118,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.db = db
     app.state.limits = ApiLimits.from_settings(db, settings)
     app.state.provisioning = Provisioning(db)
+    # Seals administrator-entered credentials (P12.4); opened by the secret store.
+    app.state.keyring = keyring
     app.state.oidc = OidcSignIn(
         db,
-        OidcClient(timeout_seconds=settings.oidc_http_timeout_seconds, require_https=production),
+        OidcClient(timeout_seconds=settings.oidc_http_timeout_seconds),
         web_origin=settings.web_origin,
         secrets=secret_store,
     )
@@ -158,6 +161,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(activity.router)
     app.include_router(access.router)
     app.include_router(accounts.router)
+    app.include_router(identity.router)
     scim.register(app)
     if settings.dev_auth_active:
         app.state.dev_identity_provider = DevIdentityProvider(settings, db)

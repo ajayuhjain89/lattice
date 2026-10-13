@@ -117,7 +117,8 @@ class Session(Base):
 
 
 class OidcConnection(Base):
-    """An organization's OIDC identity provider (ADR-015). Operator-managed."""
+    """An organization's OIDC identity provider (ADR-015). Operator-managed until P12.4;
+    administrators now change it through the 0020 fenced functions."""
 
     __tablename__ = "oidc_connections"
     __table_args__ = (
@@ -149,16 +150,30 @@ class OidcConnection(Base):
     # the last one the provider (or the client secret) failed.
     last_success_at: Mapped[datetime | None]
     last_failure_at: Mapped[datetime | None]
+    # Why the last failure happened (0020): provider_unavailable, outbound_blocked or
+    # credentials_rejected. And the last administrator test (a check or a test sign-in).
+    last_failure_code: Mapped[str | None] = mapped_column(Text)
+    last_test_at: Mapped[datetime | None]
+    last_test_kind: Mapped[str | None] = mapped_column(Text)
+    last_test_result: Mapped[str | None] = mapped_column(Text)
 
 
 class OidcLoginAttempt(Base):
-    """Server-side state of one authorization-code flow: single use, short-lived."""
+    """Server-side state of one authorization-code flow: single use, short-lived. A
+    ``test`` attempt (0020) is an administrator's test sign-in: it creates no session and
+    keeps its outcome -- and the administrator's own identifier -- until it expires."""
 
     __tablename__ = "oidc_login_attempts"
     __table_args__ = (
         ForeignKeyConstraint(
             ["organization_id", "connection_id"],
             ["oidc_connections.organization_id", "oidc_connections.id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "membership_id"],
+            ["memberships.organization_id", "memberships.id"],
+            name="fk_oidc_login_attempts_membership",
             ondelete="CASCADE",
         ),
         UniqueConstraint("state_hash"),
@@ -176,6 +191,14 @@ class OidcLoginAttempt(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     expires_at: Mapped[datetime]
     consumed_at: Mapped[datetime | None]
+    purpose: Mapped[str] = mapped_column(Text, server_default="sign_in")
+    membership_id: Mapped[uuid.UUID | None]
+    proposed_issuer: Mapped[str | None] = mapped_column(Text)
+    proposed_subject_claim: Mapped[str | None] = mapped_column(Text)
+    outcome: Mapped[str | None] = mapped_column(Text)
+    observed_identifier: Mapped[str | None] = mapped_column(Text)
+    completed_at: Mapped[datetime | None]
+    proof_used_at: Mapped[datetime | None]
 
 
 class DirectoryIdentity(Base):
@@ -239,3 +262,6 @@ class ScimToken(Base):
     token_hash: Mapped[bytes] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     revoked_at: Mapped[datetime | None]
+    # 0020: minute precision, written by the SCIM path; the token's last four characters.
+    last_used_at: Mapped[datetime | None]
+    hint: Mapped[str | None] = mapped_column(Text)

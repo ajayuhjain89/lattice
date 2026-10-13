@@ -19,6 +19,13 @@ import { api, MEMBERS_PAGE } from "./client";
 import { isApiError } from "./errors";
 import type {
   AccountChangeRequest,
+  ClientIdRequest,
+  ClientSecretRequest,
+  IdentityChangeRequest,
+  NewConnectionRequest,
+  RemoveSecretRequest,
+  StatusRequest,
+  TestSignInRequest,
   AccountLifecycle,
   AccountLifecycleRequest,
   AdministratorRequest,
@@ -58,6 +65,9 @@ export const queryKeys = {
   accountsList: (q: string, lifecycle: string) => ["admin", "access", "accounts", "list", q, lifecycle] as const,
   account: (id: string) => ["admin", "access", "accounts", "one", id] as const,
   unmappedReferences: ["admin", "access", "account-references", "unmapped"] as const,
+  identity: ["admin", "identity"] as const,
+  testSignIn: (id: string) => ["admin", "identity", "test", id] as const,
+  provisioningActivity: ["admin", "audit", "identity-provider"] as const,
 };
 
 export const queryClientConfig: QueryClientConfig = {
@@ -461,6 +471,124 @@ export function useAuditEvents(enabled: boolean) {
 }
 
 export { MEMBERS_PAGE };
+
+/* --- identity administration (Phase 12, P12.4) ------------------------------------------- */
+
+/** The organization's identity settings: read again on every visit (never cached). */
+export function useIdentity(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.identity,
+    queryFn: ({ signal }) => api.identity(signal),
+    enabled,
+    ...REAUTHORIZED,
+  });
+}
+
+/** A test sign-in's result; read until it completes or expires. */
+export function useTestSignIn(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.testSignIn(id ?? ""),
+    queryFn: ({ signal }) => api.testSignIn(id as string, signal),
+    enabled: id !== null,
+    ...REAUTHORIZED,
+    refetchInterval: (query) => (query.state.data?.status === "pending" ? 2_000 : false),
+  });
+}
+
+export function useProvisioningActivity(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.provisioningActivity,
+    queryFn: ({ signal }) => api.provisioningActivity(signal),
+    enabled,
+    ...REAUTHORIZED,
+  });
+}
+
+/** Identity changes feed the identity page, the setup record and the audit log. */
+function useIdentityChanged() {
+  const client = useQueryClient();
+  return () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: queryKeys.identity }),
+      client.invalidateQueries({ queryKey: queryKeys.setup }),
+      client.invalidateQueries({ queryKey: ["admin", "audit"] }),
+    ]);
+}
+
+export type ConnectionChange =
+  | { kind: "add"; body: NewConnectionRequest }
+  | { kind: "client_id"; id: string; body: ClientIdRequest }
+  | { kind: "secret"; id: string; body: ClientSecretRequest }
+  | { kind: "remove_secret"; id: string; body: RemoveSecretRequest }
+  | { kind: "status"; id: string; body: StatusRequest }
+  | { kind: "identity"; id: string; body: IdentityChangeRequest };
+
+export function useChangeConnection() {
+  const client = useQueryClient();
+  const changed = useIdentityChanged();
+  return useMutation({
+    mutationFn: (change: ConnectionChange) => {
+      switch (change.kind) {
+        case "add":
+          return api.addConnection(change.body);
+        case "client_id":
+          return api.updateClientId(change.id, change.body);
+        case "secret":
+          return api.setClientSecret(change.id, change.body);
+        case "remove_secret":
+          return api.removeClientSecret(change.id, change.body);
+        case "status":
+          return api.setConnectionStatus(change.id, change.body);
+        case "identity":
+          return api.changeIdentity(change.id, change.body);
+      }
+    },
+    onSuccess: (settings) => client.setQueryData(queryKeys.identity, settings),
+    onSettled: changed,
+  });
+}
+
+export function usePreviewConnectionStatus() {
+  return useMutation({ mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => api.previewConnectionStatus(id, enabled) });
+}
+
+export function usePreviewIdentityChange() {
+  return useMutation({
+    mutationFn: ({ id, issuer, subject_claim }: { id: string; issuer?: string | null; subject_claim?: string | null }) =>
+      api.previewIdentityChange(id, { issuer, subject_claim }),
+  });
+}
+
+export function useCheckConnection() {
+  const changed = useIdentityChanged();
+  return useMutation({ mutationFn: (id: string) => api.checkConnection(id), onSettled: changed });
+}
+
+export function useStartTestSignIn() {
+  return useMutation({ mutationFn: (body: TestSignInRequest) => api.startTestSignIn(body) });
+}
+
+export type TokenChange = { kind: "create"; reason: string } | { kind: "rotate"; id: string; reason: string };
+
+/** Create or rotate a SCIM token: the response holds the token once; it is never cached. */
+export function useIssueScimToken() {
+  const changed = useIdentityChanged();
+  return useMutation({
+    mutationFn: (change: TokenChange) =>
+      change.kind === "create" ? api.createScimToken(change.reason) : api.rotateScimToken(change.id, change.reason),
+    onSettled: changed,
+    gcTime: 0,
+  });
+}
+
+export function usePreviewRevokeScimToken() {
+  return useMutation({ mutationFn: (id: string) => api.previewRevokeScimToken(id) });
+}
+
+export function useRevokeScimToken() {
+  const changed = useIdentityChanged();
+  return useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => api.revokeScimToken(id, reason), onSettled: changed });
+}
 
 export function useAsk() {
   return useMutation({ mutationFn: (body: AskRequest) => api.ask(body) });

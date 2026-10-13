@@ -3,8 +3,8 @@
 Status: **Accepted as the P12.0 contract (2026-10-06).** Built checkpoint by checkpoint
 from P12.1 (phase-12-plan Part II); **P12.1 (2026-10-08) built the first fence and the
 foundations; P12.2 (2026-10-09) the member and administrator fences; P12.3 (2026-10-12) the
-account and mapping fences** — see "Implemented in P12.1", "Implemented in P12.2" and
-"Implemented in P12.3" at the end.
+account and mapping fences; P12.4 (2026-10-13) the identity fences** — see "Implemented in
+P12.1", "Implemented in P12.2", "Implemented in P12.3" and "Implemented in P12.4" at the end.
 
 ## Context
 
@@ -222,3 +222,49 @@ The `accounts` and `account_external_refs` rows of the operation table, as amend
 audit actions), `tests/test_rls.py`, `tests/test_worker_role.py`,
 `tests/accounts/*` (the API, the functions, the triggers, direct-SQL bypass attempts,
 concurrency, ingestion) and the privilege snapshot pin them.
+
+## Implemented in P12.4 (2026-10-13, migration 0020)
+
+The `oidc_connections`, `scim_tokens` and (for OIDC client secrets) `encrypted_secrets`
+rows of the operation table — narrower than the table: **every** write is a fenced
+function, none a column grant (the product owner's instruction for P12.4: no broad writes
+on connections, directory identities or tokens).
+
+- **`lattice_oidc_create`, `lattice_oidc_set_client`, `lattice_oidc_set_secret`,
+  `lattice_oidc_clear_secret`, `lattice_oidc_set_status`, `lattice_oidc_change_identity`**
+  and **`lattice_create_scim_token`, `lattice_rotate_scim_token`,
+  `lattice_revoke_scim_token`** — `SECURITY DEFINER`, owned by `lattice_owner`, search
+  path pinned, `EXECUTE` for `lattice_app` only; each re-checks an active administrator of
+  the bound organization (`LA001 not_administrator`), finds the connection or token under
+  RLS (another organization's is `connection_not_found` / `token_not_live`), compares the
+  version the administrator reviewed (`connection_changed`), and holds the invariants:
+  one active connection (and none added while a disabled one still signs members in),
+  ciphertext bound to this connection with the previous one destroyed, disable and
+  identity changes revoking the connection's sessions under its advisory lock (taken
+  before the row lock, as sign-in takes it shared), an identity change only with an
+  unused, unexpired, matched test sign-in of the same administrator under exactly the new
+  values whose identifier equals their directory identity on this connection.
+  `lattice_scim_token_used` sets `last_used_at` (a fact, no actor).
+- **Audit coupling.** `lattice_require_connection_audit` (connection inserts and changes
+  of issuer, client ID, secret reference, claim or status need an `sso.connection_*`
+  event for that connection) and `lattice_require_scim_token_audit` (a token's creation
+  needs `scim.token_created` or `scim.token_rotated` naming it; its revocation
+  `scim.token_revoked` naming it or `scim.token_rotated` naming it as replaced) —
+  deferred, SECURITY INVOKER, `lattice_app` only. The audit insert policy admits the
+  `sso.connection_*` and `scim.token_*` families from `member:` actors and
+  `scim.request_refused` from `scim:` actors.
+- **Facts and reads.** `lattice_app` may update `oidc_connections.last_failure_code,
+  last_test_at, last_test_kind, last_test_result` (sign-in and test facts, like
+  `last_success_at`) and a test attempt's `outcome, observed_identifier, completed_at`;
+  it may read every connection column (the secret's *reference*, shown as a kind),
+  `scim_tokens.last_used_at, hint` (never `token_hash`) and `outbound_targets` (to apply
+  the operator's registrations). `outbound_targets` stays operator-written.
+- **Residual risk.** The proof of an identity change is written by the API (the ID token
+  is verified in the API, not the database); a compromised API process could forge one.
+  The fence still binds it to an administrator, the exact values, a single use and ten
+  minutes, and the event records it.
+
+`tests/test_app_role_access.py` (the functions' ownership, settings and executors; the
+column grants; the trigger functions not callable), `tests/test_rls.py` (direct writes
+refused), `tests/identity/test_identity_settings.py` (refusals, coupling, bypass attempts,
+proofs) and the privilege snapshot pin them.

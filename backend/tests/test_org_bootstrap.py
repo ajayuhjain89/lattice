@@ -13,7 +13,6 @@ import ipaddress
 import uuid
 from typing import Any
 
-import httpx
 import pytest
 from fastapi import FastAPI
 from pydantic import SecretStr
@@ -21,7 +20,7 @@ from sqlalchemy import text
 
 from lattice.cli import main
 from lattice.db.engine import Database
-from lattice.identity.oidc import OidcClient, OidcSignIn
+from lattice.identity.oidc import OidcSignIn
 from lattice.orgs import bootstrap
 from lattice.orgs.bootstrap import BootstrapRejected, OrgRequest, create_organization
 from lattice.outbound import IpAddress, OutboundRefused
@@ -29,7 +28,7 @@ from lattice.vault.keys import Keyring
 
 from .conftest import CSRF, OWNER_URL, AppFactory
 from .factories import create_member, create_oidc_connection, create_org
-from .identity.fake_idp import FakeIdp
+from .identity.fake_idp import FakeIdp, oidc_client
 
 KEY = "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE="
 KEYS = {"LATTICE_SECRET_KEYS": f"k1:{KEY}", "LATTICE_SECRET_ACTIVE_KEY": "k1"}
@@ -410,9 +409,7 @@ async def test_the_first_administrator_signs_in_and_sees_the_setup_record(
     def configure(app: FastAPI) -> None:
         app.state.oidc = OidcSignIn(
             app.state.db,
-            OidcClient(
-                timeout_seconds=5, require_https=False, transport=httpx.MockTransport(idp.handler)
-            ),
+            oidc_client(idp.handler),
             web_origin="http://127.0.0.1:3000",
             secrets=app.state.ask_dependencies.secrets,
         )

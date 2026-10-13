@@ -101,3 +101,25 @@ export type MappingResult = Schemas["MappingResult"];
 export type MapRequest = Schemas["MapRequest"];
 export type RemapRequest = Schemas["RemapRequest"];
 export type UnmapRequest = Schemas["UnmapRequest"];
+
+// Identity administration (Phase 12, P12.4): the OIDC connection and SCIM tokens.
+export type IdentitySettings = Schemas["IdentitySettings"];
+export type OidcConnection = Schemas["OidcConnectionOut"];
+export type ScimSettings = Schemas["ScimSettings"];
+export type ScimToken = Schemas["ScimTokenOut"];
+export type IdentitySetupStatus = Schemas["IdentitySetupStatus"];
+export type StatusPreview = Schemas["StatusPreview"];
+export type IdentityChangePreview = Schemas["IdentityChangePreview"];
+export type ConnectionCheck = Schemas["CheckOut"];
+export type TestSignIn = Schemas["TestSignInOut"];
+export type TestSignInStarted = Schemas["TestSignInStarted"];
+export type TestOutcome = NonNullable<TestSignIn["outcome"]>;
+export type RevealedScimToken = Schemas["RevealedScimToken"];
+export type RevokePreview = Schemas["RevokePreview"];
+export type NewConnectionRequest = Schemas["NewConnectionRequest"];
+export type ClientIdRequest = Schemas["ClientIdRequest"];
+export type ClientSecretRequest = Schemas["ClientSecretRequest"];
+export type RemoveSecretRequest = Schemas["RemoveSecretRequest"];
+export type StatusRequest = Schemas["StatusRequest"];
+export type IdentityChangeRequest = Schemas["IdentityChangeRequest"];
+export type TestSignInRequest = Schemas["TestSignInRequest"];

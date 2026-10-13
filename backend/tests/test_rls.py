@@ -65,11 +65,11 @@ TENANT_TABLES = (
     # Phase 12 (P12.3)
     "account_external_refs",
 )
-# Tables the runtime role may not read (written and read by operator tools; of
-# oidc_connections it reads only id, organization_id and status since 0014).
-RUNTIME_UNREADABLE = frozenset(
-    {"audit_events", "oidc_connections", "scim_tokens", "outbound_targets"}
-)
+# Tables the runtime role may not read in full (written and read by operator tools; of
+# oidc_connections it reads named columns since 0014, all of them since 0020 -- the
+# client secret's *reference*, never the secret; of scim_tokens never token_hash; it
+# reads outbound_targets since 0020, to apply the operator's registrations).
+RUNTIME_UNREADABLE = frozenset({"audit_events", "scim_tokens"})
 GLOBAL_TABLES = ("organizations", "users", "external_identities")
 ALL_TABLES = (*GLOBAL_TABLES, *TENANT_TABLES)
 # No organization and no login role's privilege: reached only through lattice_auth
@@ -482,17 +482,14 @@ async def test_cannot_update_another_organizations_sessions(
         # Phase 10: identity provider configuration is the operator's.
         "INSERT INTO oidc_connections (organization_id, login_key, issuer, client_id) VALUES "
         "(lattice_current_org_id(), 'kkkkkkkkkkkkkkkkkkkkkk', 'https://i.example', 'c')",
-        # 0014: only id, organization_id and status (the session-creation check, D-25).
-        "SELECT client_id FROM oidc_connections",
-        "SELECT issuer, client_secret_ref, login_key FROM oidc_connections",
-        "SELECT * FROM oidc_connections",
+        # 0020: connections are read in full by the identity settings (the client
+        # secret's reference only); never a token hash.
         "SELECT token_hash FROM scim_tokens",
         "SELECT * FROM scim_tokens",
         # 0016: the API reads ciphertext but never writes it; outbound targets are the
         # operator's; only the organization's name is renamable.
         "UPDATE encrypted_secrets SET key_id = key_id",
         "DELETE FROM encrypted_secrets",
-        "SELECT 1 FROM outbound_targets",
         "INSERT INTO outbound_targets (organization_id, purpose, scheme, host, port) VALUES "
         "(lattice_current_org_id(), 'oidc', 'https', 'idp.internal', 443)",
         # 0018: mappings only through lattice_set_account_ref; accounts never deleted, the
@@ -510,6 +507,15 @@ async def test_cannot_update_another_organizations_sessions(
         "UPDATE oidc_connections SET issuer = 'https://x.example'",
         "UPDATE oidc_connections SET client_secret_ref = NULL",
         "UPDATE scim_tokens SET revoked_at = NULL",
+        # 0020: connections and tokens change only through the fenced functions.
+        "UPDATE oidc_connections SET status = 'disabled'",
+        "UPDATE oidc_connections SET client_id = 'x'",
+        "UPDATE oidc_connections SET subject_claim = 'email'",
+        "UPDATE scim_tokens SET revoked_at = now()",
+        "UPDATE scim_tokens SET last_used_at = now()",
+        "UPDATE oidc_login_attempts SET proof_used_at = now()",
+        "UPDATE outbound_targets SET revoked_at = now()",
+        "DELETE FROM outbound_targets",
         "UPDATE directory_identities SET external_id = 'x'",
         "UPDATE directory_identities SET membership_id = membership_id",
         "DELETE FROM directory_identities",

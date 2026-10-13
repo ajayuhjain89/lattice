@@ -260,7 +260,21 @@ def both(statuses: dict[str, int], code: int) -> bool:
 
 def connection() -> tuple[str, str]:
     """The organization's active connection to the verification provider, created or
-    reset to the canonical client (ID, login key)."""
+    reset to the canonical client (ID, login key). The provider is a private address on
+    the stack's network: since P12.4 sign-in reaches it only as a target the operator
+    registered for this organization (idempotent)."""
+    ops(
+        "outbound",
+        "allow",
+        "--org",
+        ORG,
+        "--url",
+        "https://idp:9443",
+        "--purpose",
+        "oidc",
+        "--reason",
+        "Verification identity provider",
+    )
     shown = ops("sso", "show", "--org", ORG)
     if "no active OIDC connection" in shown:
         listing = ops("sso", "list", "--org", ORG)

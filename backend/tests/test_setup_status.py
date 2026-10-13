@@ -76,11 +76,65 @@ CASES: list[tuple[str, SetupFacts, str, str]] = [
     ("identity", replace(BASE, connection="disabled"), "attention", "connection_disabled"),
     (
         "identity",
-        replace(BASE, last_failure_at=NOW + timedelta(minutes=5)),
+        replace(
+            BASE,
+            last_failure_at=NOW + timedelta(minutes=5),
+            last_failure_code="provider_unavailable",
+        ),
         "attention",
         "provider_unavailable",
     ),
-    ("identity", replace(BASE, last_failure_at=NOW - timedelta(minutes=5)), "complete", "verified"),
+    (
+        "identity",
+        replace(
+            BASE,
+            last_failure_at=NOW - timedelta(minutes=5),
+            last_failure_code="provider_unavailable",
+        ),
+        "complete",
+        "verified",
+    ),
+    # P12.4: why it failed, and the latest administrator test, decide the reason.
+    (
+        "identity",
+        replace(
+            BASE,
+            last_failure_at=NOW + timedelta(minutes=5),
+            last_failure_code="credentials_rejected",
+        ),
+        "attention",
+        "configuration_rejected",
+    ),
+    (
+        "identity",
+        replace(BASE, last_test_at=NOW + timedelta(minutes=5), last_test_result="token_invalid"),
+        "attention",
+        "configuration_rejected",
+    ),
+    (
+        "identity",
+        replace(BASE, last_test_at=NOW + timedelta(minutes=5), last_test_result="outbound_blocked"),
+        "blocked",
+        "outbound_blocked",
+    ),
+    ("identity", replace(BASE, issuer_access="not_permitted"), "blocked", "outbound_blocked"),
+    (
+        "identity",
+        replace(BASE, last_test_at=NOW + timedelta(minutes=5), last_test_result="valid"),
+        "complete",
+        "verified",
+    ),
+    (
+        "identity",
+        replace(
+            BASE,
+            last_success_at=None,
+            last_test_at=NOW,
+            last_test_result="sign_in_failed",  # a person's failure, not the connection's
+        ),
+        "required",
+        "not_verified",
+    ),
     ("members", replace(BASE, connection="none"), "blocked", "identity_required"),
     ("members", replace(BASE, active_members=2), "required", "only_administrators"),
     ("members", BASE, "complete", "members_active"),
@@ -99,6 +153,12 @@ CASES: list[tuple[str, SetupFacts, str, str]] = [
         "no_valid_token",
     ),
     ("provisioning", replace(BASE, tokens_ever=2), "optional", "not_configured"),
+    (
+        "provisioning",
+        replace(BASE, live_tokens=1, tokens_ever=1, token_used=True, refused_recently=2),
+        "attention",
+        "requests_refused",
+    ),
     ("ai_policy", BASE, "optional", "evidence_only"),
     (
         "ai_policy",
@@ -179,7 +239,7 @@ def test_actions_link_only_to_pages_that_exist() -> None:
     hrefs = set()
     for _, facts, _, _ in CASES:
         hrefs |= {c.action.href for c in derive(facts) if c.action is not None}
-    pages = {"/access", "/settings/providers", "/sources", "/ask"}
+    pages = {"/access", "/settings/providers", "/settings/identity", "/sources", "/ask"}
     # P12.3: the account pages under Access.
     assert hrefs <= pages | {"/access/accounts", "/access/accounts/references"}
 
@@ -284,7 +344,12 @@ async def test_a_fresh_organization_and_its_transitions(
             )
         assert _states(await _setup(client))["identity"] == ("complete", "verified")
         async with owner_db.tenant_transaction(org) as s:
-            await s.execute(text("UPDATE oidc_connections SET last_failure_at = now()"))
+            await s.execute(
+                text(
+                    "UPDATE oidc_connections SET last_failure_at = now(), "
+                    "last_failure_code = 'provider_unavailable'"
+                )
+            )
         assert _states(await _setup(client))["identity"] == ("attention", "provider_unavailable")
 
         # Provisioning: a token, used by the identity provider, then all revoked.
@@ -302,15 +367,10 @@ async def test_a_fresh_organization_and_its_transitions(
         provisioned = await create_provisioned_member(
             owner_db, org, connection, "pat@halden.example", "sub-pat"
         )
+        assert provisioned.membership_id is not None
+        # The identity provider authenticated with the token (P12.4: last_used_at).
         async with owner_db.tenant_transaction(org) as s:
-            await s.execute(
-                text(
-                    "INSERT INTO audit_events (organization_id, actor, action, target, reason) "
-                    "VALUES (:o, :a, 'access.member_changed', "
-                    "jsonb_build_object('membership_id', CAST(:m AS text)), 'scim')"
-                ),
-                {"o": org, "a": f"scim:{token}", "m": str(provisioned.membership_id)},
-            )
+            await s.execute(text("SELECT lattice_scim_token_used(:t)"), {"t": token})
         assert _states(await _setup(client))["provisioning"] == ("complete", "in_use")
         async with owner_db.tenant_transaction(org) as s:
             await s.execute(text("UPDATE scim_tokens SET revoked_at = now()"))

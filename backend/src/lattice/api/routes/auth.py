@@ -10,7 +10,7 @@ from lattice.api.schemas import DevLoginRequest, MeResponse
 from lattice.config import Settings
 from lattice.errors import ErrorResponse, LatticeError
 from lattice.identity.dev_provider import DevIdentityProvider
-from lattice.identity.oidc import OidcFailure, OidcSignIn
+from lattice.identity.oidc import OidcFailure, OidcSignIn, TestCompleted
 from lattice.log import log_event
 from lattice.ratelimit import RateLimited
 
@@ -100,11 +100,7 @@ def _oidc(request: Request) -> OidcSignIn:
     return found
 
 
-def _oidc_failed(settings: Settings, public_error: str, outcome: str) -> Response:
-    """One redirect per public error; the fixed outcome goes to metrics and the log."""
-    metrics.SSO_SIGN_INS.labels(outcome=metrics.bounded(outcome, metrics.SSO_OUTCOMES)).inc()
-    log_event(logger, logging.INFO, "auth.oidc.failed", outcome=outcome)
-    response = RedirectResponse(f"/sign-in?error={public_error}", status_code=303)
+def _forget_binding(response: Response, settings: Settings) -> None:
     response.delete_cookie(
         _binding_cookie(settings),
         path="/",
@@ -112,6 +108,27 @@ def _oidc_failed(settings: Settings, public_error: str, outcome: str) -> Respons
         httponly=True,
         samesite="lax",
     )
+
+
+def set_binding_cookie(response: Response, settings: Settings, binding: str) -> None:
+    """The login-CSRF binding of an authorization attempt (ten minutes)."""
+    response.set_cookie(
+        _binding_cookie(settings),
+        binding,
+        max_age=600,
+        path="/",
+        secure=settings.session_cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )
+
+
+def _oidc_failed(settings: Settings, public_error: str, outcome: str) -> Response:
+    """One redirect per public error; the fixed outcome goes to metrics and the log."""
+    metrics.SSO_SIGN_INS.labels(outcome=metrics.bounded(outcome, metrics.SSO_OUTCOMES)).inc()
+    log_event(logger, logging.INFO, "auth.oidc.failed", outcome=outcome)
+    response = RedirectResponse(f"/sign-in?error={public_error}", status_code=303)
+    _forget_binding(response, settings)
     return response
 
 
@@ -139,15 +156,7 @@ async def oidc_start(
     except OidcFailure as failure:
         return _oidc_failed(settings, failure.public_error, failure.outcome)
     response = RedirectResponse(started.authorization_url, status_code=303)
-    response.set_cookie(
-        _binding_cookie(settings),
-        started.binding,
-        max_age=600,
-        path="/",
-        secure=settings.session_cookie_secure,
-        httponly=True,
-        samesite="lax",
-    )
+    set_binding_cookie(response, settings, started.binding)
     return response
 
 
@@ -177,6 +186,14 @@ async def oidc_callback(
             binding=request.cookies.get(_binding_cookie(settings)),
             provider_error=error is not None,
         )
+        if isinstance(signed, TestCompleted):
+            # An administrator's test sign-in (P12.4): no session is created or changed;
+            # back to the identity settings, which read the result by its ID.
+            tested = RedirectResponse(
+                f"{signed.return_to}?test={signed.attempt_id}", status_code=303
+            )
+            _forget_binding(tested, settings)
+            return tested
         # Session rotation, as for any sign-in.
         previous = request.cookies.get(settings.session_cookie_name)
         if previous:
@@ -205,13 +222,7 @@ async def oidc_callback(
     )
     response = RedirectResponse(signed.return_to, status_code=303)
     _set_session_cookie(response, settings, token)
-    response.delete_cookie(
-        _binding_cookie(settings),
-        path="/",
-        secure=settings.session_cookie_secure,
-        httponly=True,
-        samesite="lax",
-    )
+    _forget_binding(response, settings)
     return response
 
 

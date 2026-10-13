@@ -120,6 +120,17 @@ async def policy_for(
     return OutboundPolicy(frozenset(t.target for t in live), resolver=resolver)
 
 
+def access_class(policy: OutboundPolicy, url: str) -> str:
+    """How the policy classes ``url`` by its shape and the registrations alone (no DNS):
+    ``operator_approved`` (a registered target), ``public`` (https on 443 -- every address
+    it resolves to is still checked when Lattice connects) or ``not_permitted``."""
+    try:
+        target = policy.check_url(url)
+    except OutboundRefused:
+        return "not_permitted"
+    return "operator_approved" if policy.is_registered(target) else "public"
+
+
 async def add_target(
     session: AsyncSession,
     org: uuid.UUID,

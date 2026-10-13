@@ -259,6 +259,24 @@
    "privilege": "INSERT"
   },
   {
+   "column": "client_id",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "client_secret_ref",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "created_at",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
    "column": "id",
    "grantee": "lattice_app",
    "name": "oidc_connections",
@@ -283,6 +301,18 @@
    "privilege": "UPDATE"
   },
   {
+   "column": "last_failure_code",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "last_failure_code",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "UPDATE"
+  },
+  {
    "column": "last_success_at",
    "grantee": "lattice_app",
    "name": "oidc_connections",
@@ -293,6 +323,48 @@
    "grantee": "lattice_app",
    "name": "oidc_connections",
    "privilege": "UPDATE"
+  },
+  {
+   "column": "last_test_at",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "last_test_at",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "last_test_kind",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "last_test_kind",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "last_test_result",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "last_test_result",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "login_key",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
   },
   {
    "column": "organization_id",
@@ -313,6 +385,18 @@
    "privilege": "SELECT"
   },
   {
+   "column": "updated_at",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "completed_at",
+   "grantee": "lattice_app",
+   "name": "oidc_login_attempts",
+   "privilege": "UPDATE"
+  },
+  {
    "column": "consumed_at",
    "grantee": "lattice_app",
    "name": "oidc_login_attempts",
@@ -331,10 +415,22 @@
    "privilege": "SELECT"
   },
   {
+   "column": "observed_identifier",
+   "grantee": "lattice_app",
+   "name": "oidc_login_attempts",
+   "privilege": "UPDATE"
+  },
+  {
    "column": "organization_id",
    "grantee": "lattice_worker",
    "name": "oidc_login_attempts",
    "privilege": "SELECT"
+  },
+  {
+   "column": "outcome",
+   "grantee": "lattice_app",
+   "name": "oidc_login_attempts",
+   "privilege": "UPDATE"
   },
   {
    "column": "name",
@@ -415,7 +511,19 @@
    "privilege": "SELECT"
   },
   {
+   "column": "hint",
+   "grantee": "lattice_app",
+   "name": "scim_tokens",
+   "privilege": "SELECT"
+  },
+  {
    "column": "id",
+   "grantee": "lattice_app",
+   "name": "scim_tokens",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "last_used_at",
    "grantee": "lattice_app",
    "name": "scim_tokens",
    "privilege": "SELECT"
@@ -565,6 +673,18 @@
   },
   {
    "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_create_scim_token(uuid,bytea,text)"
+  },
+  {
+   "grants": [
     "lattice_owner:EXECUTE",
     "PUBLIC:EXECUTE"
    ],
@@ -599,6 +719,30 @@
   {
    "grants": [
     "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_oidc_change_identity(uuid,uuid,timestamp with time zone,text,text,uuid)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_oidc_clear_secret(uuid,uuid,timestamp with time zone)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
     "lattice_auth:EXECUTE"
    ],
    "owner": "lattice_auth",
@@ -607,6 +751,54 @@
     "search_path=pg_catalog, public, pg_temp"
    ],
    "signature": "lattice_oidc_connection(text)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_oidc_create(uuid,text,text,text,text)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_oidc_set_client(uuid,uuid,timestamp with time zone,text)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_oidc_set_secret(uuid,uuid,timestamp with time zone,uuid,text,bytea,bytea)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_oidc_set_status(uuid,uuid,timestamp with time zone,boolean)"
   },
   {
    "grants": [
@@ -687,7 +879,29 @@
    "settings": [
     "search_path=pg_catalog, public, pg_temp"
    ],
+   "signature": "lattice_require_connection_audit()"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
    "signature": "lattice_require_mapping_audit()"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_require_scim_token_audit()"
   },
   {
    "grants": [
@@ -723,6 +937,42 @@
     "search_path=pg_catalog, public, pg_temp"
    ],
    "signature": "lattice_resolve_session(bytea)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_revoke_scim_token(uuid,uuid)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_rotate_scim_token(uuid,uuid,bytea,text)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_scim_token_used(uuid)"
   },
   {
    "grants": [
@@ -1012,7 +1262,7 @@
     "lattice_app"
    ],
    "using": null,
-   "with_check": "(((action ~~ 'access.%'::text) AND ((actor ~~ 'member:%'::text) OR (actor ~~ 'scim:%'::text))) OR ((action = ANY (ARRAY['organization.updated'::text, 'account.created'::text, 'account.updated'::text, 'account.archived'::text, 'account.reactivated'::text, 'account.mapping_changed'::text])) AND (actor ~~ 'member:%'::text)))"
+   "with_check": "(((action ~~ 'access.%'::text) AND ((actor ~~ 'member:%'::text) OR (actor ~~ 'scim:%'::text))) OR ((action = ANY (ARRAY['organization.updated'::text, 'account.created'::text, 'account.updated'::text, 'account.archived'::text, 'account.reactivated'::text, 'account.mapping_changed'::text, 'sso.connection_created'::text, 'sso.connection_updated'::text, 'sso.connection_disabled'::text, 'sso.connection_enabled'::text, 'sso.connection_tested'::text, 'scim.token_created'::text, 'scim.token_rotated'::text, 'scim.token_revoked'::text])) AND (actor ~~ 'member:%'::text)) OR ((action = 'scim.request_refused'::text) AND (actor ~~ 'scim:%'::text)))"
   },
   {
    "command": "*",
@@ -1363,7 +1613,7 @@
    "roles": [
     "lattice_app"
    ],
-   "using": "((consumed_at IS NOT NULL) OR (expires_at <= now()))",
+   "using": "(((purpose = 'sign_in'::text) AND (consumed_at IS NOT NULL)) OR (expires_at <= now()))",
    "with_check": null
   },
   {
@@ -2237,6 +2487,12 @@
   },
   {
    "grantable": false,
+   "grantee": "lattice_app",
+   "name": "outbound_targets",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
    "grantee": "lattice_auth",
    "name": "pre_auth_rate_limits",
    "privilege": "DELETE"
@@ -2826,6 +3082,14 @@
    "trigger": "trg_model_providers_updated_at"
   },
   {
+   "deferrable": true,
+   "enabled": "O",
+   "function": "lattice_require_connection_audit()",
+   "initially_deferred": true,
+   "name": "oidc_connections",
+   "trigger": "trg_oidc_connections_setup_audit"
+  },
+  {
    "deferrable": false,
    "enabled": "O",
    "function": "lattice_set_updated_at()",
@@ -2856,6 +3120,14 @@
    "initially_deferred": false,
    "name": "organizations",
    "trigger": "trg_organizations_updated_at"
+  },
+  {
+   "deferrable": true,
+   "enabled": "O",
+   "function": "lattice_require_scim_token_audit()",
+   "initially_deferred": true,
+   "name": "scim_tokens",
+   "trigger": "trg_scim_tokens_setup_audit"
   },
   {
    "deferrable": false,

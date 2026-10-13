@@ -18,8 +18,12 @@ hand on their exact identity-provider identifier, the administrator capability w
 last-administrator rule that holds under concurrency, least-access reinstatement) and
 P12.3 accounts and their external-reference mappings (create, edit, archive and
 reactivate accounts; map, remap and unmap exact ticketing-organization and channel IDs
-with a preview and a reason, applied at the next sync; unmapped references);
-P12.4–P12.8 are not started.** What runs today: a FastAPI
+with a preview and a reason, applied at the next sync; unmapped references — a missing
+mapping never widens who can read a record) and P12.4 identity administration (Settings →
+Identity: the OIDC connection — test sign-in, check, client secret sealed in the vault,
+client ID, issuer or claim with the administrator's own matched test sign-in,
+disable/enable — and SCIM tokens shown once, rotated, revoked; every OIDC request through
+the outbound policy); P12.5–P12.8 are not started.** What runs today: a FastAPI
 backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced
 row-level security for organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -333,7 +337,9 @@ needs `make migrate` (0012).
 
 Production sign-in is OIDC (authorization code with PKCE) against the organization's
 own identity provider; development keeps the persona sign-in. An operator connects the
-provider and issues a SCIM token (`lattice sso add`, `lattice scim token create`; each
+provider when the organization is created, and its administrators manage it afterwards
+in Settings → Identity (P12.4); SCIM tokens are issued there or by an operator
+(`lattice sso add`, `lattice scim token create`; each
 audited, the token shown once); the identity provider then provisions, updates,
 deactivates and removes members over SCIM (`<public URL>/api/scim/v2`). A person signs
 in only if the ID token's identifying claim matches a member that *this*

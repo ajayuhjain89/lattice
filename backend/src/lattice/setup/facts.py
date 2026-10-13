@@ -5,10 +5,13 @@ a credential reference (availability is checked by the secret store and only the
 boolean leaves this module)."""
 
 import uuid
+from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lattice.orgs.outbound_targets import access_class, policy_for
 from lattice.providers import records
 from lattice.providers.egress import may_send, provider_decision
 from lattice.providers.generation_factory import GenerationFactory, GenerationUnavailable
@@ -26,31 +29,73 @@ _PEOPLE_SQL = text(
     WHERE m.organization_id = :o
     """
 )
+# The active connection, else the most recently changed disabled one.
 _CONNECTION_SQL = text(
-    "SELECT status, last_success_at, last_failure_at FROM oidc_connections "
-    "WHERE organization_id = :o ORDER BY (status = 'active') DESC, id LIMIT 1"
+    "SELECT status, issuer, last_success_at, last_failure_at, last_failure_code, "
+    "last_test_at, last_test_result FROM oidc_connections WHERE organization_id = :o "
+    "ORDER BY (status = 'active') DESC, updated_at DESC, id LIMIT 1"
 )
-# SCIM tokens: live and ever issued; whether a live one has been used (the identity
-# provider changed a member with it: an audit event by that token's actor); members
-# the identity provider manages (0017 ``managed_by``) that are still present.
+# SCIM tokens: live and ever issued; whether a live one has authenticated a request
+# (``last_used_at``, P12.4); members the identity provider manages (0017 ``managed_by``)
+# that are still present; its refused requests in the last day (``scim.request_refused``).
 _SCIM_SQL = text(
     """
     SELECT
       count(*) FILTER (WHERE t.revoked_at IS NULL) AS live_tokens,
       count(*) AS tokens_ever,
-      EXISTS (
-        SELECT 1 FROM audit_events e JOIN scim_tokens l
-          ON l.organization_id = e.organization_id AND l.revoked_at IS NULL
-         AND e.actor = 'scim:' || l.id::text
-        WHERE e.organization_id = :o
-      ) AS token_used,
+      bool_or(t.revoked_at IS NULL AND t.last_used_at IS NOT NULL) AS token_used,
       (SELECT count(*) FROM memberships m
         JOIN directory_identities d ON d.organization_id = m.organization_id
          AND d.membership_id = m.id AND d.managed_by = 'identity_provider'
-        WHERE m.organization_id = :o AND m.status <> 'removed') AS provisioned_members
+        WHERE m.organization_id = :o AND m.status <> 'removed') AS provisioned_members,
+      (SELECT count(*) FROM audit_events e WHERE e.organization_id = :o
+        AND e.action = 'scim.request_refused'
+        AND e.created_at > now() - interval '24 hours') AS refused_recently
     FROM scim_tokens t WHERE t.organization_id = :o
     """
 )
+
+
+@dataclass(frozen=True)
+class IdentityFacts:
+    """The identity and provisioning part of the setup facts (P12.4)."""
+
+    connection: str = "none"
+    last_success_at: datetime | None = None
+    last_failure_at: datetime | None = None
+    last_failure_code: str | None = None
+    last_test_at: datetime | None = None
+    last_test_result: str | None = None
+    issuer_access: str = "public"
+    live_tokens: int = 0
+    tokens_ever: int = 0
+    token_used: bool = False
+    provisioned_members: int = 0
+    refused_recently: int = 0
+
+
+async def identity_facts(session: AsyncSession, org: uuid.UUID) -> IdentityFacts:
+    connection = (await session.execute(_CONNECTION_SQL, {"o": org})).one_or_none()
+    scim = (await session.execute(_SCIM_SQL, {"o": org})).one()
+    access = "public"
+    if connection is not None:
+        access = access_class(await policy_for(session, org, "oidc"), connection.issuer)
+    return IdentityFacts(
+        connection="none" if connection is None else connection.status,
+        last_success_at=None if connection is None else connection.last_success_at,
+        last_failure_at=None if connection is None else connection.last_failure_at,
+        last_failure_code=None if connection is None else connection.last_failure_code,
+        last_test_at=None if connection is None else connection.last_test_at,
+        last_test_result=None if connection is None else connection.last_test_result,
+        issuer_access=access,
+        live_tokens=scim.live_tokens,
+        tokens_ever=scim.tokens_ever,
+        token_used=bool(scim.token_used),
+        provisioned_members=scim.provisioned_members,
+        refused_recently=scim.refused_recently,
+    )
+
+
 _SOURCES_SQL = text(
     """
     WITH connected AS (
@@ -157,8 +202,7 @@ async def gather(
         await session.execute(text("SELECT status FROM organizations WHERE id = :o"), {"o": org})
     ).scalar_one()
     people = (await session.execute(_PEOPLE_SQL, {"o": org})).one()
-    connection = (await session.execute(_CONNECTION_SQL, {"o": org})).one_or_none()
-    scim = (await session.execute(_SCIM_SQL, {"o": org})).one()
+    identity = await identity_facts(session, org)
     sources = (await session.execute(_SOURCES_SQL, {"o": org})).one()
     answered: bool = (await session.execute(_ANSWERED_SQL, {"o": org})).scalar_one()
     egress = await records.org_egress(session, org)
@@ -166,13 +210,7 @@ async def gather(
         organization_status=status,
         active_administrators=people.active_administrators,
         active_members=people.active_members,
-        connection="none" if connection is None else connection.status,
-        last_success_at=None if connection is None else connection.last_success_at,
-        last_failure_at=None if connection is None else connection.last_failure_at,
-        live_tokens=scim.live_tokens,
-        tokens_ever=scim.tokens_ever,
-        token_used=bool(scim.token_used),
-        provisioned_members=scim.provisioned_members,
+        **identity.__dict__,
         default_question_sensitivity=egress.default_query_sensitivity,
         ai=await _ai(
             session,

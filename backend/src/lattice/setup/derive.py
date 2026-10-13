@@ -12,9 +12,14 @@ States: ``complete``, ``required``, ``optional``, ``in_progress``, ``attention``
 name (documented in the plan's P12.1 notes): ``sources·required·not_synced`` (a source
 exists without any run yet), ``accounts·blocked·sources_required`` and
 ``ai_policy·attention·provider_unavailable`` (the enabled provider cannot be used as
-configured); and one P12.3 adds: ``accounts·attention·sync_required`` (mappings created or
-changed since their source's latest sync, which applies them). ``sources·awaiting_import``
-/ ``import_rejected`` arrive with imports (P12.6).
+configured); one P12.3 adds: ``accounts·attention·sync_required`` (mappings created or
+changed since their source's latest sync, which applies them); and three P12.4 adds:
+``identity·blocked·outbound_blocked`` (the outbound policy refuses the issuer, or refused
+the latest sign-in or test), ``identity·attention·configuration_rejected`` (the provider
+rejected the client or the token was invalid in the latest sign-in or test) and
+``provisioning·attention·requests_refused`` (the identity provider's requests were
+refused in the last 24 hours). ``sources·awaiting_import`` / ``import_rejected`` arrive
+with imports (P12.6). Identity and provisioning link to ``/settings/identity`` (P12.4).
 """
 
 from dataclasses import dataclass, field
@@ -87,10 +92,18 @@ class SetupFacts:
     connection: Literal["active", "disabled", "none"] = "none"
     last_success_at: datetime | None = None
     last_failure_at: datetime | None = None
+    last_failure_code: str | None = None
+    # The latest administrator test of the connection as configured (P12.4).
+    last_test_at: datetime | None = None
+    last_test_result: str | None = None
+    # How the outbound policy classes the issuer, by shape and registrations (no DNS).
+    issuer_access: str = "public"
     live_tokens: int = 0
     tokens_ever: int = 0
+    # A live token has authenticated a request (scim_tokens.last_used_at, P12.4).
     token_used: bool = False
     provisioned_members: int = 0
+    refused_recently: int = 0
     default_question_sensitivity: str = "internal"
     ai: AiFacts = field(default_factory=AiFacts)
     connected_sources: int = 0
@@ -119,21 +132,28 @@ MESSAGES: Final[dict[tuple[str, str], str]] = {
         "No active administrator. Only your Lattice operator can appoint one."
     ),
     ("identity", "no_connection"): (
-        "No identity provider is connected, so nobody can sign in. Your Lattice operator "
-        "connects it."
+        "No identity provider is connected, so nobody can sign in. Connect one on the "
+        "Identity page."
     ),
     ("identity", "not_verified"): (
-        "The identity provider is connected but nobody has signed in through it yet. The "
-        "first successful sign-in verifies it."
+        "The identity provider is connected but no sign-in through it has succeeded yet. "
+        "A test sign-in on the Identity page verifies it."
     ),
     ("identity", "verified"): "Sign-in through the identity provider works.",
     ("identity", "connection_disabled"): (
-        "The identity provider connection is disabled: nobody can sign in through it. Your "
-        "Lattice operator can re-enable it."
+        "The identity provider connection is disabled: nobody can sign in through it. It "
+        "can be re-enabled on the Identity page."
     ),
     ("identity", "provider_unavailable"): (
-        "The last sign-in failed because the identity provider could not be reached or "
-        "refused Lattice's client credentials."
+        "The latest sign-in or test could not reach the identity provider."
+    ),
+    ("identity", "configuration_rejected"): (
+        "The identity provider rejected Lattice's configuration -- the client ID, the client "
+        "secret or the identifying claim -- in the latest sign-in or test."
+    ),
+    ("identity", "outbound_blocked"): (
+        "Lattice's outbound policy refuses the identity provider's address. A private or "
+        "self-hosted provider must be approved for this organization by your Lattice operator."
     ),
     (
         "members",
@@ -146,14 +166,18 @@ MESSAGES: Final[dict[tuple[str, str], str]] = {
     ),
     ("members", "members_active"): "Members other than administrators are active.",
     ("provisioning", "not_configured"): (
-        "Automatic provisioning (SCIM) is not set up. It is optional; your Lattice "
-        "operator issues the provisioning token."
+        "Automatic provisioning (SCIM) is not set up. It is optional; create a provisioning "
+        "token on the Identity page to use it."
     ),
     ("provisioning", "token_not_used_yet"): (
         "A provisioning token exists but the identity provider has not provisioned anyone "
         "with it yet."
     ),
     ("provisioning", "in_use"): "The identity provider provisions members.",
+    ("provisioning", "requests_refused"): (
+        "The identity provider's provisioning requests were refused in the last 24 hours "
+        "(for example a person who already exists as a member added by hand)."
+    ),
     ("provisioning", "no_valid_token"): (
         "Every provisioning token is revoked while provisioned members remain: changes in "
         "the identity provider no longer reach Lattice."
@@ -235,21 +259,51 @@ def _organization(f: SetupFacts) -> Category:
     return _category("organization", "complete", "active", facts)
 
 
-def _identity(f: SetupFacts) -> Category:
+# A failed sign-in's or test's code -> the identity reason it raises.
+_PROBLEMS: Final[dict[str, tuple[State, str]]] = {
+    "outbound_blocked": ("blocked", "outbound_blocked"),
+    "credentials_rejected": ("attention", "configuration_rejected"),
+    "invalid_configuration": ("attention", "configuration_rejected"),
+    "token_invalid": ("attention", "configuration_rejected"),
+    "provider_unavailable": ("attention", "provider_unavailable"),
+}
+IDENTITY_PAGE: Final = "/settings/identity"
+
+
+def _problem(f: SetupFacts) -> tuple[datetime, str] | None:
+    """The latest failed sign-in or test of the connection as configured, if any."""
+    found: list[tuple[datetime, str]] = []
+    if f.last_failure_at is not None and f.last_failure_code in _PROBLEMS:
+        found.append((f.last_failure_at, f.last_failure_code))
+    if f.last_test_at is not None and f.last_test_result in _PROBLEMS:
+        found.append((f.last_test_at, f.last_test_result))
+    return max(found) if found else None
+
+
+def identity_category(f: SetupFacts) -> Category:
     facts: dict[str, FactValue] = {
         "connection": f.connection,
         "last_success_at": _iso(f.last_success_at),
         "last_failure_at": _iso(f.last_failure_at),
     }
     if f.connection == "none":
-        return _category("identity", "required", "no_connection", facts)
+        return _category(
+            "identity", "required", "no_connection", facts, Action(IDENTITY_PAGE, "Open Identity")
+        )
+    review = Action(IDENTITY_PAGE, "Review identity")
     if f.connection == "disabled":
-        return _category("identity", "attention", "connection_disabled", facts)
+        return _category("identity", "attention", "connection_disabled", facts, review)
+    if f.issuer_access == "not_permitted":
+        return _category("identity", "blocked", "outbound_blocked", facts, review)
+    problem = _problem(f)
+    if problem is not None and (f.last_success_at is None or problem[0] > f.last_success_at):
+        state, reason = _PROBLEMS[problem[1]]
+        return _category("identity", state, reason, facts, review)
     if f.last_success_at is None:
-        return _category("identity", "required", "not_verified", facts)
-    if f.last_failure_at is not None and f.last_failure_at > f.last_success_at:
-        return _category("identity", "attention", "provider_unavailable", facts)
-    return _category("identity", "complete", "verified", facts)
+        return _category(
+            "identity", "required", "not_verified", facts, Action(IDENTITY_PAGE, "Test sign-in")
+        )
+    return _category("identity", "complete", "verified", facts, review)
 
 
 def _members(f: SetupFacts) -> Category:
@@ -270,18 +324,22 @@ def _members(f: SetupFacts) -> Category:
     )
 
 
-def _provisioning(f: SetupFacts) -> Category:
+def provisioning_category(f: SetupFacts) -> Category:
     facts: dict[str, FactValue] = {
         "live_tokens": f.live_tokens,
         "provisioned_members": f.provisioned_members,
+        "refused_recently": f.refused_recently,
     }
+    action = Action(IDENTITY_PAGE, "Open Identity")
+    if f.live_tokens > 0 and f.refused_recently > 0:
+        return _category("provisioning", "attention", "requests_refused", facts, action)
     if f.live_tokens > 0 and f.token_used:
-        return _category("provisioning", "complete", "in_use", facts)
+        return _category("provisioning", "complete", "in_use", facts, action)
     if f.live_tokens > 0:
-        return _category("provisioning", "optional", "token_not_used_yet", facts)
+        return _category("provisioning", "optional", "token_not_used_yet", facts, action)
     if f.tokens_ever > 0 and f.provisioned_members > 0:
-        return _category("provisioning", "attention", "no_valid_token", facts)
-    return _category("provisioning", "optional", "not_configured", facts)
+        return _category("provisioning", "attention", "no_valid_token", facts, action)
+    return _category("provisioning", "optional", "not_configured", facts, action)
 
 
 def _ai_policy(f: SetupFacts) -> Category:
@@ -364,9 +422,9 @@ def derive(facts: SetupFacts) -> list[Category]:
     sources = _sources(facts)
     return [
         _organization(facts),
-        _identity(facts),
+        identity_category(facts),
         _members(facts),
-        _provisioning(facts),
+        provisioning_category(facts),
         _ai_policy(facts),
         sources,
         _accounts(facts),

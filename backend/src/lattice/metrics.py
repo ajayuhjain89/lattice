@@ -168,10 +168,14 @@ SSO_OUTCOMES: Final = frozenset(
         "unknown_connection",
         "invalid_state",
         "provider_error",
+        "invalid_configuration",
+        "outbound_blocked",
+        "credentials_rejected",
         "token_invalid",
         "not_provisioned",
         "inactive",
         "rate_limited",
+        "test_completed",
     }
 )
 SCIM_OPERATIONS_SET: Final = frozenset(

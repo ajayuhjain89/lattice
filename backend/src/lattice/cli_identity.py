@@ -14,11 +14,15 @@ import os
 import sys
 import uuid
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from lattice.cli_secrets import operator_keyring, read_secret_stdin
 from lattice.config import ConfigurationError, load_migration_settings
 from lattice.db.engine import Database, create_engine
 from lattice.identity import admin
 from lattice.ingestion.store import organization_id
+from lattice.orgs.outbound_targets import access_class, policy_for
+from lattice.outbound import OutboundRefused, parse_target
 
 COMMANDS = ("sso", "scim", "member", "session")
 
@@ -44,6 +48,26 @@ def _id(value: str | None) -> uuid.UUID | None:
 
 def _origin() -> str:
     return os.environ.get("LATTICE_PUBLIC_URL", "http://127.0.0.1:3000").rstrip("/")
+
+
+async def _print_outbound(s: AsyncSession, org_id: uuid.UUID, org: str, issuer: str) -> None:
+    """How the outbound policy classes the issuer (P12.4, C4): sign-in reaches a private
+    or non-standard address only as a target registered for the organization."""
+    access = access_class(await policy_for(s, org_id, "oidc"), issuer)
+    if access == "not_permitted":
+        try:
+            origin = parse_target(issuer).origin
+        except OutboundRefused:
+            origin = issuer
+        print(
+            "  outbound policy: NOT PERMITTED -- sign-in is refused until it is registered: "
+            f"lattice outbound allow --org {org} --url {origin} --purpose oidc --reason ..."
+        )
+    else:
+        shown = {"public": "public (checked at each connection)"}.get(
+            access, "operator-approved private target"
+        )
+        print(f"  outbound policy: {shown}")
 
 
 def _print_connection(org: str, found: admin.ConnectionView) -> None:
@@ -77,6 +101,7 @@ async def run(args: argparse.Namespace) -> int:
                     print(f"{args.org}: no active OIDC connection")
                 else:
                     _print_connection(args.org, found)
+                    await _print_outbound(s, org, args.org, found.issuer)
             elif args.command == "sso" and args.sso_command == "add":
                 found = await admin.add_connection(
                     s,
@@ -90,6 +115,7 @@ async def run(args: argparse.Namespace) -> int:
                     new_identity_namespace=args.new_identity_namespace,
                 )
                 _print_connection(args.org, found)
+                await _print_outbound(s, org, args.org, found.issuer)
             elif args.command == "sso" and args.sso_command == "list":
                 for c in await admin.connections(s, org):
                     print(f"{c.id}  {c.status:8}  {c.issuer}  client {c.client_id}")
@@ -128,6 +154,7 @@ async def run(args: argparse.Namespace) -> int:
                     actor=actor,
                 )
                 _print_connection(args.org, updated)
+                await _print_outbound(s, org, args.org, updated.issuer)
                 if revoked:
                     print(f"  {revoked} session(s) of this connection revoked")
             elif args.command == "scim" and args.scim_action == "create":

@@ -212,11 +212,23 @@ def _visible_to(viewer: AuthorizationContext) -> ColumnElement[bool]:
     return or_(document_id.is_(None), readable)
 
 
+REQUEST_REFUSED: Final = "scim.request_refused"
+
+
 async def audit_page(
-    session: AsyncSession, viewer: AuthorizationContext, *, limit: int, before: uuid.UUID | None
+    session: AsyncSession,
+    viewer: AuthorizationContext,
+    *,
+    limit: int,
+    before: uuid.UUID | None,
+    actor_kind: str | None = None,
 ) -> AuditPage:
+    """``actor_kind="identity_provider"``: only the identity provider's events (the SCIM
+    provisioning activity, P12.4)."""
     org = viewer.organization_id
     visible = _visible_to(viewer)
+    if actor_kind == "identity_provider":
+        visible = visible & AuditEvent.actor.like("scim:%")
     query = select(AuditEvent).where(AuditEvent.organization_id == org, visible)
     if before is not None:
         # An anchor the viewer may not see is treated as absent, like a missing one.
@@ -244,6 +256,8 @@ async def audit_page(
     documents: set[uuid.UUID] = set()
     entities: set[uuid.UUID] = set()
     for e in events:
+        if e.action == REQUEST_REFUSED and (m := _uuid(e.target.get("membership_id"))):
+            members.add(m)
         if not e.action.startswith("access."):
             continue
         if (m := _uuid(e.target.get("membership_id"))) is not None:
@@ -305,6 +319,13 @@ async def audit_page(
                 details = _details({}, e.before, e.after)
         elif e.action.startswith("account."):
             details = _account_details(e, names, source_names)
+        elif e.action == REQUEST_REFUSED:
+            # The member the provider's request collided with, by name; the token and
+            # operation as details; never a value from the request (none is stored).
+            if (m := _uuid(e.target.get("membership_id"))) is not None:
+                member = NamedRef(id=m, name=member_names.get(f"member:{m}"))
+            shown = {k: v for k, v in e.target.items() if k != "membership_id"}
+            details = _details(shown, e.before, e.after)
         else:
             details = _details(e.target, e.before, e.after)
         items.append(

@@ -14,6 +14,9 @@ import {
   EXPLANATION_DENIED,
   FAILURES,
   IDENTITY_REQUIREMENT,
+  IDENTITY_VERIFIED,
+  PROVISIONING_ACTIVITY,
+  REVEALED_TOKEN,
   ME_MAYA,
   MEMBER_MAYA,
   MEMBER_NEW,
@@ -83,6 +86,14 @@ export interface MockOptions {
   unmapped?: S["UnmappedReferences"];
   /** Answer for every account or mapping write instead of applying it (e.g. a 409). */
   accountWrite?: (path: string, body: unknown) => { status: number; body: unknown } | undefined;
+  /** P12.4: the identity settings (GET /v1/admin/identity), changed by the writes below. */
+  identitySettings?: S["IdentitySettings"] | "forbidden";
+  /** The result of every test sign-in (default: matched, the connection as configured). */
+  testSignIn?: S["TestSignInOut"];
+  /** Answer for POST .../identity/preview (default: the values, no proof yet). */
+  identityPreview?: S["IdentityChangePreview"];
+  /** Answer for POST .../check (default: valid). */
+  check?: S["CheckOut"];
 }
 
 export interface MockLog {
@@ -100,6 +111,7 @@ export interface MockLog {
   administrators: { id: string; body: S["AdministratorRequest"] }[];
   reinstates: { id: string; body: S["ReinstateRequest"] }[];
   accountWrites: { path: string; body: unknown }[];
+  identityWrites: { method: string; path: string; body: unknown }[];
 }
 
 const json = (route: Route, status: number, body: unknown, headers: Record<string, string> = {}) =>
@@ -127,6 +139,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     administrators: [],
     reinstates: [],
     accountWrites: [],
+    identityWrites: [],
   };
   const answer = (route: Route, ok: number, result: unknown) =>
     typeof result === "object" && result !== null && "status" in result && "body" in result && typeof result.status === "number"
@@ -136,6 +149,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
   // Members by ID; P12.2 writes (add, administrator, reinstate) update it, so the page's
   // reload after a write reads what the write returned.
   const members: Record<string, S["MemberAccess"]> = { ...(options.member ?? { [MEMBER_MAYA.member.id]: MEMBER_MAYA }) };
+  let identity: S["IdentitySettings"] | "forbidden" = options.identitySettings ?? IDENTITY_VERIFIED;
   const forbidden = (route: Route) =>
     json(route, 403, { error: { code: "permission_denied", message: "You don't have permission to do this.", request_id: "req-403" } });
   const evidence = options.evidence ?? DETAILS;
@@ -385,6 +399,8 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
       if (path === "/v1/admin/access/directory" && method === "GET") return json(route, 200, DIRECTORY);
       if (path === "/v1/admin/access/documents" && method === "GET") return json(route, 200, DOCUMENTS);
       if (path === "/v1/admin/audit-events" && method === "GET") {
+        // The provisioning activity (P12.4): the identity provider's events only.
+        if (url.searchParams.get("actor") === "identity_provider") return json(route, 200, PROVISIONING_ACTIVITY);
         const a = options.audit ?? AUDIT;
         return json(route, 200, typeof a === "function" ? a(url.searchParams.get("before")) : a);
       }
@@ -450,7 +466,87 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
         return json(route, 200, result);
       }
     }
+    if (path.startsWith("/v1/admin/identity")) return identityRoute(route, path, method, request.postDataJSON?.() ?? null);
     return json(route, 404, NOT_FOUND);
   });
   return log;
+
+  /** Identity administration (P12.4), as the API answers it, on a stateful copy. */
+  function identityRoute(route: Route, path: string, method: string, body: Record<string, unknown> | null) {
+    const settings = identity;
+    if (settings === "forbidden") return forbidden(route);
+    if (path === "/v1/admin/identity" && method === "GET") return json(route, 200, settings);
+    if (method !== "GET") log.identityWrites.push({ method, path, body });
+    const oidc = settings.oidc;
+    const changed = (next: Partial<S["OidcConnectionOut"]>) => {
+      identity = { ...settings, oidc: oidc ? { ...oidc, ...next, version: `2026-10-13T10:${String(log.identityWrites.length).padStart(2, "0")}:00.000000Z` } : null };
+      return json(route, 200, identity);
+    };
+    if (path === "/v1/admin/identity/oidc/test-sign-in" && method === "POST") {
+      const id = "c0ffee00-0000-4000-8000-000000000001";
+      // The provider's round trip, simulated: straight back to the page with the result.
+      return json(route, 201, { test_id: id, authorization_url: `/settings/identity?test=${id}` });
+    }
+    const test = /^\/v1\/admin\/identity\/oidc\/test-sign-in\/([^/]+)$/.exec(path);
+    if (test && method === "GET") {
+      return json(route, 200, options.testSignIn ?? {
+        test_id: test[1],
+        status: "completed",
+        outcome: "matched",
+        identifier: "sub-lena",
+        issuer: oidc?.issuer ?? "",
+        subject_claim: oidc?.subject_claim ?? "sub",
+        proposed: false,
+        completed_at: "2026-10-13T10:00:00Z",
+        expires_at: "2026-10-13T10:10:00Z",
+        proof_available: false,
+      });
+    }
+    const one = /^\/v1\/admin\/identity\/oidc\/([^/]+)(\/.*)?$/.exec(path);
+    if (one && oidc && one[1] === oidc.id) {
+      const rest = one[2] ?? "";
+      if (rest === "" && method === "PATCH") return changed({ client_id: String(body?.client_id) });
+      if (rest === "/client-secret" && method === "PUT") return changed({ client_secret: { state: "encrypted", set_at: "2026-10-13T10:00:00Z" } });
+      if (rest === "/client-secret/remove" && method === "POST") return changed({ client_secret: { state: "none", set_at: null } });
+      if (rest === "/status/preview" && method === "POST")
+        return json(route, 200, { enabled: Boolean(body?.enabled), sessions_ending: body?.enabled ? 0 : oidc.live_sessions, members_bound: oidc.members_bound, ends_own_session: false });
+      if (rest === "/status" && method === "POST") return changed({ status: body?.enabled ? "active" : "disabled", live_sessions: 0 });
+      if (rest === "/identity/preview" && method === "POST") {
+        const issuer = String(body?.issuer ?? oidc.issuer);
+        const claim = String(body?.subject_claim ?? oidc.subject_claim);
+        return json(route, 200, options.identityPreview ?? {
+          issuer,
+          subject_claim: claim,
+          issuer_changed: issuer !== oidc.issuer,
+          claim_changed: claim !== oidc.subject_claim,
+          issuer_access: "public",
+          sessions_ending: oidc.live_sessions,
+          members_bound: oidc.members_bound,
+          ends_own_session: false,
+          proof: null,
+        });
+      }
+      if (rest === "/identity" && method === "POST") return changed({ issuer: String(body?.issuer), subject_claim: String(body?.subject_claim), live_sessions: 0 });
+      if (rest === "/check" && method === "POST") return json(route, 200, options.check ?? { result: "valid", step: "client", checked_at: "2026-10-13T10:00:00Z" });
+    }
+    if (path === "/v1/admin/identity/scim/tokens" && method === "POST") {
+      identity = { ...settings, scim: { ...settings.scim, tokens: [REVEALED_TOKEN.token, ...settings.scim.tokens] } };
+      return json(route, 201, REVEALED_TOKEN);
+    }
+    const token = /^\/v1\/admin\/identity\/scim\/tokens\/([^/]+)\/(revoke\/preview|revoke|rotate)$/.exec(path);
+    const found = token ? settings.scim.tokens.find((t) => t.id === token[1]) : undefined;
+    if (token && found && method === "POST") {
+      if (token[2] === "revoke/preview")
+        return json(route, 200, { last_live_token: settings.scim.tokens.filter((t) => !t.revoked_at).length === 1, provisioned_members: settings.scim.provisioned_members });
+      const revoked = { ...found, revoked_at: "2026-10-13T10:00:00Z" };
+      const tokens = settings.scim.tokens.map((t) => (t.id === found.id ? revoked : t));
+      if (token[2] === "revoke") {
+        identity = { ...settings, scim: { ...settings.scim, tokens } };
+        return json(route, 200, revoked);
+      }
+      identity = { ...settings, scim: { ...settings.scim, tokens: [REVEALED_TOKEN.token, ...tokens] } };
+      return json(route, 200, REVEALED_TOKEN);
+    }
+    return json(route, 404, NOT_FOUND);
+  }
 }

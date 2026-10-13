@@ -24,14 +24,14 @@ from sqlalchemy import text
 from lattice.cli import main
 from lattice.config import ConfigurationError
 from lattice.db.engine import Database
-from lattice.identity.oidc import OidcClient, OidcSignIn
+from lattice.identity.oidc import OidcSignIn
 from lattice.vault.keys import Keyring
 from lattice.vault.records import store_secret
 from lattice.vault.startup import SecretKeysMissing, verify_secret_keys
 
 from .conftest import OWNER_URL, AppFactory
 from .factories import create_oidc_connection, create_org, create_provisioned_member
-from .identity.fake_idp import FakeIdp
+from .identity.fake_idp import FakeIdp, oidc_client
 
 KEY_A = "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE="
 KEY_B = "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI="
@@ -185,9 +185,7 @@ async def test_sign_in_records_the_setup_facts(owner_db: Database, app_client: A
     def configure(app: FastAPI) -> None:
         app.state.oidc = OidcSignIn(
             app.state.db,
-            OidcClient(
-                timeout_seconds=5, require_https=False, transport=httpx.MockTransport(idp.handler)
-            ),
+            oidc_client(idp.handler),
             web_origin="http://127.0.0.1:3000",
             secrets=app.state.ask_dependencies.secrets,
         )
@@ -233,9 +231,7 @@ async def test_a_vault_client_secret_that_cannot_be_opened_is_a_provider_failure
     def configure(app: FastAPI) -> None:  # the API without keys: it cannot open the secret
         app.state.oidc = OidcSignIn(
             app.state.db,
-            OidcClient(
-                timeout_seconds=5, require_https=False, transport=httpx.MockTransport(idp.handler)
-            ),
+            oidc_client(idp.handler),
             web_origin="http://127.0.0.1:3000",
             secrets=app.state.ask_dependencies.secrets,
         )
@@ -311,9 +307,7 @@ async def test_only_provider_side_token_failures_mark_the_record(
     def configure(app: FastAPI) -> None:
         app.state.oidc = OidcSignIn(
             app.state.db,
-            OidcClient(
-                timeout_seconds=5, require_https=False, transport=httpx.MockTransport(idp.handler)
-            ),
+            oidc_client(idp.handler),
             web_origin="http://127.0.0.1:3000",
             secrets=app.state.ask_dependencies.secrets,
         )

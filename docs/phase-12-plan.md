@@ -2,13 +2,14 @@
 
 Status: **Plan approved (2026-10-06). P12.0 (contracts, Part II) written; P12.1
 (foundations) implemented 2026-10-08, P12.2 (members and administrators) 2026-10-09 and
-P12.3 (accounts and external-reference mapping) 2026-10-12 (Part III).** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
+P12.3 (accounts and external-reference mapping) 2026-10-12 with its fail-closed correction
+2026-10-13, and P12.4 (identity administration: OIDC and SCIM) 2026-10-13 (Part III).** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
 D-28–D-33, D-35, D-36 and D-37B are approved (§22, with the contracts of Part II);
 D-34 (raising egress ceilings: IdP step-up, C6) and D-37A (organization purge: semantics
 now, executable purge in Phase 15, C14) were decided by engineering under the product
 owner's delegation, as were corrections to D-31 and D-36 (C18). **P12.1 delivered
-(2026-10-08), P12.2 (2026-10-09) and P12.3 (2026-10-12), local commits; Part III.** P12.4
-waits for the product owner's go-ahead.
+(2026-10-08), P12.2 (2026-10-09), P12.3 (2026-10-12) and P12.4 (2026-10-13), local
+commits; Part III.** P12.5 waits for the product owner's go-ahead.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 12. Phase 11
 is closed (143392f); real external staging validation stays deferred and remains a
@@ -1420,3 +1421,65 @@ rule (`tests/ingestion/test_access_mapping.py`), the database fence
 `scim.request_refused` (P12.4); provider/BYOK settings and D-34 egress escalation
 (P12.5); source upload, first sync and `source.*` events (P12.6); organization purge
 (Phase 15). The account timeline stays post-v1.
+
+## P12.4 Identity administration: OIDC and SCIM (2026-10-13)
+
+Delivered on `phase/12-org-setup-integrations` (local commit, not pushed), after the two
+cleanup commits the product owner ordered (rate-limit test stabilization; the P12.3
+fail-closed correction). Migration **0020** (`SCHEMA_REVISION` 0020; declared
+irreversible: the downgrade drops test attempts, SCIM token hints and refusal events).
+The development database is not migrated (it stays at 0018 until the checkpoint is
+approved).
+
+| Contract | Built | Where |
+| -------- | ----- | ----- |
+| §7 `/settings/identity` | An Administration destination *Identity* (masthead, Jump, phone More sheet): **Sign-in** — the API's state and message, the connection's facts (status, issuer and how the outbound policy classes it, client ID, how the client secret is kept and when it was set — never the value or reference — identifying claim, members it signs in, sign-in URL and redirect URI with copy buttons, last successful sign-in, last test), *Test sign-in*, *Check connection*, *Set/Replace client secret*, *Remove client secret*, *Change client ID*, *Change issuer or claim*, *Disable/Enable sign-in*; **Provisioning (SCIM)** — state, base URL, the identity rule (externalId = the claim), provisioned members, refusals in the last day, the token ledger (hint, created, last used, state; *Rotate*, *Revoke*), *Create token*, the rotation procedure, recent provisioning activity (the identity provider's audit events) | `apps/web/src/components/settings/IdentityScreen.tsx`, `IdentityDialogs.tsx`, `identity-copy.ts` |
+| C5 OIDC in the product | `GET /v1/admin/identity`; `POST …/oidc` (add, when no connection is active and no disabled one still signs members in: 409 `connection_exists` / 422 `identity_namespace_in_use`); `PATCH …/oidc/{id}` (client ID); `PUT …/client-secret` (set or replace) and `POST …/client-secret/remove` (public client); `POST …/status/preview` and `…/status` (disable: sign-in stops, the connection's sessions end at once — the preview says whether yours does; enable: the same connection and members); `POST …/identity/preview` and `…/identity` (issuer and/or identifying claim). Every change: the version (409), a reason, an `sso.connection_*` event | `lattice.identity.settings`, `api/routes/identity.py` |
+| Issuer and claim (D-37B) | Allowed only with **proof**: the administrator's own test sign-in under exactly the new values, matched to their directory identity on this connection, unused and unexpired (ten minutes), re-checked by the database (`lattice_oidc_change_identity`); plus a typed confirmation (the new issuer, or the new claim) and a reason. Every session of the connection ends. A mismatch (the provider sends a different value) is shown as a changed-subject migration, which is not supported: nothing is remapped, never by e-mail. Before the change the proof makes the connection verified | 0020, `lattice.identity.settings`, `IdentityDialogs.tsx` |
+| C5 test sign-in | `POST …/oidc/test-sign-in` (optionally with proposed issuer/claim) starts an authorization-code flow with purpose `test`, bound to the administrator's membership and browser (`prompt=login`, `max_age=0`); the callback creates **no session**, records the outcome (`matched`, `mismatched`, `not_provisioned`, `sign_in_failed`, `token_invalid`, `provider_unavailable`, `invalid_configuration`, `outbound_blocked`, `credentials_rejected`) and the administrator's own identifier, and returns to `/settings/identity?test=<id>`; `GET …/test-sign-in/{id}` shows it to that administrator only. A matched test of the connection as configured verifies it (`last_success_at`) | `lattice.identity.oidc`, `api/routes/auth.py` |
+| Connection check | `POST …/oidc/{id}/check`: the issuer under the outbound policy, discovery (fresh, issuer equality, S256, endpoints re-checked), keys, then a token request with a random code and the configured client credentials — `invalid_client`/401 is `credentials_rejected`, a refused *code* (400) is `valid`. Results: `valid`, `invalid_configuration`, `credentials_rejected`, `provider_unavailable`, `outbound_blocked` with the deciding step; recorded on the connection | `lattice.identity.check` |
+| C4 outbound policy, wired | Sign-in, test sign-in and the check reach the provider only through `lattice.outbound` under the organization's `oidc` policy: a public issuer on https/443 resolving to global addresses, checked at connect time; private issuers only as operator-registered targets (revoking the registration stops sign-in and tests at once); discovery endpoints re-checked under the issuer's class; no redirects, no proxies. `lattice_app` may read `outbound_targets` (never write). Nothing special-cased for localhost | `lattice.identity.oidc`, 0020 |
+| C3 client secret | Sealed in the API (AES-256-GCM, bound to organization, secret row, `oidc_client_secret`, connection, key ID) and stored by `lattice_oidc_set_secret`, which destroys the previous ciphertext; `SecretStr` request models; never returned, logged, audited (events say `encrypted` / `encrypted (replaced)` / `none`) or echoed by a 422; refused with `secret_storage_unavailable` when the deployment has no master key. Sessions are kept | `lattice.identity.settings`, 0020 |
+| C5 SCIM tokens | `POST …/scim/tokens` (create), `…/{id}/rotate` (a replacement; the old token refused from the same transaction), `…/{id}/revoke/preview`, `…/{id}/revoke`; the token is in the creating response only; SHA-256 plus its last four characters (`hint`) are stored; the list shows hint, times, state. `scim_tokens.last_used_at` (minute precision) written by every authenticated SCIM request through `lattice_scim_token_used` | `lattice.identity.settings`, `provisioning/service.py`, 0020 |
+| `scim.request_refused` | Recorded only for **authenticated** requests refused for an actionable reason: uniqueness (409) with whom it collided — `manual_member_conflict` (a member added by hand; their membership) or `identity_conflict` — and `immutable_id` (an attempt to change a person's externalId). The operation and reason only, never a value from the request; at most one per token, operation, reason and member every ten minutes and 30 a token an hour (in SQL). Unauthenticated, malformed and rate-limited requests record nothing | `provisioning/service.py`, `api/routes/scim.py` |
+| ADR-017 fences | `lattice_oidc_create / _set_client / _set_secret / _clear_secret / _set_status / _change_identity`, `lattice_create_scim_token / _rotate_scim_token / _revoke_scim_token / _scim_token_used`: SECURITY DEFINER, owner `lattice_owner`, search path pinned, EXECUTE for `lattice_app` only; each re-checks an active administrator of the bound organization, takes the connection's advisory lock before its row lock (the lock sign-in takes shared), compares the version. Deferred triggers couple connection writes to `sso.connection_*` and token creation/revocation to `scim.token_*`. The API role has no table write on connections, tokens or ciphertext | 0020, ADR-017 "Implemented in P12.4" |
+| C11 audit | `sso.connection_created/updated/disabled/enabled` (before/after metadata, sessions ended), `sso.connection_tested` (kind, result, proposed — at most one per connection, kind and result an hour), `scim.token_created/rotated/revoked`, `scim.request_refused` (from `scim:` actors). `GET /v1/admin/audit-events?actor=identity_provider` is the provisioning activity | 0020, `access.audit` |
+| C12 setup status | `identity`: `required·no_connection`, `required·not_verified`, `complete·verified`, `attention·connection_disabled`, `attention·provider_unavailable`, **`attention·configuration_rejected`** (the provider rejected the client, or the token was invalid, in the latest sign-in or test), **`blocked·outbound_blocked`** (the issuer is not permitted, or the latest sign-in or test was refused by the policy); `provisioning`: `optional·not_configured`, `optional·token_not_used_yet`, `complete·in_use` (a live token with `last_used_at`, replacing P12.1's audit derivation), `attention·no_valid_token`, **`attention·requests_refused`**. Both link to `/settings/identity` | `lattice.setup` |
+| Operator path | `lattice sso show/add/update` say how the outbound policy classes the issuer, and print the `lattice outbound allow` command when it is not permitted. The reference stack's identity drill registers the verification IdP (`https://idp:9443`) first | `lattice.cli_identity`, `deploy/verification/identity_check.py` |
+
+**Upgrade note.** From P12.4 sign-in itself applies the outbound policy: an organization
+whose issuer is private or on a non-standard port (a self-hosted provider, the
+verification IdP) can sign in only after `lattice outbound allow --org <slug> --url
+<origin> --purpose oidc` registers it. Run it before deploying (runbook §9); `lattice sso
+show` names the missing registration.
+
+**Deviations from Part II, and why**
+
+1. **Issuer/claim changes need a matched test sign-in, not only a typed confirmation.**
+   C5 specified the P11.3 `--subjects-unchanged` assertion (typed). The administrator's
+   own sign-in under the new values matching their stored identity is evidence the
+   subjects are unchanged, and it refuses a changed-subject migration instead of letting
+   one through on an assertion. The operator's `--subjects-unchanged` path stays (P11.3).
+2. **All connection and token writes are fenced functions.** ADR-017's table allowed
+   named-column writes for routine updates; the product owner asked for no broad writes
+   on connections and tokens, so even the client ID goes through a function.
+3. **Test sign-in returns in the same tab** (the plan said "a new tab"): a provider's
+   pages and a pop-up blocker make a second tab unreliable; the administrator's session
+   is untouched either way.
+4. **Rotation has no automatic overlap**: *Rotate* replaces at once; the page and the
+   API describe the zero-downtime procedure (a second token, switch, revoke).
+5. **`scim.request_refused` covers uniqueness and `externalId` changes**, not schema
+   errors (C11 said "uniqueness, schema"): a misconfigured provider's malformed requests
+   are high-volume and not actionable per person; they stay in metrics.
+6. **`sso.connection_tested` also records server-side checks** (kind `check`), under the
+   same once-an-hour rule.
+7. **`lattice_app` may read every `oidc_connections` column**, including
+   `client_secret_ref` and `login_key` (the reference is not a secret; the API shows only
+   its kind), and `outbound_targets`.
+8. **The deployed authorization suite (`make prod-authz`) still sweeps only the routes
+   up to P12.2**; adding the accounts and identity routes is P12.8 (§20). The in-process
+   route inventory covers every new route.
+
+**Not built (later checkpoints):** provider/BYOK settings and D-34 egress escalation
+(P12.5); source upload and first sync (P12.6); organization purge (Phase 15); IdP
+migration with differing subjects (post-v1, D-37B).

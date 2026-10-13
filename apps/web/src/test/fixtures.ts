@@ -1537,9 +1537,9 @@ export const SETUP_FRESH: S["SetupStatus"] = {
   organization: SETUP_ORGANIZATION,
   categories: [
     { key: "organization", state: "attention", reason: "single_administrator", message: "One active administrator. If they leave, only your Lattice operator can appoint another; a second administrator avoids that.", facts: { active_administrators: 1 }, action: null },
-    { key: "identity", state: "required", reason: "not_verified", message: "The identity provider is connected but nobody has signed in through it yet. The first successful sign-in verifies it.", facts: { connection: "active", last_success_at: null, last_failure_at: null }, action: null },
+    { key: "identity", state: "required", reason: "not_verified", message: "The identity provider is connected but no sign-in through it has succeeded yet. A test sign-in on the Identity page verifies it.", facts: { connection: "active", last_success_at: null, last_failure_at: null }, action: { kind: "link", href: "/settings/identity", label: "Test sign-in" } },
     { key: "members", state: "required", reason: "only_administrators", message: "Only administrators are members so far. People join when your identity provider provisions them (SCIM) or when your Lattice operator adds them.", facts: { active_members: 1, active_administrators: 1 }, action: null },
-    { key: "provisioning", state: "optional", reason: "not_configured", message: "Automatic provisioning (SCIM) is not set up. It is optional; your Lattice operator issues the provisioning token.", facts: { live_tokens: 0, provisioned_members: 0 }, action: null },
+    { key: "provisioning", state: "optional", reason: "not_configured", message: "Automatic provisioning (SCIM) is not set up. It is optional; create a provisioning token on the Identity page to use it.", facts: { live_tokens: 0, provisioned_members: 0, refused_recently: 0 }, action: { kind: "link", href: "/settings/identity", label: "Open Identity" } },
     { key: "ai_policy", state: "optional", reason: "evidence_only", message: "No generation provider is enabled: answers show their evidence without a written answer.", facts: { provider: null, model: null, default_question_sensitivity: "internal" }, action: { kind: "link", href: "/settings/providers", label: "View AI providers" } },
     { key: "sources", state: "required", reason: "no_sources", message: "No source is connected yet.", facts: { connected_sources: 0, synced_sources: 0, failed_sources: 0, syncing_sources: 0 }, action: null },
     { key: "accounts", state: "optional", reason: "not_needed", message: "No source maps records to accounts, so no account mapping is needed.", facts: { account_sources: 0, unmapped_references: 0 }, action: null },
@@ -1552,9 +1552,9 @@ export const SETUP_IN_USE: S["SetupStatus"] = {
   organization: SETUP_ORGANIZATION,
   categories: [
     { key: "organization", state: "complete", reason: "active", message: "The organization is active and has more than one administrator.", facts: { active_administrators: 2 }, action: null },
-    { key: "identity", state: "complete", reason: "verified", message: "Sign-in through the identity provider works.", facts: { connection: "active", last_success_at: "2026-10-08T08:41:07Z", last_failure_at: null }, action: null },
+    { key: "identity", state: "complete", reason: "verified", message: "Sign-in through the identity provider works.", facts: { connection: "active", last_success_at: "2026-10-08T08:41:07Z", last_failure_at: null }, action: { kind: "link", href: "/settings/identity", label: "Review identity" } },
     { key: "members", state: "complete", reason: "members_active", message: "Members other than administrators are active.", facts: { active_members: 14, active_administrators: 2 }, action: { kind: "link", href: "/access", label: "Review access" } },
-    { key: "provisioning", state: "complete", reason: "in_use", message: "The identity provider provisions members.", facts: { live_tokens: 1, provisioned_members: 12 }, action: null },
+    { key: "provisioning", state: "complete", reason: "in_use", message: "The identity provider provisions members.", facts: { live_tokens: 1, provisioned_members: 12, refused_recently: 0 }, action: { kind: "link", href: "/settings/identity", label: "Open Identity" } },
     { key: "ai_policy", state: "attention", reason: "credential_failed", message: "The generation provider's credential is missing or cannot be used: answers fall back to evidence only.", facts: { provider: "gemini", model: "gemini-3.5-flash-lite", default_question_sensitivity: "internal" }, action: { kind: "link", href: "/settings/providers", label: "View AI providers" } },
     { key: "sources", state: "complete", reason: "synced", message: "At least one source has synced.", facts: { connected_sources: 3, synced_sources: 3, failed_sources: 0, syncing_sources: 0 }, action: { kind: "link", href: "/sources", label: "Open Sources" } },
     { key: "accounts", state: "attention", reason: "unmapped_references", message: "Records reference accounts that are not mapped, and are not indexed until they are.", facts: { account_sources: 1, unmapped_references: 2 }, action: { kind: "link", href: "/sources", label: "See unmapped references" } },
@@ -1695,4 +1695,123 @@ export const PREVIEW_UNMAP_CHANNEL: S["MappingPreview"] = {
   effect: "quarantined",
   records_waiting: 0,
   takes_effect: "next_sync",
+};
+
+// --- identity administration (Phase 12, P12.4) ---------------------------------------------------
+
+export const CONNECTION_ID = "6f1c2a40-5d8e-4b9a-9c3e-1a2b3c4d5e6f";
+export const TOKEN_IDS = { live: "7a2d3b51-6e9f-4cab-8d4f-2b3c4d5e6f70", revoked: "8b3e4c62-7fa0-4dbc-9e50-3c4d5e6f7081" };
+
+export const OIDC_CONNECTION: S["OidcConnectionOut"] = {
+  id: CONNECTION_ID,
+  status: "active",
+  issuer: "https://login.halden.example",
+  client_id: "lattice-halden",
+  subject_claim: "sub",
+  client_secret: { state: "encrypted", set_at: "2026-10-09T10:15:00Z" },
+  issuer_access: "public",
+  sign_in_url: "https://lattice.halden.example/sso/halden-login-key-0123456789",
+  redirect_uri: "https://lattice.halden.example/api/v1/auth/oidc/halden-login-key-0123456789/callback",
+  last_success_at: "2026-10-12T08:41:07Z",
+  last_failure: null,
+  last_test: { kind: "sign_in", result: "matched", at: "2026-10-12T08:41:07Z" },
+  members_bound: 14,
+  live_sessions: 6,
+  version: "2026-10-12T08:00:00.123456Z",
+};
+
+export const SCIM_LIVE_TOKEN: S["ScimTokenOut"] = {
+  id: TOKEN_IDS.live,
+  hint: "Qx7f",
+  created_at: "2026-10-09T10:20:00Z",
+  revoked_at: null,
+  last_used_at: "2026-10-12T09:03:00Z",
+  current_connection: true,
+};
+
+export const SCIM_REVOKED_TOKEN: S["ScimTokenOut"] = {
+  id: TOKEN_IDS.revoked,
+  hint: null,
+  created_at: "2026-10-01T09:00:00Z",
+  revoked_at: "2026-10-09T10:21:00Z",
+  last_used_at: "2026-10-09T10:00:00Z",
+  current_connection: true,
+};
+
+export const IDENTITY_VERIFIED: S["IdentitySettings"] = {
+  oidc: OIDC_CONNECTION,
+  can_add_connection: false,
+  sign_in_status: { state: "complete", reason: "verified", message: "Sign-in through the identity provider works." },
+  scim: {
+    base_url: "https://lattice.halden.example/api/scim/v2",
+    identifying_claim: "sub",
+    tokens: [SCIM_LIVE_TOKEN, SCIM_REVOKED_TOKEN],
+    provisioned_members: 12,
+    refused_recently: 0,
+    status: { state: "complete", reason: "in_use", message: "The identity provider provisions members." },
+  },
+};
+
+/** An organization whose connection a private, unapproved issuer blocks. */
+export const IDENTITY_BLOCKED: S["IdentitySettings"] = {
+  ...IDENTITY_VERIFIED,
+  oidc: { ...OIDC_CONNECTION, issuer: "https://idp.corp.example:9443", issuer_access: "not_permitted", last_success_at: null, last_test: { kind: "check", result: "outbound_blocked", at: "2026-10-12T09:00:00Z" } },
+  sign_in_status: {
+    state: "blocked",
+    reason: "outbound_blocked",
+    message: "Lattice's outbound policy refuses the identity provider's address. A private or self-hosted provider must be approved for this organization by your Lattice operator.",
+  },
+  scim: { ...IDENTITY_VERIFIED.scim, tokens: [], provisioned_members: 0, status: { state: "optional", reason: "not_configured", message: "Automatic provisioning (SCIM) is not set up. It is optional; create a provisioning token on the Identity page to use it." } },
+};
+
+export const IDENTITY_DISABLED: S["IdentitySettings"] = {
+  ...IDENTITY_VERIFIED,
+  oidc: { ...OIDC_CONNECTION, status: "disabled", live_sessions: 0 },
+  sign_in_status: {
+    state: "attention",
+    reason: "connection_disabled",
+    message: "The identity provider connection is disabled: nobody can sign in through it. It can be re-enabled on the Identity page.",
+  },
+};
+
+export const IDENTITY_NONE: S["IdentitySettings"] = {
+  oidc: null,
+  can_add_connection: true,
+  sign_in_status: { state: "required", reason: "no_connection", message: "No identity provider is connected, so nobody can sign in. Connect one on the Identity page." },
+  scim: {
+    base_url: "https://lattice.halden.example/api/scim/v2",
+    identifying_claim: null,
+    tokens: [],
+    provisioned_members: 0,
+    refused_recently: 0,
+    status: { state: "optional", reason: "not_configured", message: "Automatic provisioning (SCIM) is not set up. It is optional; create a provisioning token on the Identity page to use it." },
+  },
+};
+
+export const REVEALED_TOKEN: S["RevealedScimToken"] = {
+  token: { ...SCIM_LIVE_TOKEN, id: "9c4f5d73-80b1-4ecd-8f61-4d5e6f708192", hint: "Zk9w", last_used_at: null, created_at: "2026-10-13T10:00:00Z" },
+  revealed_token: "lsc_EXAMPLE-not-a-real-token-only-for-tests-Zk9w",
+};
+
+export const PROVISIONING_ACTIVITY: S["AuditPage"] = {
+  items: [
+    {
+      id: "a1b2c3d4-0000-4000-8000-000000000001",
+      created_at: "2026-10-12T09:03:00Z",
+      action: "scim.request_refused",
+      actor: { kind: "identity_provider", name: null, operator: null },
+      reason: "Provisioning request refused (SCIM)",
+      member: { id: ID.maya, name: "Maya Okafor" },
+      document: null,
+      effects: [],
+      details: [
+        { field: "operation", before: null, after: "create" },
+        { field: "token_id", before: null, after: TOKEN_IDS.live },
+        { field: "reason", before: null, after: "manual_member_conflict" },
+        { field: "scim_type", before: null, after: "uniqueness" },
+        { field: "status", before: null, after: "409" },
+      ],
+    },
+  ],
+  next_before: null,
 };

@@ -11,26 +11,46 @@ Flow (``OidcSignIn``):
 2. **Callback** (``/v1/auth/oidc/<login key>/callback``). The attempt is *consumed*
    (atomically, in its own transaction) before anything else happens, so a ``state``
    works once, success or not; the browser must present the binding cookie set at the
-   start (login CSRF). Then the code is exchanged (PKCE verifier; client secret by
-   ``env:`` reference when the client is confidential) and the ID token verified:
-   asymmetric signature from the provider's JWKS (``alg`` from an allow-list matching
-   the key's type: never ``none``, never HMAC), ``iss`` equal to the configured issuer,
-   ``aud`` containing the client ID (``azp`` when several), ``exp``/``iat`` with one
-   minute of leeway, and the ``nonce``.
+   start (login CSRF). Then the code is exchanged (PKCE verifier; the client secret from
+   its ``env:`` reference or ``vault:`` ciphertext when the client is confidential) and the
+   ID token verified: asymmetric signature from the provider's JWKS (``alg`` from an
+   allow-list matching the key's type: never ``none``, never HMAC), ``iss`` equal to the
+   configured issuer, ``aud`` containing the client ID (``azp`` when several),
+   ``exp``/``iat`` with one minute of leeway, and the ``nonce``.
 3. **Identity mapping** (deterministic, organization-scoped): the configured claim
    (``sub`` by default) must equal the ``external_id`` of a directory identity of *this*
    connection, in *this* organization (row-level security bound to it), whose
    membership and user are active. No just-in-time creation, no e-mail linking, no other
    organization consulted. Anything else is one generic failure.
 
-Sign-in facts (P12.1, C12): a successful sign-in records the connection's
-``last_success_at`` (the setup record's "verified"); a failure on the provider's side or
-of the client secret records ``last_failure_at``. Timestamps only, at most once a minute.
+**Outbound policy (P12.4, phase-12-plan C4).** Every request -- discovery, keys, the
+token exchange -- goes through ``lattice.outbound`` under the connection's organization's
+policy for the ``oidc`` purpose: a public issuer is ``https`` on port 443 and every address
+it resolves to must be globally routable, checked at connect time (DNS rebinding cannot
+pass), redirects are refused and environment proxies ignored; a private or self-hosted
+issuer works only as the exact target an operator registered for that organization
+(``lattice outbound allow``), and stops working when the registration is revoked. The
+endpoints a discovery document names are re-checked under the same class as the issuer.
+Nothing is special-cased for localhost.
 
-Network bounds: timeouts, no redirects followed, responses capped at 256 KiB, HTTPS
-required in production. Discovery and keys are cached per issuer for ten minutes (public
-data); an unknown key ID refreshes the keys at most once a minute. Nothing from the
-provider -- claims, e-mail, error bodies, tokens -- is logged; only fixed outcome codes.
+**Test sign-in (P12.4, C5).** An administrator may sign in through the connection --
+or through proposed new issuer / identifying-claim values -- with purpose ``test``: the
+attempt is bound to their membership; the callback creates **no session**, records the
+outcome (``matched`` when the identifier under the tested values equals their own
+directory identity on this connection) and their own identifier, and returns them to the
+identity settings. A ``matched`` test under proposed values is the proof an issuer or
+claim change requires (``lattice_oidc_change_identity``).
+
+Sign-in facts (P12.1, C12): a successful sign-in records the connection's
+``last_success_at`` (the setup record's "verified"); a failure on the provider's side, of
+the outbound policy or of the client credentials records ``last_failure_at`` and its code.
+Timestamps and codes only, at most once a minute. A rejected authorization code (400 from
+the token endpoint) is anyone's to send and never marks the provider.
+
+Bounds: 10 s per request, no redirects, responses capped at 256 KiB. Discovery and keys
+are cached for ten minutes per issuer and policy (public data); an unknown key ID
+refreshes the keys at most once a minute. Nothing from the provider -- claims, e-mail,
+error bodies, tokens -- is logged; only fixed outcome codes.
 """
 
 import base64
@@ -44,10 +64,10 @@ import secrets
 import time
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 from typing import Any, Final
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlencode
 
 import httpx
 import jwt
@@ -55,10 +75,13 @@ from jwt import PyJWK
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lattice import metrics
 from lattice.db.engine import Database
 from lattice.log import log_event
+from lattice.orgs.outbound_targets import policy_for
+from lattice.outbound import OutboundPolicy, OutboundRefused, Resolver, fetch, system_resolver
 from lattice.providers.secrets import SecretStore, SecretUnavailable
 from lattice.vault.records import load_sealed
 
@@ -70,6 +93,7 @@ KEY_REFRESH_SECONDS: Final = 60.0
 MAX_RESPONSE_BYTES: Final = 256 * 1024
 LEEWAY_SECONDS: Final = 60
 SCOPES: Final = "openid email profile"
+TEST_RETURN: Final = "/settings/identity"
 # Asymmetric only, each with the key type it needs.
 ALGORITHMS: Final = {
     "RS256": "RSA",
@@ -93,8 +117,29 @@ _SUCCESS_SQL = text(
     "AND id = :c AND (last_success_at IS NULL OR last_success_at < now() - interval '1 minute')"
 )
 _FAILURE_SQL = text(
-    "UPDATE oidc_connections SET last_failure_at = now() WHERE organization_id = :o "
-    "AND id = :c AND (last_failure_at IS NULL OR last_failure_at < now() - interval '1 minute')"
+    "UPDATE oidc_connections SET last_failure_at = now(), last_failure_code = :code "
+    "WHERE organization_id = :o AND id = :c AND (last_failure_at IS NULL "
+    "OR last_failure_at < now() - interval '1 minute' OR last_failure_code IS DISTINCT FROM :code)"
+)
+# Outcomes that are the connection's (or the provider's) fault, recorded as a failure fact.
+FAILURE_CODES: Final = {
+    "provider_error": "provider_unavailable",
+    "invalid_configuration": "invalid_configuration",
+    "outbound_blocked": "outbound_blocked",
+    "credentials_rejected": "credentials_rejected",
+}
+# The outbound policy's refusals that are the policy's (not the provider's).
+_BLOCKED: Final = frozenset({"target_invalid", "target_not_public"})
+# OAuth errors (RFC 6749 §5.2) that may be read from a token-endpoint error body.
+_OAUTH_ERRORS: Final = frozenset(
+    {
+        "invalid_request",
+        "invalid_client",
+        "invalid_grant",
+        "unauthorized_client",
+        "unsupported_grant_type",
+        "invalid_scope",
+    }
 )
 
 
@@ -102,15 +147,25 @@ class OidcFailure(Exception):
     """A sign-in that did not succeed. ``outcome`` is a fixed code (metrics, logs);
     the user sees one of three generic messages (``public_error``)."""
 
-    def __init__(self, outcome: str, *, status_code: int | None = None) -> None:
+    def __init__(
+        self, outcome: str, *, status_code: int | None = None, error: str | None = None
+    ) -> None:
         super().__init__(outcome)
         self.outcome = outcome
-        # The provider's HTTP status when it answered with an error (never shown).
+        # The provider's HTTP status and OAuth error code when it answered with an error
+        # (never shown, never logged beyond the fixed outcome).
         self.status_code = status_code
+        self.error = error
 
     @property
     def public_error(self) -> str:
-        return "sso_unavailable" if self.outcome == "provider_error" else "sso_failed"
+        return "sso_unavailable" if self.outcome in FAILURE_CODES else "sso_failed"
+
+    @property
+    def rejected_code(self) -> bool:
+        """The token endpoint refused the authorization code itself (400, not the client):
+        anyone can send a bogus or reused code, so it is never the provider's fault."""
+        return self.outcome == "provider_error" and self.status_code == 400
 
 
 @dataclass(frozen=True)
@@ -135,6 +190,7 @@ class ProviderMetadata:
 class Started:
     authorization_url: str
     binding: str
+    attempt_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -143,6 +199,16 @@ class SignedIn:
     organization_id: uuid.UUID
     connection_id: uuid.UUID
     return_to: str
+
+
+@dataclass(frozen=True)
+class TestCompleted:
+    """A test sign-in finished (whatever its outcome): no session; back to settings."""
+
+    attempt_id: uuid.UUID
+    organization_id: uuid.UUID
+    outcome: str
+    return_to: str = TEST_RETURN
 
 
 def _b64url(data: bytes) -> str:
@@ -179,102 +245,153 @@ def resolve_client_secret(reference: str | None) -> SecretStr | None:
     return SecretStr(value)
 
 
+def _oauth_error(body: bytes) -> str | None:
+    """The OAuth ``error`` code of an error response, when it is one of RFC 6749's."""
+    try:
+        document = json.loads(body)
+    except ValueError:
+        return None
+    error = document.get("error") if isinstance(document, dict) else None
+    return error if isinstance(error, str) and error in _OAUTH_ERRORS else None
+
+
+def _policy_key(policy: OutboundPolicy) -> frozenset[Any]:
+    return frozenset(policy.registered)
+
+
 class OidcClient:
-    """Discovery, keys and the token exchange, with bounded time and size."""
+    """Discovery, keys and the token exchange under the outbound policy, with bounded
+    time and size. ``transport`` (tests only) replaces the network after the same policy
+    decision (shape and resolution through ``resolver``)."""
 
     def __init__(
         self,
         *,
         timeout_seconds: float,
-        require_https: bool,
         transport: httpx.AsyncBaseTransport | None = None,
+        resolver: Resolver = system_resolver,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._timeout = timeout_seconds
-        self._require_https = require_https
         self._transport = transport
+        self.resolver = resolver
         self._clock = clock
-        self._metadata: dict[str, tuple[float, ProviderMetadata]] = {}
-        self._keys: dict[str, tuple[float, list[dict[str, Any]]]] = {}
-        self._refreshed: dict[str, float] = {}
+        self._metadata: dict[tuple[str, frozenset[Any]], tuple[float, ProviderMetadata]] = {}
+        self._keys: dict[tuple[str, frozenset[Any]], tuple[float, list[dict[str, Any]]]] = {}
+        self._refreshed: dict[tuple[str, frozenset[Any]], float] = {}
 
-    def _check_url(self, url: Any) -> str:
-        if not isinstance(url, str) or len(url) > 2000:
-            raise OidcFailure("provider_error")
-        parts = urlsplit(url)
-        allowed = ("https",) if self._require_https else ("https", "http")
-        if parts.scheme not in allowed or not parts.netloc or "@" in parts.netloc:
-            raise OidcFailure("provider_error")
-        return url
+    async def _send(
+        self, policy: OutboundPolicy, method: str, url: str, *, base: bool, **kwargs: Any
+    ) -> tuple[int, bytes]:
+        if self._transport is None:
+            response = await fetch(
+                policy,
+                method,
+                url,
+                base=base,
+                max_bytes=MAX_RESPONSE_BYTES,
+                total_timeout=self._timeout,
+                **kwargs,
+            )
+            return response.status_code, response.body
+        # Tests: the policy's decision exactly as in production, then the in-process IdP.
+        await policy.check_target(url, base=base)
+        async with (
+            httpx.AsyncClient(
+                timeout=self._timeout, follow_redirects=False, transport=self._transport
+            ) as client,
+            client.stream(method, url, **kwargs) as streamed,
+        ):
+            if 300 <= streamed.status_code < 400:
+                raise OutboundRefused("redirect_refused")
+            body = bytearray()
+            async for chunk in streamed.aiter_bytes():
+                body.extend(chunk)
+                if len(body) > MAX_RESPONSE_BYTES:
+                    raise OutboundRefused("response_too_large")
+            return streamed.status_code, bytes(body)
 
-    async def _request(self, method: str, url: str, **kwargs: Any) -> Any:
-        self._check_url(url)
+    async def _request(
+        self, policy: OutboundPolicy, method: str, url: Any, *, base: bool = False, **kwargs: Any
+    ) -> Any:
+        if not isinstance(url, str):
+            raise OidcFailure("invalid_configuration")
         try:
-            async with (
-                httpx.AsyncClient(
-                    timeout=self._timeout, follow_redirects=False, transport=self._transport
-                ) as client,
-                client.stream(method, url, **kwargs) as response,
-            ):
-                body = bytearray()
-                async for chunk in response.aiter_bytes():
-                    body.extend(chunk)
-                    if len(body) > MAX_RESPONSE_BYTES:
-                        raise OidcFailure("provider_error")
-                if response.status_code != 200:
-                    raise OidcFailure("provider_error", status_code=response.status_code)
+            status, body = await self._send(policy, method, url, base=base, **kwargs)
+        except OutboundRefused as refused:
+            outcome = "outbound_blocked" if refused.code in _BLOCKED else "provider_error"
+            raise OidcFailure(outcome) from None
         except httpx.HTTPError:
             raise OidcFailure("provider_error") from None
+        if status != 200:
+            raise OidcFailure("provider_error", status_code=status, error=_oauth_error(body))
         try:
-            return json.loads(bytes(body))
+            return json.loads(body)
         except ValueError:
-            raise OidcFailure("provider_error") from None
+            raise OidcFailure("invalid_configuration") from None
 
-    async def metadata(self, issuer: str) -> ProviderMetadata:
-        cached = self._metadata.get(issuer)
-        if cached is not None and cached[0] > self._clock():
+    async def metadata(
+        self, policy: OutboundPolicy, issuer: str, *, fresh: bool = False
+    ) -> ProviderMetadata:
+        """``fresh``: fetch now even when cached (an administrator's check)."""
+        key = (issuer, _policy_key(policy))
+        cached = self._metadata.get(key)
+        if cached is not None and cached[0] > self._clock() and not fresh:
             return cached[1]
         document = await self._request(
-            "GET", issuer.rstrip("/") + "/.well-known/openid-configuration"
+            policy, "GET", issuer.rstrip("/") + "/.well-known/openid-configuration", base=True
         )
         if not isinstance(document, dict) or document.get("issuer") != issuer:
             # The discovery document must name exactly the configured issuer.
-            raise OidcFailure("provider_error")
+            raise OidcFailure("invalid_configuration")
         methods = document.get("code_challenge_methods_supported")
         if isinstance(methods, list) and "S256" not in methods:
-            raise OidcFailure("provider_error")
-        found = ProviderMetadata(
-            issuer=issuer,
-            authorization_endpoint=self._check_url(document.get("authorization_endpoint")),
-            token_endpoint=self._check_url(document.get("token_endpoint")),
-            jwks_uri=self._check_url(document.get("jwks_uri")),
-        )
-        self._metadata[issuer] = (self._clock() + CACHE_SECONDS, found)
+            raise OidcFailure("invalid_configuration")
+        endpoints = [
+            document.get("authorization_endpoint"),
+            document.get("token_endpoint"),
+            document.get("jwks_uri"),
+        ]
+        if not all(isinstance(e, str) and e for e in endpoints):
+            raise OidcFailure("invalid_configuration")
+        try:
+            # The same class as the issuer: a public issuer cannot point Lattice at a
+            # private address (C4).
+            await policy.check_discovery_endpoints(issuer, endpoints)
+        except OutboundRefused as refused:
+            outcome = "outbound_blocked" if refused.code in _BLOCKED else "provider_error"
+            raise OidcFailure(outcome) from None
+        found = ProviderMetadata(issuer, *(str(e) for e in endpoints))
+        self._metadata[key] = (self._clock() + CACHE_SECONDS, found)
         return found
 
-    async def keys(self, jwks_uri: str, *, refresh: bool = False) -> list[dict[str, Any]]:
+    async def keys(
+        self, policy: OutboundPolicy, jwks_uri: str, *, refresh: bool = False, fresh: bool = False
+    ) -> list[dict[str, Any]]:
+        key = (jwks_uri, _policy_key(policy))
         now = self._clock()
-        cached = self._keys.get(jwks_uri)
-        if cached is not None and cached[0] > now and not refresh:
+        cached = self._keys.get(key)
+        if cached is not None and cached[0] > now and not refresh and not fresh:
             return cached[1]
         if (
             refresh
             and cached is not None
-            and now - self._refreshed.get(jwks_uri, -1e9) < (KEY_REFRESH_SECONDS)
+            and now - self._refreshed.get(key, -1e9) < (KEY_REFRESH_SECONDS)
         ):
             return cached[1]
-        document = await self._request("GET", jwks_uri)
+        document = await self._request(policy, "GET", jwks_uri)
         found = document.get("keys") if isinstance(document, dict) else None
         if not isinstance(found, list):
-            raise OidcFailure("provider_error")
+            raise OidcFailure("invalid_configuration")
         usable = [k for k in found if isinstance(k, dict) and k.get("use", "sig") == "sig"]
-        self._keys[jwks_uri] = (now + CACHE_SECONDS, usable)
+        self._keys[key] = (now + CACHE_SECONDS, usable)
         if refresh:
-            self._refreshed[jwks_uri] = now
+            self._refreshed[key] = now
         return usable
 
     async def exchange(
         self,
+        policy: OutboundPolicy,
         metadata: ProviderMetadata,
         connection: Connection,
         *,
@@ -299,20 +416,28 @@ class OidcClient:
             form["client_id"] = connection.client_id
         else:
             auth = httpx.BasicAuth(connection.client_id, secret.get_secret_value())
-        document = await self._request(
-            "POST",
-            metadata.token_endpoint,
-            data=form,
-            auth=auth,
-            headers={"Accept": "application/json"},
-        )
+        try:
+            document = await self._request(
+                policy,
+                "POST",
+                metadata.token_endpoint,
+                data=form,
+                auth=auth,
+                headers={"Accept": "application/json"},
+            )
+        except OidcFailure as failure:
+            # The client itself was refused: its ID or secret is wrong (RFC 6749 §5.2).
+            if failure.status_code == 401 or failure.error == "invalid_client":
+                raise OidcFailure("credentials_rejected", status_code=failure.status_code) from None
+            raise
         id_token = document.get("id_token") if isinstance(document, dict) else None
         if not isinstance(id_token, str) or not id_token:
-            raise OidcFailure("provider_error")
+            raise OidcFailure("invalid_configuration")
         return id_token
 
     async def verify(
         self,
+        policy: OutboundPolicy,
         id_token: str,
         metadata: ProviderMetadata,
         connection: Connection,
@@ -327,9 +452,11 @@ class OidcClient:
         algorithm = header.get("alg")
         if not isinstance(algorithm, str) or algorithm not in ALGORITHMS:
             raise OidcFailure("token_invalid")
-        key = self._select(await self.keys(metadata.jwks_uri), header, algorithm)
+        key = self._select(await self.keys(policy, metadata.jwks_uri), header, algorithm)
         if key is None:
-            key = self._select(await self.keys(metadata.jwks_uri, refresh=True), header, algorithm)
+            key = self._select(
+                await self.keys(policy, metadata.jwks_uri, refresh=True), header, algorithm
+            )
         if key is None:
             raise OidcFailure("token_invalid")
         try:
@@ -374,6 +501,36 @@ class OidcClient:
         return candidates[0] if len(candidates) == 1 else None
 
 
+def _identifier(claims: Mapping[str, Any], claim: str) -> str:
+    value = claims.get(claim)
+    if not isinstance(value, str) or not 1 <= len(value) <= 255:
+        raise OidcFailure("token_invalid")
+    return value
+
+
+@dataclass(frozen=True)
+class _Attempt:
+    id: uuid.UUID
+    binding_hash: bytes
+    nonce: str
+    code_verifier: str
+    return_to: str
+    purpose: str
+    membership_id: uuid.UUID | None
+    proposed_issuer: str | None
+    proposed_subject_claim: str | None
+
+
+# Test outcomes (an OidcFailure's outcome -> the recorded one).
+_TEST_FAILURES: Final = {
+    "provider_error": "provider_unavailable",
+    "invalid_configuration": "invalid_configuration",
+    "outbound_blocked": "outbound_blocked",
+    "credentials_rejected": "credentials_rejected",
+    "token_invalid": "token_invalid",
+}
+
+
 class OidcSignIn:
     def __init__(
         self,
@@ -389,7 +546,18 @@ class OidcSignIn:
         # Opens vault: client secrets (the API holds the master keys, C3.4).
         self._secrets = secrets
 
-    async def _client_secret(self, connection: Connection) -> SecretStr | None:
+    @property
+    def client(self) -> OidcClient:
+        return self._client
+
+    async def policy(self, organization_id: uuid.UUID) -> OutboundPolicy:
+        """The organization's outbound policy for OIDC (its live registrations)."""
+        async with self._db.tenant_snapshot(organization_id) as session:
+            return await policy_for(
+                session, organization_id, "oidc", resolver=self._client.resolver
+            )
+
+    async def client_secret(self, connection: Connection) -> SecretStr | None:
         """The client secret to present, from its env: reference or its vault:
         ciphertext bound to this connection; ``provider_error`` when unavailable."""
         reference = connection.client_secret_ref
@@ -411,14 +579,23 @@ class OidcSignIn:
             raise OidcFailure("provider_error") from None
 
     async def _record(
-        self, organization_id: uuid.UUID, connection_id: uuid.UUID, *, succeeded: bool
+        self,
+        organization_id: uuid.UUID,
+        connection_id: uuid.UUID,
+        *,
+        succeeded: bool,
+        outcome: str = "provider_error",
     ) -> None:
         """Best effort: a sign-in fact for the setup record (never fails a sign-in)."""
         try:
             async with self._db.tenant_transaction(organization_id) as session:
                 await session.execute(
                     _SUCCESS_SQL if succeeded else _FAILURE_SQL,
-                    {"o": organization_id, "c": connection_id},
+                    {
+                        "o": organization_id,
+                        "c": connection_id,
+                        **({} if succeeded else {"code": FAILURE_CODES[outcome]}),
+                    },
                 )
         except (SQLAlchemyError, OSError):
             log_event(logger, logging.WARNING, "auth.oidc.fact_not_recorded")
@@ -426,6 +603,15 @@ class OidcSignIn:
     async def record_success(self, organization_id: uuid.UUID, connection_id: uuid.UUID) -> None:
         """Called once the session exists: the connection is verified (C1, C12)."""
         await self._record(organization_id, connection_id, succeeded=True)
+
+    async def _record_failure(self, connection: Connection, failure: OidcFailure) -> None:
+        if failure.outcome in FAILURE_CODES and not failure.rejected_code:
+            await self._record(
+                connection.organization_id,
+                connection.id,
+                succeeded=False,
+                outcome=failure.outcome,
+            )
 
     def redirect_uri(self, login_key: str) -> str:
         return f"{self._web_origin}/api/v1/auth/oidc/{login_key}/callback"
@@ -446,44 +632,66 @@ class OidcSignIn:
             subject_claim=row.subject_claim,
         )
 
-    async def start(self, login_key: str, return_to: str | None) -> Started:
-        connection = await self._connection(login_key)
+    async def _authorize(
+        self,
+        connection: Connection,
+        login_key: str,
+        *,
+        return_to: str,
+        membership_id: uuid.UUID | None = None,
+        proposed_issuer: str | None = None,
+        proposed_subject_claim: str | None = None,
+    ) -> Started:
+        """Store an attempt and build the provider's authorization URL. The provider is
+        the connection's issuer, or the proposed one of a test."""
+        policy = await self.policy(connection.organization_id)
+        issuer = proposed_issuer or connection.issuer
         try:
-            metadata = await self._client.metadata(connection.issuer)
+            metadata = await self._client.metadata(policy, issuer)
         except OidcFailure as failure:
-            if failure.outcome == "provider_error":
-                await self._record(connection.organization_id, connection.id, succeeded=False)
+            if proposed_issuer is None:
+                await self._record_failure(connection, failure)
             raise
         state = secrets.token_urlsafe(32)
         nonce = secrets.token_urlsafe(32)
         verifier = secrets.token_urlsafe(64)
         binding = secrets.token_urlsafe(32)
+        test = membership_id is not None
         async with self._db.tenant_transaction(connection.organization_id) as session:
-            # Housekeeping: finished attempts of this organization go first.
+            # Housekeeping: finished sign-in attempts and expired ones go first.
             await session.execute(
                 text(
                     "DELETE FROM oidc_login_attempts WHERE organization_id = :o "
-                    "AND (consumed_at IS NOT NULL OR expires_at <= now())"
+                    "AND ((purpose = 'sign_in' AND consumed_at IS NOT NULL) "
+                    "OR expires_at <= now())"
                 ),
                 {"o": connection.organization_id},
             )
-            await session.execute(
-                text(
-                    "INSERT INTO oidc_login_attempts (organization_id, connection_id, "
-                    "state_hash, binding_hash, nonce, code_verifier, return_to, expires_at) "
-                    "VALUES (:o, :c, :s, :b, :n, :v, :r, now() + :ttl)"
-                ),
-                {
-                    "o": connection.organization_id,
-                    "c": connection.id,
-                    "s": _sha256(state),
-                    "b": _sha256(binding),
-                    "n": nonce,
-                    "v": verifier,
-                    "r": safe_return_to(return_to),
-                    "ttl": ATTEMPT_TTL,
-                },
-            )
+            attempt_id: uuid.UUID = (
+                await session.execute(
+                    text(
+                        "INSERT INTO oidc_login_attempts (organization_id, connection_id, "
+                        "state_hash, binding_hash, nonce, code_verifier, return_to, expires_at, "
+                        "purpose, membership_id, proposed_issuer, proposed_subject_claim) "
+                        "VALUES (:o, :c, :s, :b, :n, :v, :r, now() + :ttl, :purpose, :m, :pi, "
+                        ":pc) RETURNING id"
+                    ),
+                    {
+                        "o": connection.organization_id,
+                        "c": connection.id,
+                        "s": _sha256(state),
+                        "b": _sha256(binding),
+                        "n": nonce,
+                        "v": verifier,
+                        "r": return_to,
+                        "ttl": ATTEMPT_TTL,
+                        "purpose": "test" if test else "sign_in",
+                        "m": membership_id,
+                        "pi": proposed_issuer,
+                        "pc": proposed_subject_claim,
+                    },
+                )
+            ).scalar_one()
         query = urlencode(
             {
                 "response_type": "code",
@@ -494,6 +702,8 @@ class OidcSignIn:
                 "nonce": nonce,
                 "code_challenge": _b64url(hashlib.sha256(verifier.encode("ascii")).digest()),
                 "code_challenge_method": "S256",
+                # A test always asks the provider to authenticate again.
+                **({"prompt": "login", "max_age": "0"} if test else {}),
             }
         )
         separator = "&" if "?" in metadata.authorization_endpoint else "?"
@@ -504,8 +714,114 @@ class OidcSignIn:
             "auth.oidc.started",
             connection_id=str(connection.id),
             organization_id=str(connection.organization_id),
+            purpose="test" if test else "sign_in",
         )
-        return Started(f"{metadata.authorization_endpoint}{separator}{query}", binding)
+        return Started(
+            f"{metadata.authorization_endpoint}{separator}{query}",
+            binding,
+            attempt_id if test else None,
+        )
+
+    async def start(self, login_key: str, return_to: str | None) -> Started:
+        connection = await self._connection(login_key)
+        return await self._authorize(connection, login_key, return_to=safe_return_to(return_to))
+
+    async def start_test(
+        self,
+        organization_id: uuid.UUID,
+        membership_id: uuid.UUID,
+        *,
+        proposed_issuer: str | None = None,
+        proposed_subject_claim: str | None = None,
+    ) -> Started:
+        """An administrator's test sign-in through the organization's active connection,
+        optionally under proposed issuer / claim values. ``unknown_connection`` when there
+        is no active connection."""
+        async with self._db.tenant_snapshot(organization_id) as session:
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT id, login_key, issuer, client_id, client_secret_ref, "
+                        "subject_claim FROM oidc_connections "
+                        "WHERE organization_id = :o AND status = 'active'"
+                    ),
+                    {"o": organization_id},
+                )
+            ).one_or_none()
+        if row is None:
+            raise OidcFailure("unknown_connection")
+        connection = Connection(
+            id=row.id,
+            organization_id=organization_id,
+            issuer=row.issuer,
+            client_id=row.client_id,
+            client_secret_ref=row.client_secret_ref,
+            subject_claim=row.subject_claim,
+        )
+        return await self._authorize(
+            connection,
+            row.login_key,
+            return_to=TEST_RETURN,
+            membership_id=membership_id,
+            proposed_issuer=proposed_issuer if proposed_issuer != connection.issuer else None,
+            proposed_subject_claim=(
+                proposed_subject_claim
+                if proposed_subject_claim != connection.subject_claim
+                else None
+            ),
+        )
+
+    async def _consume(self, connection: Connection, state: str) -> _Attempt | None:
+        # Consume first, in its own transaction: this state never works again.
+        async with self._db.tenant_transaction(connection.organization_id) as session:
+            row = (
+                await session.execute(
+                    text(
+                        "UPDATE oidc_login_attempts SET consumed_at = now() "
+                        "WHERE organization_id = :o AND connection_id = :c "
+                        "AND state_hash = :s AND consumed_at IS NULL AND expires_at > now() "
+                        "RETURNING id, binding_hash, nonce, code_verifier, return_to, purpose, "
+                        "membership_id, proposed_issuer, proposed_subject_claim"
+                    ),
+                    {"o": connection.organization_id, "c": connection.id, "s": _sha256(state)},
+                )
+            ).one_or_none()
+        if row is None:
+            return None
+        return _Attempt(
+            row.id,
+            bytes(row.binding_hash),
+            row.nonce,
+            row.code_verifier,
+            row.return_to,
+            row.purpose,
+            row.membership_id,
+            row.proposed_issuer,
+            row.proposed_subject_claim,
+        )
+
+    async def _claims(
+        self,
+        policy: OutboundPolicy,
+        connection: Connection,
+        login_key: str,
+        attempt: _Attempt,
+        code: str,
+    ) -> Mapping[str, Any]:
+        metadata = await self._client.metadata(policy, connection.issuer)
+        secret = await self.client_secret(connection)
+        id_token = await self._client.exchange(
+            policy,
+            metadata,
+            connection,
+            code=code,
+            verifier=attempt.code_verifier,
+            redirect_uri=self.redirect_uri(login_key),
+            client_secret=secret,
+        )
+        return await self._client.verify(
+            policy, id_token, metadata, connection, nonce=attempt.nonce
+        )
 
     async def complete(
         self,
@@ -515,52 +831,30 @@ class OidcSignIn:
         state: str | None,
         binding: str | None,
         provider_error: bool,
-    ) -> SignedIn:
+    ) -> SignedIn | TestCompleted:
         connection = await self._connection(login_key)
         if state is None or not _TOKEN.fullmatch(state):
             raise OidcFailure("invalid_state")
-        # Consume first, in its own transaction: this state never works again.
-        async with self._db.tenant_transaction(connection.organization_id) as session:
-            attempt = (
-                await session.execute(
-                    text(
-                        "UPDATE oidc_login_attempts SET consumed_at = now() "
-                        "WHERE organization_id = :o AND connection_id = :c "
-                        "AND state_hash = :s AND consumed_at IS NULL AND expires_at > now() "
-                        "RETURNING binding_hash, nonce, code_verifier, return_to"
-                    ),
-                    {"o": connection.organization_id, "c": connection.id, "s": _sha256(state)},
-                )
-            ).one_or_none()
+        attempt = await self._consume(connection, state)
         if attempt is None:
             raise OidcFailure("invalid_state")
         if binding is None or not _TOKEN.fullmatch(binding):
             raise OidcFailure("invalid_state")
-        if not hmac.compare_digest(bytes(attempt.binding_hash), _sha256(binding)):
+        if not hmac.compare_digest(attempt.binding_hash, _sha256(binding)):
             raise OidcFailure("invalid_state")
+        if attempt.purpose == "test":
+            return await self._complete_test(
+                connection, login_key, attempt, code=code, provider_error=provider_error
+            )
         if provider_error or code is None or not 1 <= len(code) <= 2048:
             raise OidcFailure("provider_error")
+        policy = await self.policy(connection.organization_id)
         try:
-            metadata = await self._client.metadata(connection.issuer)
-            secret = await self._client_secret(connection)
-            id_token = await self._client.exchange(
-                metadata,
-                connection,
-                code=code,
-                verifier=attempt.code_verifier,
-                redirect_uri=self.redirect_uri(login_key),
-                client_secret=secret,
-            )
+            claims = await self._claims(policy, connection, login_key, attempt, code)
         except OidcFailure as failure:
-            # A 400 from the token endpoint is a bad or reused code -- anyone can send one
-            # with their own flow -- not the provider's fault: it never marks the record.
-            if failure.outcome == "provider_error" and failure.status_code != 400:
-                await self._record(connection.organization_id, connection.id, succeeded=False)
+            await self._record_failure(connection, failure)
             raise
-        claims = await self._client.verify(id_token, metadata, connection, nonce=attempt.nonce)
-        subject = claims.get(connection.subject_claim)
-        if not isinstance(subject, str) or not 1 <= len(subject) <= 255:
-            raise OidcFailure("token_invalid")
+        subject = _identifier(claims, connection.subject_claim)
         user_id = await self._member(connection, subject)
         return SignedIn(
             user_id=user_id,
@@ -568,6 +862,106 @@ class OidcSignIn:
             connection_id=connection.id,
             return_to=safe_return_to(attempt.return_to),
         )
+
+    async def _complete_test(
+        self,
+        connection: Connection,
+        login_key: str,
+        attempt: _Attempt,
+        *,
+        code: str | None,
+        provider_error: bool,
+    ) -> TestCompleted:
+        """Exchange and verify under the tested values; compare the administrator's own
+        identifier with their directory identity on this connection. Never a session."""
+        tested = replace(
+            connection,
+            issuer=attempt.proposed_issuer or connection.issuer,
+            subject_claim=attempt.proposed_subject_claim or connection.subject_claim,
+        )
+        proposed = attempt.proposed_issuer is not None or attempt.proposed_subject_claim is not None
+        identifier: str | None = None
+        if provider_error or code is None or not 1 <= len(code) <= 2048:
+            outcome = "sign_in_failed"
+        else:
+            policy = await self.policy(connection.organization_id)
+            try:
+                claims = await self._claims(policy, tested, login_key, attempt, code)
+                identifier = _identifier(claims, tested.subject_claim)
+            except OidcFailure as failure:
+                outcome = (
+                    "sign_in_failed"
+                    if failure.rejected_code
+                    else _TEST_FAILURES.get(failure.outcome, "sign_in_failed")
+                )
+                if not proposed:
+                    await self._record_failure(connection, failure)
+            else:
+                outcome = await self._match(connection, attempt, identifier)
+        async with self._db.tenant_transaction(connection.organization_id) as session:
+            await session.execute(
+                text(
+                    "UPDATE oidc_login_attempts SET outcome = :r, observed_identifier = :x, "
+                    "completed_at = now() WHERE organization_id = :o AND id = :a"
+                ),
+                {
+                    "r": outcome,
+                    "x": identifier if outcome in ("matched", "mismatched") else None,
+                    "o": connection.organization_id,
+                    "a": attempt.id,
+                },
+            )
+            if not proposed:
+                # A test of the connection as configured is its latest test.
+                await session.execute(
+                    text(
+                        "UPDATE oidc_connections SET last_test_at = now(), "
+                        "last_test_kind = 'sign_in', last_test_result = :r "
+                        "WHERE organization_id = :o AND id = :c"
+                    ),
+                    {"r": outcome, "o": connection.organization_id, "c": connection.id},
+                )
+            assert attempt.membership_id is not None  # noqa: S101 - purpose test
+            await record_test_event(
+                session,
+                connection.organization_id,
+                connection.id,
+                actor=f"member:{attempt.membership_id}",
+                kind="sign_in",
+                result=outcome,
+                proposed=proposed,
+            )
+        if outcome == "matched" and not proposed:
+            await self.record_success(connection.organization_id, connection.id)
+        metrics.SSO_SIGN_INS.labels(outcome="test_completed").inc()
+        log_event(
+            logger,
+            logging.INFO,
+            "auth.oidc.test_completed",
+            connection_id=str(connection.id),
+            organization_id=str(connection.organization_id),
+            outcome=outcome,
+        )
+        return TestCompleted(attempt.id, connection.organization_id, outcome)
+
+    async def _match(self, connection: Connection, attempt: _Attempt, identifier: str) -> str:
+        async with self._db.tenant_snapshot(connection.organization_id) as session:
+            stored = (
+                await session.execute(
+                    text(
+                        "SELECT external_id FROM directory_identities WHERE organization_id = :o "
+                        "AND connection_id = :c AND membership_id = :m"
+                    ),
+                    {
+                        "o": connection.organization_id,
+                        "c": connection.id,
+                        "m": attempt.membership_id,
+                    },
+                )
+            ).scalar_one_or_none()
+        if stored is None:
+            return "not_provisioned"
+        return "matched" if hmac.compare_digest(stored, identifier) else "mismatched"
 
     async def _member(self, connection: Connection, subject: str) -> uuid.UUID:
         """The active member this connection's subject maps to, in its organization."""
@@ -591,3 +985,50 @@ class OidcSignIn:
             raise OidcFailure("inactive")
         user_id: uuid.UUID = row.user_id
         return user_id
+
+
+# At most one ``sso.connection_tested`` event per connection, kind and result an hour: a
+# test is audited for its result, not for every click (C11).
+_TEST_EVENT_SQL = text(
+    """
+    INSERT INTO audit_events (organization_id, actor, action, target, before, after, reason)
+    SELECT :o, :actor, 'sso.connection_tested', CAST(:target AS jsonb), NULL,
+           CAST(:after AS jsonb), :reason
+    WHERE NOT EXISTS (
+      SELECT 1 FROM audit_events e
+      WHERE e.organization_id = :o AND e.action = 'sso.connection_tested'
+        AND e.target ->> 'connection_id' = :c
+        AND e.after ->> 'kind' = :kind AND e.after ->> 'result' = :result
+        AND (e.after ->> 'proposed')::boolean = :proposed
+        AND e.created_at > now() - interval '1 hour'
+    )
+    """
+)
+
+
+async def record_test_event(
+    session: AsyncSession,
+    organization_id: uuid.UUID,
+    connection_id: uuid.UUID,
+    *,
+    actor: str,
+    kind: str,
+    result: str,
+    proposed: bool,
+) -> None:
+    await session.execute(
+        _TEST_EVENT_SQL,
+        {
+            "o": organization_id,
+            "actor": actor,
+            "target": json.dumps({"connection_id": str(connection_id)}),
+            "after": json.dumps({"kind": kind, "result": result, "proposed": proposed}),
+            "reason": "Identity provider test"
+            if kind == "check"
+            else "Identity provider test sign-in",
+            "c": str(connection_id),
+            "kind": kind,
+            "result": result,
+            "proposed": proposed,
+        },
+    )

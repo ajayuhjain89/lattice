@@ -73,7 +73,8 @@ APP_TABLES = {
     # Phase 12 (P12.1, 0016): ciphertext the API opens to present a credential; private
     # outbound targets are operator-only.
     "encrypted_secrets": {"SELECT"},
-    "outbound_targets": set(),
+    # 0020: read to apply the operator's registrations (C4); never written by the API.
+    "outbound_targets": {"SELECT"},
     # Phase 12 (P12.3, 0018): mappings are read; written only by lattice_set_account_ref.
     "account_external_refs": {"SELECT"},
 }
@@ -95,7 +96,14 @@ COLUMN_PRIVILEGES = {
         "version",
         "updated_at",
     },
-    ("oidc_login_attempts", "UPDATE"): {"consumed_at"},
+    # 0020: a test sign-in's outcome and the administrator's own identifier; never the
+    # proof's use (lattice_oidc_change_identity).
+    ("oidc_login_attempts", "UPDATE"): {
+        "consumed_at",
+        "outcome",
+        "observed_identifier",
+        "completed_at",
+    },
     ("rate_limit_counters", "UPDATE"): {"window_start", "count"},
     ("ask_slots", "UPDATE"): {"lease_id", "expires_at"},
     # 0014: the session-creation check reads the connection's status only (D-25);
@@ -109,8 +117,26 @@ COLUMN_PRIVILEGES = {
         # 0017: the add-member form names the identifying claim.
         "issuer",
         "subject_claim",
+        # 0020: the identity settings (the secret's reference, shown as a kind only).
+        "client_id",
+        "login_key",
+        "client_secret_ref",
+        "created_at",
+        "updated_at",
+        "last_failure_code",
+        "last_test_at",
+        "last_test_kind",
+        "last_test_result",
     },
-    ("oidc_connections", "UPDATE"): {"last_success_at", "last_failure_at"},
+    # Sign-in and test facts; configuration only through the 0020 fenced functions.
+    ("oidc_connections", "UPDATE"): {
+        "last_success_at",
+        "last_failure_at",
+        "last_failure_code",
+        "last_test_at",
+        "last_test_kind",
+        "last_test_result",
+    },
     # 0016: the provisioning setup record -- never token_hash.
     ("scim_tokens", "SELECT"): {
         "id",
@@ -118,6 +144,9 @@ COLUMN_PRIVILEGES = {
         "connection_id",
         "created_at",
         "revoked_at",
+        # 0020: the token list (never the hash).
+        "last_used_at",
+        "hint",
     },
     # 0016: rename (ADR-017), audit-coupled.
     ("organizations", "UPDATE"): {"name", "updated_at"},
@@ -758,6 +787,78 @@ async def test_app_deletes_only_finished_sign_in_attempts(
                 {"o": world.org, "c": connection, "k": key},
             )
     assert await _run(app_db, world.org, "DELETE FROM oidc_login_attempts") == 2
+    # 0020: a finished test sign-in stays (its result, its proof) until it expires.
+    async with owner_db.tenant_transaction(world.org) as s:
+        await s.execute(
+            text(
+                "INSERT INTO oidc_login_attempts (organization_id, connection_id, state_hash, "
+                "binding_hash, nonce, code_verifier, expires_at, consumed_at, purpose, "
+                "membership_id) VALUES (:o, :c, sha256('t'::bytea), sha256('b'::bytea), "
+                "repeat('n', 22), repeat('v', 43), now() + interval '5 minutes', now(), 'test', "
+                ":m)"
+            ),
+            {"o": world.org, "c": connection, "m": world.member},
+        )
+    # Neither the live sign-in attempt nor the finished, unexpired test is deletable.
+    assert await _run(app_db, world.org, "DELETE FROM oidc_login_attempts") == 0
+
+
+# --- Phase 12 (P12.4, 0020): the identity fences ---------------------------------------------
+
+IDENTITY_FUNCTIONS = {
+    "lattice_oidc_create(uuid,text,text,text,text)",
+    "lattice_oidc_set_client(uuid,uuid,timestamp with time zone,text)",
+    "lattice_oidc_set_secret(uuid,uuid,timestamp with time zone,uuid,text,bytea,bytea)",
+    "lattice_oidc_clear_secret(uuid,uuid,timestamp with time zone)",
+    "lattice_oidc_set_status(uuid,uuid,timestamp with time zone,boolean)",
+    "lattice_oidc_change_identity(uuid,uuid,timestamp with time zone,text,text,uuid)",
+    "lattice_create_scim_token(uuid,bytea,text)",
+    "lattice_rotate_scim_token(uuid,uuid,bytea,text)",
+    "lattice_revoke_scim_token(uuid,uuid)",
+    "lattice_scim_token_used(uuid)",
+}
+
+
+async def test_the_identity_functions_are_narrow_definer_functions(
+    superuser_engine: AsyncEngine,
+) -> None:
+    names = sorted({f.split("(")[0] for f in IDENTITY_FUNCTIONS})
+    async with superuser_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    """
+                    SELECT p.oid::regprocedure::text, pg_get_userbyid(p.proowner), p.prosecdef,
+                           p.proconfig,
+                           array(SELECT DISTINCT coalesce(r.rolname, 'PUBLIC')
+                                 FROM aclexplode(p.proacl) a
+                                 LEFT JOIN pg_roles r ON r.oid = a.grantee
+                                 WHERE a.privilege_type = 'EXECUTE' ORDER BY 1)
+                    FROM pg_proc p WHERE p.proname = ANY(:names)
+                    """
+                ),
+                {"names": names},
+            )
+        ).all()
+        triggers = (
+            await conn.execute(
+                text(
+                    "SELECT p.proname, p.prosecdef, has_function_privilege('lattice_app', p.oid, "
+                    "'EXECUTE') FROM pg_proc p WHERE p.proname IN "
+                    "('lattice_require_connection_audit', 'lattice_require_scim_token_audit')"
+                )
+            )
+        ).all()
+    assert {r[0].replace(", ", ",") for r in rows} == IDENTITY_FUNCTIONS
+    for signature, owner, definer, config, executors in rows:
+        assert owner == "lattice_owner", signature
+        assert definer, signature
+        assert config == ["search_path=pg_catalog, public, pg_temp"], signature
+        assert executors == ["lattice_app", "lattice_owner"], signature
+    assert sorted(tuple(t) for t in triggers) == [
+        ("lattice_require_connection_audit", False, False),
+        ("lattice_require_scim_token_audit", False, False),
+    ]
 
 
 # --- Phase 12 (P12.3, 0018): accounts and their external references -----------------------

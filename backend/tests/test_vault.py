@@ -497,6 +497,11 @@ async def test_scim_tokens_stay_verification_only(owner_db: Database) -> None:
         "token_hash",
         "created_at",
         "revoked_at",
+        # 0020: when it was last used, and (for tokens created in the product) its last
+        # four characters -- never enough to recover it.
+        "last_used_at",
+        "hint",
     }
+    assert row["hint"] is None or len(row["hint"]) == 4
     assert len(row["token_hash"]) == 32
     assert token.encode() not in row["token_hash"]

@@ -85,6 +85,23 @@ ADMIN = {
     ("POST", "/v1/admin/access/account-references"),
     ("POST", "/v1/admin/access/account-references/remap"),
     ("POST", "/v1/admin/access/account-references/unmap"),
+    # Phase 12 (P12.4): identity administration (OIDC connection, SCIM tokens).
+    ("GET", "/v1/admin/identity"),
+    ("POST", "/v1/admin/identity/oidc"),
+    ("PATCH", "/v1/admin/identity/oidc/{connection_id}"),
+    ("PUT", "/v1/admin/identity/oidc/{connection_id}/client-secret"),
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/client-secret/remove"),
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/status/preview"),
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/status"),
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/identity/preview"),
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/identity"),
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/check"),
+    ("POST", "/v1/admin/identity/oidc/test-sign-in"),
+    ("GET", "/v1/admin/identity/oidc/test-sign-in/{test_id}"),
+    ("POST", "/v1/admin/identity/scim/tokens"),
+    ("POST", "/v1/admin/identity/scim/tokens/{token_id}/rotate"),
+    ("POST", "/v1/admin/identity/scim/tokens/{token_id}/revoke/preview"),
+    ("POST", "/v1/admin/identity/scim/tokens/{token_id}/revoke"),
 }
 SCIM = {
     ("GET", "/scim/v2/ServiceProviderConfig"),
@@ -176,6 +193,38 @@ BODIES: dict[tuple[str, str], Any] = {
         "reason": "Probe",
     },
 }
+_VERSIONED = {"version": "2026-10-02T00:00:00Z", "reason": "Probe"}
+BODIES |= {
+    ("POST", "/v1/admin/identity/oidc"): {
+        "issuer": "https://idp.probe.example",
+        "client_id": "probe",
+        "reason": "Probe",
+    },
+    ("PATCH", "/v1/admin/identity/oidc/{connection_id}"): {"client_id": "probe", **_VERSIONED},
+    ("PUT", "/v1/admin/identity/oidc/{connection_id}/client-secret"): {
+        "client_secret": "probe-secret-value",
+        **_VERSIONED,
+    },
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/client-secret/remove"): _VERSIONED,
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/status/preview"): {"enabled": False},
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/status"): {"enabled": False, **_VERSIONED},
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/identity/preview"): {
+        "subject_claim": "email"
+    },
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/identity"): {
+        "issuer": "https://idp.probe.example",
+        "subject_claim": "sub",
+        "proof_id": str(uuid.uuid4()),
+        "confirmation": "https://idp.probe.example",
+        **_VERSIONED,
+    },
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/check"): None,
+    ("POST", "/v1/admin/identity/oidc/test-sign-in"): {},
+    ("POST", "/v1/admin/identity/scim/tokens"): {"reason": "Probe"},
+    ("POST", "/v1/admin/identity/scim/tokens/{token_id}/rotate"): {"reason": "Probe"},
+    ("POST", "/v1/admin/identity/scim/tokens/{token_id}/revoke/preview"): None,
+    ("POST", "/v1/admin/identity/scim/tokens/{token_id}/revoke"): {"reason": "Probe"},
+}
 QUERIES = {("GET", "/v1/admin/access/documents"): "?q=onboarding"}
 
 
@@ -210,6 +259,9 @@ def _random_ids() -> dict[str, str]:
         "document_id",
         "grant_id",
         "account_id",
+        "connection_id",
+        "token_id",
+        "test_id",
     )
     return {name: str(uuid.uuid4()) for name in names} | {"resource_id": str(uuid.uuid4())}
 
@@ -291,6 +343,24 @@ async def worlds(owner_db: Database, app_client: AppFactory) -> Worlds:
         grant: uuid.UUID = (await s.execute(text("SELECT id FROM document_grants"))).scalar_one()
     connection = await create_oidc_connection(owner_db, halden.id)
     await create_provisioned_member(owner_db, halden.id, connection, "pat@halden.example", "x")
+    from ..factories import create_scim_token
+
+    await create_scim_token(owner_db, halden.id, connection)
+    async with owner_db.tenant_transaction(halden.id) as s:
+        token_id: uuid.UUID = (await s.execute(text("SELECT id FROM scim_tokens"))).scalar_one()
+        # A test sign-in of Lena's (P12.4), still pending.
+        test_id: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO oidc_login_attempts (organization_id, connection_id, "
+                    "state_hash, binding_hash, nonce, code_verifier, expires_at, purpose, "
+                    "membership_id) VALUES (:o, :c, sha256('s'::bytea), sha256('b'::bytea), "
+                    "repeat('n', 43), repeat('v', 43), now() + interval '10 minutes', 'test', "
+                    ":m) RETURNING id"
+                ),
+                {"o": halden.id, "c": connection, "m": halden.members["lena"]},
+            )
+        ).scalar_one()
     async with owner_db.tenant_transaction(halden.id) as s:
         resource: uuid.UUID = (
             await s.execute(text("SELECT id FROM directory_identities"))
@@ -309,6 +379,9 @@ async def worlds(owner_db: Database, app_client: AppFactory) -> Worlds:
         "grant_id": str(grant),
         "resource_id": str(resource),
         "account_id": str(halden.accounts["acme"]),
+        "connection_id": str(connection),
+        "token_id": str(token_id),
+        "test_id": str(test_id),
     }
     return Worlds(halden, veridian, ids)
 
@@ -342,12 +415,15 @@ async def test_another_organizations_identifiers_are_unknown(
                     "SELECT (SELECT count(*) FROM document_grants), (SELECT clearance FROM "
                     "memberships WHERE id = :m), (SELECT count(*) FROM jobs), "
                     "(SELECT count(*) FROM audit_events WHERE action LIKE 'access.%' "
-                    "OR action LIKE 'account.%')"
+                    "OR action LIKE 'account.%' OR action LIKE 'sso.%' "
+                    "OR action LIKE 'scim.%'), "
+                    "(SELECT count(*) FROM scim_tokens WHERE revoked_at IS NULL), "
+                    "(SELECT client_id || status FROM oidc_connections)"
                 ),
                 {"m": uuid.UUID(worlds.halden_ids["membership_id"])},
             )
         ).one()
-    assert tuple(state) == (1, "internal", 0, 0)
+    assert tuple(state) == (1, "internal", 0, 0, 1, "latticeactive")
 
 
 @pytest.mark.parametrize(("method", "path"), sorted(ADMIN))
