@@ -14,9 +14,10 @@ source of another organization is invisible, so it answers exactly as a random I
 * **Mappings**: map, remap and unmap one reference through the fenced
   ``lattice_set_account_ref`` with the mapping the administrator reviewed as
   ``expected`` (409 when it moved on). Nothing indexed changes until the source syncs:
-  then mapped records are indexed under (or move to) the account, and unmapped ones are
-  quarantined (account-scoped source) or lose the account (otherwise) -- the Phase 4
-  rules, deterministic, never an ad-hoc rewrite of stored evidence.
+  then mapped records are indexed under (or move to) the account, and an unmapped
+  reference stays known as *unresolved* (0019): its records are quarantined on every
+  source -- a missing mapping never widens who can read them -- until it is mapped again.
+  The Phase 4 rules, deterministic, never an ad-hoc rewrite of stored evidence.
 * **Unmapped references**: from the latest run's ``access_unmappable:account`` failures,
   grouped by reference -- the exact reference and a count, nothing from the records.
 
@@ -507,8 +508,10 @@ async def _source(
 
 async def _current(
     session: AsyncSession, organization_id: uuid.UUID, key: ReferenceKey
-) -> uuid.UUID | None:
-    value: uuid.UUID | None = (
+) -> tuple[bool, uuid.UUID | None]:
+    """Whether the reference is known (mapped, or unresolved after an unmap), and its
+    account (None when unresolved or unknown)."""
+    row = (
         await session.execute(
             text(
                 "SELECT account_id FROM account_external_refs WHERE organization_id = :o "
@@ -516,8 +519,8 @@ async def _current(
             ),
             {"o": organization_id, "s": key.source_id, "k": key.ref_kind, "r": key.external_ref},
         )
-    ).scalar_one_or_none()
-    return value
+    ).one_or_none()
+    return (False, None) if row is None else (True, row.account_id)
 
 
 _LATEST_RUNS = """
@@ -621,7 +624,7 @@ async def preview_mapping(
 ) -> MappingPreview:
     """Now → After, with the refusals the change would give (without its lock)."""
     source, account_scoped = await _source(session, organization_id, request)
-    now = await _current(session, organization_id, request)
+    known, now = await _current(session, organization_id, request)
     operation = _operation(now, request.account_id)
     after = await _account_ref(session, organization_id, request.account_id)
     if request.account_id is not None:
@@ -629,10 +632,15 @@ async def preview_mapping(
             raise refusal("unknown_account")
         if after.lifecycle == "archived":
             raise refusal("account_archived")
+    # Only a chat channel that was never mapped, on a source that is not account-scoped,
+    # has records indexed without an account: mapping scopes them. Every other unmapped
+    # reference's records wait (failed or quarantined) and are indexed under the account.
+    # Unmapping always quarantines: a missing mapping never widens access (0019).
+    unscoped_now = request.ref_kind == "chat_channel" and not account_scoped and not known
     effect = {
-        "map": "indexed" if account_scoped else "scoped",
+        "map": "scoped" if unscoped_now else "indexed",
         "remap": "moved",
-        "unmap": "quarantined" if account_scoped else "unscoped",
+        "unmap": "quarantined",
     }[operation]
     return MappingPreview(
         operation=operation,
@@ -680,7 +688,12 @@ async def _change(
             if fenced is not None and fenced[0] == "mapping_changed" and operation == "map":
                 raise refusal("already_mapped") from None
             raise
-        assert done == {"map": "created", "remap": "changed", "unmap": "removed"}[operation]  # noqa: S101
+        expected_outcomes = {
+            "map": ("created", "restored"),
+            "remap": ("changed",),
+            "unmap": ("unresolved",),
+        }[operation]
+        assert done in expected_outcomes  # noqa: S101
         await record_event(
             session,
             organization_id,
@@ -746,8 +759,9 @@ async def unmap_reference(
     actor_membership_id: uuid.UUID,
     request: UnmapRequest,
 ) -> MappingResult:
-    """Remove a reference's mapping. Indexed records keep their account until the next
-    sync; then they are quarantined or lose the account (``MappingPreview.effect``)."""
+    """Remove a reference's mapping: it stays known as unresolved. Indexed records keep
+    their account until the next sync, then are quarantined -- on every source -- until
+    the reference is mapped again (never indexed without the account)."""
     return await _change(
         db,
         organization_id=organization_id,

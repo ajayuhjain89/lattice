@@ -151,9 +151,12 @@ Internal (non-public) comments are included; they are internal-level content.
 `account_ref` = ticketing organization ID (canonical decimal text) → mapped **exactly** by
 the source's `account_external_refs` rows of kind `ticketing_organization` (P12.3; the
 operator's `sources.yaml` `account_refs` are written there by `lattice sync`, audited as
-`operator:sync`; administrators map, remap and unmap in Access → Accounts). Source is
-`account_scoped = true`: unmapped tickets
-are not indexed (`access_unmappable:account`, e.g. HAL-4951 in the dataset).
+`operator:sync`; administrators map, remap and unmap in Access → Accounts). A ticket's
+organization always names a customer account, so a ticket whose organization has no
+mapping — never mapped, or unmapped by an administrator — is not indexed on any source
+(`access_unmappable:account`, e.g. HAL-4951 in the dataset); an indexed one is
+quarantined. A missing mapping never widens access. The dataset's sources are also
+`account_scoped = true`, which additionally refuses tickets naming no organization.
 `display_ref` = the ticket ID. People appear by name only; emails are never copied into
 content. A ticket ID that appears twice is rejected in every occurrence.
 Capabilities: snapshot ✔, incremental ✗ (as built), acl_export ✗ (source defaults
@@ -169,9 +172,12 @@ The real Slack export layout: `channels.json`, `groups.json` (private channels, 
 - `external_id`: `<channel_id>:<thread_ts>` or `<channel_id>:day:<date>`.
 - Account mapping by channel ID through the source's `account_external_refs` rows of kind
   `chat_channel` (P12.3; a `sources.yaml` `channels: {C0ACCTKES01: {account:
-  kestrel-bank}}` entry is written there by `lattice sync`); channels not mapped have no
-  account. No naming rule — an explicit mapping only, by ID. Channel *names* never appear
-  in the mapping workflow (D-18).
+  kestrel-bank}}` entry is written there by `lattice sync`); a channel that was never
+  mapped is not an account reference and its records have no account. A channel an
+  administrator *unmapped* stays known as unresolved (migration 0019): its records are
+  quarantined until it is mapped again — never indexed without the account. No naming
+  rule — an explicit mapping only, by ID. Channel *names* never appear in the mapping
+  workflow (D-18).
 - Public channels: source default sensitivity (internal).
 - Private channels: `ExternalGroup` per private channel; records get a `group` grant
   and `access_mode = grants_only` so **only channel members** can read them —
@@ -183,8 +189,9 @@ The real Slack export layout: `channels.json`, `groups.json` (private channels, 
 - As built (fixtures): folders are named by channel name; threads use `thread_ts`,
   `reply_count`, `reply_users` and `replies`; replies are stored in the day file of the
   day they were posted; bot posts use `subtype: bot_message`; a Slack Connect channel
-  includes external users from another `team_id`. Channel settings (account,
-  sensitivity) live in the source configuration (`sources.yaml` in the dataset).
+  includes external users from another `team_id`. Channel settings live in the source
+  configuration (`sources.yaml` in the dataset); since P12.3 a channel's account is
+  written into `account_external_refs`, its sensitivity stays in the configuration.
 - As built (connector): any message a reply points to is a thread root, even without
   `reply_count`, so a root never appears in both its thread and its day record; a reply
   to a missing root is `orphan_reply`; `<@U123>` becomes `@Real Name` and `&amp;`,

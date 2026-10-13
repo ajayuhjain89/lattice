@@ -2051,10 +2051,10 @@ export interface components {
       after: components["schemas"]["AccountRef"] | null;
       /**
        * Effect
-       * @description At the next sync: indexed (waiting records are indexed under the account), scoped (records become scoped to the account), moved (records move to the new account), quarantined (records become unreadable until mapped again), unscoped (records lose their account: readable under the source's other rules).
+       * @description At the next sync: indexed (waiting or quarantined records are indexed under the account), scoped (a never-mapped channel's records become scoped to the account), moved (records move to the new account), quarantined (an unmap: records become unreadable until the reference is mapped again, on every source -- a missing mapping never widens who can read them).
        * @enum {string}
        */
-      effect: "indexed" | "scoped" | "moved" | "quarantined" | "unscoped";
+      effect: "indexed" | "scoped" | "moved" | "quarantined";
       /** External Ref */
       external_ref: string;
       now: components["schemas"]["AccountRef"] | null;

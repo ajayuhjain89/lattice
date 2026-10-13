@@ -185,14 +185,15 @@ describe("An account", () => {
     expect(await screen.findByTestId("applied-change")).toHaveTextContent("Sync Halden Support (Zendesk) now");
   });
 
-  it("warns when removing a mapping widens who can read", async () => {
+  it("says removing a mapping leaves the records unresolved, never more widely readable", async () => {
     mockFetch({ [`GET ${LIST}/${ACCOUNT_IDS.acme}`]: [200, ACCOUNT_ACME], [`POST ${PREVIEW}`]: [200, PREVIEW_UNMAP_CHANNEL] });
     renderInWorkspace(<AccountScreen id={ACCOUNT_IDS.acme} />, { me: ME_LENA });
     await userEvent.click(await screen.findByRole("button", { name: "Remove the mapping of C0EXTACME01" }));
     const dialog = await screen.findByRole("dialog", { name: "Remove a reference's mapping" });
     await userEvent.click(within(dialog).getByRole("button", { name: "Review change" }));
-    expect(await within(dialog).findByText("This widens who can read these records")).toBeInTheDocument();
-    expect(within(dialog).getByTestId("mapping-effect")).toHaveTextContent("are no longer Acme Corp's");
+    expect(await within(dialog).findByText("These records stay unreadable until mapped again")).toBeInTheDocument();
+    expect(within(dialog).getByTestId("mapping-effect")).toHaveTextContent("become unresolved: nobody can read them");
+    expect(dialog).not.toHaveTextContent(/widen/i);
   });
 
   it("an unknown or foreign account is simply not available", async () => {
@@ -262,8 +263,10 @@ describe("Account copy", () => {
     expect(mappingEffect(PREVIEW_REMAP_ACME_KESTREL)).toBe(
       "Records from Ticketing organization 360001001 move from Acme Corp to Kestrel Bank. Until then they stay with Acme Corp.",
     );
-    expect(mappingEffect({ ...PREVIEW_UNMAP_CHANNEL, account_scoped: true, effect: "quarantined" })).toBe(
-      "Records from Channel C0EXTACME01 stop being readable until the reference is mapped again. Nothing is deleted.",
-    );
+    for (const account_scoped of [true, false]) {
+      expect(mappingEffect({ ...PREVIEW_UNMAP_CHANNEL, account_scoped })).toBe(
+        "Records from Channel C0EXTACME01 become unresolved: nobody can read them until the reference is mapped to an account again. Nothing is deleted, and they are never indexed without an account.",
+      );
+    }
   });
 });

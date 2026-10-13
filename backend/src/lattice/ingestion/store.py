@@ -392,6 +392,7 @@ class ExistingDocument:
     access_hash: bytes
     version: int
     sensitivity: str
+    account_id: uuid.UUID | None
 
 
 async def existing_documents(
@@ -400,13 +401,14 @@ async def existing_documents(
     """Hashes and status of every document of the source -- metadata only, no content."""
     rows = await session.execute(
         text(
-            "SELECT external_id, id, status, content_hash, access_hash, version, sensitivity "
-            "FROM documents WHERE organization_id = :o AND source_id = :s"
+            "SELECT external_id, id, status, content_hash, access_hash, version, sensitivity, "
+            "account_id FROM documents WHERE organization_id = :o AND source_id = :s"
         ),
         {"o": org, "s": source_id},
     )
     return {
-        r[0]: ExistingDocument(r[1], r[2], bytes(r[3]), bytes(r[4]), r[5], r[6]) for r in rows.all()
+        r[0]: ExistingDocument(r[1], r[2], bytes(r[3]), bytes(r[4]), r[5], r[6], r[7])
+        for r in rows.all()
     }
 
 

@@ -43,7 +43,14 @@ from lattice.connectors.contract import Connector, RecordError, SourceRecord, So
 from lattice.connectors.registry import build_connector
 from lattice.db.engine import Database
 from lattice.ingestion import store
-from lattice.ingestion.access import LEVELS, AccessFailure, MappedAccess, OrgDirectory, map_access
+from lattice.ingestion.access import (
+    LEVELS,
+    AccessFailure,
+    MappedAccess,
+    OrgDirectory,
+    map_access,
+    unmapped_account,
+)
 from lattice.ingestion.canonical import CanonicalDocument, NormalizeFailure, canonicalize
 from lattice.ingestion.chunking import chunk, estimate_tokens
 from lattice.ingestion.embedding_input import embedding_input, input_hash, lexical_header
@@ -531,6 +538,16 @@ class Syncer:
             self._quarantine_prior(prior, quarantine)
             return None
         access = map_access(record, self.config, directory)
+        if (
+            isinstance(access, MappedAccess)
+            and access.account_id is None
+            and record.account_ref is not None
+            and prior is not None
+            and prior.account_id is not None
+        ):
+            # The record still names the reference that gave it an account: a mapping
+            # that disappeared never leaves it readable with less restriction.
+            access = unmapped_account(record.account_ref)
         if isinstance(access, AccessFailure):
             self._fail("map_access", access.code, external_id=ext, params=access.params)
             self._quarantine_prior(prior, quarantine)

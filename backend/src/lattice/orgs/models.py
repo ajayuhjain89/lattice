@@ -132,7 +132,8 @@ class Account(Base):
 class AccountExternalRef(Base):
     """A source-provided reference mapped to one canonical account (phase-12-plan C10;
     migration 0018). Unique per organization, source, kind and value; written by the
-    fenced ``lattice_set_account_ref`` (the API) or by operators (``lattice sync``)."""
+    fenced ``lattice_set_account_ref`` (the API) or by operators (``lattice sync``). An
+    unmap leaves the row with no account (unresolved, 0019)."""
 
     __tablename__ = "account_external_refs"
     __table_args__ = (
@@ -166,7 +167,8 @@ class AccountExternalRef(Base):
     # ticketing_organization | chat_channel: the connector's own reference kind.
     ref_kind: Mapped[str] = mapped_column(Text)
     external_ref: Mapped[str] = mapped_column(Text)
-    account_id: Mapped[uuid.UUID]
+    # NULL: unresolved -- unmapped by an administrator; its records fail closed (0019).
+    account_id: Mapped[uuid.UUID | None]
     created_by: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())

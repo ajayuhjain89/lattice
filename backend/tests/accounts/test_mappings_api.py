@@ -49,7 +49,7 @@ async def _map(client: httpx.AsyncClient, body: dict[str, Any], reason: str = "S
     return await post(client, "account-references", {**body, "reason": reason})
 
 
-async def _mappings(owner: Database, org: uuid.UUID) -> list[tuple[str, str, uuid.UUID]]:
+async def _mappings(owner: Database, org: uuid.UUID) -> list[tuple[str, str, uuid.UUID | None]]:
     rows = await owner_rows(
         owner,
         org,
@@ -122,7 +122,8 @@ async def test_map_remap_unmap_are_previewed_explicit_and_audited(
     )
     assert unmapped.status_code == 200, unmapped.text
     assert unmapped.json()["account"] is None
-    assert await _mappings(owner_db, halden.id) == []
+    # The reference stays known, unresolved: its records fail closed at the next sync.
+    assert await _mappings(owner_db, halden.id) == [("ticketing_organization", "360009913", None)]
     nothing = await _preview(client, _ref(world, account_id=None))
     assert nothing.status_code == 422
 
@@ -153,17 +154,41 @@ async def test_map_remap_unmap_are_previewed_explicit_and_audited(
     }
 
 
-async def test_unscoped_sources_preview_scoping_and_unscoping(
-    client: httpx.AsyncClient, world: World
+async def test_unmapping_never_unscopes_even_on_a_source_that_is_not_account_scoped(
+    client: httpx.AsyncClient, world: World, owner_db: Database
 ) -> None:
-    acme = str(world.halden.accounts["acme"])
-    await as_member(client, world.halden, "lena")
+    halden = world.halden
+    acme, kestrel = str(halden.accounts["acme"]), str(halden.accounts["kestrel"])
+    await as_member(client, halden, "lena")
     first = (await _preview(client, _channel(world, account_id=acme))).json()
     assert (first["effect"], first["account_scoped"]) == ("scoped", False)
     assert (await _map(client, _channel(world, account_id=acme))).status_code == 201
     unmap = (await _preview(client, _channel(world, account_id=None))).json()
-    # Without an account the channel's records are readable under the source's own rules.
-    assert unmap["effect"] == "unscoped"
+    # A missing mapping never widens access: the records are quarantined, not unscoped.
+    assert (unmap["operation"], unmap["effect"], unmap["account_scoped"]) == (
+        "unmap",
+        "quarantined",
+        False,
+    )
+    done = await post(
+        client, "account-references/unmap", _channel(world, current_account_id=acme, reason="x")
+    )
+    assert done.status_code == 200, done.text
+    assert await _mappings(owner_db, halden.id) == [("chat_channel", "C0GENERAL01", None)]
+    # Mapping the unresolved reference again restores (indexes) its records: no longer a
+    # channel that was never mapped, so not "scoped".
+    again = (await _preview(client, _channel(world, account_id=kestrel))).json()
+    assert (again["operation"], again["effect"], again["now"]) == ("map", "indexed", None)
+    restored = await _map(client, _channel(world, account_id=kestrel))
+    assert restored.status_code == 201, restored.text
+    assert await _mappings(owner_db, halden.id) == [
+        ("chat_channel", "C0GENERAL01", halden.accounts["kestrel"])
+    ]
+    assert [(e.before, e.after) for e in await events(owner_db, halden.id)] == [
+        (None, {"account_id": acme}),
+        ({"account_id": acme}, None),
+        (None, {"account_id": kestrel}),
+    ]
 
 
 async def test_one_account_takes_many_references_and_a_reference_one_account(
@@ -446,6 +471,9 @@ async def test_the_check_trigger_binds_every_writer(world: World, owner_db: Data
     )
     with pytest.raises(DBAPIError, match="account_archived"):
         await write(insert, **{**base, "a": halden.accounts["kestrel"]})
+    # A reference starts mapped: only an unmap makes one unresolved (0019).
+    with pytest.raises(DBAPIError, match="account_not_found"):
+        await write(insert, **{**base, "a": None})
     await write(insert, **{**base, "a": halden.accounts["acme"]})
     with pytest.raises(DBAPIError, match="account_archived"):
         await write(
@@ -456,6 +484,13 @@ async def test_the_check_trigger_binds_every_writer(world: World, owner_db: Data
     # An account with mappings cannot be deleted (documents would lose their account).
     with pytest.raises(DBAPIError, match="foreign key"):
         await write("DELETE FROM accounts WHERE id = :a", a=halden.accounts["acme"])
+    # Unresolved, then mapped again (never to an archived account).
+    await write("UPDATE account_external_refs SET account_id = NULL")
+    with pytest.raises(DBAPIError, match="account_archived"):
+        await write(
+            "UPDATE account_external_refs SET account_id = :a", a=halden.accounts["kestrel"]
+        )
+    await write("UPDATE account_external_refs SET account_id = :a", a=halden.accounts["acme"])
     # The existing mapping keeps working when its account is archived later.
     await write("UPDATE accounts SET archived_at = now() WHERE id = :a", a=halden.accounts["acme"])
     assert len(await _mappings(owner_db, org)) == 1

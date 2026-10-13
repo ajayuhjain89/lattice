@@ -8,6 +8,10 @@ connector's own normalisation -- against ``account_external_refs`` of the record
 never fuzzily, never by name, never from content. A document names an account *key*
 (front matter), which is the canonical account itself and needs no mapping.
 
+A row with no account is an **unresolved** reference (0019): it was mapped and an
+administrator unmapped it. Its records fail closed at sync (``lattice.ingestion.access``)
+-- a missing mapping never widens who can read them -- until it is mapped again.
+
 Writers: the API through the fenced ``lattice_set_account_ref`` (``lattice.accounts.service``)
 and operators through ``lattice sync --sources`` (``apply_file_mappings``): a sources file
 makes the references it names match it again -- audited as ``operator:sync``, never
@@ -63,8 +67,9 @@ def mapping_target(source_id: uuid.UUID, ref_kind: str, external_ref: str) -> di
 
 async def load_mappings(
     session: AsyncSession, organization_id: uuid.UUID, source_id: uuid.UUID, connector_type: str
-) -> dict[str, uuid.UUID]:
-    """The source's mappings: external reference -> account ID."""
+) -> dict[str, uuid.UUID | None]:
+    """The source's mappings: external reference -> account ID, or None when the reference
+    is unresolved (unmapped by an administrator; its records fail closed)."""
     kind = ref_kind_for(connector_type)
     if kind is None:
         return {}
@@ -100,7 +105,7 @@ async def apply_file_mappings(
         before = current.get(ref)
         if before == account_id:
             continue
-        if before is None:
+        if ref not in current:
             statement = text(
                 "INSERT INTO account_external_refs (organization_id, source_id, ref_kind, "
                 "external_ref, account_id, created_by) VALUES (:o, :s, :k, :r, :a, 'operator:sync')"

@@ -26,7 +26,7 @@ test("on a phone, accounts and references are stacked rows and the mapping revie
     return box && [Math.round(box.x), Math.round(box.y + box.height)];
   }).toEqual([0, viewport?.height]);
   await sheet.getByRole("button", { name: "Review change" }).tap();
-  await expect(sheet.getByTestId("mapping-effect")).toContainText("stop being readable until the reference is mapped again");
+  await expect(sheet.getByTestId("mapping-effect")).toContainText("become unresolved: nobody can read them until the reference is mapped to an account again");
   await expect(sheet.getByRole("button", { name: "Remove mapping" })).toBeInViewport();
   await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: "Close" }).tap();

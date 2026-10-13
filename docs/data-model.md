@@ -234,8 +234,8 @@ reference them.
 
 **Lifecycle (P12.3).** Archiving is an administration state, not content deletion and not
 authorization revocation: documents keep their account, assignments stay, traces stay
-valid, existing mappings keep resolving at sync (dropping them would quarantine an
-account-scoped source's records or unscope — and so widen — the others'). An archived
+valid, existing mappings keep resolving at sync (dropping them would quarantine the
+account's records). An archived
 account refuses new mappings and is read-only to the API role until reactivated, which
 keeps the same row (no duplicate identity). The Ask account picker labels it *archived*.
 
@@ -251,9 +251,9 @@ which accounts an `assigned`-scope member can see.
 | source_id       | uuid        | FK `(organization_id, source_id)` → sources **ON DELETE CASCADE** |
 | ref_kind        | text        | `ticketing_organization` (ticketing sources) · `chat_channel` (chat_export sources); must fit the source's connector (check trigger) |
 | external_ref    | text        | exactly as the connector reports it: trimmed, NFC, case kept, 1–256, no control characters; a ticketing organization ID in canonical decimal |
-| account_id      | uuid        | FK `(organization_id, account_id)` → accounts **ON DELETE RESTRICT** |
+| account_id      | uuid NULL   | FK `(organization_id, account_id)` → accounts **ON DELETE RESTRICT**. NULL = **unresolved** (0019): an administrator unmapped it; its records fail closed at sync until it is mapped again. Only an unmap sets NULL (an INSERT must name an account, for every writer) |
 | created_by      | text        | `member:<id>`, `operator:sync`, `operator:migration` |
-| created_at, updated_at | timestamptz | `updated_at` moves on a remap (the setup record's `sync_required`) |
+| created_at, updated_at | timestamptz | `updated_at` moves on a remap or unmap (the setup record's `sync_required`) |
 
 UQ `(organization_id, source_id, ref_kind, external_ref)`: one reference → at most one
 account; one account → many references, across sources. Index `(organization_id,
@@ -261,8 +261,9 @@ account_id)`. A BEFORE trigger (`lattice_check_account_ref`, every writer) refus
 that does not fit the connector, a source being deleted, a change of the reference's
 identity columns, and a new or changed mapping to an archived account (read under a
 share lock that serialises with archiving). Ingestion reads the source's mappings at
-sync (`lattice.accounts.refs.load_mappings`); unmapped references on account-scoped
-sources **fail closed** (`ingestion-design.md` §6). Migration 0018 moved
+sync (`lattice.accounts.refs.load_mappings`); a missing mapping **fails closed** and never
+widens access — an unmapped ticketing organization or an unresolved reference on any
+source, any unmapped reference on an account-scoped source (`ingestion-design.md` §6). Migration 0018 moved
 `sources.config.account_refs` and `channels.*.account` here; channel *sensitivity* stays
 in `sources.config.channels`.
 

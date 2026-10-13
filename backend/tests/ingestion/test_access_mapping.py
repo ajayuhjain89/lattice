@@ -113,6 +113,50 @@ def test_an_unmapped_ticket_reports_only_the_external_reference() -> None:
     assert result.params == {"external_account_ref": "360009913"}
 
 
+# A reference an administrator unmapped stays known with no account (0019).
+UNRESOLVED_TICKET = replace(DIRECTORY, account_refs={"360001001": None})
+UNRESOLVED_CHANNEL = replace(DIRECTORY, account_refs={"C0ACME": None})
+PLAIN_TICKETS = _config("ticketing")  # not account-scoped
+
+
+@pytest.mark.parametrize(
+    ("config", "record", "directory"),
+    [
+        # Unresolved, whether or not the source is account-scoped.
+        (TICKETS, _record("ticket", "360001001"), UNRESOLVED_TICKET),
+        (PLAIN_TICKETS, _record("ticket", "360001001"), UNRESOLVED_TICKET),
+        (SLACK, _record("chat_thread", "C0ACME"), UNRESOLVED_CHANNEL),
+        (
+            _config("chat_export", account_scoped=True),
+            _record("chat_thread", "C0ACME"),
+            UNRESOLVED_CHANNEL,
+        ),
+        # A ticket's organization always names an account: never mapped is no better.
+        (PLAIN_TICKETS, _record("ticket", "360009913"), TICKET_REFS),
+    ],
+)
+def test_a_missing_account_mapping_fails_closed_on_every_source(
+    config: SourceConfig, record: SourceRecord, directory: OrgDirectory
+) -> None:
+    result = map_access(record, config, directory)
+    assert isinstance(result, AccessFailure)
+    assert result.code == "access_unmappable:account"
+    assert result.params == {"external_account_ref": record.account_ref}
+
+
+def test_only_a_never_mapped_channel_or_a_ticket_without_organization_has_no_account() -> None:
+    """Not account references: a channel nobody mapped (#general) and a ticket that names
+    no organization, on sources that are not account-scoped."""
+    assert (
+        _ok(map_access(_record("chat_thread", "C0GENERAL"), SLACK, CHANNEL_REFS)).account_id is None
+    )
+    assert _ok(map_access(_record("ticket", None), PLAIN_TICKETS, TICKET_REFS)).account_id is None
+    # Mapped again: the same reference resolves.
+    assert (
+        _ok(map_access(_record("chat_thread", "C0ACME"), SLACK, CHANNEL_REFS)).account_id == A_ACME
+    )
+
+
 # --- mapping ------------------------------------------------------------------------------
 
 

@@ -21,7 +21,7 @@ BusinessStatus = Literal["active", "churned", "prospect"]
 Lifecycle = Literal["active", "archived"]
 RefKind = Literal["ticketing_organization", "chat_channel"]
 MappingOperation = Literal["map", "remap", "unmap"]
-MappingEffect = Literal["indexed", "scoped", "moved", "quarantined", "unscoped"]
+MappingEffect = Literal["indexed", "scoped", "moved", "quarantined"]
 MAX_ALIASES = 20
 MAX_ALIAS = 100
 MAX_NAME = 200
@@ -171,10 +171,11 @@ class MappingPreview(_Out):
     now: AccountRef | None
     after: AccountRef | None
     effect: MappingEffect = Field(
-        description="At the next sync: indexed (waiting records are indexed under the "
-        "account), scoped (records become scoped to the account), moved (records move to "
-        "the new account), quarantined (records become unreadable until mapped again), "
-        "unscoped (records lose their account: readable under the source's other rules)."
+        description="At the next sync: indexed (waiting or quarantined records are indexed "
+        "under the account), scoped (a never-mapped channel's records become scoped to the "
+        "account), moved (records move to the new account), quarantined (an unmap: records "
+        "become unreadable until the reference is mapped again, on every source -- a "
+        "missing mapping never widens who can read them)."
     )
     records_waiting: int = Field(
         description="Records of the latest run waiting for this reference (0 if none)."

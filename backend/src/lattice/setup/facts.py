@@ -72,7 +72,8 @@ _SOURCES_SQL = text(
         WHERE c.account_scoped OR EXISTS (
           SELECT 1 FROM account_external_refs m
           WHERE m.organization_id = :o AND m.source_id = c.id)) AS account_sources,
-      -- Still unmapped now: one mapped since the run waits for the next sync instead.
+      -- Still unmapped now (no mapping, or unresolved after an unmap): one mapped since
+      -- the run waits for the next sync instead.
       (SELECT count(*) FROM (
          SELECT DISTINCT f.sync_run_id, f.message_params ->> 'external_account_ref' AS ref,
                 l.source_id
@@ -82,7 +83,7 @@ _SOURCES_SQL = text(
         WHERE NOT EXISTS (
           SELECT 1 FROM account_external_refs m
           WHERE m.organization_id = :o AND m.source_id = w.source_id
-            AND m.external_ref = w.ref)) AS unmapped_references,
+            AND m.external_ref = w.ref AND m.account_id IS NOT NULL)) AS unmapped_references,
       (SELECT count(*) FROM account_external_refs m JOIN latest l ON l.source_id = m.source_id
         WHERE m.organization_id = :o AND m.updated_at > l.started_at)
         AS references_awaiting_sync

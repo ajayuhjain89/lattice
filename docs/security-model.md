@@ -672,9 +672,13 @@ accounts and their external references; the rest is contract, not yet implemente
   or content-derived suggestions (C9, D-10). Mapping changes which account a record
   belongs to at the next sync; the record's own rules (grants-only private channels,
   sensitivity, departments, the tenant) still decide who may read it, and the
-  administrator gains nothing (tested over the synthetic export). Unmapping on a
-  non-account-scoped source widens readers to the source's other rules; the preview
-  states it before the reason is asked.
+  administrator gains nothing (tested over the synthetic export). **A missing account
+  mapping never widens access** (P12.3 correction, migration 0019): unmapping leaves the
+  reference *unresolved* and its records quarantined at the next sync on every source,
+  account-scoped or not, until a valid mapping exists; a ticket whose organization has no
+  mapping is never indexed without an account. The preview says the records become
+  unresolved and unreadable; mapping again restores them. Tested with the authorization
+  predicate for every member (`test_missing_account_mapping_never_widens_read_access`).
 - **D-10.** Names and aliases stay administrative metadata: editing them touches no
   document, chunk, search text or embedding (tested); mention detection still matches
   only accounts the asker may see.

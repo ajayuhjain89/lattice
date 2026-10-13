@@ -201,6 +201,8 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
       const after = b.account_id ? accounts[b.account_id] : undefined;
       const scoped = source.connector_type === "ticketing";
       const operation = !now ? "map" : after ? "remap" : "unmap";
+      // As the API: only a never-mapped channel of a source that is not account-scoped is
+      // indexed without an account; an unmap always quarantines (never widens).
       const waiting = unmapped.items.find((r) => r.external_ref === b.external_ref && r.source.id === b.source_id)?.records_waiting ?? 0;
       return json(route, 200, {
         operation,
@@ -210,7 +212,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
         account_scoped: scoped,
         now: now ? ref(now) : null,
         after: after ? ref(after) : null,
-        effect: operation === "map" ? (scoped ? "indexed" : "scoped") : operation === "remap" ? "moved" : scoped ? "quarantined" : "unscoped",
+        effect: operation === "map" ? (scoped ? "indexed" : "scoped") : operation === "remap" ? "moved" : "quarantined",
         records_waiting: waiting,
         takes_effect: "next_sync",
       } satisfies S["MappingPreview"]);

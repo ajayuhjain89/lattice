@@ -1692,7 +1692,7 @@ export const PREVIEW_UNMAP_CHANNEL: S["MappingPreview"] = {
   account_scoped: false,
   now: { id: ACCOUNT_IDS.acme, key: "acme-corp", name: "Acme Corp", lifecycle: "active" },
   after: null,
-  effect: "unscoped",
+  effect: "quarantined",
   records_waiting: 0,
   takes_effect: "next_sync",
 };

@@ -6,7 +6,9 @@ Proves: the sources file's mappings land in ``account_external_refs`` (audited
 sync could not map is listed with its count and nothing from the records; mapping it
 indexes the waiting records at the next sync -- through the product's own *Sync now* and
 the worker role -- and re-syncing changes nothing; a remap moves the records at the next
-sync; an unmap quarantines them (account-scoped) without deleting or reassigning; an
+sync; an unmap leaves the reference unresolved and quarantines its records at the next sync
+-- on every source: a missing mapping never widens who can read them -- without deleting,
+reassigning or rewriting them, and mapping it again restores them; an
 archived account's mappings keep resolving; disconnecting a source removes only its own
 mappings and reconnecting creates no duplicates; mapping never widens what anyone may
 read beyond the account rule (private channels stay private, the administrator reads
@@ -264,6 +266,233 @@ async def test_an_unmapped_reference_is_mapped_and_indexed_at_the_next_sync(
     )
     # Mapping, remapping and unmapping gave the administrator nothing to read.
     assert await readable(app_db, halden.id, lena) == lena_before
+
+
+KESTREL_CHANNEL = "C0ACCTKES01"  # public; mapped to kestrel-bank by the sources file
+
+
+async def _channel_documents(db: Database, org: Org) -> dict[uuid.UUID, tuple[Any, ...]]:
+    """The Kestrel channel's documents: id -> (account key, status, version, content hash)."""
+    rows = await _q(
+        db,
+        org.id,
+        "SELECT d.id, a.key, d.status, d.version, d.content_hash FROM documents d "
+        "JOIN sources s ON s.id = d.source_id LEFT JOIN accounts a ON a.id = d.account_id "
+        "WHERE s.key = 'slack' AND d.external_id LIKE :p",
+        p=f"{KESTREL_CHANNEL}%",
+    )
+    return {r[0]: (None if r[1] is None else str(r[1]), r[2], r[3], bytes(r[4])) for r in rows}
+
+
+async def _everyone(db: Database, org: Org) -> dict[str, uuid.UUID]:
+    rows = await _q(
+        db,
+        org.id,
+        "SELECT u.email, m.id FROM memberships m JOIN users u ON u.id = m.user_id "
+        "WHERE m.status = 'active'",
+    )
+    return {str(r[0]): r[1] for r in rows}
+
+
+async def _readers(
+    app_db: Database, org: Org, members: dict[str, uuid.UUID], documents: set[uuid.UUID]
+) -> dict[str, set[uuid.UUID]]:
+    """Per member, which of ``documents`` the authorization policy lets them read now."""
+    return {email: (await readable(app_db, org.id, m)) & documents for email, m in members.items()}
+
+
+async def _trace(owner_db: Database, org: Org, member: uuid.UUID, chunks: list[uuid.UUID]) -> Any:
+    """A stored Ask by ``member`` whose evidence is ``chunks`` (Kestrel's)."""
+    kestrel = await _account(owner_db, org, "kestrel-bank")
+    [(trace_id,)] = await _q(
+        owner_db,
+        org.id,
+        "INSERT INTO query_traces (organization_id, membership_id, question_text, "
+        "question_sensitivity, authz_snapshot, retrieval, evidence_chunk_ids, cited_chunk_ids, "
+        "answer_account_ids, egress, validation, answer, status, timings_ms) VALUES "
+        "(:o, :m, 'What did Kestrel ask for?', 'internal', '{}', '{}', :c, :c, :a, '{}', '{}', "
+        "CAST(:answer AS jsonb), 'answered', '{}') RETURNING id",
+        o=org.id,
+        m=member,
+        c=chunks,
+        a=[kestrel],
+        answer=json.dumps({"text": "Kestrel asked for SSO."}),
+    )
+    return trace_id
+
+
+async def test_missing_account_mapping_never_widens_read_access(
+    owner_db: Database, app_db: Database, worker_db: Database, halden: Org, admin: Any
+) -> None:
+    """The fail-closed invariant on a source that is NOT account-scoped (where 0018 let an
+    unmapped reference's records lose their account): removing a mapping quarantines its
+    records at the next sync -- nobody gains access, the unresolved reference is visible
+    operationally, nothing stored is rewritten -- and mapping it again restores them."""
+    from lattice.tracing.recorder import AskerTrace, read_trace
+
+    first = await sync(owner_db, halden, "slack", FAKE)
+    assert first.failed == 0
+    slack = await _source(owner_db, halden, "slack")
+    kestrel = str(await _account(owner_db, halden, "kestrel-bank"))
+    northpeak = str(await _account(owner_db, halden, "northpeak-logistics"))
+    members = await _everyone(owner_db, halden)
+    channel = await _channel_documents(owner_db, halden)
+    documents = set(channel)
+    assert documents
+    assert {(a, status) for a, status, *_ in channel.values()} == {("kestrel-bank", "active")}
+    [[slack_scoped]] = await _q(
+        owner_db, halden.id, "SELECT account_scoped FROM sources WHERE id = :s", s=slack
+    )
+    assert slack_scoped is False
+
+    # 1-2. Resolves to Kestrel: exactly the members who may see Kestrel read it.
+    readers = await _readers(app_db, halden, members, documents)
+    assert readers["daniel.reyes@halden.example"] == documents  # assigned Kestrel
+    assert readers["maya.okafor@halden.example"] == set()  # assigned Acme, Northpeak
+    assert readers["lena.brandt@halden.example"] == set()  # administrator: no content
+    kestrel_readers = {e for e, docs in readers.items() if docs}
+
+    # A stored Ask by Daniel citing the channel (historical evidence).
+    daniel = members["daniel.reyes@halden.example"]
+    chunks = [
+        r[0]
+        for r in await _q(
+            owner_db,
+            halden.id,
+            "SELECT id FROM chunks WHERE document_id = ANY(:d) ORDER BY id",
+            d=list(documents),
+        )
+    ]
+    trace_id = await _trace(owner_db, halden, daniel, chunks)
+
+    async def view() -> AskerTrace:
+        seen = await read_trace(
+            app_db,
+            organization_id=halden.id,
+            viewer_membership_id=daniel,
+            viewer_is_admin=False,
+            trace_id=trace_id,
+        )
+        assert isinstance(seen, AskerTrace)
+        return seen
+
+    assert (await view()).answer_hidden is False
+    [stored_trace] = await _q(
+        owner_db, halden.id, "SELECT * FROM query_traces WHERE id = :t", t=trace_id
+    )
+
+    # 3. The mapping is removed (previewed truthfully: quarantined, never unscoped).
+    ref = {"source_id": str(slack), "ref_kind": "chat_channel", "external_ref": KESTREL_CHANNEL}
+    preview = (await _map(admin, "/preview", **ref, account_id=None)).json()
+    assert (preview["operation"], preview["effect"], preview["account_scoped"]) == (
+        "unmap",
+        "quarantined",
+        False,
+    )
+    assert (await _map(admin, "/unmap", **ref, current_account_id=kestrel)).status_code == 200
+    # Nothing changes before the sync.
+    assert await _channel_documents(owner_db, halden) == channel
+
+    # 4. The next sync produces no unscoped or wider-readable version: quarantined, with
+    # the account, version and content they had.
+    out = await sync(owner_db, halden, "slack", FAKE, record_config=False)
+    assert (out.quarantined, out.deleted, out.access_updated, out.created) == (
+        len(documents),
+        0,
+        0,
+        0,
+    )
+    assert out.failure_codes == {"access_unmappable:account": len(documents)}
+    after = await _channel_documents(owner_db, halden)
+    assert after == {
+        d: (account, "quarantined", version, content)
+        for d, (account, _, version, content) in channel.items()
+    }
+    # 5. Nobody gains access -- by the authorization policy itself, for every member.
+    assert await _readers(app_db, halden, members, documents) == {e: set() for e in members}
+    # Historical evidence: the stored trace is untouched; read now, it hides the answer.
+    assert (
+        await _q(owner_db, halden.id, "SELECT * FROM query_traces WHERE id = :t", t=trace_id)
+    ) == [stored_trace]
+    hidden = await view()
+    assert (hidden.answer, hidden.answer_hidden, hidden.evidence_ids) == (None, True, [])
+
+    # 6. Visible operationally: the unresolved reference with its waiting records, the
+    # run's failure code, and the setup record.
+    listed = (await admin.get("/v1/admin/access/account-references/unmapped")).json()["items"]
+    assert [(i["external_ref"], i["state"], i["records_waiting"]) for i in listed] == [
+        (KESTREL_CHANNEL, "unmapped", len(documents))
+    ]
+    sources = (await admin.get("/v1/admin/sources")).json()["sources"]
+    [slack_status] = [x for x in sources if x["id"] == str(slack)]
+    assert {"code": "access_unmappable:account", "count": len(documents)} in [
+        {"code": f["code"], "count": f["count"]} for f in slack_status["failure_codes"]
+    ]
+    setup = await _setup_accounts(admin)
+    assert (setup["state"], setup["reason"], setup["facts"]["unmapped_references"]) == (
+        "attention",
+        "unmapped_references",
+        1,
+    )
+    # Repeating the sync keeps failing closed and rewrites nothing.
+    again = await sync(owner_db, halden, "slack", FAKE, record_config=False)
+    assert (again.quarantined, again.access_updated) == (0, 0)
+    assert await _channel_documents(owner_db, halden) == after
+
+    # 7. Restoring the mapping recovers deterministically at the next sync.
+    restore = (await _map(admin, "/preview", **ref, account_id=kestrel)).json()
+    assert (restore["operation"], restore["effect"], restore["records_waiting"]) == (
+        "map",
+        "indexed",
+        len(documents),
+    )
+    assert (await _map(admin, "", **ref, account_id=kestrel)).status_code == 201
+    await _sync_now(admin, worker_db, slack)
+    assert await _channel_documents(owner_db, halden) == channel
+    assert await _readers(app_db, halden, members, documents) == readers
+    assert (await view()).answer_hidden is False
+    assert (await admin.get("/v1/admin/access/account-references/unmapped")).json()["items"] == []
+
+    # 8. Remapping Kestrel -> Northpeak follows the approved access-update path: readers
+    # become exactly those who may see Northpeak.
+    moved = await _map(admin, "/remap", **ref, current_account_id=kestrel, account_id=northpeak)
+    assert moved.status_code == 200
+    out = await sync(owner_db, halden, "slack", FAKE, record_config=False)
+    assert (out.access_updated, out.quarantined, out.failed) == (len(documents), 0, 0)
+    remapped = await _readers(app_db, halden, members, documents)
+    assert remapped["maya.okafor@halden.example"] == documents  # assigned Northpeak
+    assert remapped["daniel.reyes@halden.example"] == set()
+    assert remapped["lena.brandt@halden.example"] == set()
+    assert {e for e, docs in remapped.items() if docs} - kestrel_readers == {
+        "maya.okafor@halden.example"
+    }
+    # 9. The trace was never rewritten; re-authorized on read, Daniel no longer sees it.
+    assert (
+        await _q(owner_db, halden.id, "SELECT * FROM query_traces WHERE id = :t", t=trace_id)
+    ) == [stored_trace]
+    assert (await view()).answer_hidden is True
+
+
+async def test_a_sources_file_maps_an_unresolved_reference_again(
+    owner_db: Database, halden: Org, admin: Any
+) -> None:
+    """The operator's sources file makes the references it names match it again -- an
+    unresolved one included (an UPDATE of the same row, audited ``operator:sync``)."""
+    await sync(owner_db, halden, "slack", FAKE)
+    slack = await _source(owner_db, halden, "slack")
+    kestrel = str(await _account(owner_db, halden, "kestrel-bank"))
+    ref = {"source_id": str(slack), "ref_kind": "chat_channel", "external_ref": KESTREL_CHANNEL}
+    assert (await _map(admin, "/unmap", **ref, current_account_id=kestrel)).status_code == 200
+    await sync(owner_db, halden, "slack", FAKE)  # the file names C0ACCTKES01: kestrel-bank
+    assert (KESTREL_CHANNEL, "kestrel-bank") in await _mappings(owner_db, halden, "slack")
+    assert {a for a, _, *_ in (await _channel_documents(owner_db, halden)).values()} == {
+        "kestrel-bank"
+    }
+    written = await events(owner_db, halden.id)
+    assert [(e.actor, e.before, e.after) for e in written[-2:]] == [
+        (written[-2].actor, {"account_id": kestrel}, None),
+        ("operator:sync", None, {"account_id": kestrel}),
+    ]
 
 
 async def test_an_archived_accounts_mappings_keep_resolving(

@@ -47,9 +47,7 @@ export function mappingEffect(p: MappingPreview): string {
     case "moved":
       return `Records from ${ref} move from ${now} to ${after}. Until then they stay with ${now}.`;
     case "quarantined":
-      return `Records from ${ref} stop being readable until the reference is mapped again. Nothing is deleted.`;
-    case "unscoped":
-      return `Records from ${ref} are no longer ${now}'s: anyone the source's own rules allow can read them. This widens who can read them.`;
+      return `Records from ${ref} become unresolved: nobody can read them until the reference is mapped to an account again. Nothing is deleted, and they are never indexed without an account.`;
   }
 }
 

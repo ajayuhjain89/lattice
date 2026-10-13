@@ -271,9 +271,12 @@ function MappingForm({
             </li>
             <li className={styles.secondary}>Nothing indexed changes before that sync. You can start it from Sources, or right after applying.</li>
           </ul>
-          {shown.effect === "unscoped" && (
-            <Callout tone="neutral" label="This widens who can read these records" labelAs="p">
-              <p>{shown.source.name} isn&apos;t account-scoped, so its records stay indexed without an account.</p>
+          {shown.effect === "quarantined" && (
+            <Callout tone="neutral" label="These records stay unreadable until mapped again" labelAs="p">
+              <p>
+                {shown.source.name} keeps {refKindLabel(shown.ref_kind).toLowerCase()} {shown.external_ref} as an unresolved reference. Its records are quarantined, not given to a
+                wider audience; they appear under Unmapped references after the sync, and mapping the reference again restores them.
+              </p>
             </Callout>
           )}
           <ReasonField value={reason} onChange={setReason} error={tried && !reason.trim() ? "Give a reason for this change." : undefined} inputRef={reasonRef} />

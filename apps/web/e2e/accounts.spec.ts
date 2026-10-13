@@ -225,7 +225,7 @@ test("axe passes on the accounts, an account, its dialogs and the unmapped refer
   await click(page, "Remove the mapping of C0EXTACME01");
   const dialog = page.getByRole("dialog", { name: "Remove a reference's mapping" });
   await dialog.getByRole("button", { name: "Review change" }).click();
-  await expect(dialog.getByText("This widens who can read these records")).toBeVisible();
+  await expect(dialog.getByText("These records stay unreadable until mapped again")).toBeVisible();
   await audit(page);
   await page.keyboard.press("Escape");
   await page.goto(`/access/accounts/${ACCOUNT_IDS.orbital}`);

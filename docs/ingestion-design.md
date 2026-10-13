@@ -208,7 +208,11 @@ every record and persona (`tests/ingestion/test_ingested_access.py`).
 | Group reference the connector did not declare | Record fails: `access_unmappable:group` |
 | Account key that does not exist (document front matter) | Record fails: `access_unmappable:account` — never "no account" |
 | Ticketing organization / channel reference | Mapped **exactly** by the source's `account_external_refs` (P12.3), read once per sync; a mapping to an *archived* account keeps resolving |
-| `account_scoped` source and account reference unmapped | Record fails: `access_unmappable:account` (not indexed as unscoped); the failure carries only the external reference to map |
+| Ticket naming a ticketing organization with no mapping — on **any** source | Record fails: `access_unmappable:account` (never indexed without an account); the failure carries only the external reference to map |
+| Reference an administrator unmapped (*unresolved*, migration 0019) — on **any** source | Record fails: `access_unmappable:account`; its indexed document is quarantined until the reference is mapped again |
+| Record that still names the reference which gave its indexed document an account, now resolving to none | Record fails: `access_unmappable:account` (defence in depth: a missing mapping never lowers a document's restriction) |
+| `account_scoped` source and a record with no account (no reference, or a channel never mapped) | Record fails: `access_unmappable:account` |
+| Chat channel never mapped, on a source that is not account-scoped (`#general`) | Indexed without an account: the channel is not an account reference |
 | Private channel with no mappable members | Indexed `grants_only` with an empty group: readable by nobody until members map |
 | Existing document whose record now fails | Quarantined (§5) |
 
@@ -220,10 +224,12 @@ exist; a sources file mapping a *new* reference to an archived account,
 **Mapping changes (P12.3)** apply at the next sync, deterministically, through these same
 rules — nothing already indexed is rewritten when an administrator maps, remaps or
 unmaps: a newly mapped reference's waiting records are indexed; a remapped reference's
-documents get the new account (an access update); an unmapped reference's documents are
-quarantined on an account-scoped source, or lose their account otherwise (the sync's
-ordinary access update). Repeating a sync with the same mappings and export changes
-nothing.
+documents get the new account (an access update); an unmapped reference stays known as
+*unresolved* (`account_external_refs.account_id` NULL, migration 0019) and its documents
+are **quarantined** — on every source, account-scoped or not — keeping their account,
+version and content; new records naming it are not indexed. **A missing account mapping
+never widens access.** Mapping the reference again restores them at the next sync.
+Repeating a sync with the same mappings and export changes nothing.
 
 ## 7. Embedding
 

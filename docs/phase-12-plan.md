@@ -177,7 +177,9 @@ version check (409), audit event, previewed when it narrows or widens access or 
   stays accepted by the CLI and is written into the table (audited, actor
   `operator:sync`).
 - Ingestion reads mappings from the table; behaviour is unchanged (unmapped on an
-  account-scoped source = not indexed, `access_unmappable:account`).
+  account-scoped source = not indexed, `access_unmappable:account`). *Corrected
+  2026-10-13 (Part III, "P12.3 correction"): a missing account mapping never widens
+  access, on any source.*
 
 ### 9.2 Unmapped references
 From the latest run's failure records (`access_unmappable:account`), grouped by
@@ -1015,8 +1017,9 @@ account_external_refs(
 - **Sync**: ingestion reads the table instead of `sources.config`; behaviour unchanged —
   an unmapped record of an account-scoped source is not indexed
   (`access_unmappable:account`); a previously indexed record whose reference loses its
-  mapping is **quarantined** at the next sync (Phase 4 rule); a remap moves the
-  documents to the new account at the next sync (access update).
+  mapping is **quarantined** at the next sync (Phase 4 rule) — on every source, account-
+  scoped or not (P12.3 correction); a remap moves the documents to the new account at the
+  next sync (access update).
 - **Migration** (P12.3): `sources.config.account_refs` and `channels.*.account` move into
   the table; channel *sensitivity* stays in source settings. The synthetic organizations
   must index the same documents with the same accounts before and after (test).
@@ -1345,8 +1348,8 @@ equal to the old configuration.
 | Create and edit | `POST /v1/admin/access/accounts` (key, name, aliases, business status, reason; key immutable afterwards; 409 `key` taken; nobody assigned) · `PATCH …/accounts/{id}` (name, aliases, status, version, reason) · `POST …/{id}/archive` · `POST …/{id}/reactivate` (version, reason). Names and aliases NFC-normalised, whitespace collapsed, aliases de-duplicated ignoring case (≤ 20 × 100) | `api/routes/accounts.py` |
 | C10 `account_external_refs` | as contracted (composite FKs, cascade from the source, restrict to the account, unique reference, forced RLS) plus a check trigger for every writer (kind fits the connector, no identity change, no new mapping to an archived account, source not being deleted) | 0018 |
 | Exact identifiers | `ticketing_organization`: the ticket's `organization_id` as canonical decimal text (`^(0\|[1-9][0-9]{0,18})$`); `chat_channel`: the Slack channel ID. Trimmed, NFC, case kept, matched byte for byte; documents name account keys and take no mapping | `lattice.accounts.refs`, `ingestion.access` |
-| Map, remap, unmap | `POST …/account-references/preview` (Now → After: operation, accounts, `effect` ∈ indexed · scoped · moved · quarantined · unscoped, records waiting, `takes_effect: next_sync`); `POST …/account-references` (map; 409 `already_mapped`), `…/remap` and `…/unmap` (with `current_account_id`; 409 `mapping_changed`), each with a reason, through `lattice_set_account_ref` | `lattice.accounts.service` |
-| Sync | the sync reads the source's mappings (owner for the CLI, `lattice_worker` for requested syncs); behaviour as Phase 4: unmapped on an account-scoped source = not indexed, a previously indexed record quarantined; a remap is an access update at the next sync; nothing indexed is rewritten by the mapping change itself. Idempotent (a re-sync with the same mappings changes nothing) | `ingestion.sync`, `ingestion.store` |
+| Map, remap, unmap | `POST …/account-references/preview` (Now → After: operation, accounts, `effect` ∈ indexed · scoped · moved · quarantined — an unmap is always `quarantined` (P12.3 correction) — records waiting, `takes_effect: next_sync`); `POST …/account-references` (map; 409 `already_mapped`), `…/remap` and `…/unmap` (with `current_account_id`; 409 `mapping_changed`), each with a reason, through `lattice_set_account_ref` | `lattice.accounts.service` |
+| Sync | the sync reads the source's mappings (owner for the CLI, `lattice_worker` for requested syncs); behaviour as Phase 4: unmapped on an account-scoped source = not indexed, a previously indexed record quarantined; a missing mapping never widens access on any source (P12.3 correction below); a remap is an access update at the next sync; nothing indexed is rewritten by the mapping change itself. Idempotent (a re-sync with the same mappings changes nothing) | `ingestion.sync`, `ingestion.store` |
 | Unmapped references | `GET …/account-references/unmapped`: from each ticketing/chat source's latest run's `access_unmappable:account` failures, grouped by reference: source, kind, the reference, records waiting, the run's start, and `unmapped` / `mapped_pending_sync` (with the account). Nothing from the records | `lattice.accounts.service` |
 | Operator file | `lattice sync --sources` writes the references the file names into the table (`account.mapping_changed` by `operator:sync`), leaves the others, refuses a new reference to an archived account (`source_config:account_archived`); `sources.config` keeps channel sensitivity only | `lattice.accounts.refs` |
 | Disconnect | the purge cascades the source's mappings; the CLI reports `account mappings N`; accounts and other sources' mappings stay; reconnecting writes the file's mappings once | `ingestion.lifecycle` |
@@ -1381,9 +1384,37 @@ equal to the old configuration.
    disconnect report counts the mappings removed.
 8. **`archived` on `GET /v1/accounts` and the access directory** (additive fields) so the
    Ask picker and the member editor can label archived accounts.
-9. **Unmapped references exist only for account-scoped sources**: elsewhere an unmapped
-   reference is indexed without an account (Phase 4 behaviour), so there is nothing
-   waiting. The page says so.
+9. ~~**Unmapped references exist only for account-scoped sources**: elsewhere an unmapped
+   reference is indexed without an account.~~ **Withdrawn by the P12.3 correction
+   (below):** a ticketing organization without a mapping, and any reference an
+   administrator unmapped, wait as unmapped references on every source; only a chat
+   channel that was never mapped (on a source that is not account-scoped) is indexed
+   without an account, because it is not an account reference.
+
+### P12.3 correction — a missing account mapping never widens access (2026-10-13)
+
+The product owner did not approve P12.3's unmap behaviour on sources that are not
+account-scoped (0018 deleted the mapping, and the next sync indexed the records without
+their account — readable under the source's other rules, which widened readership). The
+fail-closed invariant: **an unresolved structured account reference never makes a record
+less restricted because a mapping disappeared**, whatever the source's scoping.
+
+| Item | Built | Where |
+| ---- | ----- | ----- |
+| Unresolved references | migration **0019** (`SCHEMA_REVISION` 0019; declared irreversible: `lattice migrate` refuses its downgrade, which would drop unresolved references and let 0018 unscope their records): `account_external_refs.account_id` nullable; unmap sets it to NULL (`lattice_set_account_ref` returns `unresolved`) instead of deleting, so the reference stays known; mapping it again updates the same row (`restored`). An INSERT must name an account for every writer (check trigger). Same `expected`/409 contract, same audit coupling (`account.mapping_changed`, after = none) | 0019, `lattice.accounts.refs` |
+| Ingestion | `access_unmappable:account` (quarantine of the indexed document, its account, version and content kept) for: a ticketing organization with no mapping on **any** source (it always names an account); an unresolved reference on any source; a record whose indexed document had an account and whose reference now resolves to none (defence in depth). Only a never-mapped chat channel on a source that is not account-scoped stays account-less | `ingestion.access`, `ingestion.sync`, `dataset.access` (the oracle agrees) |
+| Preview | `effect` loses `unscoped`; an unmap is `quarantined` on every source: "Records … become unresolved: nobody can read them until the reference is mapped to an account again. Nothing is deleted, and they are never indexed without an account." Mapping an unresolved reference previews `indexed` (restore); only a never-mapped channel previews `scoped` | `lattice.accounts.service`, `MappingDialog.tsx`, `accountsCopy.ts` |
+| Operational visibility | after the sync: the run's `access_unmappable:account` count (Sources), the reference under *Unmapped references* with its records waiting (state `unmapped`), setup `accounts·attention·unmapped_references` (an unresolved reference counts as unmapped) | `lattice.setup.facts` |
+| Recovery and remap | mapping the reference again restores the same documents at the next sync (same IDs, versions, content); a remap A → B is the approved access update; the operator's sources file maps an unresolved reference it names again (`operator:sync`) | `test_mapping_sync.py` |
+| History | traces and audit events are never rewritten; a trace citing quarantined evidence hides its answer when read (re-authorization, Phase 6) and shows it again after recovery | `test_missing_account_mapping_never_widens_read_access` |
+
+Evidence: `tests/accounts/test_mapping_sync.py::test_missing_account_mapping_never_widens_read_access`
+(a public channel of the non-account-scoped Halden Slack: readers by the authorization
+predicate for every member before, after the unmap and sync — nobody — after recovery
+and after a remap; quarantine visible; the stored trace unchanged), unit tests of the
+rule (`tests/ingestion/test_access_mapping.py`), the database fence
+(`tests/accounts/test_mappings_api.py`) and the 0019 round trip
+(`tests/accounts/test_migration_0019.py`).
 
 **Not built (later checkpoints):** OIDC and SCIM settings, SCIM token UI,
 `scim.request_refused` (P12.4); provider/BYOK settings and D-34 egress escalation
