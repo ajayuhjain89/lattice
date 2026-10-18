@@ -297,6 +297,7 @@ async def update_connection(
     subjects_unchanged: bool = False,
     secret_value: SecretStr | None = None,
     keyring: Keyring | None = None,
+    step_up_acr: object = _UNSET,
     reason: str,
     actor: str,
 ) -> tuple[ConnectionView, int]:
@@ -308,14 +309,17 @@ async def update_connection(
     directory identities hold: changing either is allowed only with
     ``subjects_unchanged`` (the operator asserts every person keeps the same subject
     value, e.g. an issuer URL rename) and revokes the connection's sessions. A provider
-    whose subjects differ needs an identity mapping (Phase 12), not this."""
+    whose subjects differ needs an identity mapping (Phase 12), not this.
+    ``step_up_acr`` (P12.5, D-34): the ``acr`` values an administrator's egress step-up
+    must assert (a list), or None for none -- an operator decision, never the
+    administrators' (lowering it would weaken their own step-up)."""
     wanted = "active" if connection_id is None else None
     found = await _pick(session, org, connection_id, status=wanted)
     current = (
         await session.execute(
             text(
-                "SELECT issuer, client_id, client_secret_ref, subject_claim "
-                "FROM oidc_connections WHERE id = :c"
+                "SELECT issuer, client_id, client_secret_ref, subject_claim, "
+                "step_up_acr_values FROM oidc_connections WHERE id = :c"
             ),
             {"c": found.id},
         )
@@ -355,6 +359,15 @@ async def update_connection(
         changes["issuer"] = _check_issuer(issuer)
     if subject_claim is not None and subject_claim != current.subject_claim:
         changes["subject_claim"] = subject_claim
+    if step_up_acr is not _UNSET:
+        values = None if step_up_acr is None else list(step_up_acr)  # type: ignore[call-overload]
+        if values is not None and (
+            not 1 <= len(values) <= 10
+            or not all(isinstance(v, str) and 1 <= len(v.strip()) <= 200 for v in values)
+        ):
+            raise OperatorRejected("--step-up-acr takes 1-10 acr values")
+        if values != (list(current.step_up_acr_values) if current.step_up_acr_values else None):
+            changes["step_up_acr_values"] = values
     if not changes:
         raise OperatorRejected("nothing to change")
     identity_shape = bool({"issuer", "subject_claim"} & set(changes))
@@ -387,6 +400,7 @@ async def update_connection(
             "issuer": values["issuer"],
             "client_id": values["client_id"],
             "subject_claim": values["subject_claim"],
+            "step_up_acr": values["step_up_acr_values"],
             "client_secret": "none"
             if not reference
             else "encrypted"

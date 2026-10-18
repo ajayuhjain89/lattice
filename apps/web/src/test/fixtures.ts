@@ -768,55 +768,206 @@ export const TRACE_ADMIN: S["AdminTrace"] = {
 
 // --- providers ------------------------------------------------------------------------------
 
-export const PROVIDERS: S["ProvidersResponse"] = {
-  egress: {
-    external_egress_level: "internal",
-    organization_controlled_level: null,
-    default_query_sensitivity: "internal",
-    data_origin: "synthetic",
-  },
-  providers: [
-    {
-      purpose: "generation",
-      provider: "ollama",
-      model: "qwen3.5:4b",
-      deployment: "local",
-      approved_for_level: "confidential",
-      explicitly_approved: true,
-      enabled: true,
-      endpoint_configured: false,
-      retention_mode: "none",
-      training_opt_out: true,
-      credential: { state: "none", source: null, resolvable: false, data_use: null },
-    },
-    {
-      purpose: "generation",
-      provider: "gemini",
-      model: "gemini-3.5-flash-lite",
-      deployment: "external_api",
-      approved_for_level: "internal",
-      explicitly_approved: true,
-      enabled: false,
-      endpoint_configured: false,
-      retention_mode: "provider_default",
-      training_opt_out: false,
-      credential: { state: "active", source: "env", resolvable: false, data_use: "unpaid" },
-    },
-    {
-      purpose: "embedding",
-      provider: "local",
-      model: "mxbai-embed-large-v1",
-      deployment: "local",
-      approved_for_level: "restricted",
-      explicitly_approved: true,
-      enabled: true,
-      endpoint_configured: false,
-      retention_mode: "none",
-      training_opt_out: true,
-      credential: { state: "none", source: null, resolvable: false, data_use: null },
-    },
-  ],
+type ProviderFixture = Omit<S["ProviderOut"], "allowed_up_to" | "blocked_by">;
+const LEVEL_ORDER = ["internal", "confidential", "restricted"] as const;
+type FixtureLevel = (typeof LEVEL_ORDER)[number];
+
+/**
+ * Test data only: the server's reading of a fixture's lattice (backend
+ * providers/lattice.py), so fixtures stay consistent. The page never computes a cell.
+ */
+function reading(egress: S["EgressSettingsOut"], p: ProviderFixture): { level: FixtureLevel | null; reason: string } {
+  const rank = (l: string | null | undefined) => LEVEL_ORDER.indexOf(l as FixtureLevel);
+  if (p.purpose === "generation" && !p.enabled) return { level: null, reason: "provider_disabled" };
+  if (p.purpose === "generation" && !p.explicitly_approved) return { level: null, reason: "provider_unapproved" };
+  if (!["local", "organization_controlled", "external_api"].includes(p.deployment)) return { level: null, reason: "deployment_unknown" };
+  if (p.deployment === "organization_controlled" && !p.explicitly_approved) return { level: null, reason: "provider_unapproved" };
+  if (!p.training_opt_out && egress.data_origin !== "synthetic") return { level: null, reason: "provider_data_use" };
+  const ceiling = p.deployment === "local" ? "restricted" : p.deployment === "external_api" ? egress.external_egress_level : egress.organization_controlled_level;
+  if (ceiling == null) return { level: null, reason: "deployment_not_allowed" };
+  const level = LEVEL_ORDER[Math.min(rank(ceiling), rank(p.approved_for_level))]!;
+  return { level, reason: "permitted" };
+}
+
+export function providerSettings(
+  egress: S["EgressSettingsOut"],
+  records: ProviderFixture[],
+  extra: Partial<Omit<S["ProviderSettings"], "egress" | "providers" | "lattice">> = {},
+): S["ProviderSettings"] {
+  const providers = records.map((p) => {
+    const r = reading(egress, p);
+    return { ...p, allowed_up_to: r.level, blocked_by: r.level ? null : r.reason };
+  });
+  const lattice = providers.flatMap((p) =>
+    LEVEL_ORDER.map((level) => {
+      const r = reading(egress, p);
+      const permitted = r.level !== null && LEVEL_ORDER.indexOf(level) <= LEVEL_ORDER.indexOf(r.level);
+      let reason = r.level === null ? r.reason : "permitted";
+      if (r.level !== null && !permitted) {
+        const approval = LEVEL_ORDER.indexOf(p.approved_for_level as FixtureLevel);
+        reason = approval < LEVEL_ORDER.indexOf(level) && LEVEL_ORDER.indexOf(r.level) === approval ? "above_approval" : "above_ceiling";
+      }
+      return { provider_id: p.id, level, permitted, reason };
+    }),
+  );
+  return {
+    egress,
+    providers,
+    lattice,
+    targets: [],
+    supported: [
+      { provider: "gemini", trust_class: "external_api", requires_credential: true, models: ["gemini-3.5-flash-lite"], needs_target: false },
+      { provider: "ollama", trust_class: "organization_controlled", requires_credential: false, models: [], needs_target: true },
+    ],
+    step_up: { available: true, reason: "available", assurance_required: null, max_age_seconds: 300 },
+    confirmation: "Halden Logistics",
+    status: { state: "complete", reason: "generation_ready", message: "A generation provider is enabled and allowed for the level the organization's questions default to." },
+    ...extra,
+  };
+}
+
+export const PROVIDER_ID = {
+  ollama: "9a000000-0000-4000-8000-000000000001",
+  gemini: "9a000000-0000-4000-8000-000000000002",
+  mxbai: "9a000000-0000-4000-8000-000000000003",
+} as const;
+
+const NO_CREDENTIAL: S["CredentialOut"] = { state: "none", id: null, source: null, managed_by: null, resolvable: false, data_use: null, hint: null, set_at: null };
+
+export const PROVIDER_OLLAMA: ProviderFixture = {
+  id: PROVIDER_ID.ollama,
+  purpose: "generation",
+  provider: "ollama",
+  model: "qwen3.5:4b",
+  deployment: "local",
+  approved_for_level: "confidential",
+  explicitly_approved: true,
+  enabled: true,
+  endpoint_configured: true,
+  retention_mode: "none",
+  training_opt_out: true,
+  credential: NO_CREDENTIAL,
+  managed_by: "organization",
+  destination: { kind: "deployment_local", origin: "http://127.0.0.1:11434", access: "deployment_local" },
+  requires_credential: false,
+  last_test: { at: "2026-10-16T09:12:00Z", result: "valid", current: true },
 };
+
+export const PROVIDER_GEMINI: ProviderFixture = {
+  id: PROVIDER_ID.gemini,
+  purpose: "generation",
+  provider: "gemini",
+  model: "gemini-3.5-flash-lite",
+  deployment: "external_api",
+  approved_for_level: "internal",
+  explicitly_approved: true,
+  enabled: false,
+  endpoint_configured: false,
+  retention_mode: "unpaid_product_improvement",
+  training_opt_out: false,
+  credential: { state: "active", id: "c1000000-0000-4000-8000-000000000001", source: "env", managed_by: "operator", resolvable: false, data_use: "unpaid", hint: null, set_at: "2026-10-01T08:00:00Z" },
+  managed_by: "organization",
+  destination: { kind: "vendor_api", origin: "https://generativelanguage.googleapis.com", access: "public" },
+  requires_credential: true,
+  last_test: null,
+};
+
+export const PROVIDER_MXBAI: ProviderFixture = {
+  id: PROVIDER_ID.mxbai,
+  purpose: "embedding",
+  provider: "local",
+  model: "mxbai-embed-large-v1",
+  deployment: "local",
+  approved_for_level: "restricted",
+  explicitly_approved: true,
+  enabled: true,
+  endpoint_configured: false,
+  retention_mode: "none",
+  training_opt_out: true,
+  credential: NO_CREDENTIAL,
+  managed_by: "deployment",
+  destination: { kind: "deployment_local", origin: null, access: "deployment_local" },
+  requires_credential: false,
+  last_test: null,
+};
+
+export const EGRESS_DEFAULT: S["EgressSettingsOut"] = {
+  external_egress_level: "internal",
+  organization_controlled_level: null,
+  default_query_sensitivity: "internal",
+  data_origin: "synthetic",
+  version: 7,
+};
+
+export const PROVIDERS: S["ProviderSettings"] = providerSettings(EGRESS_DEFAULT, [PROVIDER_OLLAMA, PROVIDER_GEMINI, PROVIDER_MXBAI]);
+
+/** A fresh organization: nothing recorded, evidence only. */
+export const PROVIDERS_EMPTY: S["ProviderSettings"] = providerSettings({ ...EGRESS_DEFAULT, version: 0 }, [], {
+  status: { state: "optional", reason: "evidence_only", message: "No generation provider is enabled: answers show their evidence without a written answer." },
+});
+
+/** Gemini configured in the product: a key entered here, disabled and unapproved. */
+export const PROVIDER_GEMINI_NEW: ProviderFixture = {
+  ...PROVIDER_GEMINI,
+  explicitly_approved: false,
+  enabled: false,
+  training_opt_out: true,
+  retention_mode: "abuse_monitoring_limited",
+  credential: { state: "active", id: "c1000000-0000-4000-8000-000000000002", source: "vault", managed_by: "organization", resolvable: true, data_use: "paid", hint: "WXYZ", set_at: "2026-10-17T08:00:00Z" },
+  last_test: { at: "2026-10-17T08:01:00Z", result: "valid", current: true },
+};
+
+export const PROVIDERS_GEMINI_NEW: S["ProviderSettings"] = providerSettings(EGRESS_DEFAULT, [PROVIDER_GEMINI_NEW], {
+  status: { state: "optional", reason: "not_enabled", message: "A generation provider is configured but not enabled: answers show their evidence without a written answer." },
+});
+
+export const PREVIEW_APPROVE_GEMINI: S["ChangePreview"] = {
+  policy_version: 7,
+  escalation: true,
+  newly_allowed: [
+    { provider_id: PROVIDER_ID.gemini, provider: "gemini", model: "gemini-3.5-flash-lite", purpose: "generation", trust_class: "external_api", destination: "https://generativelanguage.googleapis.com", level: "internal", before: false, after: true },
+  ],
+  no_longer_allowed: [],
+  default_query_sensitivity: { before: "internal", after: "internal" },
+  remaining: ["authorization_first", "question_floor:internal", "organization_controlled_not_allowed", "never_sent:confidential", "never_sent:restricted", "credentials_never_widen"],
+  affected_provider_ids: [PROVIDER_ID.gemini],
+};
+
+export const PREVIEW_LOWER_EXTERNAL: S["ChangePreview"] = {
+  policy_version: 7,
+  escalation: false,
+  newly_allowed: [],
+  no_longer_allowed: [],
+  default_query_sensitivity: { before: "internal", after: "internal" },
+  remaining: ["authorization_first", "question_floor:internal", "external_not_allowed", "organization_controlled_not_allowed", "never_sent:confidential", "never_sent:restricted", "credentials_never_widen"],
+  affected_provider_ids: [],
+};
+
+export const STEP_UP_GRANTED: S["StepUpOut"] = {
+  id: "5e000000-0000-4000-8000-000000000001",
+  outcome: "granted",
+  created_at: "2026-10-17T09:00:00Z",
+  change: { kind: "provider", provider_id: PROVIDER_ID.gemini, approval: "internal" },
+  reason: "Security review 42 approved Gemini for internal data",
+  policy_version: 7,
+  current_version: 7,
+  grant: { id: "6e000000-0000-4000-8000-000000000001", expires_at: "2026-10-17T09:05:30Z", auth_time: "2026-10-17T09:00:30Z", assurance: null, consumed: false },
+  preview: PREVIEW_APPROVE_GEMINI,
+};
+
+export const STEP_UP_NOT_FRESH: S["StepUpOut"] = { ...STEP_UP_GRANTED, outcome: "not_fresh", grant: null, preview: null };
+
+/** Every trust class and approval the egress lattice must draw, eight providers wide. */
+export const PROVIDERS_MANY: S["ProviderSettings"] = providerSettings({ ...EGRESS_DEFAULT, external_egress_level: "internal", organization_controlled_level: "confidential" }, [
+  PROVIDER_OLLAMA,
+  PROVIDER_GEMINI,
+  PROVIDER_MXBAI,
+  { ...PROVIDER_OLLAMA, id: "9a000000-0000-4000-8000-000000000004", provider: "vllm-private", model: "llama-4-scout-17b-instruct", deployment: "organization_controlled", enabled: false, destination: { kind: "registered_target", origin: "https://llm.halden.internal:8443", access: "operator_approved" } },
+  { ...PROVIDER_OLLAMA, id: "9a000000-0000-4000-8000-000000000005", provider: "vllm-staging", model: "qwen3-32b", deployment: "organization_controlled", approved_for_level: "restricted", explicitly_approved: false, enabled: false, destination: { kind: "registered_target", origin: "https://staging.halden.internal", access: "not_permitted" } },
+  { ...PROVIDER_GEMINI, id: "9a000000-0000-4000-8000-000000000006", provider: "anthropic", model: "claude-sonnet-5-5", enabled: false, training_opt_out: true, retention_mode: "zero", credential: { ...PROVIDER_GEMINI.credential, resolvable: true, data_use: "paid" } },
+  { ...PROVIDER_GEMINI, id: "9a000000-0000-4000-8000-000000000007", provider: "legacy-gateway", model: "unknown-model", deployment: "private", enabled: false, training_opt_out: true },
+  { ...PROVIDER_MXBAI, id: "9a000000-0000-4000-8000-000000000008", provider: "voyage", model: "voyage-3-large", deployment: "external_api", approved_for_level: "internal", destination: { kind: "vendor_api", origin: null, access: "public" } },
+]);
 
 export const NOT_FOUND = {
   error: { code: "not_found", message: "Not found.", request_id: "req-404-fixture" },
@@ -1486,18 +1637,6 @@ export const MEMBER_WIDE: S["MemberAccess"] = {
   departments: [SALES, { id: ID.leadership, name: "Leadership" }],
 };
 
-/** Every trust class and approval the egress lattice must draw, eight providers wide. */
-export const PROVIDERS_MANY: S["ProvidersResponse"] = {
-  egress: { ...PROVIDERS.egress, external_egress_level: "internal", organization_controlled_level: "confidential" },
-  providers: [
-    ...PROVIDERS.providers,
-    { ...PROVIDERS.providers[0]!, provider: "vllm-private", model: "llama-4-scout-17b-instruct", deployment: "organization_controlled", approved_for_level: "confidential", explicitly_approved: true, endpoint_configured: true },
-    { ...PROVIDERS.providers[0]!, provider: "vllm-staging", model: "qwen3-32b", deployment: "organization_controlled", approved_for_level: "restricted", explicitly_approved: false, enabled: true },
-    { ...PROVIDERS.providers[1]!, provider: "anthropic", model: "claude-sonnet-5-5", enabled: true, training_opt_out: true, retention_mode: "zero", credential: { state: "active", source: "env", resolvable: true, data_use: "paid" } },
-    { ...PROVIDERS.providers[1]!, provider: "legacy-gateway", model: "unknown-model", deployment: "private", enabled: true, training_opt_out: true },
-    { ...PROVIDERS.providers[2]!, provider: "voyage", model: "voyage-3-large", deployment: "external_api", approved_for_level: "internal", credential: { state: "active", source: "env", resolvable: true, data_use: "paid" } },
-  ],
-};
 
 /** A long audit log, paged by its cursor. */
 export function auditPages(before: string | null, total = 60, size = 25): S["AuditPage"] {
@@ -1540,7 +1679,7 @@ export const SETUP_FRESH: S["SetupStatus"] = {
     { key: "identity", state: "required", reason: "not_verified", message: "The identity provider is connected but no sign-in through it has succeeded yet. A test sign-in on the Identity page verifies it.", facts: { connection: "active", last_success_at: null, last_failure_at: null }, action: { kind: "link", href: "/settings/identity", label: "Test sign-in" } },
     { key: "members", state: "required", reason: "only_administrators", message: "Only administrators are members so far. People join when your identity provider provisions them (SCIM) or when your Lattice operator adds them.", facts: { active_members: 1, active_administrators: 1 }, action: null },
     { key: "provisioning", state: "optional", reason: "not_configured", message: "Automatic provisioning (SCIM) is not set up. It is optional; create a provisioning token on the Identity page to use it.", facts: { live_tokens: 0, provisioned_members: 0, refused_recently: 0 }, action: { kind: "link", href: "/settings/identity", label: "Open Identity" } },
-    { key: "ai_policy", state: "optional", reason: "evidence_only", message: "No generation provider is enabled: answers show their evidence without a written answer.", facts: { provider: null, model: null, default_question_sensitivity: "internal" }, action: { kind: "link", href: "/settings/providers", label: "View AI providers" } },
+    { key: "ai_policy", state: "optional", reason: "evidence_only", message: "No generation provider is enabled: answers show their evidence without a written answer.", facts: { provider: null, model: null, default_question_sensitivity: "internal" }, action: { kind: "link", href: "/settings/providers", label: "Open AI providers" } },
     { key: "sources", state: "required", reason: "no_sources", message: "No source is connected yet.", facts: { connected_sources: 0, synced_sources: 0, failed_sources: 0, syncing_sources: 0 }, action: null },
     { key: "accounts", state: "optional", reason: "not_needed", message: "No source maps records to accounts, so no account mapping is needed.", facts: { account_sources: 0, unmapped_references: 0 }, action: null },
     { key: "first_answer", state: "blocked", reason: "sources_required", message: "The first question can be asked once a source has synced.", facts: { answered: false }, action: null },
@@ -1555,7 +1694,7 @@ export const SETUP_IN_USE: S["SetupStatus"] = {
     { key: "identity", state: "complete", reason: "verified", message: "Sign-in through the identity provider works.", facts: { connection: "active", last_success_at: "2026-10-08T08:41:07Z", last_failure_at: null }, action: { kind: "link", href: "/settings/identity", label: "Review identity" } },
     { key: "members", state: "complete", reason: "members_active", message: "Members other than administrators are active.", facts: { active_members: 14, active_administrators: 2 }, action: { kind: "link", href: "/access", label: "Review access" } },
     { key: "provisioning", state: "complete", reason: "in_use", message: "The identity provider provisions members.", facts: { live_tokens: 1, provisioned_members: 12, refused_recently: 0 }, action: { kind: "link", href: "/settings/identity", label: "Open Identity" } },
-    { key: "ai_policy", state: "attention", reason: "credential_failed", message: "The generation provider's credential is missing or cannot be used: answers fall back to evidence only.", facts: { provider: "gemini", model: "gemini-3.5-flash-lite", default_question_sensitivity: "internal" }, action: { kind: "link", href: "/settings/providers", label: "View AI providers" } },
+    { key: "ai_policy", state: "attention", reason: "credential_failed", message: "The generation provider's credential is missing or cannot be used: answers fall back to evidence only.", facts: { provider: "gemini", model: "gemini-3.5-flash-lite", default_question_sensitivity: "internal" }, action: { kind: "link", href: "/settings/providers", label: "Open AI providers" } },
     { key: "sources", state: "complete", reason: "synced", message: "At least one source has synced.", facts: { connected_sources: 3, synced_sources: 3, failed_sources: 0, syncing_sources: 0 }, action: { kind: "link", href: "/sources", label: "Open Sources" } },
     { key: "accounts", state: "attention", reason: "unmapped_references", message: "Records reference accounts that are not mapped, and are not indexed until they are.", facts: { account_sources: 1, unmapped_references: 2 }, action: { kind: "link", href: "/sources", label: "See unmapped references" } },
     { key: "first_answer", state: "complete", reason: "answered", message: "Members have received answers.", facts: { answered: true }, action: null },

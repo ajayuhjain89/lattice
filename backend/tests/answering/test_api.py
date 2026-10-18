@@ -4,6 +4,7 @@ GET /v1/admin/providers. Thin routes over the services; these tests pin the cont
 SEC-5 (unreadable and nonexistent are the same 404), SEC-9/SEC-15 (trace views
 re-authorized; administrators see operational structure only) and masked secrets."""
 
+import json
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
@@ -207,12 +208,15 @@ async def test_admin_providers_is_masked_and_admin_only(
     body = response.json()
     assert body["egress"]["external_egress_level"] == "internal"
     gemini = next(p for p in body["providers"] if p["provider"] == "gemini")
-    assert gemini["credential"] == {
+    credential = gemini["credential"]
+    assert {k: credential[k] for k in ("state", "source", "resolvable", "data_use")} == {
         "state": "active",
         "source": "memory",
         "resolvable": True,
         "data_use": "paid",
     }
+    assert credential["managed_by"] == "operator"  # not entered in the product
+    assert credential["hint"] is None
     assert gemini["enabled"] is True
     fake = next(
         p for p in body["providers"] if p["provider"] == "fake" and p["purpose"] == "generation"
@@ -232,9 +236,15 @@ async def test_the_openapi_contract_lists_the_phase_6_routes(
         "/v1/admin/providers",
     ):
         assert path in paths
-    schema = (await client.get("/openapi.json")).text
-    assert "api_key" not in schema.lower()
+    document = (await client.get("/openapi.json")).json()
+    schema = json.dumps(document)
     assert "secret_ref" not in schema
+    # An API key is only ever a write-only request field (P12.5), never in a response.
+    components = document["components"]["schemas"]
+    holders = sorted(n for n, c in components.items() if "api_key" in c.get("properties", {}))
+    assert holders == ["CredentialRequest"]
+    field = components["CredentialRequest"]["properties"]["api_key"]
+    assert (field["format"], field["writeOnly"]) == ("password", True)
 
 
 async def test_ask_persists_exactly_one_trace(

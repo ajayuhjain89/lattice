@@ -41,6 +41,24 @@ directory identity on this connection) and their own identifier, and returns the
 identity settings. A ``matched`` test under proposed values is the proof an issuer or
 claim change requires (``lattice_oidc_change_identity``).
 
+**Egress step-up (P12.5, D-34; phase-12-plan C6.4).** Raising what may leave Lattice
+needs a fresh re-authentication of the administrator at the identity provider: purpose
+``step_up``, bound to their membership **and their Lattice session** and carrying the exact
+previewed change, its reason and the policy version it was previewed on; ``max_age=0`` and
+``prompt=login`` (plus ``acr_values`` when the operator configured an assurance
+requirement for the connection). The callback must arrive in the same browser session
+(the session cookie names the bound session; anything else is ``session_mismatch``,
+checked before the code is exchanged), verifies the ID token as for sign-in, requires the
+identifier to equal the administrator's own directory identity, requires a verified
+``auth_time`` not before the attempt began and at most five minutes old (an absent,
+malformed or stale ``auth_time`` is ``not_fresh`` -- ``prompt=login`` alone proves
+nothing), and the configured ``acr`` when one is required (``assurance_insufficient``).
+Then ``lattice_create_step_up_grant`` re-checks freshness, the session and the
+administrator in the database and creates a single-use grant (five minutes at most). It
+creates **no session** and changes none; the browser returns to the AI providers page.
+A fresh authentication is not by itself multi-factor authentication: Lattice claims only
+what the provider asserted (``acr``) against what the operator required.
+
 Sign-in facts (P12.1, C12): a successful sign-in records the connection's
 ``last_success_at`` (the setup record's "verified"); a failure on the provider's side, of
 the outbound policy or of the client credentials records ``last_failure_at`` and its code.
@@ -63,9 +81,9 @@ import re
 import secrets
 import time
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, replace
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 from urllib.parse import urlencode
 
@@ -94,6 +112,10 @@ MAX_RESPONSE_BYTES: Final = 256 * 1024
 LEEWAY_SECONDS: Final = 60
 SCOPES: Final = "openid email profile"
 TEST_RETURN: Final = "/settings/identity"
+STEP_UP_RETURN: Final = "/settings/providers"
+# D-34: a step-up's authentication must be this fresh, with this much clock leeway.
+STEP_UP_MAX_AGE_SECONDS: Final = 300
+STEP_UP_LEEWAY_SECONDS: Final = 60
 # Asymmetric only, each with the key type it needs.
 ALGORITHMS: Final = {
     "RS256": "RSA",
@@ -199,6 +221,16 @@ class SignedIn:
     organization_id: uuid.UUID
     connection_id: uuid.UUID
     return_to: str
+
+
+@dataclass(frozen=True)
+class StepUpCompleted:
+    """An egress step-up finished (whatever its outcome): no session; back to providers."""
+
+    attempt_id: uuid.UUID
+    organization_id: uuid.UUID
+    outcome: str
+    return_to: str = STEP_UP_RETURN
 
 
 @dataclass(frozen=True)
@@ -519,6 +551,8 @@ class _Attempt:
     membership_id: uuid.UUID | None
     proposed_issuer: str | None
     proposed_subject_claim: str | None
+    session_id: uuid.UUID | None = None
+    created_at: datetime | None = None
 
 
 # Test outcomes (an OidcFailure's outcome -> the recorded one).
@@ -641,9 +675,13 @@ class OidcSignIn:
         membership_id: uuid.UUID | None = None,
         proposed_issuer: str | None = None,
         proposed_subject_claim: str | None = None,
+        purpose: str = "sign_in",
+        step_up: dict[str, Any] | None = None,
+        acr_values: list[str] | None = None,
     ) -> Started:
         """Store an attempt and build the provider's authorization URL. The provider is
-        the connection's issuer, or the proposed one of a test."""
+        the connection's issuer, or the proposed one of a test. ``step_up``: the session,
+        change, reason and policy version a step-up attempt is bound to."""
         policy = await self.policy(connection.organization_id)
         issuer = proposed_issuer or connection.issuer
         try:
@@ -656,7 +694,8 @@ class OidcSignIn:
         nonce = secrets.token_urlsafe(32)
         verifier = secrets.token_urlsafe(64)
         binding = secrets.token_urlsafe(32)
-        test = membership_id is not None
+        fresh = purpose in ("test", "step_up")
+        bound = step_up or {}
         async with self._db.tenant_transaction(connection.organization_id) as session:
             # Housekeeping: finished sign-in attempts and expired ones go first.
             await session.execute(
@@ -672,9 +711,10 @@ class OidcSignIn:
                     text(
                         "INSERT INTO oidc_login_attempts (organization_id, connection_id, "
                         "state_hash, binding_hash, nonce, code_verifier, return_to, expires_at, "
-                        "purpose, membership_id, proposed_issuer, proposed_subject_claim) "
+                        "purpose, membership_id, proposed_issuer, proposed_subject_claim, "
+                        "session_id, change, reason, policy_version) "
                         "VALUES (:o, :c, :s, :b, :n, :v, :r, now() + :ttl, :purpose, :m, :pi, "
-                        ":pc) RETURNING id"
+                        ":pc, :sid, CAST(:change AS jsonb), :reason, :pv) RETURNING id"
                     ),
                     {
                         "o": connection.organization_id,
@@ -685,10 +725,14 @@ class OidcSignIn:
                         "v": verifier,
                         "r": return_to,
                         "ttl": ATTEMPT_TTL,
-                        "purpose": "test" if test else "sign_in",
+                        "purpose": purpose,
                         "m": membership_id,
                         "pi": proposed_issuer,
                         "pc": proposed_subject_claim,
+                        "sid": bound.get("session_id"),
+                        "change": None if "change" not in bound else json.dumps(bound["change"]),
+                        "reason": bound.get("reason"),
+                        "pv": bound.get("policy_version"),
                     },
                 )
             ).scalar_one()
@@ -702,8 +746,9 @@ class OidcSignIn:
                 "nonce": nonce,
                 "code_challenge": _b64url(hashlib.sha256(verifier.encode("ascii")).digest()),
                 "code_challenge_method": "S256",
-                # A test always asks the provider to authenticate again.
-                **({"prompt": "login", "max_age": "0"} if test else {}),
+                # A test or a step-up always asks the provider to authenticate again.
+                **({"prompt": "login", "max_age": "0"} if fresh else {}),
+                **({"acr_values": " ".join(acr_values)} if acr_values else {}),
             }
         )
         separator = "&" if "?" in metadata.authorization_endpoint else "?"
@@ -714,12 +759,12 @@ class OidcSignIn:
             "auth.oidc.started",
             connection_id=str(connection.id),
             organization_id=str(connection.organization_id),
-            purpose="test" if test else "sign_in",
+            purpose=purpose,
         )
         return Started(
             f"{metadata.authorization_endpoint}{separator}{query}",
             binding,
-            attempt_id if test else None,
+            attempt_id if fresh else None,
         )
 
     async def start(self, login_key: str, return_to: str | None) -> Started:
@@ -762,6 +807,7 @@ class OidcSignIn:
             connection,
             row.login_key,
             return_to=TEST_RETURN,
+            purpose="test",
             membership_id=membership_id,
             proposed_issuer=proposed_issuer if proposed_issuer != connection.issuer else None,
             proposed_subject_claim=(
@@ -769,6 +815,71 @@ class OidcSignIn:
                 if proposed_subject_claim != connection.subject_claim
                 else None
             ),
+        )
+
+    async def step_up_connection(
+        self, organization_id: uuid.UUID, membership_id: uuid.UUID
+    ) -> tuple[Connection, str, list[str] | None] | None:
+        """The active connection, its login key and the operator's step-up assurance
+        requirement -- when the administrator has a directory identity on it (a step-up
+        proves who they are there). None otherwise: no step-up is possible."""
+        async with self._db.tenant_snapshot(organization_id) as session:
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT c.id, c.login_key, c.issuer, c.client_id, c.client_secret_ref, "
+                        "c.subject_claim, c.step_up_acr_values, EXISTS (SELECT 1 FROM "
+                        "directory_identities d WHERE d.organization_id = c.organization_id "
+                        "AND d.connection_id = c.id AND d.membership_id = :m) AS bound "
+                        "FROM oidc_connections c WHERE c.organization_id = :o "
+                        "AND c.status = 'active'"
+                    ),
+                    {"o": organization_id, "m": membership_id},
+                )
+            ).one_or_none()
+        if row is None or not row.bound:
+            return None
+        connection = Connection(
+            id=row.id,
+            organization_id=organization_id,
+            issuer=row.issuer,
+            client_id=row.client_id,
+            client_secret_ref=row.client_secret_ref,
+            subject_claim=row.subject_claim,
+        )
+        acr = list(row.step_up_acr_values) if row.step_up_acr_values else None
+        return connection, row.login_key, acr
+
+    async def start_step_up(
+        self,
+        organization_id: uuid.UUID,
+        membership_id: uuid.UUID,
+        session_id: uuid.UUID,
+        *,
+        change: dict[str, Any],
+        reason: str,
+        policy_version: int,
+    ) -> Started:
+        """An egress step-up (D-34): a fresh authentication of this administrator, in
+        this session, for exactly this change. ``unknown_connection`` when no step-up is
+        possible (no active connection, or no directory identity on it)."""
+        found = await self.step_up_connection(organization_id, membership_id)
+        if found is None:
+            raise OidcFailure("unknown_connection")
+        connection, login_key, acr = found
+        return await self._authorize(
+            connection,
+            login_key,
+            return_to=STEP_UP_RETURN,
+            purpose="step_up",
+            membership_id=membership_id,
+            step_up={
+                "session_id": session_id,
+                "change": change,
+                "reason": reason,
+                "policy_version": policy_version,
+            },
+            acr_values=acr,
         )
 
     async def _consume(self, connection: Connection, state: str) -> _Attempt | None:
@@ -781,7 +892,8 @@ class OidcSignIn:
                         "WHERE organization_id = :o AND connection_id = :c "
                         "AND state_hash = :s AND consumed_at IS NULL AND expires_at > now() "
                         "RETURNING id, binding_hash, nonce, code_verifier, return_to, purpose, "
-                        "membership_id, proposed_issuer, proposed_subject_claim"
+                        "membership_id, proposed_issuer, proposed_subject_claim, session_id, "
+                        "created_at"
                     ),
                     {"o": connection.organization_id, "c": connection.id, "s": _sha256(state)},
                 )
@@ -798,6 +910,8 @@ class OidcSignIn:
             row.membership_id,
             row.proposed_issuer,
             row.proposed_subject_claim,
+            row.session_id,
+            row.created_at,
         )
 
     async def _claims(
@@ -831,7 +945,10 @@ class OidcSignIn:
         state: str | None,
         binding: str | None,
         provider_error: bool,
-    ) -> SignedIn | TestCompleted:
+        current_session: Callable[[], Awaitable[uuid.UUID | None]] | None = None,
+    ) -> SignedIn | TestCompleted | StepUpCompleted:
+        """``current_session``: the Lattice session the callback's browser presents (read
+        only for a step-up, which must come back to the session it was bound to)."""
         connection = await self._connection(login_key)
         if state is None or not _TOKEN.fullmatch(state):
             raise OidcFailure("invalid_state")
@@ -845,6 +962,16 @@ class OidcSignIn:
         if attempt.purpose == "test":
             return await self._complete_test(
                 connection, login_key, attempt, code=code, provider_error=provider_error
+            )
+        if attempt.purpose == "step_up":
+            presented = await current_session() if current_session is not None else None
+            return await self._complete_step_up(
+                connection,
+                login_key,
+                attempt,
+                code=code,
+                provider_error=provider_error,
+                session_id=presented,
             )
         if provider_error or code is None or not 1 <= len(code) <= 2048:
             raise OidcFailure("provider_error")
@@ -943,6 +1070,110 @@ class OidcSignIn:
             outcome=outcome,
         )
         return TestCompleted(attempt.id, connection.organization_id, outcome)
+
+    async def _complete_step_up(
+        self,
+        connection: Connection,
+        login_key: str,
+        attempt: _Attempt,
+        *,
+        code: str | None,
+        provider_error: bool,
+        session_id: uuid.UUID | None,
+    ) -> StepUpCompleted:
+        """Verify a fresh re-authentication of the bound administrator in the bound
+        session and, when it holds, create the single-use grant. Never a session."""
+        acr_required: list[str] | None = None
+        grant: tuple[datetime, str | None] | None = None
+        if provider_error or code is None or not 1 <= len(code) <= 2048:
+            outcome = "sign_in_failed"
+        elif session_id is None or session_id != attempt.session_id:
+            # Checked before the code is used: a step-up completes only in the browser
+            # session that started it.
+            outcome = "session_mismatch"
+        else:
+            policy = await self.policy(connection.organization_id)
+            found = await self.step_up_connection(
+                connection.organization_id, attempt.membership_id or uuid.uuid4()
+            )
+            acr_required = found[2] if found is not None and found[0].id == connection.id else None
+            try:
+                claims = await self._claims(policy, connection, login_key, attempt, code)
+                identifier = _identifier(claims, connection.subject_claim)
+            except OidcFailure as failure:
+                outcome = (
+                    "sign_in_failed"
+                    if failure.rejected_code
+                    else _TEST_FAILURES.get(failure.outcome, "sign_in_failed")
+                )
+            else:
+                outcome = await self._match(connection, attempt, identifier)
+                if outcome == "matched":
+                    outcome, grant = self._fresh(claims, attempt, acr_required)
+        if grant is not None:
+            outcome = await self._grant(connection, attempt, *grant)
+        if outcome != "granted":
+            async with self._db.tenant_transaction(connection.organization_id) as session:
+                await session.execute(
+                    text(
+                        "UPDATE oidc_login_attempts SET outcome = :r, completed_at = now() "
+                        "WHERE organization_id = :o AND id = :a AND outcome IS NULL"
+                    ),
+                    {"r": outcome, "o": connection.organization_id, "a": attempt.id},
+                )
+        metrics.SSO_SIGN_INS.labels(outcome="step_up_completed").inc()
+        metrics.STEP_UPS.labels(outcome=metrics.bounded(outcome, metrics.STEP_UP_OUTCOMES)).inc()
+        log_event(
+            logger,
+            logging.INFO,
+            "auth.oidc.step_up_completed",
+            connection_id=str(connection.id),
+            organization_id=str(connection.organization_id),
+            outcome=outcome,
+        )
+        return StepUpCompleted(attempt.id, connection.organization_id, outcome)
+
+    @staticmethod
+    def _fresh(
+        claims: Mapping[str, Any], attempt: _Attempt, acr_required: list[str] | None
+    ) -> tuple[str, tuple[datetime, str | None] | None]:
+        """D-34: a verified ``auth_time`` from this attempt's authentication, at most five
+        minutes old; the required ``acr`` when the operator configured one."""
+        auth_time = claims.get("auth_time")
+        now = time.time()
+        started = attempt.created_at.timestamp() if attempt.created_at is not None else now
+        if (
+            not isinstance(auth_time, (int, float))
+            or isinstance(auth_time, bool)
+            or auth_time > now + STEP_UP_LEEWAY_SECONDS
+            or now - auth_time > STEP_UP_MAX_AGE_SECONDS
+            or auth_time < started - STEP_UP_LEEWAY_SECONDS
+        ):
+            return "not_fresh", None
+        acr = claims.get("acr")
+        if acr_required is not None and (not isinstance(acr, str) or acr not in acr_required):
+            return "assurance_insufficient", None
+        asserted = acr if acr_required is not None and isinstance(acr, str) else None
+        return "matched", (datetime.fromtimestamp(auth_time, UTC), asserted)
+
+    async def _grant(
+        self, connection: Connection, attempt: _Attempt, auth_time: datetime, acr: str | None
+    ) -> str:
+        """The database's half: freshness, session and administrator re-checked, the grant
+        created and its event recorded in one transaction."""
+        from lattice.providers.stepup import create_grant  # an import cycle otherwise
+
+        assert attempt.membership_id is not None  # noqa: S101 - a step-up attempt
+        assert attempt.session_id is not None  # noqa: S101 - a step-up attempt
+        return await create_grant(
+            self._db,
+            connection.organization_id,
+            membership_id=attempt.membership_id,
+            session_id=attempt.session_id,
+            attempt_id=attempt.id,
+            auth_time=auth_time,
+            acr=acr,
+        )
 
     async def _match(self, connection: Connection, attempt: _Attempt, identifier: str) -> str:
         async with self._db.tenant_snapshot(connection.organization_id) as session:

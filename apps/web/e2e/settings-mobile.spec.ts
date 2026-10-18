@@ -15,7 +15,7 @@ test("administrators open Organization from More and read the stacked record", a
   await expect(page.getByRole("heading", { name: "Organization", level: 1 })).toBeVisible();
   const ai = page.getByTestId("setup-record").getByRole("listitem", { name: "AI policy", exact: true });
   await expect(ai).toContainText("Needs attention");
-  const link = ai.getByRole("link", { name: "View AI providers" });
+  const link = ai.getByRole("link", { name: "Open AI providers" });
   // Small controls keep their look and get a 44 px hit area on touch (design-system §7).
   const hit = await link.evaluate((el) => parseFloat(getComputedStyle(el, "::after").height));
   expect(hit).toBeGreaterThanOrEqual(44);

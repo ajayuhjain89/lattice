@@ -77,6 +77,10 @@ APP_TABLES = {
     "outbound_targets": {"SELECT"},
     # Phase 12 (P12.3, 0018): mappings are read; written only by lattice_set_account_ref.
     "account_external_refs": {"SELECT"},
+    # Phase 12 (P12.5, 0021): read for previews and step-up results; written only by the
+    # egress functions (grants) and by triggers of every writer (versions).
+    "egress_policy_versions": {"SELECT"},
+    "step_up_grants": {"SELECT"},
 }
 # Column-level privileges (table-level ones above).
 COLUMN_PRIVILEGES = {
@@ -127,6 +131,8 @@ COLUMN_PRIVILEGES = {
         "last_test_at",
         "last_test_kind",
         "last_test_result",
+        # 0021: the operator's step-up assurance requirement (shown, never written).
+        "step_up_acr_values",
     },
     # Sign-in and test facts; configuration only through the 0020 fenced functions.
     ("oidc_connections", "UPDATE"): {
@@ -154,6 +160,8 @@ COLUMN_PRIVILEGES = {
     # after creation, never the lifecycle (lattice_set_account_archived).
     ("accounts", "INSERT"): {"organization_id", "key", "name", "aliases", "status"},
     ("accounts", "UPDATE"): {"name", "aliases", "status"},
+    # 0021: a provider test's facts; the policy only through lattice_apply_egress_change.
+    ("model_providers", "UPDATE"): {"last_test_at", "last_test_result", "last_test_credential_id"},
 }
 RLS_REFUSED = r"row-level security"
 
@@ -421,7 +429,10 @@ async def test_app_cannot_write_another_organizations_access(
     ("actor", "action"),
     [
         ("operator:seed", "access.member_changed"),
-        ("member:x", "provider.configured"),
+        # 0021 admits provider and egress events from members only.
+        ("operator:x", "provider.configured"),
+        ("scim:x", "egress.levels_changed"),
+        ("member:x", "secret.rekeyed"),
         ("scim:x", "sso.connection_created"),
         ("idp:x", "access.member_changed"),
     ],
@@ -930,6 +941,105 @@ async def test_app_records_account_events_by_a_member_only(
         "VALUES (:o, :actor, :action, '{}', 'because')"
     )
     for actor in (f"scim:{uuid.uuid4()}", "operator:sync"):
+        with pytest.raises(DBAPIError, match=RLS_REFUSED):
+            await _run(app_db, world.org, insert, o=world.org, actor=actor, action=action)
+    assert (
+        await _run(
+            app_db, world.org, insert, o=world.org, actor=f"member:{world.member}", action=action
+        )
+        == 1
+    )
+
+
+# --- Phase 12 (P12.5, 0021): providers, credentials, egress, step-up grants --------------------
+
+PROVIDER_FUNCTIONS = {
+    "lattice_preview_egress_change(uuid,jsonb)",
+    "lattice_apply_egress_change(uuid,uuid,jsonb,bigint,uuid)",
+    "lattice_create_step_up_grant(uuid,uuid,uuid,timestamp with time zone,text)",
+    "lattice_create_provider(uuid,text,text,uuid,boolean)",
+    "lattice_set_provider_endpoint(uuid,uuid,bigint,uuid)",
+    "lattice_set_provider_credential(uuid,text,uuid,uuid,uuid,text,bytea,bytea,text,text)",
+    "lattice_revoke_provider_credential(uuid,text,uuid)",
+}
+PROVIDER_HELPERS = (
+    "lattice_egress_cells",
+    "lattice_egress_version",
+    "lattice_egress_write",
+    "lattice_target_endpoint",
+    "lattice_require_policy_actor",
+    "lattice_bump_egress_version",
+    "lattice_require_provider_audit",
+    "lattice_require_egress_settings_audit",
+    "lattice_require_credential_audit",
+    "lattice_require_step_up_audit",
+)
+
+
+async def test_the_provider_functions_are_narrow_definer_functions(
+    superuser_engine: AsyncEngine,
+) -> None:
+    names = sorted({f.split("(")[0] for f in PROVIDER_FUNCTIONS})
+    async with superuser_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    """
+                    SELECT p.oid::regprocedure::text, pg_get_userbyid(p.proowner), p.prosecdef,
+                           p.proconfig,
+                           array(SELECT DISTINCT coalesce(r.rolname, 'PUBLIC')
+                                 FROM aclexplode(p.proacl) a
+                                 LEFT JOIN pg_roles r ON r.oid = a.grantee
+                                 WHERE a.privilege_type = 'EXECUTE' ORDER BY 1)
+                    FROM pg_proc p WHERE p.proname = ANY(:names)
+                    """
+                ),
+                {"names": names},
+            )
+        ).all()
+        helpers = (
+            await conn.execute(
+                text(
+                    "SELECT p.proname, has_function_privilege('lattice_app', p.oid, 'EXECUTE'), "
+                    "has_function_privilege('lattice_worker', p.oid, 'EXECUTE') "
+                    "FROM pg_proc p WHERE p.proname = ANY(:names)"
+                ),
+                {"names": list(PROVIDER_HELPERS)},
+            )
+        ).all()
+    assert {r[0].replace(", ", ",") for r in rows} == PROVIDER_FUNCTIONS
+    for signature, owner, definer, config, executors in rows:
+        assert owner == "lattice_owner", signature
+        assert definer, signature
+        assert config == ["search_path=pg_catalog, public, pg_temp"], signature
+        assert executors == ["lattice_app", "lattice_owner"], signature
+    assert sorted(h[0] for h in helpers) == sorted(PROVIDER_HELPERS)
+    assert all(not app and not worker for _, app, worker in helpers)
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "provider.configured",
+        "provider.enabled",
+        "provider.disabled",
+        "provider.approval_changed",
+        "credential.set",
+        "credential.rotated",
+        "credential.revoked",
+        "egress.levels_changed",
+        "egress.step_up_completed",
+        "egress.escalation_refused",
+    ],
+)
+async def test_app_records_provider_events_by_a_member_only(
+    app_db: Database, world: World, action: str
+) -> None:
+    insert = (
+        "INSERT INTO audit_events (organization_id, actor, action, target, reason) "
+        "VALUES (:o, :actor, :action, '{}', 'because')"
+    )
+    for actor in (f"scim:{uuid.uuid4()}", "operator:cli"):
         with pytest.raises(DBAPIError, match=RLS_REFUSED):
             await _run(app_db, world.org, insert, o=world.org, actor=actor, action=action)
     assert (

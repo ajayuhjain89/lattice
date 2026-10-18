@@ -3,8 +3,9 @@
 Status: **Accepted as the P12.0 contract (2026-10-06).** Built checkpoint by checkpoint
 from P12.1 (phase-12-plan Part II); **P12.1 (2026-10-08) built the first fence and the
 foundations; P12.2 (2026-10-09) the member and administrator fences; P12.3 (2026-10-12) the
-account and mapping fences; P12.4 (2026-10-13) the identity fences** — see "Implemented in
-P12.1", "Implemented in P12.2", "Implemented in P12.3" and "Implemented in P12.4" at the end.
+account and mapping fences; P12.4 (2026-10-13) the identity fences; P12.5 (2026-10-17) the
+provider, credential, egress and step-up fences** — see "Implemented in P12.1" … "Implemented
+in P12.5" at the end.
 
 ## Context
 
@@ -268,3 +269,61 @@ on connections, directory identities or tokens).
 column grants; the trigger functions not callable), `tests/test_rls.py` (direct writes
 refused), `tests/identity/test_identity_settings.py` (refusals, coupling, bypass attempts,
 proofs) and the privilege snapshot pin them.
+
+## Implemented in P12.5 (2026-10-17, migration 0021)
+
+The `org_settings`, `model_providers`, `provider_credentials`, `encrypted_secrets` (provider
+keys) and `step_up_grants` rows of the operation table — again narrower than the table:
+**every** write is a fenced function (the table allowed restricted direct writes for
+lowering a ceiling and column writes for provider records; one function per kind of change
+leaves the database, not the caller, to decide what is an escalation).
+
+- **`lattice_preview_egress_change(actor, change)`** applies the change in a
+  subtransaction that always rolls back and returns the cells before and after
+  (`lattice_egress_cells`: permitted (record, destination, level) of the recorded
+  configuration), the questions' default before and after, the policy version and the
+  verdict. **`lattice_apply_egress_change(actor, session, change, expected version,
+  grant)`** — under the organization's egress lock (`b"LEGR"`) — compares the version,
+  applies, recomputes and, when a cell is newly permitted or the default lowered, requires
+  and consumes (row lock) a grant of the same administrator and session for exactly this
+  change and version, unexpired, the session live; otherwise refuses (`step_up_required`,
+  `grant_invalid`, `grant_consumed`, `grant_expired`, `grant_mismatch`, `session_ended`,
+  `policy_changed`). One change document kind for settings (`external_egress_level`,
+  `organization_controlled_level`, `default_query_sensitivity`) and one for a record
+  (`enabled`, `approval`, `training_opt_out`; embedding records: approval only —
+  `deployment_managed`).
+- **`lattice_create_step_up_grant(actor, session, attempt, auth_time, acr)`** — the OIDC
+  callback's write: the administrator's consumed `step_up` attempt of that session,
+  `auth_time` not before the attempt (one minute of leeway) and at most five minutes old,
+  the session live, a directory identity on the active connection; the grant copies the
+  attempt's change, reason and version, stores the change's SHA-256, expires five minutes
+  after the authentication at most (CHECKs hold the window for every writer).
+- **`lattice_create_provider`** (generation only, created disabled and unapproved; an
+  Ollama endpoint only as an operator-registered `generation` target, its trust class
+  derived from it, https unless loopback), **`lattice_set_provider_endpoint`** (same class,
+  approval withdrawn), **`lattice_set_provider_credential`** / **`lattice_revoke_provider_
+  credential`** (per organization and provider under `b"LCRD"`, the expected current
+  credential compared, always `vault:`, the previous ciphertext destroyed).
+- **`egress_policy_versions`** is raised by a definer trigger on every write to
+  `org_settings` and to the policy columns of `model_providers` by **any** writer —
+  operators and a sync's embedding record included — so a preview and a grant name exactly
+  the policy they were computed on.
+- **Audit coupling**: `lattice_require_provider_audit` (`provider.*` naming the record, or
+  listing it as affected), `lattice_require_egress_settings_audit`
+  (`egress.levels_changed`), `lattice_require_credential_audit` (`credential.*` naming the
+  provider), `lattice_require_step_up_audit` (`egress.step_up_completed` naming the grant;
+  its consumption by the committing event naming it). The audit insert policy admits these
+  families and `egress.escalation_refused` from `member:` actors only.
+- **Reads and facts**: `lattice_app` reads `egress_policy_versions`, `step_up_grants`,
+  `oidc_connections.step_up_acr_values` (operator-written), and may update only
+  `model_providers.last_test_at, last_test_result, last_test_credential_id`. The worker
+  gains nothing. Helpers (`lattice_egress_cells`, `_write`, `_version`,
+  `lattice_target_endpoint`, `lattice_require_policy_actor`) are owner-only.
+- **Residual risk** (as P12.4's identity proof): the ID token behind a grant is verified in
+  the API; a compromised API process could forge one. The database still binds it to an
+  active administrator, a live session, a fresh `auth_time`, one change, one version, five
+  minutes and one use, and the events record it.
+
+`tests/test_app_role_access.py`, `tests/test_rls.py`, `tests/test_worker_role.py`,
+`tests/providers/test_egress_fences.py` (direct API-role SQL), `test_step_up.py`,
+`test_provider_admin.py`, `test_egress_lattice.py` and the privilege snapshot pin them.

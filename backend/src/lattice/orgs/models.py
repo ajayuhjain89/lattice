@@ -205,8 +205,9 @@ class OrgSettings(Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
     )
-    # internal | confidential | restricted; raising it is an explicit admin action.
-    external_egress_level: Mapped[str] = mapped_column(Text, server_default="internal")
+    # internal | confidential | restricted; raising it is an explicit admin action. NULL
+    # (0021): external APIs are not allowed at all.
+    external_egress_level: Mapped[str | None] = mapped_column(Text, server_default="internal")
     # D-13: the trusted minimum sensitivity of a question; a caller can only raise it.
     default_query_sensitivity: Mapped[str] = mapped_column(Text, server_default="internal")
     # customer | synthetic: only synthetic content may reach a provider that may use

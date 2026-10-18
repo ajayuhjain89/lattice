@@ -3,13 +3,14 @@
 Status: **Plan approved (2026-10-06). P12.0 (contracts, Part II) written; P12.1
 (foundations) implemented 2026-10-08, P12.2 (members and administrators) 2026-10-09 and
 P12.3 (accounts and external-reference mapping) 2026-10-12 with its fail-closed correction
-2026-10-13, and P12.4 (identity administration: OIDC and SCIM) 2026-10-13 (Part III).** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
+2026-10-13, P12.4 (identity administration: OIDC and SCIM) 2026-10-13 and P12.5 (providers,
+BYOK and egress with the D-34 step-up) 2026-10-17 (Part III).** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
 D-28–D-33, D-35, D-36 and D-37B are approved (§22, with the contracts of Part II);
 D-34 (raising egress ceilings: IdP step-up, C6) and D-37A (organization purge: semantics
 now, executable purge in Phase 15, C14) were decided by engineering under the product
 owner's delegation, as were corrections to D-31 and D-36 (C18). **P12.1 delivered
-(2026-10-08), P12.2 (2026-10-09), P12.3 (2026-10-12) and P12.4 (2026-10-13), local
-commits; Part III.** P12.5 waits for the product owner's go-ahead.
+(2026-10-08), P12.2 (2026-10-09), P12.3 (2026-10-12), P12.4 (2026-10-13) and P12.5
+(2026-10-17), local commits; Part III.** P12.6 waits for the product owner's go-ahead.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 12. Phase 11
 is closed (143392f); real external staging validation stays deferred and remains a
@@ -1483,3 +1484,135 @@ show` names the missing registration.
 **Not built (later checkpoints):** provider/BYOK settings and D-34 egress escalation
 (P12.5); source upload and first sync (P12.6); organization purge (Phase 15); IdP
 migration with differing subjects (post-v1, D-37B).
+
+## P12.5 Providers, BYOK and egress policy, with the D-34 step-up (2026-10-17)
+
+Delivered on `phase/12-org-setup-integrations` (local commit, not pushed) after the
+product owner approved P12.4. Migration **0021** (`SCHEMA_REVISION` 0021; declared
+irreversible: the downgrade drops step-up grants and attempts, the policy versions and the
+test facts, maps a denied external class to `internal` and keeps the generation approvals
+0021 recorded). The development database is not migrated.
+
+**Provider invocation paths, as found before building** (§1 of the instruction): generation
+— `answering.service` → `answering.policy.resolve_generation` (in the Ask's REPEATABLE READ
+snapshot: configuration, `provider_decision`, question sensitivity, credential reference,
+`vault:` opened in the API) → snapshot closed → `GenerationProvider.generate` (Gemini /
+Ollama adapters with their own unguarded `httpx` clients). Query embedding — the
+deployment's provider (`LATTICE_QUERY_EMBEDDING`, key in the API environment) checked by
+`retrieval.semantic.query_egress_block` against the organization's embedding record inside
+the snapshot, then `embed`. Document embedding — the worker / `lattice sync` with the
+deployment's provider (`LATTICE_SYNC_EMBEDDING`), the worker holding no master keys and no
+privilege on `encrypted_secrets`. No reranker calls a provider (the 5.1 cross-encoder was
+removed). Writes — operator CLI only (`lattice.providers.configuration`); the page was
+read-only.
+
+| Contract | Built | Where |
+| -------- | ----- | ----- |
+| §11 / C6.1 provider product model | `GET /v1/admin/providers`: the policy (with its **version**), every record with its facts kept apart — configuration (enabled, data terms), approval (explicit or not), trust class, destination (vendor API, operator-registered target with how the outbound policy classes it, deployment-local, test double), API key (who holds it: *organization* = entered here, `vault:`; *operator* = an `env:` reference; last four characters, set time, tier, whether it can be opened), latest test (and whether it tested the current key), what it may receive now (`allowed_up_to` / `blocked_by`); the egress **lattice** computed by the server; the operator's registered generation targets; the supported adapters (Gemini, Ollama; the test double outside production); the step-up requirement; the AI setup status | `lattice.providers.admin`, `admin_models`, `lattice` |
+| Lifecycle | **configure** (`POST`, generation only: created **disabled and unapproved** — never an escalation), **approve / withdraw approval**, **enable / disable**, **data terms** (Gemini), **move endpoint** (Ollama: another registered target of the same class; the approval is withdrawn), **key set / replace / revoke**, **test** — separate actions, each a reason and an event; a key replacement never re-enables or re-approves anything. One enabled generation record (unchanged); enabling another disables the first in the same change | `api/routes/admin.py`, 0021 |
+| C3 BYOK | Keys accepted only in `PUT …/{id}/credential` (`SecretStr`, trimmed, ≤ 4096, no control characters), sealed in the API (AES-256-GCM bound to the organization, secret row, `provider_api_key`, the credential row, key ID), stored by `lattice_set_provider_credential` (expected current credential compared; previous ciphertext destroyed — whoever set it); revoke destroys it. Never in a response, log, audit event (`credential.set/rotated/revoked` say `encrypted` / `environment` and the tier), trace, URL or 422 body. **Precedence**: the organization's own active credential, or none — no fallback across organizations or to a deployment key; an administrator never names an `env:` variable; operators keep `lattice provider credential set` | `lattice.providers.admin`, 0021 |
+| Tests (§11) | `POST …/{id}/test`: Gemini `GET /v1beta/models/{model}` (authenticates the key, generates nothing), Ollama `GET /api/tags` (the model must be listed); through the outbound guard; fixed results `valid`, `invalid_credential`, `configuration_invalid`, `provider_unavailable`, `outbound_blocked`, `credential_missing`, `unsupported`; recorded on the record with the credential it tested; logged and counted (`lattice_provider_tests_total`), not audited (C11). A test changes no cell, no version, no enablement | `lattice.providers.tester` |
+| D-15 trust | The class follows the destination, never a label: Gemini `external_api`; an Ollama endpoint is an operator-registered `generation` target (`lattice outbound allow --purpose generation`), `local` only when the operator registered a loopback origin, else `organization_controlled` and https; the class never changes on a record (endpoint moves refuse `trust_class_change`); unknown classes fail closed | 0021 `lattice_target_endpoint`, `lattice_create_provider` |
+| C4 on provider calls | The Gemini and Ollama adapters connect only through `lattice.providers.http` → `lattice.outbound` (connect-time address check, no redirects, no proxies) under the organization's `generation` policy; the invocation rule refuses an organization-controlled endpoint the policy does not permit before building anything (`outbound_blocked`); a loopback (`local`) server stays the operator's, ungoverned (C4) | `providers/http.py`, adapters, `answering.policy` |
+| Egress policy | Settings change: external ceiling (a level or **not allowed**), organization-controlled ceiling (a level or not allowed), questions' default (a level). Provider change: enabled, approval, data terms. One fenced function applies both kinds; the effective level is the stricter trusted value as before (D-13, D-15); no new sensitivity label; document ACLs untouched | 0021 `lattice_egress_write` |
+| C6.2 escalation | Decided by the **database**: the permitted (record, destination, level) cells and the questions' default before and after; any new cell or a lower default is an escalation, whatever control changed — so enabling an approved provider, approving, raising a ceiling, allowing a class, changing data terms all count when (and only when) they newly let content out; a credential cannot (it is not an input). `lattice_egress_cells` and `providers.lattice` are proven equal over 40 random configurations | `test_egress_lattice.py` |
+| C6.4 D-34 step-up | Preview (`changes/preview`, server Now → After: newly allowed and no longer allowed transmissions by provider, class and destination, the default before/after, what stays in force) → reason + the organization's name typed → `POST step-ups` (checks the escalation, version and confirmation before redirecting) → the IdP with `prompt=login`, `max_age=0` (+ `acr_values` when the operator set them) → callback: same Lattice session (checked before the code is exchanged), verified ID token, the administrator's own directory identity, a verified `auth_time` not before the attempt and ≤ 5 min (absent, malformed, stale, premature or future: `not_fresh`), the required `acr` (`assurance_insufficient`) → `lattice_create_step_up_grant` re-checks in the database → back to `/settings/providers?step_up=<id>`, **no session created or changed** → the page re-previews and *Apply this change* (`step-ups/{id}/apply`) commits exactly the stored change once | `identity.oidc`, `providers.stepup`, `providers.admin`, 0021 |
+| C6.4 grants | `step_up_grants`: organization, administrator, session, attempt (unique), the exact change and its SHA-256, reason, **policy version**, `auth_time`, asserted `acr`, ≤ 5 min after the authentication; consumed under a row lock inside `lattice_apply_egress_change`, after the organization's egress lock: a second, concurrent or later use, another session, another administrator, an expired grant, a changed policy (any writer raises the version), an ended session, a suspended or demoted administrator, a suspended organization → refused. The browser holds only the step-up's ID in the URL; the change and reason stay on the server | 0021 |
+| Lowering (§17) | Not an escalation → `changes` applies at once with a reason and an event; the next request (and the next call of a running Ask, below) sees it | `apply_change` |
+| Call time (§11 of the instruction) | `recheck_generation` before **every** model call and regeneration, in a fresh snapshot: same enabled, explicitly approved record at the same destination, whose operator registration (organization-controlled) is still live; ceilings, data terms and the questions' default (a raised default applies) still admit the question and every prompt document, re-read and still readable by the asker; same active credential. Otherwise no call: `evidence_only` (`egress_policy` / `generation_unavailable`), trace `decision_reason` `policy_changed` / `outbound_blocked` / `credential_revoked` or `recheck_refused`. A request already sent to a provider is not cancelled (its content was permitted when sent) | `answering.policy`, `answering.service` |
+| Generation approval | Generation records need an explicit approval for every class (P12.5): product records start unapproved; the operator's `provider configure` records the approval for `internal` (what configuring always meant, ADR-011); 0021 backfilled existing generation records | `answering.policy`, `configuration`, 0021 |
+| Embedding (§6 of the instruction) | Stays the deployment's: the page shows the recorded embedding provider as *the deployment's* with its approval for this organization, which is the only thing administrators change (raise = escalation, lower = immediate); enable/disable and data terms refused (`deployment_managed`). Query embedding still skips a disallowed external provider while exact and lexical retrieval answer (D-13; tested with external APIs denied) | `admin.py`, 0021 |
+| C12 setup status | `ai_policy`: `optional·evidence_only`, **`optional·not_enabled`**, `attention·provider_unavailable` (also a latest test `provider_unavailable`/`configuration_invalid` of the current key), **`attention·not_approved`**, **`blocked·outbound_blocked`**, **`attention·credential_missing`**, `attention·credential_failed` (can't be opened), **`attention·credential_invalid`** (the provider rejected the current key), `attention·policy_excludes_default`, `complete·generation_ready`; action *Open AI providers*. The providers page shows the same category | `setup.derive`, `setup.facts` |
+| C11 audit | `provider.configured / enabled / disabled / approval_changed`, `egress.levels_changed` (before/after, `escalation`, and for an escalation the grant, `auth_time`, assurance), `credential.set / rotated / revoked`, **`egress.step_up_completed`**, **`egress.escalation_refused`** (`step_up_required` and grant refusals; the refused change, no secret); coupled by deferred triggers; reads, previews and tests record nothing. Metric `lattice_egress_escalations_total{outcome}`, `lattice_step_ups_total{outcome}`; alert `LatticeEgressEscalation` (ticket, security; runbook §10.17) | 0021, `alerts.yml` |
+| ADR-017 fences | Every write a fenced function (above); `lattice_app` reads `egress_policy_versions`, `step_up_grants`, `oidc_connections.step_up_acr_values` and writes only the test facts; the worker gains nothing; privilege snapshot updated; direct API-role SQL refused statement by statement (`test_egress_fences.py`) | ADR-017 "Implemented in P12.5" |
+| §21 UI | `/settings/providers` (design-system v2): the API's AI status line; a boundary band (raising needs a fresh sign-in; lowering applies at once); the policy as ruled facts with *Change policy*; the server's lattice (keyboard grid, reasons in words, filled vs hatched + dashed, never-sent levels); one ruled record per generation provider (status line *Sends nothing above Internal* / *Sends nothing: not approved*, configuration, approval, trust boundary and destination, API key, latest test; *Test* and an actions menu); the deployment's embedding ledger; dialogs reusing the access dialogs' Now → After table and reason field; an escalation asks for the organization's name and *Continue to sign in again*; the return panel shows the outcome, the sign-in time, the deadline, assurance only when required ("whether it used a second factor is up to your identity provider"), the recomputed Now → After and *Apply this change*. Keys: empty `type=password` fields, `autocomplete=new-password`, cleared on send, never in storage or URLs | `ProvidersScreen.tsx`, `ProviderDialogs.tsx`, `provider-copy.ts` |
+| Verification IdP | Emits a verified `auth_time` (every authorization is a fresh authentication) and an optional `acr` (`IDP_ACR`); the identity drill gained step-up cases (escalation refused without one, stale `auth_time`, fresh grant across instances, single use, a policy change voiding an unused grant, no new session) | `deploy/verification/idp.py`, `identity_check.py` |
+
+**Deviations from Part II, and why**
+
+1. **Generation needs an explicit approval for every class.** C6 kept the Phase 6 default
+   approval; the P12.5 instruction makes approval a separate lifecycle step whose absence
+   fails closed. Product records start unapproved; operator configuration records the
+   approval it always implied (ADR-011), and 0021 recorded it for existing records — no
+   behaviour change for them.
+2. **External APIs can be denied** (`external_egress_level` NULL), like the
+   organization-controlled class already could: "deny external egress" was otherwise not
+   representable. Not a new sensitivity label.
+3. **Every write is a fenced function**, lowering included (ADR-017 allowed restricted
+   direct writes for lowering and column writes for records): one place decides what is an
+   escalation, from the cells, not from the column touched.
+4. **Grants are bound to the policy version as well as the change** (C6.4 named the change
+   digest): a grant cannot apply on a policy that moved under it. The change and reason are
+   kept with the attempt and the grant, and *Apply this change* commits the stored change
+   (`step-ups/{id}/apply`) instead of the browser resending it.
+5. **Test facts live on the record** (with the credential they used), not on
+   `provider_credentials` (ADR-017's table): Ollama has no credential; a replaced key shows
+   *Not tested since the key changed*.
+6. **Test results and method** differ from §11's sketch (`ok`, `quota`,
+   `refused_in_production`; "reply with OK"): a generation call — even a tiny one — is
+   billable and is content; model metadata authenticates the key without generating.
+7. **Organization-controlled endpoints are operator-registered targets only**, even
+   public ones (C4 allowed public https endpoints for administrator-entered URLs): the
+   class is an assertion about who runs the server, which only the operator's registration
+   substantiates. Moving an endpoint withdraws its approval.
+8. **Assurance is operator configuration** (`oidc_connections.step_up_acr_values`, `lattice
+   sso update --step-up-acr`), not an administrator setting (lowering it would weaken their
+   own step-up). Without it the UI and events claim only a fresh authentication.
+9. **No development/test shortcut** (C6.4 mentioned one under `LATTICE_ENV=test`): every
+   environment needs a real step-up through an OIDC connection; tests use the in-process
+   identity provider; organizations without one raise through operators.
+10. **Escalations are recorded under the existing action families** with `escalation: true`
+    and the grant, plus two new actions (`egress.step_up_completed`,
+    `egress.escalation_refused`), instead of one new "escalation" action.
+11. **Five setup reasons added** (`not_enabled`, `not_approved`, `outbound_blocked`,
+    `credential_missing`, `credential_invalid`); the action label is *Open AI providers*.
+12. **The call-time re-check also re-reads readability and the questions' default**
+    (the instruction named provider state and egress): the cost is one small snapshot per
+    call.
+13. **The test double can be configured in the product outside production** (never offered
+    or accepted in production; the factory refuses it there) so local and CI flows run
+    without any provider.
+
+**Closure verification (2026-10-18).** A final security review of the uncommitted P12.5
+work, then the full gates, found and fixed:
+
+- **Call time and a revoked registration** (a genuine gap): `recheck_generation` re-read
+  the record, ceilings, readability and credential but not the organization's outbound
+  registrations, while the adapter had been built with the request snapshot's; an
+  operator revoking an organization-controlled endpoint mid-Ask would not have stopped the
+  call. The re-check now reads them again (`outbound_blocked`;
+  `test_a_registration_revoked_before_the_call_stops_it`, which fails without the fix).
+- **`lattice_egress_escalations_total{outcome="committed"}`** was counted inside the
+  transaction, before the deferred audit coupling ran at commit; it is now counted after
+  the commit, so `LatticeEgressEscalation` counts only committed escalations (asserted in
+  the step-up test, a refused replay is not counted).
+- Coverage added where a guarantee had none: an operator's `env:` credential still serves
+  only the organization it was recorded for (P12.0 compatibility; another organization
+  with the same provider gets `credential_unavailable`), and a suspended organization
+  cannot escalate or be granted a step-up (`organization_inactive`).
+- Inventory and fixtures: the OpenAPI path pin gained the nine provider routes; the
+  retrieval property test now binds the organization for its `model_providers` insert
+  (0021's version trigger refuses an unbound policy write, even a superuser's — every
+  product, operator and worker writer binds); two lint findings.
+- **The identity drill had never run against P12.4/P12.5.** Three drill-only fixes: the
+  verification IdP's browser-facing authorization endpoint (`https://localhost:9443`) must
+  be a registered origin, since P12.4 checks every discovery endpoint against the policy
+  (runbook note added; product behaviour unchanged); the step-up cases enable the Gemini
+  record before approving it (approving a disabled record lets nothing out, so the
+  database rightly did not call it an escalation) and use the live SCIM token; a case
+  proves a policy change voids an unused grant.
+
+Results: full backend suite **3,049 passed** (16 min, after the fixes; the first run's two
+failures were the property-test fixture and the path pin); web lint, type check, **264**
+unit tests and the production build; functional Playwright **357 passed**, 56 skipped by
+viewport design, 0 failed, no retries (desktop, mobile, production); `make audit`: backend
+clean, web only the approved GHSA-vfj7-8cjw-p6xm (braces 3.0.3 is still the latest
+release); `make prod-up IDP=1` (images rebuilt, reference database migrated 0015 → 0021,
+verified) and `make prod-identity` **52/52**, including the ten step-up cases (started on
+`api2`, completed on `api1`). The development database is not migrated.
+
+**Not built (later checkpoints, or outside P12.5):** source upload, first sync and `source.*`
+events (P12.6); per-organization embedding credentials (they need the worker to open
+organization secrets and a re-index; Phase 13/14 dependency); cancellation of an in-flight
+provider request; pruning of old step-up grants (a few rows per escalation); organization
+purge (Phase 15); `make prod-authz` coverage of the provider routes (P12.8).

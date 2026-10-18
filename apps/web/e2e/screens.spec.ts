@@ -32,6 +32,10 @@ import {
   MEMBER_WIDE,
   PREVIEW_MIXED,
   PROVIDERS_MANY,
+  PROVIDERS_EMPTY,
+  PROVIDERS_GEMINI_NEW,
+  PREVIEW_APPROVE_GEMINI,
+  STEP_UP_GRANTED,
   SETUP_FRESH,
   SETUP_IN_USE,
   SOURCES_ADMIN_LONG,
@@ -47,7 +51,7 @@ import {
   UNVERIFIED,
 } from "../src/test/fixtures";
 
-import { askFor, expectNoHorizontalOverflow, openAsk, WIDTHS } from "./helpers";
+import { askFor, expectNoHorizontalOverflow, hydrated, openAsk, WIDTHS } from "./helpers";
 import { mockApi, type MockOptions } from "./mock-api";
 
 const only = process.env.SCREENS?.split(",");
@@ -376,6 +380,34 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
   "not-found": async (page) => {
     await page.goto("/no-such-page");
     await page.getByRole("heading", { name: "This page doesn't exist" }).waitFor();
+  },
+  // P12.5: a provider configured in the product, the escalation review, the return from the IdP.
+  "providers-new": async (page) => {
+    await at(page, { me: ME_LENA, providers: PROVIDERS_GEMINI_NEW });
+    await page.goto("/settings/providers");
+    await page.getByTestId("provider-record").waitFor();
+  },
+  "providers-escalation": async (page) => {
+    await at(page, { me: ME_LENA, providers: PROVIDERS_GEMINI_NEW, providerPreview: () => PREVIEW_APPROVE_GEMINI });
+    await page.goto("/settings/providers");
+    const trigger = page.getByRole("button", { name: "Actions for gemini · gemini-3.5-flash-lite" });
+    await hydrated(trigger);
+    await trigger.click();
+    await page.getByRole("menuitem", { name: "Approve…" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("radio", { name: "Internal" }).check();
+    await dialog.getByRole("button", { name: "Review change" }).click();
+    await dialog.getByTestId("confirmation").waitFor();
+  },
+  "providers-step-up": async (page) => {
+    await at(page, { me: ME_LENA, providers: PROVIDERS_GEMINI_NEW });
+    await page.goto(`/settings/providers?step_up=${STEP_UP_GRANTED.id}`);
+    await page.getByTestId("step-up-result").getByRole("button", { name: "Apply this change" }).waitFor();
+  },
+  "providers-empty": async (page) => {
+    await at(page, { me: ME_LENA, providers: PROVIDERS_EMPTY });
+    await page.goto("/settings/providers");
+    await page.getByRole("heading", { name: "No AI providers are configured" }).waitFor();
   },
   "providers-forbidden": async (page) => {
     await at(page, { providers: "forbidden" });

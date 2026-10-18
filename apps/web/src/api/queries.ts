@@ -41,6 +41,13 @@ import type {
   ReinstateRequest,
   RemapRequest,
   UnmapRequest,
+  ChangeRequest,
+  CredentialRequest,
+  EgressChange,
+  EndpointRequest,
+  NewProviderRequest,
+  RevokeCredentialRequest,
+  StepUpRequest,
 } from "./types";
 
 export const queryKeys = {
@@ -67,6 +74,7 @@ export const queryKeys = {
   unmappedReferences: ["admin", "access", "account-references", "unmapped"] as const,
   identity: ["admin", "identity"] as const,
   testSignIn: (id: string) => ["admin", "identity", "test", id] as const,
+  stepUp: (id: string) => ["admin", "providers", "step-up", id] as const,
   provisioningActivity: ["admin", "audit", "identity-provider"] as const,
 };
 
@@ -588,6 +596,80 @@ export function usePreviewRevokeScimToken() {
 export function useRevokeScimToken() {
   const changed = useIdentityChanged();
   return useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => api.revokeScimToken(id, reason), onSettled: changed });
+}
+
+/* --- AI providers, BYOK and egress (Phase 12, P12.5) --------------------------------------- */
+
+/** A step-up's result: read until the sign-in at the identity provider completes. */
+export function useStepUp(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.stepUp(id ?? ""),
+    queryFn: ({ signal }) => api.stepUp(id as string, signal),
+    enabled: id !== null,
+    ...REAUTHORIZED,
+    refetchInterval: (query) => (query.state.data?.outcome === "pending" ? 2_000 : false),
+  });
+}
+
+/** Provider and policy changes feed the providers page, the setup record and the audit log. */
+function useProvidersChanged() {
+  const client = useQueryClient();
+  return () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: queryKeys.providers }),
+      client.invalidateQueries({ queryKey: queryKeys.setup }),
+      client.invalidateQueries({ queryKey: ["admin", "audit"] }),
+    ]);
+}
+
+/** Now -> After, computed by the API on the current policy. Changes nothing. */
+export function usePreviewEgressChange() {
+  return useMutation({ mutationFn: (change: EgressChange) => api.previewEgressChange(change) });
+}
+
+export type ProviderMutation =
+  | { kind: "create"; body: NewProviderRequest }
+  | { kind: "change"; body: ChangeRequest }
+  | { kind: "apply_step_up"; id: string }
+  | { kind: "endpoint"; id: string; body: EndpointRequest }
+  | { kind: "credential"; id: string; body: CredentialRequest }
+  | { kind: "revoke_credential"; id: string; body: RevokeCredentialRequest };
+
+/** Every change that answers with the new settings. A key is in the request only; the
+ * mutation keeps no variables after it settles (gcTime 0). */
+export function useChangeProviders() {
+  const client = useQueryClient();
+  const changed = useProvidersChanged();
+  return useMutation({
+    mutationFn: (m: ProviderMutation) => {
+      switch (m.kind) {
+        case "create":
+          return api.createProvider(m.body);
+        case "change":
+          return api.applyEgressChange(m.body);
+        case "apply_step_up":
+          return api.applyStepUp(m.id);
+        case "endpoint":
+          return api.setProviderEndpoint(m.id, m.body);
+        case "credential":
+          return api.setProviderCredential(m.id, m.body);
+        case "revoke_credential":
+          return api.revokeProviderCredential(m.id, m.body);
+      }
+    },
+    onSuccess: (settings) => client.setQueryData(queryKeys.providers, settings),
+    onSettled: changed,
+    gcTime: 0,
+  });
+}
+
+export function useStartStepUp() {
+  return useMutation({ mutationFn: (body: StepUpRequest) => api.startStepUp(body) });
+}
+
+export function useTestProvider() {
+  const changed = useProvidersChanged();
+  return useMutation({ mutationFn: (id: string) => api.testProvider(id), onSettled: changed });
 }
 
 export function useAsk() {

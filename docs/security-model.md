@@ -299,8 +299,15 @@ a ceiling or an approval, and never turns `external_api` into
 `organization_controlled` or `organization_controlled` into `local`. **Credential
 availability ≠ provider approval ≠ data-egress authorization.**
 
-- `org_settings.external_egress_level` ∈ {`internal`, `confidential`, `restricted`},
-  default **`internal`**. `org_settings.organization_controlled_level` (D-15): the
+Since P12.5: a **generation** record needs an explicit approval (`approved_at`) whatever
+its class (records an administrator creates start unapproved and disabled; the operator's
+`lattice provider configure` approves for `internal` as before, recorded); an
+`organization_controlled` generation endpoint must be permitted by the organization's
+outbound policy (`outbound_blocked`); `external_egress_level` may be NULL — external APIs
+not allowed; and the whole rule is re-checked immediately before each model call (§12).
+
+- `org_settings.external_egress_level` ∈ {`internal`, `confidential`, `restricted`} or
+  NULL (P12.5: external APIs not allowed), default **`internal`**. `org_settings.organization_controlled_level` (D-15): the
   same levels or NULL, default **NULL (class not allowed)**.
   `org_settings.default_query_sensitivity` (D-13), default `internal`.
   `org_settings.data_origin` ∈ {`customer`, `synthetic`}, default **`customer`** (set
@@ -325,7 +332,9 @@ availability ≠ provider approval ≠ data-egress authorization.**
   outright when `LATTICE_ENV=production`.
 - Raising any of these values is an explicit admin action with a stated reason, recorded as
   an audit event and shown on the provider settings page. There is no implicit path
-  (no "leadership users may send confidential content" shortcut). Implemented today as
+  (no "leadership users may send confidential content" shortcut). Since P12.5 an
+  administrator raises them in the product only with a fresh identity-provider sign-in
+  bound to the exact change (D-34, §12); operators keep the commands below. Implemented today as
   the operator command `lattice provider approve --org … --provider … --model …
   --level … --reason …`, which sets `approved_at` and logs `provider.approval_changed`.
   The organization-level ceilings have no operator command yet (set by the owner role;
@@ -602,7 +611,7 @@ accounts and their external references; the rest is contract, not yet implemente
   (`outbound_targets`, audited); never link-local or reserved. Used by `org create`,
   and since P12.4 by every OIDC request — sign-in, test sign-in, the connection check —
   under the organization's `oidc` policy (a revoked registration stops sign-in at once);
-  provider calls adopt it in P12.5.
+  since P12.5 by every provider call and provider test under the `generation` policy.
 - **Organization bootstrap.** `lattice org create`: one audited transaction, exact IdP
   identifier, no e-mail linking or JIT membership, an IdP client registered to another
   organization refused, identical retries idempotent and differing ones refused.
@@ -713,7 +722,52 @@ accounts and their external references; the rest is contract, not yet implemente
   `externalId` changes), with the reason and the colliding member, never a request value;
   rate-limited in SQL so it cannot become a logging flood.
 
-**Contracts not yet implemented:** egress
-escalation with a fresh IdP re-authentication bound to the exact change (D-34, P12.5),
-imports (C8, P12.6); and on every setup surface administrators stay non-readers of
-content (C9, C10).
+**Providers, BYOK and egress (P12.5, migration 0021; phase-12-plan Part III).**
+- **Seven facts apart** (C6.1): a credential and its test change no record and no setting;
+  approval, enablement, data terms, the ceilings and the questions' default are the egress
+  *policy*. The egress lattice the page draws is the server's (`lattice` in `GET
+  /v1/admin/providers`); the database computes the same cells (`lattice_egress_cells`,
+  tested equal over random configurations).
+- **Writes only through fenced functions** (`lattice_preview_egress_change`,
+  `lattice_apply_egress_change`, `lattice_create_provider`, `lattice_set_provider_endpoint`,
+  `lattice_set_provider_credential`, `lattice_revoke_provider_credential`,
+  `lattice_create_step_up_grant`), each re-checking an active administrator of an active
+  organization, each audit-coupled; the API role has no table write on `org_settings`,
+  `model_providers` (test facts excepted), `provider_credentials`, `encrypted_secrets`,
+  `step_up_grants` or `egress_policy_versions` (tested statement by statement).
+- **Escalation is the database's verdict** (D-34, C6.2): a change that newly lets a level
+  reach a provider record at a destination, or lowers the questions' default, commits only
+  with a single-use step-up grant of the same administrator and session, for exactly that
+  change, on exactly that policy version (every writer, operators included, raises it),
+  within five minutes of a fresh identity-provider authentication (`max_age=0`,
+  `prompt=login`, a verified `auth_time` not before the attempt and at most five minutes
+  old, the identifier equal to the administrator's own directory identity; the callback
+  must come back to the same Lattice session). A stolen session cookie alone cannot pass:
+  it cannot authenticate at the identity provider. Lowering needs no grant and applies to
+  the next request. Grants are consumed under a row lock (concurrent reuse: one commit).
+  A fresh sign-in is **not** multi-factor authentication: Lattice reports an assurance
+  (`acr`) only when the operator configured a requirement for the connection
+  (`lattice sso update --step-up-acr`) and the provider asserted it.
+- **API keys** entered in the product are sealed in the API (AES-256-GCM, bound to the
+  credential row) and stored as `vault:`; an administrator can never name an environment
+  variable (only operators record `env:` references); replacement and revocation destroy
+  the previous ciphertext whoever managed it. Never in a response, log, audit event, trace
+  or 422 body (tested). Shown as: who holds it, its last four characters (product keys),
+  when it was set, the declared tier, the latest test.
+- **Destinations**: an organization-controlled endpoint is an operator-registered
+  `generation` target (`lattice outbound allow --purpose generation`), never a typed URL;
+  its trust class follows it (loopback = `local` only by the operator's registration;
+  plain http only for loopback); moving withdraws the approval; the class never changes.
+  Every provider call and test connects through the outbound guard (connect-time address
+  check, no redirects, no proxies).
+- **Call time**: the invocation rule is repeated in a fresh snapshot immediately before
+  every model call (and every regeneration): a provider disabled, unapproved or moved, a
+  lowered ceiling or raised default, a reclassified or no-longer-readable prompt
+  document, a revoked operator registration of an organization-controlled endpoint, a
+  revoked or replaced credential stops the call (`policy_changed`, `outbound_blocked`,
+  `credential_revoked`). A request already in flight is not cancelled.
+- **Tests** send no organization content and generate nothing (Gemini: model metadata;
+  Ollama: its model list); results are facts, never approvals; not audited (C11).
+
+**Contracts not yet implemented:** imports (C8, P12.6); and on every setup surface
+administrators stay non-readers of content (C9, C10).

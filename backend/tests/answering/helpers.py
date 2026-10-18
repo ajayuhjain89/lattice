@@ -109,13 +109,17 @@ class Harness:
 def deps(
     harness: Harness,
     memory: dict[str, SecretStr] | None = None,
+    environ: dict[str, str] | None = None,
     **operations: Any,
 ) -> AskDependencies:
-    """``operations``: ``generation_enabled``, ``generation_deadline_seconds``."""
+    """``operations``: ``generation_enabled``, ``generation_deadline_seconds``.
+    ``environ``: what ``env:`` references resolve against (none by default)."""
     return AskDependencies(
         embedding=FAKE,
         generation=harness,
-        secrets=EnvironmentSecretStore(environ={}, memory=memory if memory is not None else {}),
+        secrets=EnvironmentSecretStore(
+            environ=environ or {}, memory=memory if memory is not None else {}
+        ),
         **operations,
     )
 
@@ -180,6 +184,7 @@ async def run(
     harness: Harness,
     *,
     memory: dict[str, SecretStr] | None = None,
+    environ: dict[str, str] | None = None,
     persist: bool = False,
     operations: dict[str, Any] | None = None,
     **request: Any,
@@ -191,7 +196,7 @@ async def run(
         organization_id=org.id,
         membership_id=org.members[member],
         request=body,
-        deps=deps(harness, memory, **(operations or {})),
+        deps=deps(harness, memory, environ, **(operations or {})),
         now=NOW,
     )
 

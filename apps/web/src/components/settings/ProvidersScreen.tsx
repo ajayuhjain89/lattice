@@ -1,89 +1,196 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, CircleSlash } from "lucide-react";
+import { CheckCircle2, CircleSlash, FlaskConical, KeyRound, MoreHorizontal, Plus, Power, ShieldCheck, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import { useProviders } from "@/api/queries";
 import { isApiError } from "@/api/errors";
-import type { EgressOut, ProviderOut } from "@/api/types";
+import { useProviders, useTestProvider } from "@/api/queries";
+import type { AiSetupStatus, ProviderOut, ProviderSettings } from "@/api/types";
 import { BoundaryBand } from "@/components/primitives/Boundary";
+import { Button } from "@/components/primitives/Button";
 import { DataTable, type Column } from "@/components/primitives/DataTable";
+import { Icon } from "@/components/primitives/icons";
 import { cellKey, Lattice, LatticeLegend, type LatticeAxis, type LatticeCell } from "@/components/primitives/Lattice";
-import { LEVELS, LevelMeter, type Level } from "@/components/primitives/LevelMeter";
+import { LEVELS, LevelMeter } from "@/components/primitives/LevelMeter";
+import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/primitives/Menu";
+import { RuleSkeleton } from "@/components/primitives/RuleSkeleton";
 import { StateBlock } from "@/components/primitives/StateBlock";
 import { StatusMark } from "@/components/primitives/StatusMark";
 import { AdminGate, OpsHead, OpsPage, OpsSection } from "@/components/ops/OpsPage";
 import { useWorkspace } from "@/components/shell/workspace-context";
 import { ErrorState } from "@/components/states/ErrorState";
-import { RuleSkeleton } from "@/components/primitives/RuleSkeleton";
-import { humanize, levelLabel, retentionLabel } from "@/lib/format";
+import { formatTime, humanize, levelLabel } from "@/lib/format";
 
-import { byPurpose, neverSent, providerKey, readCell, trustClassMeaning, trustClassName } from "./egress-model";
+import {
+  approvalLine,
+  byPurpose,
+  ceilingWords,
+  cellClause,
+  credentialHeadline,
+  credentialLine,
+  dataTermsLabel,
+  destinationBlocked,
+  destinationLine,
+  levelsList,
+  providerError,
+  providerName,
+  sendsLine,
+  testLine,
+  testResultMessage,
+  trustClassMeaning,
+  trustClassName,
+} from "./provider-copy";
+import { ProviderDialogs, StepUpResult, type Applied, type ProviderDialog } from "./ProviderDialogs";
 import styles from "./ProvidersScreen.module.css";
+import { STATE } from "./setup-model";
 
 /**
- * AI providers (design-direction §6.9): the boundary between Lattice and the models it may
- * call. GET /v1/admin/providers, read-only -- there is no write API: every change is an
- * audited operator command, so the page has no control that would pretend otherwise.
- * Credentials are masked by the API (state and scheme, never a value or reference), and
- * none of them changes what a provider may receive.
+ * AI providers (phase-12-plan §11, C6; design-direction §6.9): the boundary between
+ * Lattice and the models it may call, operated by the organization's administrators.
+ *
+ * Seven facts stay apart here as in the API: whether a key exists, whether its test
+ * passed, what a provider is approved for, its trust class, the policy's ceiling for that
+ * class, the questions' default level -- and, only when someone asks, each piece of
+ * evidence's own authorization. The egress lattice is the server's reading of the policy
+ * (`lattice`), never computed here; a change is previewed by the server (Now → After) and,
+ * when it raises what may leave Lattice, confirmed by a fresh sign-in at the identity
+ * provider before it commits. Keys are typed into empty masked fields and never come back.
  */
 export function ProvidersScreen() {
   const { isAdmin, me } = useWorkspace();
-  // The API decides; a non-admin still gets its 403 if they reach this page.
   const query = useProviders(isAdmin);
   const forbidden = query.isError && isApiError(query.error) && query.error.isForbidden;
+  const [dialog, setDialog] = useState<ProviderDialog | null>(null);
+  const [applied, setApplied] = useState<Applied | null>(null);
+  const search = useSearchParams();
+  const stepUpId = search.get("step_up");
+  const router = useRouter();
+  const pathname = usePathname();
+  const dismissStepUp = () => router.replace(pathname, { scroll: false });
 
   return (
     <OpsPage aria-labelledby="page-title">
       <AdminGate forbidden={forbidden} body="AI provider settings are visible to your organization's administrators.">
         <OpsHead title="AI providers" deck={`Which AI providers ${me.organization.name}'s data may reach, at which sensitivity — and what never leaves Lattice.`} />
-        <BoundaryBand>
-          <strong>Read-only here.</strong> Providers, approvals, credentials and the AI data policy change only through the audited{" "}
-          <code>lattice provider</code> and <code>lattice org egress</code> commands, run by an operator on the server. Each change is
-          recorded in the <Link href="/access/audit">audit log</Link> with who made it and why.
-        </BoundaryBand>
+        {stepUpId && /^[0-9a-f-]{36}$/.test(stepUpId) && (
+          <StepUpResult
+            id={stepUpId}
+            onDismiss={dismissStepUp}
+            onApplied={(a) => {
+              dismissStepUp();
+              setApplied(a);
+            }}
+          />
+        )}
+        {applied && <AppliedLine applied={applied} onDismiss={() => setApplied(null)} />}
         {query.isError ? (
           <ErrorState error={query.error} title="Couldn't load provider settings" onRetry={() => query.refetch()} retrying={query.isFetching} />
         ) : !query.data ? (
-          <RuleSkeleton variant="ledger" rows={4} label="Loading provider settings" />
+          <RuleSkeleton variant="ledger" rows={6} label="Loading provider settings" />
         ) : (
-          <>
-            <Policy egress={query.data.egress} />
-            {query.data.providers.length === 0 ? (
-              <StateBlock family="quiet" heading="No AI providers are configured">
-                <p>Nothing leaves Lattice. Search still works, and without a generation provider Ask returns the sources it finds as evidence only.</p>
-              </StateBlock>
-            ) : (
-              <>
-                <Egress egress={query.data.egress} providers={query.data.providers} />
-                <Providers providers={query.data.providers} />
-              </>
-            )}
-          </>
+          <Loaded settings={query.data} onOpen={setDialog} dialog={dialog} onClose={() => setDialog(null)} onApplied={setApplied} />
         )}
       </AdminGate>
     </OpsPage>
   );
 }
 
-/* --- the policy ------------------------------------------------------------------------- */
-
-function Policy({ egress }: { egress: EgressOut }) {
+function Loaded({
+  settings,
+  dialog,
+  onOpen,
+  onClose,
+  onApplied,
+}: {
+  settings: ProviderSettings;
+  dialog: ProviderDialog | null;
+  onOpen: (dialog: ProviderDialog) => void;
+  onClose: () => void;
+  onApplied: (applied: Applied) => void;
+}) {
+  const generation = settings.providers.filter((p) => p.purpose === "generation");
+  const embedding = settings.providers.filter((p) => p.purpose !== "generation");
   return (
-    <OpsSection id="policy-heading" title="AI data policy">
+    <>
+      <Status status={settings.status} />
+      <BoundaryBand>
+        <strong>Raising what may leave Lattice needs a fresh sign-in</strong> at your identity provider, after a preview of exactly what changes. Lowering applies at
+        once. Every change is recorded in the <Link href="/access/audit">audit log</Link> with who made it and why.
+      </BoundaryBand>
+      <Policy settings={settings} onChange={() => onOpen({ kind: "policy" })} />
+      {settings.providers.length === 0 ? (
+        <StateBlock family="quiet" heading="No AI providers are configured">
+          <p>Nothing leaves Lattice. Search still works, and without a generation provider Ask returns the sources it finds as evidence only.</p>
+        </StateBlock>
+      ) : (
+        <Egress settings={settings} />
+      )}
+      <Generation settings={settings} providers={generation} onOpen={onOpen} />
+      {embedding.length > 0 && <Embedding settings={settings} providers={embedding} onOpen={onOpen} />}
+      <ProviderDialogs dialog={dialog} settings={settings} onClose={onClose} onApplied={onApplied} />
+    </>
+  );
+}
+
+/* --- shared ------------------------------------------------------------------------------------ */
+
+function Status({ status }: { status: AiSetupStatus }) {
+  const state = STATE[status.state];
+  return (
+    <div className={styles.status} data-state={status.state} data-reason={status.reason} data-testid="ai-status">
+      <StatusMark tone={state.tone} icon={state.icon}>
+        {state.word}
+      </StatusMark>
+      <p className={styles.statusMessage}>{status.message}</p>
+    </div>
+  );
+}
+
+function AppliedLine({ applied, onDismiss }: { applied: Applied; onDismiss: () => void }) {
+  return (
+    <div className={styles.applied} role="status" data-testid="applied-change">
+      <span className={styles.appliedIcon}>
+        <Icon as={CheckCircle2} />
+      </span>
+      <p className={styles.appliedText}>
+        <strong>{applied.title}</strong> <span className={styles.when}>{formatTime(applied.at)} UTC</span>
+        <span className={styles.appliedDetail}>
+          {applied.detail} Recorded in the <Link href="/access/audit">audit log</Link> with your name and reason.
+        </span>
+      </p>
+      <Button size="sm" variant="quiet" icon={<Icon as={X} />} aria-label="Dismiss" onClick={onDismiss} />
+    </div>
+  );
+}
+
+/* --- the policy -------------------------------------------------------------------------------- */
+
+function Policy({ settings, onChange }: { settings: ProviderSettings; onChange: () => void }) {
+  const egress = settings.egress;
+  const stepUp = settings.step_up;
+  return (
+    <OpsSection
+      id="policy-heading"
+      title="AI data policy"
+      aside={
+        <Button size="sm" icon={<Icon as={SlidersHorizontal} />} onClick={onChange}>
+          Change policy
+        </Button>
+      }
+    >
       <dl className={styles.policy}>
         <div>
           <dt>External APIs</dt>
-          <dd>{`Up to ${levelLabel(egress.external_egress_level)}`}</dd>
+          <dd>{ceilingWords(egress.external_egress_level)}</dd>
         </div>
         <div>
-          <dt>Organization-controlled</dt>
-          <dd>{egress.organization_controlled_level ? `Up to ${levelLabel(egress.organization_controlled_level)}` : "Not allowed"}</dd>
+          <dt>Organization-controlled servers</dt>
+          <dd>{ceilingWords(egress.organization_controlled_level)}</dd>
         </div>
         <div>
-          <dt>Local</dt>
+          <dt>Inside the Lattice deployment</dt>
           <dd>Each provider&apos;s own approval</dd>
         </div>
         <div>
@@ -101,46 +208,52 @@ function Policy({ egress }: { egress: EgressOut }) {
           </dd>
         </div>
       </dl>
+      <p className={styles.note} data-testid="step-up-rule">
+        {stepUp.available
+          ? stepUp.assurance_required
+            ? `Raising any of this needs you to sign in again at your identity provider, with the sign-in method your Lattice operator requires (${stepUp.assurance_required.join(", ")}).`
+            : "Raising any of this needs you to sign in again at your identity provider. Lattice checks the sign-in is fresh; whether it asks for a second factor is up to your identity provider."
+          : stepUp.reason === "no_identity"
+            ? "You don't sign in through the organization's identity provider, so you can't confirm a raise here. Lowering still works."
+            : "This organization doesn't sign in through an identity provider, so raising can't be confirmed in Lattice: ask your Lattice operator. Lowering still works."}
+      </p>
     </OpsSection>
   );
 }
 
-/* --- the egress lattice ---------------------------------------------------------------- */
+/* --- the egress lattice (the server's reading) -------------------------------------------------- */
 
 const LEVEL_ROWS: LatticeAxis[] = LEVELS.map((l) => ({ key: l, label: levelLabel(l), name: `${levelLabel(l)} data` }));
 
-function Egress({ egress, providers }: { egress: EgressOut; providers: ProviderOut[] }) {
+function Egress({ settings }: { settings: ProviderSettings }) {
+  const providers = settings.providers;
+  const egress = settings.egress;
   const groups = useMemo(() => byPurpose(providers), [providers]);
   const ordered = groups.flatMap((g) => g.providers);
   const cols: LatticeAxis[] = ordered.map((p) => ({
-    key: providerKey(p),
+    key: p.id,
     label: p.provider,
-    name: `${p.provider} · ${p.model} (${humanize(p.purpose).toLowerCase()}, ${trustClassName(p.deployment).toLowerCase()}${p.purpose === "generation" && !p.enabled ? ", disabled" : ""})`,
+    name: `${providerName(p)} (${humanize(p.purpose).toLowerCase()}, ${trustClassName(p.deployment).toLowerCase()}${p.purpose === "generation" && !p.enabled ? ", disabled" : ""})`,
     detail: trustClassName(p.deployment),
   }));
-  const readings = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof readCell>>();
-    for (const p of ordered) for (const level of LEVELS) map.set(cellKey(level, providerKey(p)), readCell(egress, p, level));
-    return map;
-  }, [egress, ordered]);
-  // Every cell is a known relationship: permitted (filled) or a boundary (hatched). None is empty.
-  const cells = useMemo(() => new Map<string, LatticeCell>([...readings].map(([k, r]) => [k, r.permitted ? "filled" : "hatched"])), [readings]);
+  const readings = useMemo(() => new Map(settings.lattice.map((c) => [cellKey(c.level, c.provider_id), c])), [settings.lattice]);
+  const cells = useMemo(() => new Map<string, LatticeCell>([...readings].map(([k, c]) => [k, c.permitted ? "filled" : "hatched"])), [readings]);
   const sentence = (row: string, col: string) => {
-    const r = readings.get(cellKey(row, col));
-    const p = ordered.find((x) => providerKey(x) === col);
-    if (!r || !p) return "";
-    return `${levelLabel(row)} data ${r.permitted ? "may be sent to" : "isn't sent to"} ${p.provider} · ${p.model}: ${r.because}.`;
+    const c = readings.get(cellKey(row, col));
+    const p = ordered.find((x) => x.id === col);
+    if (!c || !p) return "";
+    return `${levelLabel(row)} data ${c.permitted ? "may be sent to" : "isn't sent to"} ${providerName(p)}: ${cellClause(c.reason, p, egress)}.`;
   };
   const [hover, setHover] = useState<{ row: string; col: string } | null>(null);
   const [pinned, setPinned] = useState<{ row: string; col: string } | null>(null);
   const shown = hover ?? pinned;
-  const kept = neverSent(egress, providers);
+  const kept = LEVELS.filter((level) => !settings.lattice.some((c) => c.level === level && c.permitted));
 
   return (
     <OpsSection id="egress-heading" title="What may leave Lattice">
       <p className={styles.note}>
-        Each cell is one data level and one provider: filled where the AI data policy and the provider&apos;s approval allow that level to be
-        sent, hatched where they don&apos;t. A credential never changes a cell.
+        Each cell is one data level and one provider: filled where the AI data policy and the provider&apos;s approval allow that level to be sent, hatched where they
+        don&apos;t. An API key or a passing test never changes a cell.
       </p>
       <div className={styles.egress} data-testid="egress-lattice">
         <Lattice
@@ -174,25 +287,160 @@ function Egress({ egress, providers }: { egress: EgressOut; providers: ProviderO
       <div className={styles.keptBlock} data-testid="never-sent">
         <p className={styles.kept}>
           {kept.length > 0
-            ? `${listLevels(kept)} content is never sent to an AI provider: it stays in Lattice.`
+            ? `${levelsList(kept)} content is never sent to an AI provider: it stays in Lattice.`
             : "Every level may reach at least one provider, each only within its own approval."}
         </p>
         <p className={styles.note}>
-          Content held back from a model stays in Lattice and is shown, as evidence only, to the people allowed to read it. This policy is
-          about models, not people: each person still sees only what they may read.
+          Content held back from a model stays in Lattice and is shown, as evidence only, to the people allowed to read it. This policy is about models, not people:
+          each person still sees only what they may read — and that is checked again just before any model is called.
         </p>
       </div>
     </OpsSection>
   );
 }
 
-const listLevels = (levels: readonly Level[]) =>
-  levels.length <= 1 ? levels.map(levelLabel).join("") : `${levels.slice(0, -1).map(levelLabel).join(", ")} and ${levelLabel(levels.at(-1)!)}`;
+/* --- generation providers: one record each ------------------------------------------------------ */
 
-/* --- the provider ledger ---------------------------------------------------------------- */
+function Generation({ settings, providers, onOpen }: { settings: ProviderSettings; providers: ProviderOut[]; onOpen: (dialog: ProviderDialog) => void }) {
+  return (
+    <OpsSection
+      id="generation-heading"
+      title="Generation providers"
+      count={providers.length > 0 ? `${providers.length.toLocaleString("en-GB")} configured` : undefined}
+      aside={
+        <Button size="sm" variant="primary" icon={<Icon as={Plus} />} onClick={() => onOpen({ kind: "add" })}>
+          Add provider
+        </Button>
+      }
+    >
+      {providers.length === 0 ? (
+        <p className={styles.note}>
+          None: Ask shows the evidence it finds without a written answer. A provider you add starts disabled and unapproved, so nothing is sent to it until you approve and
+          enable it.
+        </p>
+      ) : (
+        <div className={styles.records}>
+          {providers.map((p) => (
+            <ProviderRecord key={p.id} provider={p} settings={settings} onOpen={onOpen} />
+          ))}
+        </div>
+      )}
+      <p className={styles.note}>
+        A credential is how Lattice calls a provider. It never raises a provider&apos;s trust class, its approval or the levels it may receive, and it&apos;s never shown
+        again once saved.
+      </p>
+    </OpsSection>
+  );
+}
 
-function Providers({ providers }: { providers: ProviderOut[] }) {
-  const ordered = byPurpose(providers).flatMap((g) => g.providers);
+function ProviderRecord({ provider: p, settings, onOpen }: { provider: ProviderOut; settings: ProviderSettings; onOpen: (dialog: ProviderDialog) => void }) {
+  const titleId = `provider-${p.id}`;
+  const test = useTestProvider();
+  const runTest = () => test.mutate(p.id);
+  const sends = p.allowed_up_to !== null;
+  const blocked = destinationBlocked(p.destination);
+  return (
+    <article className={styles.record} aria-labelledby={titleId} data-testid="provider-record" data-provider={p.provider}>
+      <header className={styles.recordHead}>
+        <h3 className={styles.recordTitle} id={titleId}>
+          {p.provider} <span className={styles.model}>{p.model}</span>
+        </h3>
+        <StatusMark tone="neutral" icon={sends ? ShieldCheck : CircleSlash}>
+          {sendsLine(p)}
+        </StatusMark>
+        <div className={styles.recordActions}>
+          <Button size="sm" icon={<Icon as={FlaskConical} />} onClick={runTest} loading={test.isPending} disabled={p.provider === "fake"}>
+            Test
+          </Button>
+          <Menu label={`Actions for ${providerName(p)}`} trigger={<Button size="sm" variant="quiet" icon={<Icon as={MoreHorizontal} />} aria-label={`Actions for ${providerName(p)}`} />}>
+            <MenuLabel>Policy</MenuLabel>
+            <MenuItem onSelect={() => onOpen({ kind: "approval", provider: p })}>{p.explicitly_approved ? "Change approval…" : "Approve…"}</MenuItem>
+            <MenuItem onSelect={() => onOpen({ kind: "enabled", provider: p, enabled: !p.enabled })}>{p.enabled ? "Disable…" : "Enable…"}</MenuItem>
+            {p.provider === "gemini" && <MenuItem onSelect={() => onOpen({ kind: "data_terms", provider: p })}>Change data terms…</MenuItem>}
+            {p.provider === "ollama" && settings.targets.length > 0 && <MenuItem onSelect={() => onOpen({ kind: "endpoint", provider: p })}>Move to another server…</MenuItem>}
+            {p.requires_credential && (
+              <>
+                <MenuSeparator />
+                <MenuLabel>API key</MenuLabel>
+                <MenuItem onSelect={() => onOpen({ kind: "credential", provider: p })}>{p.credential.state === "active" ? "Replace key…" : "Add key…"}</MenuItem>
+                {p.credential.state === "active" && (
+                  <MenuItem danger onSelect={() => onOpen({ kind: "revoke", provider: p })}>
+                    Revoke key…
+                  </MenuItem>
+                )}
+              </>
+            )}
+          </Menu>
+        </div>
+      </header>
+      <dl className={styles.facts}>
+        <div>
+          <dt>Configuration</dt>
+          <dd>
+            <span className={styles.inline}>
+              <Icon as={Power} size={14} /> {p.enabled ? "Enabled" : "Disabled"}
+            </span>
+            <span className={styles.secondary}>{dataTermsLabel(p.retention_mode, p.training_opt_out)}</span>
+          </dd>
+        </div>
+        <div>
+          <dt>Approval</dt>
+          <dd>
+            {p.explicitly_approved && LEVELS.includes(p.approved_for_level as (typeof LEVELS)[number]) ? (
+              <>
+                <LevelMeter level={p.approved_for_level as (typeof LEVELS)[number]} />
+                <span className={styles.secondary}>Approved by an administrator; the policy may cap it lower</span>
+              </>
+            ) : (
+              approvalLine(p)
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>Trust boundary</dt>
+          <dd>
+            {trustClassName(p.deployment)}
+            <span className={styles.secondary}>{trustClassMeaning(p.deployment)}</span>
+            <span className={blocked ? styles.blocked : styles.secondary}>
+              {blocked ? "Refused by Lattice's outbound policy: nothing can be sent" : destinationLine(p.destination)}
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt>API key</dt>
+          <dd>
+            {p.requires_credential ? (
+              <>
+                <span className={styles.inline}>
+                  <Icon as={KeyRound} size={14} /> {credentialHeadline(p.credential)}
+                </span>
+                {p.credential.state === "active" && <span className={styles.secondary}>{credentialLine(p.credential, true)}</span>}
+              </>
+            ) : (
+              <span className={styles.secondary}>None needed</span>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>Latest test</dt>
+          <dd>
+            {testLine(p.last_test)}
+            <span className={styles.secondary}>Shows only that the key or endpoint works</span>
+          </dd>
+        </div>
+      </dl>
+      {(test.data || test.isError) && (
+        <p className={styles.testResult} role="status" data-testid="test-result" data-result={test.data?.result}>
+          {test.isError ? `Couldn't run the test. ${providerError(test.error)}` : testResultMessage(test.data!.result)}
+        </p>
+      )}
+    </article>
+  );
+}
+
+/* --- embedding: the deployment's --------------------------------------------------------------- */
+
+function Embedding({ settings, providers, onOpen }: { settings: ProviderSettings; providers: ProviderOut[]; onOpen: (dialog: ProviderDialog) => void }) {
   const columns: Column<ProviderOut>[] = [
     {
       key: "provider",
@@ -201,12 +449,7 @@ function Providers({ providers }: { providers: ProviderOut[] }) {
       cell: (p) => (
         <span className={styles.stack}>
           <span>{p.provider}</span>
-          <span className={styles.model}>
-            {p.model}
-            {p.endpoint_configured ? " · custom endpoint" : ""}
-          </span>
-          {/* Purpose sits with the provider: a seventh column crushed the others at 1024 px. */}
-          <span className={styles.secondary}>{humanize(p.purpose)}</span>
+          <span className={styles.model}>{p.model}</span>
         </span>
       ),
     },
@@ -223,69 +466,35 @@ function Providers({ providers }: { providers: ProviderOut[] }) {
     {
       key: "approval",
       header: "Approved up to",
-      width: "10rem",
+      width: "11rem",
       cell: (p) => (
         <span className={styles.stack}>
-          {LEVELS.includes(p.approved_for_level as Level) ? <LevelMeter level={p.approved_for_level as Level} /> : humanize(p.approved_for_level)}
-          <span className={styles.secondary}>{p.explicitly_approved ? "Explicitly approved" : "Default approval"}</span>
+          {LEVELS.includes(p.approved_for_level as (typeof LEVELS)[number]) ? <LevelMeter level={p.approved_for_level as (typeof LEVELS)[number]} /> : humanize(p.approved_for_level)}
+          <span className={styles.secondary}>{p.explicitly_approved ? "Approved by an administrator" : "Default approval"}</span>
         </span>
       ),
     },
+    { key: "sends", header: "May receive", width: "11rem", cell: (p) => <span>{sendsLine(p)}</span> },
     {
-      key: "status",
-      header: "Status",
+      key: "actions",
+      header: "Actions",
       short: true,
-      width: "7rem",
-      cell: (p) =>
-        p.enabled ? (
-          <StatusMark tone="neutral" icon={CheckCircle2}>
-            Enabled
-          </StatusMark>
-        ) : (
-          <StatusMark tone="neutral" icon={CircleSlash}>
-            Disabled
-          </StatusMark>
-        ),
-    },
-    { key: "credential", header: "Credential", width: "10rem", cell: (p) => <Credential p={p} /> },
-    {
-      key: "terms",
-      header: "Data terms",
-      width: "10rem",
+      width: "9rem",
       cell: (p) => (
-        <span className={styles.stack}>
-          <span>{retentionLabel(p.retention_mode)}</span>
-          <span className={styles.secondary}>{p.training_opt_out ? "Training opt-out" : "May use submitted data"}</span>
-        </span>
+        <Button size="sm" onClick={() => onOpen({ kind: "approval", provider: p })} aria-label={`Change approval of ${providerName(p)}`}>
+          Change approval
+        </Button>
       ),
     },
   ];
   return (
-    <OpsSection id="providers-heading" title="Providers" count={`${providers.length.toLocaleString("en-GB")} recorded`}>
-      <DataTable caption="Recorded AI providers (read-only)" columns={columns} rows={ordered} rowKey={providerKey} />
+    <OpsSection id="embedding-heading" title="Embedding (the deployment's)" count={`${providers.length.toLocaleString("en-GB")} recorded`}>
       <p className={styles.note}>
-        A credential is how Lattice calls a provider. It never raises a provider&apos;s trust class, its approval or the levels it may
-        receive; its value is never shown.
+        Your Lattice operator runs the embedding provider for every organization of this deployment; its model and keys are theirs. What it may receive for {settings.confirmation}{" "}
+        is yours: change its approval here. Exact and keyword search work whatever this says.
       </p>
+      <DataTable caption="Embedding providers recorded for this organization" columns={columns} rows={providers} rowKey={(p) => p.id} />
     </OpsSection>
   );
 }
 
-function Credential({ p }: { p: ProviderOut }) {
-  const c = p.credential;
-  if (c.state === "none") return <span className={styles.secondary}>None recorded</span>;
-  return (
-    <span className={styles.stack}>
-      {c.resolvable ? (
-        <span>Active</span>
-      ) : (
-        <StatusMark tone="neutral" icon={AlertTriangle}>
-          Active · doesn&apos;t resolve
-        </StatusMark>
-      )}
-      <span className={styles.secondary}>
-        {[c.source ? `${c.source} reference` : null, c.data_use ? `${humanize(c.data_use)} data use` : null].filter(Boolean).join(" · ") || "Value never shown"}
-      </span>
-    </span>
-  );
-}

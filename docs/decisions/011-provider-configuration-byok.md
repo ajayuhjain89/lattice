@@ -247,3 +247,28 @@ P12.5. Process access as verified on the call graph: the API opens OIDC client s
 presents no organization credential (its embedding provider is a deployment setting), so
 it holds no keys and has no privilege on the rows. **The database never holds a credential
 in plaintext** — and never a master key.
+
+### Implemented in P12.5 (2026-10-17)
+
+The administrator UX this ADR assigned to Phase 7 now exists (`/settings/providers`,
+`/v1/admin/providers/*`; phase-12-plan Part III P12.5). What changed in this ADR's model:
+
+- **Precedence of credentials** stays one rule: *the organization's own active credential
+  for the provider, or nothing*. A credential row is per organization (forced RLS), so no
+  organization's key — product-entered (`vault:`) or operator-recorded (`env:`) — is ever
+  another's fallback, and a deployment-wide environment key implies nothing for any
+  organization until an operator records a reference to it *for that organization*.
+  Administrators can enter keys only as `vault:` ciphertext (never an `env:` reference);
+  they can replace or revoke an operator's key for their organization.
+- **Generation needs an explicit approval** for every trust class (`approved_at`); the
+  operator's `provider configure` records it for `internal`, as configuring always meant;
+  records created in the product start unapproved and disabled.
+- **The invocation rule runs again immediately before every model call** (a fresh snapshot;
+  `policy_changed` / `outbound_blocked` / `credential_revoked`; the organization-controlled
+  endpoint's registration is read again too), and provider calls connect only through the
+  organization's outbound policy (`outbound_blocked`).
+- **Embedding** stays a deployment setting (`LATTICE_QUERY_EMBEDDING` /
+  `LATTICE_SYNC_EMBEDDING`, its key in the API/worker environment); administrators change
+  only the organization's approval of the recorded embedding provider. Per-organization
+  embedding credentials would need the worker to open organization secrets (C3.4) and a
+  re-index on change — not built (Phase 13/14 dependency).

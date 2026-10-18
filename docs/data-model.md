@@ -26,6 +26,10 @@ the `jobs` table, the `lattice_worker` role's grants and policies, and an
 (migration 0016) added `encrypted_secrets`, `outbound_targets`, the sign-in facts
 `oidc_connections.last_success_at`/`last_failure_at`, `vault:` secret references, the
 organization-name check and the first setup fence (rename, audit-coupled) (§2, §7).
+**Phase 12 P12.5** (migration 0021) added `egress_policy_versions`, `step_up_grants`, the
+step-up columns of `oidc_login_attempts`, `oidc_connections.step_up_acr_values`, the
+provider test facts on `model_providers`, a nullable `org_settings.external_egress_level`
+and the provider/egress fences (§2, §7).
 Related: `authorization-model.md`, `ingestion-design.md`, `retrieval-design.md`.
 
 Conventions:
@@ -564,6 +568,11 @@ Design (Phase 0):
 
 ### org_settings
 
+**P12.5 (migration 0021):** `external_egress_level` may be NULL — the organization does
+not allow external APIs (an organization without a row keeps the default `internal`).
+Written by the API only through `lattice_apply_egress_change` (ADR-017); every write by
+any role raises `egress_policy_versions.version`.
+
 **As built (Phase 4):** `organization_id PK, external_egress_level` (default
 `internal`), timestamps. No row means the defaults.
 
@@ -597,6 +606,9 @@ variables and `vault:` references to a ciphertext sealed for that credential
 revoking a `vault:` credential destroys its ciphertext. At most one active credential per organization and
 provider (partial unique index); rotation revokes and inserts, history is kept. Forced
 RLS; the runtime role may SELECT only (to resolve the reference at invocation).
+Since P12.5 administrators set, replace and revoke credentials through
+`lattice_set_provider_credential` / `lattice_revoke_provider_credential` — always
+`vault:` (sealed by the API), the previous ciphertext destroyed whoever set it.
 
 ### audit_events (Phase 6, migration 0008; access events Phase 9, migration 0012; enforced by the database Phase 10, migration 0013)
 
@@ -607,7 +619,8 @@ Never a secret, a secret reference or document content.
 
 | Action | Written by | Target | before / after |
 | ------ | ---------- | ------ | -------------- |
-| `provider.*`, `credential.*`, `egress.levels_changed` | operator CLI (Phase 6) | provider / purpose | the changed settings |
+| `provider.*`, `credential.*`, `egress.levels_changed` | operator CLI (Phase 6); API (`member:<id>`, P12.5) | provider / purpose (API: `provider_id`, `affected_provider_ids`, `grant_id`) | the changed settings; API events add `escalation` and, for an escalation, `step_up` (grant, `auth_time`, assurance) |
+| `egress.step_up_completed`, `egress.escalation_refused` (P12.5) | API (`member:<id>`) | `grant_id`, `step_up_id` / the change's kind and provider | the change document, its digest, the policy version, `auth_time` / the refusal code |
 | `access.member_changed` | API (`member:<id>`), seed (`operator:seed`) | `membership_id` | access snapshots: status, administrator flag, clearance, account scope, assigned account IDs, department IDs, administrator-defined group IDs (before NULL = provisioned) |
 | `access.grant_created`, `access.grant_revoked` | API, `apply-admin-grants` (`operator:admin-grants`) | `membership_id`, `document_id`, `grant_id`, `source_id`, `reference` (the document's opaque `rec_…`) | `{origin, principal_type}` |
 | `access.member_changed` (Phase 10) | SCIM (`scim:<token id>`: provisioning, suspension, reactivation, removal), `lattice member admin` (`operator:<user>`: the administrator capability) | `membership_id` | access snapshots, as above |
@@ -629,7 +642,31 @@ Deferred constraint triggers on `memberships`, `account_assignments`,
 unless an `access.*` event of the same transaction names the same `membership_id`
 (`lattice_require_access_audit`). Operator and worker writes are not affected.
 
+### egress_policy_versions, step_up_grants (Phase 12 P12.5, migration 0021)
+
+Tenant tables, forced RLS; the API role reads both, writes neither directly.
+
+| Table | Fields | Notes |
+| ----- | ------ | ----- |
+| `egress_policy_versions` | `organization_id PK, version bigint (≥ 0), changed_at` | Raised by a definer trigger on every write to `org_settings` and to the policy columns of `model_providers` (`purpose, provider, model, deployment, approved_for_level, approved_at, enabled, endpoint, retention_mode, training_opt_out`) by any role. No row = version 0. Previews and grants name the version they were computed on |
+| `step_up_grants` | `id, organization_id, membership_id, session_id, attempt_id (UQ), change jsonb, change_digest (SHA-256), reason, policy_version, auth_time, acr, created_at, expires_at, consumed_at` | D-34: created only by `lattice_create_step_up_grant` after a fresh IdP authentication; `expires_at` ≤ `auth_time` + 5 min and ≤ `created_at` + 5 min (CHECK); consumed once by `lattice_apply_egress_change`. FKs to the membership and the session (cascade). `acr` only when the operator required one |
+
+`oidc_login_attempts` gained `session_id` (FK, cascade), `change`, `reason`,
+`policy_version` and the purpose `step_up` (all four required for it, absent for the
+others; CHECK), and the step-up outcomes (`granted`, `not_fresh`, `session_mismatch`,
+`assurance_insufficient`, `step_up_invalid`). `oidc_connections.step_up_acr_values text[]`
+(NULL = no assurance requirement; operator-written, `lattice sso update --step-up-acr`).
+
 ### model_providers
+
+**P12.5 (migration 0021):** `last_test_at, last_test_result (valid | invalid_credential |
+configuration_invalid | provider_unavailable | outbound_blocked | credential_missing |
+unsupported), last_test_credential_id` — the latest administrator test, a fact (column
+grant; not policy, not audited). Generation records need `approved_at` (explicit
+approval) to receive anything; existing ones were backfilled `approved_at = created_at`
+(they were approved for `internal` by their configuration). The API writes records only
+through `lattice_create_provider`, `lattice_set_provider_endpoint` and
+`lattice_apply_egress_change`.
 
 **As built (Phase 4):** `id, organization_id, purpose, provider, model, deployment,
 approved_for_level (default internal), retention_mode, training_opt_out`, timestamps;

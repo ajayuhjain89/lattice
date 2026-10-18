@@ -848,10 +848,194 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** The organization's AI egress settings and provider configuration (masked) */
+    /**
+     * The organization's AI egress policy, providers and credentials (administrators; masked)
+     * @description Never an API key, a secret reference or ciphertext: whether a key is set, who manages it, its last four characters (keys entered here), when it was set and its latest test. `lattice` is the server's reading of what may leave Lattice.
+     */
     get: operations["get_providers_v1_admin_providers_get"];
     put?: never;
+    /**
+     * Configure a generation provider, disabled and unapproved, with a reason (administrators; audited)
+     * @description gemini: a model from `supported` and its data terms. ollama: a target your operator registered (`targets`); its trust class follows the target. Nothing can be sent to it until it is approved and enabled. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_provider_v1_admin_providers_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/providers/changes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Apply an egress change that is not an escalation, with a reason (administrators; audited)
+     * @description Lowering applies at once to the next request. `policy_version` must be the one previewed (409 `policy_version` otherwise). An escalation is refused (422 `step_up_required`): start a step-up instead. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_change_v1_admin_providers_changes_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/providers/changes/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Preview an egress change: Now -> After, and whether it is an escalation (administrators; changes nothing)
+     * @description Computed by the database on the current policy (`policy_version`). An escalation needs a fresh sign-in at the identity provider (`step-ups`). Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_change_preview_v1_admin_providers_changes_preview_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/providers/step-ups": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start a fresh identity-provider sign-in for one previewed escalation (administrators)
+     * @description The change must be an escalation on the current `policy_version`; `confirmation` is the organization's name, typed; a reason. Open `authorization_url` and sign in again as yourself: you return to the AI providers page with `?step_up=<id>`. No session is created or changed. 422 `step_up` `unavailable_no_connection` / `unavailable_no_identity` when your organization cannot step up (raising egress is then refused). Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_step_up_v1_admin_providers_step_ups_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/providers/step-ups/{step_up_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Your step-up's result (administrators; only the one who started it, in the same session) */
+    get: operations["get_step_up_v1_admin_providers_step_ups__step_up_id__get"];
+    put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/providers/step-ups/{step_up_id}/apply": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Apply the escalation a step-up authorized, once (administrators; audited)
+     * @description Exactly the previewed change, on exactly the previewed policy version, in the session that stepped up, within five minutes of the sign-in. 409 `step_up` `grant_consumed` / `grant_expired` / `grant_mismatch` / `session_ended`, or `policy_version` `changed`: preview and step up again. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_step_up_apply_v1_admin_providers_step_ups__step_up_id__apply_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/providers/{provider_id}/credential": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Set or replace the provider's API key, with a reason (administrators; audited)
+     * @description Encrypted at once (AES-256-GCM) for this organization; the previous key is revoked and destroyed. Never returned, logged or audited. A key changes no approval, enablement or ceiling: it never lets anything more leave Lattice. Requires the X-Lattice-Request: 1 header.
+     */
+    put: operations["put_credential_v1_admin_providers__provider_id__credential_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/providers/{provider_id}/credential/revoke": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Revoke the provider's API key, with a reason (administrators; audited)
+     * @description Excluded from the next request; its ciphertext is destroyed. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_revoke_credential_v1_admin_providers__provider_id__credential_revoke_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/providers/{provider_id}/endpoint": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Move an Ollama provider to another registered target, with a reason (administrators; audited)
+     * @description The trust class cannot change; the approval given for the previous destination is withdrawn (approve again to send anything). Requires the X-Lattice-Request: 1 header.
+     */
+    put: operations["put_endpoint_v1_admin_providers__provider_id__endpoint_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/providers/{provider_id}/test": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Test the provider's credential or endpoint (administrators)
+     * @description No organization content is sent and nothing is generated (Gemini: the model's metadata; Ollama: the server's model list), through the outbound policy. A passing test approves nothing and permits nothing to be sent; the result is recorded on the provider. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_test_v1_admin_providers__provider_id__test_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1518,6 +1702,18 @@ export interface components {
        */
       version: string;
     };
+    /** AiSetupStatus */
+    AiSetupStatus: {
+      /** Message */
+      message: string;
+      /** Reason */
+      reason: string;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "complete" | "required" | "optional" | "in_progress" | "attention" | "blocked";
+    };
     /** Answer */
     Answer: {
       /** Claims */
@@ -1694,6 +1890,65 @@ export interface components {
       /** Next Before */
       next_before: string | null;
     };
+    /** CellOut */
+    CellOut: {
+      /**
+       * Level
+       * @enum {string}
+       */
+      level: "internal" | "confidential" | "restricted";
+      /** Permitted */
+      permitted: boolean;
+      /**
+       * Provider Id
+       * Format: uuid
+       */
+      provider_id: string;
+      /**
+       * Reason
+       * @description permitted, or why not (a fixed code).
+       */
+      reason: string;
+    };
+    /** ChangePreview */
+    ChangePreview: {
+      /** Affected Provider Ids */
+      affected_provider_ids: string[];
+      /** Default Query Sensitivity */
+      default_query_sensitivity: {
+        [key: string]: "internal" | "confidential" | "restricted";
+      };
+      /**
+       * Escalation
+       * @description The database's reading: some level newly reaches some provider, or the questions' default level is lowered. Committing it needs a fresh step-up.
+       */
+      escalation: boolean;
+      /** Newly Allowed */
+      newly_allowed: components["schemas"]["Transition"][];
+      /** No Longer Allowed */
+      no_longer_allowed: components["schemas"]["Transition"][];
+      /** Policy Version */
+      policy_version: number;
+      /**
+       * Remaining
+       * @description Restrictions that stay in force whatever this change does (fixed codes).
+       */
+      remaining: string[];
+    };
+    /** ChangePreviewRequest */
+    ChangePreviewRequest: {
+      /** Change */
+      change: components["schemas"]["SettingsChange"] | components["schemas"]["ProviderChange"];
+    };
+    /** ChangeRequest */
+    ChangeRequest: {
+      /** Change */
+      change: components["schemas"]["SettingsChange"] | components["schemas"]["ProviderChange"];
+      /** Policy Version */
+      policy_version: number;
+      /** Reason */
+      reason: string;
+    };
     /** CheckOut */
     CheckOut: {
       /**
@@ -1850,17 +2105,80 @@ export interface components {
     };
     /** CredentialOut */
     CredentialOut: {
-      /** Data Use */
+      /**
+       * Data Use
+       * @description The declared tier: paid or unpaid.
+       */
       data_use: string | null;
-      /** Resolvable */
+      /**
+       * Hint
+       * @description The last four characters, for keys entered here.
+       */
+      hint: string | null;
+      /**
+       * Id
+       * @description The active credential's ID (send it back as `expected_credential_id`).
+       */
+      id: string | null;
+      /** Managed By */
+      managed_by: ("organization" | "operator") | null;
+      /**
+       * Resolvable
+       * @description Whether Lattice can open it now (never the value).
+       */
       resolvable: boolean;
-      /** Source */
+      /** Set At */
+      set_at: string | null;
+      /**
+       * Source
+       * @description How the value is kept: vault (entered in the product, encrypted), env (an operator's deployment variable), memory (tests). Never the reference.
+       */
       source: string | null;
       /**
        * State
        * @enum {string}
        */
       state: "none" | "active";
+    };
+    /** CredentialRequest */
+    CredentialRequest: {
+      /**
+       * Api Key
+       * Format: password
+       * @description Encrypted at once; never returned.
+       */
+      api_key: string;
+      /**
+       * Data Use
+       * @description paid: the provider does not use submitted content; unpaid: it may (then only synthetic organizations' content is ever sent).
+       * @enum {string}
+       */
+      data_use: "paid" | "unpaid";
+      /**
+       * Expected Credential Id
+       * @description The active credential you are replacing (null when there is none).
+       */
+      expected_credential_id: string | null;
+      /** Reason */
+      reason: string;
+    };
+    /** DestinationOut */
+    DestinationOut: {
+      /**
+       * Access
+       * @enum {string}
+       */
+      access: "public" | "operator_approved" | "not_permitted" | "deployment_local";
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "vendor_api" | "registered_target" | "deployment_local" | "test_double";
+      /**
+       * Origin
+       * @description The endpoint (never resolved addresses).
+       */
+      origin: string | null;
     };
     /** DevLoginRequest */
     DevLoginRequest: {
@@ -1977,16 +2295,46 @@ export interface components {
       /** Items */
       items: components["schemas"]["DocumentRef"][];
     };
-    /** EgressOut */
-    EgressOut: {
-      /** Data Origin */
+    /** EgressSettingsOut */
+    EgressSettingsOut: {
+      /**
+       * Data Origin
+       * @description customer or synthetic (operator-managed).
+       */
       data_origin: string;
-      /** Default Query Sensitivity */
-      default_query_sensitivity: string;
-      /** External Egress Level */
-      external_egress_level: string;
-      /** Organization Controlled Level */
-      organization_controlled_level: string | null;
+      /**
+       * Default Query Sensitivity
+       * @description D-13: a question is at least this sensitive; askers can only raise it.
+       * @enum {string}
+       */
+      default_query_sensitivity: "internal" | "confidential" | "restricted";
+      /**
+       * External Egress Level
+       * @description The ceiling for external APIs; null: external APIs are not allowed.
+       */
+      external_egress_level: ("internal" | "confidential" | "restricted") | null;
+      /**
+       * Organization Controlled Level
+       * @description The ceiling for organization-controlled servers; null: not allowed.
+       */
+      organization_controlled_level: ("internal" | "confidential" | "restricted") | null;
+      /**
+       * Version
+       * @description The policy version: every change (by anyone) raises it. Previews, changes and step-ups name the version they were computed on.
+       */
+      version: number;
+    };
+    /** EndpointRequest */
+    EndpointRequest: {
+      /** Policy Version */
+      policy_version: number;
+      /** Reason */
+      reason: string;
+      /**
+       * Target Id
+       * Format: uuid
+       */
+      target_id: string;
     };
     /** ErrorBody */
     ErrorBody: {
@@ -2497,6 +2845,31 @@ export interface components {
       /** Result */
       result: string;
     };
+    /** LastTestOut */
+    LastTestOut: {
+      /**
+       * At
+       * Format: date-time
+       */
+      at: string;
+      /**
+       * Current
+       * @description Whether the test used the credential that is active now (false after a replacement: test again).
+       */
+      current: boolean;
+      /**
+       * Result
+       * @enum {string}
+       */
+      result:
+        | "valid"
+        | "invalid_credential"
+        | "configuration_invalid"
+        | "provider_unavailable"
+        | "outbound_blocked"
+        | "credential_missing"
+        | "unsupported";
+    };
     /**
      * LifecycleAction
      * @description One lifecycle action the product offers for this member, decided by the backend.
@@ -2949,6 +3322,28 @@ export interface components {
       /** Reason */
       reason: string;
     };
+    /** NewProviderRequest */
+    NewProviderRequest: {
+      /** Model */
+      model: string;
+      /**
+       * Provider
+       * @enum {string}
+       */
+      provider: "gemini" | "ollama" | "fake";
+      /** Reason */
+      reason: string;
+      /**
+       * Target Id
+       * @description ollama: a registered target (`targets`).
+       */
+      target_id?: string | null;
+      /**
+       * Training Opt Out
+       * @description gemini: whether the provider's terms for this key's tier exclude training on submitted content (a paid tier). Ignored for the others.
+       */
+      training_opt_out?: boolean | null;
+    };
     /** Notice */
     Notice: {
       /**
@@ -3106,35 +3501,99 @@ export interface components {
       /** Items */
       items: components["schemas"]["OwnActivityOut"][];
     };
+    /**
+     * ProviderChange
+     * @description Set the named facts of one provider record (omitted ones stay). `approval`: a level
+     *     approves explicitly at that level; null withdraws the approval.
+     */
+    ProviderChange: {
+      /** Approval */
+      approval?: ("internal" | "confidential" | "restricted") | null;
+      /** Enabled */
+      enabled?: boolean | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "provider";
+      /**
+       * Provider Id
+       * Format: uuid
+       */
+      provider_id: string;
+      /** Training Opt Out */
+      training_opt_out?: boolean | null;
+    };
     /** ProviderOut */
     ProviderOut: {
+      /**
+       * Allowed Up To
+       * @description The most sensitive level this record may receive under the policy now; null: nothing (see `blocked_by`).
+       */
+      allowed_up_to: ("internal" | "confidential" | "restricted") | null;
       /** Approved For Level */
       approved_for_level: string;
+      /**
+       * Blocked By
+       * @description Why nothing may be sent (a fixed code).
+       */
+      blocked_by: string | null;
       credential: components["schemas"]["CredentialOut"];
-      /** Deployment */
+      /**
+       * Deployment
+       * @description The D-15 trust class, as recorded.
+       */
       deployment: string;
+      destination: components["schemas"]["DestinationOut"];
       /** Enabled */
       enabled: boolean;
       /** Endpoint Configured */
       endpoint_configured: boolean;
       /** Explicitly Approved */
       explicitly_approved: boolean;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      last_test: components["schemas"]["LastTestOut"] | null;
+      /**
+       * Managed By
+       * @description deployment: the embedding provider your operator runs for every organization (only its approval for this organization is yours to change).
+       * @enum {string}
+       */
+      managed_by: "organization" | "deployment";
       /** Model */
       model: string;
       /** Provider */
       provider: string;
       /** Purpose */
       purpose: string;
+      /** Requires Credential */
+      requires_credential: boolean;
       /** Retention Mode */
       retention_mode: string;
       /** Training Opt Out */
       training_opt_out: boolean;
     };
-    /** ProvidersResponse */
-    ProvidersResponse: {
-      egress: components["schemas"]["EgressOut"];
+    /** ProviderSettings */
+    ProviderSettings: {
+      /**
+       * Confirmation
+       * @description What to type to confirm an escalation: the organization's name.
+       */
+      confirmation: string;
+      egress: components["schemas"]["EgressSettingsOut"];
+      /** Lattice */
+      lattice: components["schemas"]["CellOut"][];
       /** Providers */
       providers: components["schemas"]["ProviderOut"][];
+      status: components["schemas"]["AiSetupStatus"];
+      step_up: components["schemas"]["StepUpAvailability"];
+      /** Supported */
+      supported: components["schemas"]["SupportedProviderOut"][];
+      /** Targets */
+      targets: components["schemas"]["TargetOut"][];
     };
     /** ReadyResponse */
     ReadyResponse: {
@@ -3231,6 +3690,16 @@ export interface components {
       revealed_token: string;
       token: components["schemas"]["ScimTokenOut"];
     };
+    /** RevokeCredentialRequest */
+    RevokeCredentialRequest: {
+      /**
+       * Expected Credential Id
+       * Format: uuid
+       */
+      expected_credential_id: string;
+      /** Reason */
+      reason: string;
+    };
     /** RevokePreview */
     RevokePreview: {
       /** Last Live Token */
@@ -3319,6 +3788,23 @@ export interface components {
       last_used_at: string | null;
       /** Revoked At */
       revoked_at: string | null;
+    };
+    /**
+     * SettingsChange
+     * @description Set the named fields of the organization's egress policy (omitted ones stay).
+     */
+    SettingsChange: {
+      /** Default Query Sensitivity */
+      default_query_sensitivity?: ("internal" | "confidential" | "restricted") | null;
+      /** External Egress Level */
+      external_egress_level?: ("internal" | "confidential" | "restricted") | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "settings";
+      /** Organization Controlled Level */
+      organization_controlled_level?: ("internal" | "confidential" | "restricted") | null;
     };
     /** SetupAction */
     SetupAction: {
@@ -3428,6 +3914,121 @@ export interface components {
        */
       version: string;
     };
+    /** StepUpAvailability */
+    StepUpAvailability: {
+      /**
+       * Assurance Required
+       * @description acr values your operator requires the identity provider to assert; null: a fresh authentication is required, not a particular method.
+       */
+      assurance_required: string[] | null;
+      /** Available */
+      available: boolean;
+      /**
+       * Max Age Seconds
+       * @default 300
+       */
+      max_age_seconds?: number;
+      /**
+       * Reason
+       * @description no_connection: the organization signs in without OIDC; no_identity: you have no directory identity on its connection. Raising egress needs a fresh sign-in at the identity provider: without one it is refused (an operator may still change it).
+       * @enum {string}
+       */
+      reason: "available" | "no_connection" | "no_identity";
+    };
+    /** StepUpGrantOut */
+    StepUpGrantOut: {
+      /**
+       * Assurance
+       * @description The acr the identity provider asserted when your operator requires one; null otherwise. A fresh sign-in is not by itself multi-factor authentication.
+       */
+      assurance: string | null;
+      /**
+       * Auth Time
+       * Format: date-time
+       */
+      auth_time: string;
+      /** Consumed */
+      consumed: boolean;
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+    };
+    /** StepUpOut */
+    StepUpOut: {
+      /** Change */
+      change: {
+        [key: string]: unknown;
+      };
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Current Version */
+      current_version: number;
+      grant: components["schemas"]["StepUpGrantOut"] | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Outcome
+       * @enum {string}
+       */
+      outcome:
+        | "pending"
+        | "granted"
+        | "not_fresh"
+        | "session_mismatch"
+        | "assurance_insufficient"
+        | "step_up_invalid"
+        | "mismatched"
+        | "not_provisioned"
+        | "sign_in_failed"
+        | "token_invalid"
+        | "provider_unavailable"
+        | "invalid_configuration"
+        | "outbound_blocked"
+        | "credentials_rejected";
+      /** Policy Version */
+      policy_version: number;
+      /** @description Now -> After recomputed from the current policy (null when it can no longer apply: the change is no longer valid). */
+      preview: components["schemas"]["ChangePreview"] | null;
+      /** Reason */
+      reason: string;
+    };
+    /** StepUpRequest */
+    StepUpRequest: {
+      /** Change */
+      change: components["schemas"]["SettingsChange"] | components["schemas"]["ProviderChange"];
+      /**
+       * Confirmation
+       * @description The organization's name, typed (`confirmation` of the page).
+       */
+      confirmation: string;
+      /** Policy Version */
+      policy_version: number;
+      /** Reason */
+      reason: string;
+    };
+    /** StepUpStarted */
+    StepUpStarted: {
+      /** Authorization Url */
+      authorization_url: string;
+      /**
+       * Step Up Id
+       * Format: uuid
+       */
+      step_up_id: string;
+    };
     /** Supersession */
     Supersession: {
       /** Since */
@@ -3443,6 +4044,25 @@ export interface components {
        */
       superseding_document_id: string;
     };
+    /** SupportedProviderOut */
+    SupportedProviderOut: {
+      /**
+       * Models
+       * @description Fixed models; empty: any model name the server has.
+       */
+      models: string[];
+      /** Needs Target */
+      needs_target: boolean;
+      /**
+       * Provider
+       * @enum {string}
+       */
+      provider: "gemini" | "ollama" | "fake";
+      /** Requires Credential */
+      requires_credential: boolean;
+      /** Trust Class */
+      trust_class: string;
+    };
     /** SyncRequest */
     SyncRequest: {
       /**
@@ -3451,6 +4071,60 @@ export interface components {
        * @enum {string}
        */
       mode?: "full" | "acl_only";
+    };
+    /**
+     * TargetOut
+     * @description An outbound target your operator registered for this organization's generation
+     *     servers (C4): the only endpoints an Ollama provider may use.
+     */
+    TargetOut: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Origin */
+      origin: string;
+      /**
+       * Trust Class
+       * @enum {string}
+       */
+      trust_class: "local" | "organization_controlled";
+      /**
+       * Usable
+       * @description False for plain http on a non-loopback host.
+       */
+      usable: boolean;
+    };
+    /** TestOut */
+    TestOut: {
+      /**
+       * At
+       * Format: date-time
+       */
+      at: string;
+      /**
+       * Note
+       * @description What the result proves: only that the credential or endpoint works for this provider operation -- never approval, egress, a higher ceiling or permission to send content.
+       */
+      note: string;
+      /**
+       * Provider Id
+       * Format: uuid
+       */
+      provider_id: string;
+      /**
+       * Result
+       * @enum {string}
+       */
+      result:
+        | "valid"
+        | "invalid_credential"
+        | "configuration_invalid"
+        | "provider_unavailable"
+        | "outbound_blocked"
+        | "credential_missing"
+        | "unsupported";
     };
     /** TestSignInOut */
     TestSignInOut: {
@@ -3523,6 +4197,33 @@ export interface components {
     TokenRequest: {
       /** Reason */
       reason: string;
+    };
+    /** Transition */
+    Transition: {
+      /** After */
+      after: boolean;
+      /** Before */
+      before: boolean;
+      /** Destination */
+      destination: string | null;
+      /**
+       * Level
+       * @enum {string}
+       */
+      level: "internal" | "confidential" | "restricted";
+      /** Model */
+      model: string;
+      /** Provider */
+      provider: string;
+      /**
+       * Provider Id
+       * Format: uuid
+       */
+      provider_id: string;
+      /** Purpose */
+      purpose: string;
+      /** Trust Class */
+      trust_class: string;
     };
     /** UnmapRequest */
     UnmapRequest: {
@@ -6902,7 +7603,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["ProvidersResponse"];
+          "application/json": components["schemas"]["ProviderSettings"];
         };
       };
       /** @description Unauthorized */
@@ -6916,6 +7617,759 @@ export interface operations {
       };
       /** @description Forbidden */
       403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_provider_v1_admin_providers_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["NewProviderRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProviderSettings"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_change_v1_admin_providers_changes_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ChangeRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProviderSettings"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_change_preview_v1_admin_providers_changes_preview_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ChangePreviewRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChangePreview"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_step_up_v1_admin_providers_step_ups_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StepUpRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StepUpStarted"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_step_up_v1_admin_providers_step_ups__step_up_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        step_up_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StepUpOut"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_step_up_apply_v1_admin_providers_step_ups__step_up_id__apply_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        step_up_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProviderSettings"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  put_credential_v1_admin_providers__provider_id__credential_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        provider_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CredentialRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProviderSettings"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_revoke_credential_v1_admin_providers__provider_id__credential_revoke_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        provider_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RevokeCredentialRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProviderSettings"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  put_endpoint_v1_admin_providers__provider_id__endpoint_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        provider_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["EndpointRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProviderSettings"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_test_v1_admin_providers__provider_id__test_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        provider_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TestOut"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
         headers: {
           [name: string]: unknown;
         };

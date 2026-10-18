@@ -343,7 +343,11 @@ def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]")
     cli_org.add_create_parser(org_commands)
     egress_cmd = org_commands.add_parser("egress", help="The organization's AI egress ceilings")
     egress_cmd.add_argument("--org", required=True)
-    egress_cmd.add_argument("--external-level", choices=LEVELS)
+    egress_cmd.add_argument(
+        "--external-level",
+        choices=(*LEVELS, "none"),
+        help="'none': external APIs are not allowed at all",
+    )
     egress_cmd.add_argument(
         "--organization-controlled-level",
         choices=[*LEVELS, "none"],

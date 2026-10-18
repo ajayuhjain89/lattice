@@ -222,4 +222,14 @@ async def test_openapi_documents_the_error_envelope(client: httpx.AsyncClient) -
         "/v1/admin/identity/scim/tokens/{token_id}/rotate",
         "/v1/admin/identity/scim/tokens/{token_id}/revoke/preview",
         "/v1/admin/identity/scim/tokens/{token_id}/revoke",
+        # Phase 12 (P12.5): providers, credentials, egress and its step-up
+        "/v1/admin/providers/changes",
+        "/v1/admin/providers/changes/preview",
+        "/v1/admin/providers/step-ups",
+        "/v1/admin/providers/step-ups/{step_up_id}",
+        "/v1/admin/providers/step-ups/{step_up_id}/apply",
+        "/v1/admin/providers/{provider_id}/credential",
+        "/v1/admin/providers/{provider_id}/credential/revoke",
+        "/v1/admin/providers/{provider_id}/endpoint",
+        "/v1/admin/providers/{provider_id}/test",
     }

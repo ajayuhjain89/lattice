@@ -97,11 +97,30 @@ secret or a secret reference). From `backend/`, `uv run --env-file ../.env latti
 | ------ | ------- |
 | Configure generation (becomes the one enabled generation configuration; approved for `internal` only; the trust class is fixed from then on) | `lattice provider configure --org halden --purpose generation --provider gemini --model gemini-3.5-flash-lite --deployment external_api --reason "..."` · local: `--provider ollama --model qwen3.5:4b --deployment local --endpoint http://127.0.0.1:11434` · organization-controlled: `--deployment organization_controlled --endpoint https://...` |
 | Approve a level (sets `approved_at`) | `lattice provider approve --org halden --purpose generation --provider gemini --model gemini-3.5-flash-lite --level confidential --reason "..."` |
-| Raise or lower the organization's ceilings | `lattice org egress --org halden --external-level confidential --reason "..."`; `--organization-controlled-level internal\|confidential\|restricted\|none` (`none`: the class is not allowed) |
+| Raise or lower the organization's ceilings | `lattice org egress --org halden --external-level confidential --reason "..."` (`--external-level none`: external APIs not allowed, P12.5); `--organization-controlled-level internal\|confidential\|restricted\|none` (`none`: the class is not allowed) |
 | Record or rotate a credential (BYOK, by reference) | Put the value in the process environment as `LATTICE_PROVIDER_SECRET_<NAME>` (for example in the git-ignored `.env` in development, the platform's secret store in deployment), then `lattice provider credential set --org halden --provider gemini --secret-ref env:LATTICE_PROVIDER_SECRET_HALDEN_GEMINI --data-use paid --reason "..."`. Setting again rotates (the old reference is revoked, history kept). The legacy names `LATTICE_GEMINI_API_KEY`, `GEMINI_API_KEY`, `LATTICE_OPENAI_API_KEY` are also accepted; a reference to any other variable is refused |
 | Revoke a credential | `lattice provider credential revoke --org halden --provider gemini --reason "..."` (next request: `credential_unavailable`, nothing sent) |
 | Disable / enable a provider | `lattice provider disable --org halden --purpose generation --provider gemini --model gemini-3.5-flash-lite --reason "..."` (next request: nothing sent; the record and history stay) |
 | See the configuration (masked) | `lattice provider list --org halden`, or `GET /v1/admin/providers` as an administrator: approval, class, enabled, and whether a credential is configured and resolvable; never the value or its reference |
+
+**In the product (P12.5).** Administrators do all of this in Settings → AI providers
+(`/settings/providers`): add a generation provider (disabled and unapproved), approve,
+enable or disable it, change its data terms, move an Ollama provider to another
+operator-registered server (its approval is withdrawn), add, replace or revoke its API key
+(sealed in the vault; never an `env:` reference), test it (no organization content; a
+passing test approves nothing), and change the policy (external ceiling or *not allowed*,
+organization-controlled ceiling, the questions' default). Lowering applies at once. Raising —
+anything the server's preview shows as newly letting content out — needs a reason, the
+organization's name typed, and a fresh sign-in at the identity provider within five
+minutes (D-34); the change applies once, exactly as previewed. Operators keep the commands
+above; their writes raise the policy version too, so a pending step-up started before an
+operator change cannot apply. The embedding provider stays the deployment's
+(`LATTICE_QUERY_EMBEDDING` / `LATTICE_SYNC_EMBEDDING`): administrators change only its
+approval for their organization. An organization-controlled generation server must first be
+registered by the operator: `lattice outbound allow --org <slug> --url https://host:port
+--purpose generation --reason "…"` (P12.5 upgrade, deployment.md). A step-up assurance
+requirement is operator configuration: `lattice sso update --org <slug> --step-up-acr <acr>
+--reason "…"` (`--no-step-up-acr` removes it).
 
 A credential never makes a provider eligible: data origin, trust class, the
 organization's ceiling and the approval do (security-model §6). **Credential
@@ -615,7 +634,10 @@ every organization whose issuer is private or not on https/443 (a self-hosted pr
 the verification IdP `https://idp:9443`), run `lattice outbound allow --org <slug> --url
 <scheme://host:port> --purpose oidc --reason "…"` first, or its sign-in fails as
 `sso_unavailable` (`outbound_blocked`). `lattice sso show --org <slug>` names a missing
-registration.
+registration. Every endpoint of the provider's discovery document must pass the same
+policy, the browser-only authorization endpoint included: when a private provider names
+it on another origin (the verification IdP's `https://localhost:9443`, its host port
+mapping), register that origin too (found closing P12.5, 2026-10-18).
 
 | Task | Procedure |
 | ---- | --------- |
@@ -791,3 +813,16 @@ or script retrying, or a limit too low for real use (§2 "A member gets 429").
 `LatticeProviderFailureSurge` (ticket): more than half of the model-provider calls fail for
 10 minutes. §2 "Provider outage": answers degrade to evidence; switch to an approved
 alternative or stop generation (§7.4).
+
+### 10.17 Egress escalation
+
+`LatticeEgressEscalation` (ticket, security): an administrator raised what may leave
+Lattice (D-34) after a fresh sign-in at the identity provider. Expected, rare. Read the
+`egress.levels_changed` / `provider.*` event with `escalation: true` and its
+`egress.step_up_completed` event (Access → Audit log, or `audit_events`): who, the reason,
+the exact change, the sign-in time. Confirm it with the organization's security contact. A
+compromised administrator *account* passes a step-up: if the change is not recognised,
+lower it at once (the product, or `lattice org egress` / `lattice provider disable`),
+suspend the member (`lattice member suspend`), and treat the identity-provider account as
+compromised. Refused attempts are `egress.escalation_refused` events and
+`lattice_egress_escalations_total{outcome!="committed"}`.

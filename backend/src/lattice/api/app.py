@@ -60,6 +60,7 @@ from lattice.log import configure_logging
 from lattice.providers.factory import build_embedding_provider
 from lattice.providers.generation_factory import DefaultGenerationFactory
 from lattice.providers.secrets import EnvironmentSecretStore
+from lattice.providers.tester import ProviderTester
 from lattice.provisioning.service import Provisioning
 from lattice.ratelimit import ApiLimits
 from lattice.vault.keys import Keyring, KeyringError
@@ -126,6 +127,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         web_origin=settings.web_origin,
         secrets=secret_store,
     )
+    # Administrator provider tests (P12.5): no organization content, through the outbound
+    # policy (tests replace its transport).
+    app.state.provider_tester = ProviderTester()
     app.state.session_service = SessionService(
         db,
         SessionPolicy(

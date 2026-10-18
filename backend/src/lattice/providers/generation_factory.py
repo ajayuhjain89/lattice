@@ -18,6 +18,9 @@ Provider names (``model_providers.provider``, purpose ``generation``):
 * ``gemini`` -- Gemini API, organization BYOK; needs a credential. An ``unpaid`` key
   (the default declaration: Google may use the content) is refused in production.
 
+Built adapters connect only through the organization's outbound policy for generation
+(``GenerationConfig.outbound``, P12.5; ``lattice.providers.http``).
+
 Anything else is unsupported: nothing is sent. OpenAI, Anthropic and other endpoints fit
 the same two functions when they are built; none of them is implemented in Phase 6.
 """
@@ -107,6 +110,7 @@ class DefaultGenerationFactory:
                 model=config.record.model,
                 endpoint=config.endpoint or DEFAULT_ENDPOINT,
                 timeout_seconds=self.ollama_timeout_seconds,
+                outbound=config.outbound,
             )
         if name == "gemini":
             if secret is None:
@@ -115,6 +119,9 @@ class DefaultGenerationFactory:
             if production and not paid:
                 raise GenerationUnavailable("refused_in_production")
             return GeminiGenerationProvider(
-                secret, model=config.record.model, data_use="paid" if paid else "unpaid"
+                secret,
+                model=config.record.model,
+                data_use="paid" if paid else "unpaid",
+                outbound=config.outbound,
             )
         raise GenerationUnavailable("provider_unsupported")

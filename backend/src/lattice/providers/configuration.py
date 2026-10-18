@@ -12,12 +12,16 @@ The minimum Phase 6 backend for BYOK, below the Phase 7 settings UI:
 
 Writes are administrative actions: each needs a stated reason and is recorded in the
 append-only ``audit_events`` table with before/after state (never a secret value or
-a secret reference's target). Today they are run by operators through the CLI
-(``lattice provider ...``, ``lattice org egress``) as ``lattice_owner``; the Phase 7 UI
-will call the same functions behind an administrator capability.
+a secret reference's target). These are the **operator's** writers, run through the CLI
+(``lattice provider ...``, ``lattice org egress``) as ``lattice_owner``; administrators
+change the same tables through the product and the 0021 fenced functions
+(``lattice.providers.admin``), where raising egress needs a fresh step-up (D-34).
 
 * configuring a provider records it approved for ``internal`` only (the default of
-  security-model §6) and, for generation, makes it the one enabled configuration;
+  security-model §6) and, for generation, makes it the one enabled configuration; a new
+  generation record is **explicitly** approved for ``internal`` by the operator's
+  configuration (``approved_at``: generation needs an explicit approval since P12.5;
+  records an administrator creates in the product start unapproved and disabled);
 * approval, enablement, credentials and the organization's ceilings each change only
   what they name -- none of them can change a trust class;
 * rotating a credential revokes the active reference and records a new one; revoking
@@ -155,8 +159,9 @@ async def configure_provider(
     await session.execute(
         text(
             "INSERT INTO model_providers (organization_id, purpose, provider, model, deployment, "
-            "endpoint, retention_mode, training_opt_out, enabled) VALUES (:o, :u, :p, :m, :d, "
-            ":e, :r, :t, true) ON CONFLICT (organization_id, purpose, provider, model) DO UPDATE "
+            "endpoint, retention_mode, training_opt_out, enabled, approved_at) VALUES (:o, :u, "
+            ":p, :m, :d, :e, :r, :t, true, CASE WHEN :u = 'generation' THEN now() END) "
+            "ON CONFLICT (organization_id, purpose, provider, model) DO UPDATE "
             "SET endpoint = EXCLUDED.endpoint, retention_mode = EXCLUDED.retention_mode, "
             "training_opt_out = EXCLUDED.training_opt_out, enabled = true, updated_at = now()"
         ),
@@ -430,12 +435,13 @@ async def set_egress_levels(
 ) -> dict[str, Any]:
     """Change the organization's ceilings (security-model §6). ``None`` for
     ``organization_controlled_level`` means the class is not allowed; ``"unset"`` leaves
-    it unchanged."""
+    it unchanged. ``external_level``: a level, ``"none"`` (external APIs are not allowed,
+    P12.5) or None (unchanged)."""
     changes: dict[str, str | None] = {}
     if external_level is not None:
-        if external_level not in LEVELS_ORDER:
+        if external_level != "none" and external_level not in LEVELS_ORDER:
             raise ConfigurationRejected("unknown level")
-        changes["external_egress_level"] = external_level
+        changes["external_egress_level"] = None if external_level == "none" else external_level
     if organization_controlled_level != "unset":
         if organization_controlled_level is not None and (
             organization_controlled_level not in LEVELS_ORDER

@@ -23,7 +23,7 @@ mapping never widens who can read a record) and P12.4 identity administration (S
 Identity: the OIDC connection — test sign-in, check, client secret sealed in the vault,
 client ID, issuer or claim with the administrator's own matched test sign-in,
 disable/enable — and SCIM tokens shown once, rotated, revoked; every OIDC request through
-the outbound policy); P12.5–P12.8 are not started.** What runs today: a FastAPI
+the outbound policy); P12.5 providers, BYOK and egress with the D-34 step-up is delivered locally and awaits review; P12.6–P12.8 are not started.** What runs today: a FastAPI
 backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced
 row-level security for organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -289,7 +289,7 @@ read it. Every other status has its own presentation. A claim citing evidence ab
 from the response is not rendered. The evidence inspector (docked at ≥1280 px, a drawer
 below, a bottom sheet on phones) reads `GET /v1/evidence/{id}` each time it opens; a 404
 — nonexistent or unreadable — has one presentation. Traces are fetched fresh and never
-filled in from the Ask page's memory. AI provider settings are read-only: configuration
+filled in from the Ask page's memory. AI provider settings are editable by administrators since P12.5 (raising egress needs a fresh identity-provider sign-in); before that, configuration
 is changed with the audited CLI. `/` is a static public landing page (no API call; a
 labelled synthetic example) and `/sign-in` is the organization's identity provider, or
 the persona picker where development sign-in is on. Details: [design

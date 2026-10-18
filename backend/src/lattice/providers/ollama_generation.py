@@ -19,6 +19,12 @@ boundary: the adapter declares ``local``. Any other host is outside it and decla
 the same class, or the invocation rule sends nothing
 (``provider_deployment_mismatch``): calling a remote server "local" cannot relax policy.
 
+**Outbound policy (P12.5, C4).** An ``organization_controlled`` server is reached only
+through ``lattice.providers.http``: the organization's ``generation`` policy is checked
+at connect time (the exact origin an operator registered, or a public https endpoint);
+a refusal is ``generation_failed:outbound_blocked``. A ``local`` (loopback) server is the
+operator's own deployment and is not governed by it.
+
 Errors carry fixed codes (``generation_failed:network`` when Ollama is not running,
 ``not_found`` when the model is not pulled, ...), never response bodies. Ollama itself
 and the model weights are installed by the operator (``ollama pull qwen3.5:4b``);
@@ -31,8 +37,10 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from lattice.outbound import OutboundPolicy, OutboundRefused
 from lattice.providers.egress import Deployment
 from lattice.providers.generation import GenerationError, GenerationRequest, GenerationResult
+from lattice.providers.http import provider_client, refused_code
 
 DEFAULT_MODEL: Final = "qwen3.5:4b"
 DEFAULT_ENDPOINT: Final = "http://127.0.0.1:11434"
@@ -79,6 +87,7 @@ class OllamaGenerationProvider:
         timeout_seconds: float = 300.0,
         context_tokens: int = 12288,
         transport: httpx.AsyncBaseTransport | None = None,
+        outbound: OutboundPolicy | None = None,
     ) -> None:
         self.model = model
         self.endpoint = validate_endpoint(endpoint)
@@ -86,6 +95,7 @@ class OllamaGenerationProvider:
         self._timeout = timeout_seconds
         self._context = context_tokens
         self._transport = transport
+        self._outbound = outbound
 
     def __repr__(self) -> str:
         return f"OllamaGenerationProvider(model={self.model!r}, deployment={self.deployment!r})"
@@ -107,16 +117,28 @@ class OllamaGenerationProvider:
             },
         }
 
+    def client(self, timeout: float) -> Any:
+        """The HTTP client for this server (``lattice.providers.http``)."""
+        return provider_client(
+            self.endpoint,
+            timeout_seconds=timeout,
+            outbound=self._outbound,
+            transport=self._transport,
+            local=self.deployment == "local",
+        )
+
     async def generate(self, request: GenerationRequest) -> GenerationResult:
-        async with httpx.AsyncClient(
-            base_url=self.endpoint, timeout=self._timeout, transport=self._transport
-        ) as client:
-            try:
+        try:
+            async with self.client(self._timeout) as client:
                 response = await client.post("/api/chat", json=self.payload(request))
-            except httpx.TimeoutException:
-                raise GenerationError("generation_failed:timeout") from None
-            except httpx.HTTPError:
-                raise GenerationError("generation_failed:network") from None
+        except OutboundRefused as refused:
+            code = "outbound_blocked" if refused_code(refused) else "network"
+            raise GenerationError(f"generation_failed:{code}") from None
+        except httpx.TimeoutException:
+            raise GenerationError("generation_failed:timeout") from None
+        except httpx.HTTPError as exc:
+            code = "outbound_blocked" if refused_code(exc) else "network"
+            raise GenerationError(f"generation_failed:{code}") from None
         if response.status_code == 404:
             raise GenerationError("generation_failed:not_found")
         if response.status_code != 200:

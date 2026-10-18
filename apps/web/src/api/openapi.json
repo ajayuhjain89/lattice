@@ -864,6 +864,37 @@
         "title": "AdministratorRequest",
         "type": "object"
       },
+      "AiSetupStatus": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "complete",
+              "required",
+              "optional",
+              "in_progress",
+              "attention",
+              "blocked"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "reason",
+          "message"
+        ],
+        "title": "AiSetupStatus",
+        "type": "object"
+      },
       "Answer": {
         "additionalProperties": false,
         "properties": {
@@ -1371,6 +1402,175 @@
         "title": "AuditPage",
         "type": "object"
       },
+      "CellOut": {
+        "properties": {
+          "level": {
+            "enum": [
+              "internal",
+              "confidential",
+              "restricted"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "permitted": {
+            "title": "Permitted",
+            "type": "boolean"
+          },
+          "provider_id": {
+            "format": "uuid",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "reason": {
+            "description": "permitted, or why not (a fixed code).",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "level",
+          "permitted",
+          "reason"
+        ],
+        "title": "CellOut",
+        "type": "object"
+      },
+      "ChangePreview": {
+        "properties": {
+          "affected_provider_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Affected Provider Ids",
+            "type": "array"
+          },
+          "default_query_sensitivity": {
+            "additionalProperties": {
+              "enum": [
+                "internal",
+                "confidential",
+                "restricted"
+              ],
+              "type": "string"
+            },
+            "title": "Default Query Sensitivity",
+            "type": "object"
+          },
+          "escalation": {
+            "description": "The database's reading: some level newly reaches some provider, or the questions' default level is lowered. Committing it needs a fresh step-up.",
+            "title": "Escalation",
+            "type": "boolean"
+          },
+          "newly_allowed": {
+            "items": {
+              "$ref": "#/components/schemas/Transition"
+            },
+            "title": "Newly Allowed",
+            "type": "array"
+          },
+          "no_longer_allowed": {
+            "items": {
+              "$ref": "#/components/schemas/Transition"
+            },
+            "title": "No Longer Allowed",
+            "type": "array"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "integer"
+          },
+          "remaining": {
+            "description": "Restrictions that stay in force whatever this change does (fixed codes).",
+            "items": {
+              "type": "string"
+            },
+            "title": "Remaining",
+            "type": "array"
+          }
+        },
+        "required": [
+          "policy_version",
+          "escalation",
+          "newly_allowed",
+          "no_longer_allowed",
+          "default_query_sensitivity",
+          "remaining",
+          "affected_provider_ids"
+        ],
+        "title": "ChangePreview",
+        "type": "object"
+      },
+      "ChangePreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "change": {
+            "discriminator": {
+              "mapping": {
+                "provider": "#/components/schemas/ProviderChange",
+                "settings": "#/components/schemas/SettingsChange"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SettingsChange"
+              },
+              {
+                "$ref": "#/components/schemas/ProviderChange"
+              }
+            ],
+            "title": "Change"
+          }
+        },
+        "required": [
+          "change"
+        ],
+        "title": "ChangePreviewRequest",
+        "type": "object"
+      },
+      "ChangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "change": {
+            "discriminator": {
+              "mapping": {
+                "provider": "#/components/schemas/ProviderChange",
+                "settings": "#/components/schemas/SettingsChange"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SettingsChange"
+              },
+              {
+                "$ref": "#/components/schemas/ProviderChange"
+              }
+            ],
+            "title": "Change"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "change",
+          "policy_version",
+          "reason"
+        ],
+        "title": "ChangeRequest",
+        "type": "object"
+      },
       "CheckOut": {
         "properties": {
           "checked_at": {
@@ -1726,11 +1926,65 @@
                 "type": "null"
               }
             ],
+            "description": "The declared tier: paid or unpaid.",
             "title": "Data Use"
           },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last four characters, for keys entered here.",
+            "title": "Hint"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The active credential's ID (send it back as `expected_credential_id`).",
+            "title": "Id"
+          },
+          "managed_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "organization",
+                  "operator"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Managed By"
+          },
           "resolvable": {
+            "description": "Whether Lattice can open it now (never the value).",
             "title": "Resolvable",
             "type": "boolean"
+          },
+          "set_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Set At"
           },
           "source": {
             "anyOf": [
@@ -1741,6 +1995,7 @@
                 "type": "null"
               }
             ],
+            "description": "How the value is kept: vault (entered in the product, encrypted), env (an operator's deployment variable), memory (tests). Never the reference.",
             "title": "Source"
           },
           "state": {
@@ -1754,11 +2009,106 @@
         },
         "required": [
           "state",
+          "id",
           "source",
+          "managed_by",
           "resolvable",
-          "data_use"
+          "data_use",
+          "hint",
+          "set_at"
         ],
         "title": "CredentialOut",
+        "type": "object"
+      },
+      "CredentialRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "description": "Encrypted at once; never returned.",
+            "format": "password",
+            "title": "Api Key",
+            "type": "string",
+            "writeOnly": true
+          },
+          "data_use": {
+            "description": "paid: the provider does not use submitted content; unpaid: it may (then only synthetic organizations' content is ever sent).",
+            "enum": [
+              "paid",
+              "unpaid"
+            ],
+            "title": "Data Use",
+            "type": "string"
+          },
+          "expected_credential_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The active credential you are replacing (null when there is none).",
+            "title": "Expected Credential Id"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "data_use",
+          "expected_credential_id",
+          "reason"
+        ],
+        "title": "CredentialRequest",
+        "type": "object"
+      },
+      "DestinationOut": {
+        "properties": {
+          "access": {
+            "enum": [
+              "public",
+              "operator_approved",
+              "not_permitted",
+              "deployment_local"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "vendor_api",
+              "registered_target",
+              "deployment_local",
+              "test_double"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The endpoint (never resolved addresses).",
+            "title": "Origin"
+          }
+        },
+        "required": [
+          "kind",
+          "origin",
+          "access"
+        ],
+        "title": "DestinationOut",
         "type": "object"
       },
       "DevLoginRequest": {
@@ -2020,39 +2370,98 @@
         "title": "DocumentsPage",
         "type": "object"
       },
-      "EgressOut": {
+      "EgressSettingsOut": {
         "properties": {
           "data_origin": {
+            "description": "customer or synthetic (operator-managed).",
             "title": "Data Origin",
             "type": "string"
           },
           "default_query_sensitivity": {
+            "description": "D-13: a question is at least this sensitive; askers can only raise it.",
+            "enum": [
+              "internal",
+              "confidential",
+              "restricted"
+            ],
             "title": "Default Query Sensitivity",
             "type": "string"
           },
           "external_egress_level": {
-            "title": "External Egress Level",
-            "type": "string"
-          },
-          "organization_controlled_level": {
             "anyOf": [
               {
+                "enum": [
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ],
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
+            "description": "The ceiling for external APIs; null: external APIs are not allowed.",
+            "title": "External Egress Level"
+          },
+          "organization_controlled_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The ceiling for organization-controlled servers; null: not allowed.",
             "title": "Organization Controlled Level"
+          },
+          "version": {
+            "description": "The policy version: every change (by anyone) raises it. Previews, changes and step-ups name the version they were computed on.",
+            "title": "Version",
+            "type": "integer"
           }
         },
         "required": [
           "external_egress_level",
           "organization_controlled_level",
           "default_query_sensitivity",
-          "data_origin"
+          "data_origin",
+          "version"
         ],
-        "title": "EgressOut",
+        "title": "EgressSettingsOut",
+        "type": "object"
+      },
+      "EndpointRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_id",
+          "policy_version",
+          "reason"
+        ],
+        "title": "EndpointRequest",
         "type": "object"
       },
       "ErrorBody": {
@@ -3305,6 +3714,40 @@
         "title": "LastTest",
         "type": "object"
       },
+      "LastTestOut": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "current": {
+            "description": "Whether the test used the credential that is active now (false after a replacement: test again).",
+            "title": "Current",
+            "type": "boolean"
+          },
+          "result": {
+            "enum": [
+              "valid",
+              "invalid_credential",
+              "configuration_invalid",
+              "provider_unavailable",
+              "outbound_blocked",
+              "credential_missing",
+              "unsupported"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "result",
+          "current"
+        ],
+        "title": "LastTestOut",
+        "type": "object"
+      },
       "LifecycleAction": {
         "description": "One lifecycle action the product offers for this member, decided by the backend.",
         "properties": {
@@ -4470,6 +4913,64 @@
         "title": "NewMemberRequest",
         "type": "object"
       },
+      "NewProviderRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "gemini",
+              "ollama",
+              "fake"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ollama: a registered target (`targets`).",
+            "title": "Target Id"
+          },
+          "training_opt_out": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "gemini: whether the provider's terms for this key's tier exclude training on submitted content (a paid tier). Ignored for the others.",
+            "title": "Training Opt Out"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "reason"
+        ],
+        "title": "NewProviderRequest",
+        "type": "object"
+      },
       "Notice": {
         "additionalProperties": false,
         "properties": {
@@ -4861,18 +5362,111 @@
         "title": "OwnActivityResponse",
         "type": "object"
       },
+      "ProviderChange": {
+        "additionalProperties": false,
+        "description": "Set the named facts of one provider record (omitted ones stay). `approval`: a level\napproves explicitly at that level; null withdraws the approval.",
+        "properties": {
+          "approval": {
+            "anyOf": [
+              {
+                "enum": [
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "kind": {
+            "const": "provider",
+            "title": "Kind",
+            "type": "string"
+          },
+          "provider_id": {
+            "format": "uuid",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "training_opt_out": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Training Opt Out"
+          }
+        },
+        "required": [
+          "kind",
+          "provider_id"
+        ],
+        "title": "ProviderChange",
+        "type": "object"
+      },
       "ProviderOut": {
         "properties": {
+          "allowed_up_to": {
+            "anyOf": [
+              {
+                "enum": [
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The most sensitive level this record may receive under the policy now; null: nothing (see `blocked_by`).",
+            "title": "Allowed Up To"
+          },
           "approved_for_level": {
             "title": "Approved For Level",
             "type": "string"
+          },
+          "blocked_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why nothing may be sent (a fixed code).",
+            "title": "Blocked By"
           },
           "credential": {
             "$ref": "#/components/schemas/CredentialOut"
           },
           "deployment": {
+            "description": "The D-15 trust class, as recorded.",
             "title": "Deployment",
             "type": "string"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/DestinationOut"
           },
           "enabled": {
             "title": "Enabled",
@@ -4886,6 +5480,30 @@
             "title": "Explicitly Approved",
             "type": "boolean"
           },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_test": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastTestOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "managed_by": {
+            "description": "deployment: the embedding provider your operator runs for every organization (only its approval for this organization is yours to change).",
+            "enum": [
+              "organization",
+              "deployment"
+            ],
+            "title": "Managed By",
+            "type": "string"
+          },
           "model": {
             "title": "Model",
             "type": "string"
@@ -4898,6 +5516,10 @@
             "title": "Purpose",
             "type": "string"
           },
+          "requires_credential": {
+            "title": "Requires Credential",
+            "type": "boolean"
+          },
           "retention_mode": {
             "title": "Retention Mode",
             "type": "string"
@@ -4908,6 +5530,7 @@
           }
         },
         "required": [
+          "id",
           "purpose",
           "provider",
           "model",
@@ -4918,15 +5541,33 @@
           "endpoint_configured",
           "retention_mode",
           "training_opt_out",
-          "credential"
+          "credential",
+          "managed_by",
+          "destination",
+          "requires_credential",
+          "allowed_up_to",
+          "blocked_by",
+          "last_test"
         ],
         "title": "ProviderOut",
         "type": "object"
       },
-      "ProvidersResponse": {
+      "ProviderSettings": {
         "properties": {
+          "confirmation": {
+            "description": "What to type to confirm an escalation: the organization's name.",
+            "title": "Confirmation",
+            "type": "string"
+          },
           "egress": {
-            "$ref": "#/components/schemas/EgressOut"
+            "$ref": "#/components/schemas/EgressSettingsOut"
+          },
+          "lattice": {
+            "items": {
+              "$ref": "#/components/schemas/CellOut"
+            },
+            "title": "Lattice",
+            "type": "array"
           },
           "providers": {
             "items": {
@@ -4934,13 +5575,39 @@
             },
             "title": "Providers",
             "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AiSetupStatus"
+          },
+          "step_up": {
+            "$ref": "#/components/schemas/StepUpAvailability"
+          },
+          "supported": {
+            "items": {
+              "$ref": "#/components/schemas/SupportedProviderOut"
+            },
+            "title": "Supported",
+            "type": "array"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/TargetOut"
+            },
+            "title": "Targets",
+            "type": "array"
           }
         },
         "required": [
           "egress",
-          "providers"
+          "providers",
+          "lattice",
+          "targets",
+          "supported",
+          "step_up",
+          "confirmation",
+          "status"
         ],
-        "title": "ProvidersResponse",
+        "title": "ProviderSettings",
         "type": "object"
       },
       "ReadyResponse": {
@@ -5138,6 +5805,28 @@
           "revealed_token"
         ],
         "title": "RevealedScimToken",
+        "type": "object"
+      },
+      "RevokeCredentialRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_credential_id": {
+            "format": "uuid",
+            "title": "Expected Credential Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_credential_id",
+          "reason"
+        ],
+        "title": "RevokeCredentialRequest",
         "type": "object"
       },
       "RevokePreview": {
@@ -5355,6 +6044,70 @@
           "current_connection"
         ],
         "title": "ScimTokenOut",
+        "type": "object"
+      },
+      "SettingsChange": {
+        "additionalProperties": false,
+        "description": "Set the named fields of the organization's egress policy (omitted ones stay).",
+        "properties": {
+          "default_query_sensitivity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Query Sensitivity"
+          },
+          "external_egress_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Egress Level"
+          },
+          "kind": {
+            "const": "settings",
+            "title": "Kind",
+            "type": "string"
+          },
+          "organization_controlled_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization Controlled Level"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "SettingsChange",
         "type": "object"
       },
       "SetupAction": {
@@ -5607,6 +6360,246 @@
         "title": "StatusRequest",
         "type": "object"
       },
+      "StepUpAvailability": {
+        "properties": {
+          "assurance_required": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "acr values your operator requires the identity provider to assert; null: a fresh authentication is required, not a particular method.",
+            "title": "Assurance Required"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "max_age_seconds": {
+            "default": 300,
+            "title": "Max Age Seconds",
+            "type": "integer"
+          },
+          "reason": {
+            "description": "no_connection: the organization signs in without OIDC; no_identity: you have no directory identity on its connection. Raising egress needs a fresh sign-in at the identity provider: without one it is refused (an operator may still change it).",
+            "enum": [
+              "available",
+              "no_connection",
+              "no_identity"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "available",
+          "reason",
+          "assurance_required"
+        ],
+        "title": "StepUpAvailability",
+        "type": "object"
+      },
+      "StepUpGrantOut": {
+        "properties": {
+          "assurance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The acr the identity provider asserted when your operator requires one; null otherwise. A fresh sign-in is not by itself multi-factor authentication.",
+            "title": "Assurance"
+          },
+          "auth_time": {
+            "format": "date-time",
+            "title": "Auth Time",
+            "type": "string"
+          },
+          "consumed": {
+            "title": "Consumed",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "expires_at",
+          "auth_time",
+          "assurance",
+          "consumed"
+        ],
+        "title": "StepUpGrantOut",
+        "type": "object"
+      },
+      "StepUpOut": {
+        "properties": {
+          "change": {
+            "additionalProperties": true,
+            "title": "Change",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_version": {
+            "title": "Current Version",
+            "type": "integer"
+          },
+          "grant": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StepUpGrantOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "pending",
+              "granted",
+              "not_fresh",
+              "session_mismatch",
+              "assurance_insufficient",
+              "step_up_invalid",
+              "mismatched",
+              "not_provisioned",
+              "sign_in_failed",
+              "token_invalid",
+              "provider_unavailable",
+              "invalid_configuration",
+              "outbound_blocked",
+              "credentials_rejected"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "integer"
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChangePreview"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Now -> After recomputed from the current policy (null when it can no longer apply: the change is no longer valid)."
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "outcome",
+          "created_at",
+          "change",
+          "reason",
+          "policy_version",
+          "current_version",
+          "grant",
+          "preview"
+        ],
+        "title": "StepUpOut",
+        "type": "object"
+      },
+      "StepUpRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "change": {
+            "discriminator": {
+              "mapping": {
+                "provider": "#/components/schemas/ProviderChange",
+                "settings": "#/components/schemas/SettingsChange"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SettingsChange"
+              },
+              {
+                "$ref": "#/components/schemas/ProviderChange"
+              }
+            ],
+            "title": "Change"
+          },
+          "confirmation": {
+            "description": "The organization's name, typed (`confirmation` of the page).",
+            "maxLength": 300,
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "change",
+          "policy_version",
+          "reason",
+          "confirmation"
+        ],
+        "title": "StepUpRequest",
+        "type": "object"
+      },
+      "StepUpStarted": {
+        "properties": {
+          "authorization_url": {
+            "title": "Authorization Url",
+            "type": "string"
+          },
+          "step_up_id": {
+            "format": "uuid",
+            "title": "Step Up Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step_up_id",
+          "authorization_url"
+        ],
+        "title": "StepUpStarted",
+        "type": "object"
+      },
       "Supersession": {
         "additionalProperties": false,
         "properties": {
@@ -5641,6 +6634,48 @@
         "title": "Supersession",
         "type": "object"
       },
+      "SupportedProviderOut": {
+        "properties": {
+          "models": {
+            "description": "Fixed models; empty: any model name the server has.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "needs_target": {
+            "title": "Needs Target",
+            "type": "boolean"
+          },
+          "provider": {
+            "enum": [
+              "gemini",
+              "ollama",
+              "fake"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "requires_credential": {
+            "title": "Requires Credential",
+            "type": "boolean"
+          },
+          "trust_class": {
+            "title": "Trust Class",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "trust_class",
+          "requires_credential",
+          "models",
+          "needs_target"
+        ],
+        "title": "SupportedProviderOut",
+        "type": "object"
+      },
       "SyncRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5655,6 +6690,81 @@
           }
         },
         "title": "SyncRequest",
+        "type": "object"
+      },
+      "TargetOut": {
+        "description": "An outbound target your operator registered for this organization's generation\nservers (C4): the only endpoints an Ollama provider may use.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "trust_class": {
+            "enum": [
+              "local",
+              "organization_controlled"
+            ],
+            "title": "Trust Class",
+            "type": "string"
+          },
+          "usable": {
+            "description": "False for plain http on a non-loopback host.",
+            "title": "Usable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "origin",
+          "trust_class",
+          "usable"
+        ],
+        "title": "TargetOut",
+        "type": "object"
+      },
+      "TestOut": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "note": {
+            "description": "What the result proves: only that the credential or endpoint works for this provider operation -- never approval, egress, a higher ceiling or permission to send content.",
+            "title": "Note",
+            "type": "string"
+          },
+          "provider_id": {
+            "format": "uuid",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "valid",
+              "invalid_credential",
+              "configuration_invalid",
+              "provider_unavailable",
+              "outbound_blocked",
+              "credential_missing",
+              "unsupported"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "result",
+          "at",
+          "note"
+        ],
+        "title": "TestOut",
         "type": "object"
       },
       "TestSignInOut": {
@@ -5819,6 +6929,72 @@
           "reason"
         ],
         "title": "TokenRequest",
+        "type": "object"
+      },
+      "Transition": {
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "boolean"
+          },
+          "before": {
+            "title": "Before",
+            "type": "boolean"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination"
+          },
+          "level": {
+            "enum": [
+              "internal",
+              "confidential",
+              "restricted"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_id": {
+            "format": "uuid",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "trust_class": {
+            "title": "Trust Class",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "provider",
+          "model",
+          "purpose",
+          "trust_class",
+          "destination",
+          "level",
+          "before",
+          "after"
+        ],
+        "title": "Transition",
         "type": "object"
       },
       "UnmapRequest": {
@@ -10274,13 +11450,14 @@
     },
     "/v1/admin/providers": {
       "get": {
+        "description": "Never an API key, a secret reference or ciphertext: whether a key is set, who manages it, its last four characters (keys entered here), when it was set and its latest test. `lattice` is the server's reading of what may leave Lattice.",
         "operationId": "get_providers_v1_admin_providers_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProvidersResponse"
+                  "$ref": "#/components/schemas/ProviderSettings"
                 }
               }
             },
@@ -10305,9 +11482,938 @@
               }
             },
             "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
           }
         },
-        "summary": "The organization's AI egress settings and provider configuration (masked)",
+        "summary": "The organization's AI egress policy, providers and credentials (administrators; masked)",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "gemini: a model from `supported` and its data terms. ollama: a target your operator registered (`targets`); its trust class follows the target. Nothing can be sent to it until it is approved and enabled. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_provider_v1_admin_providers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Configure a generation provider, disabled and unapproved, with a reason (administrators; audited)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/providers/changes": {
+      "post": {
+        "description": "Lowering applies at once to the next request. `policy_version` must be the one previewed (409 `policy_version` otherwise). An escalation is refused (422 `step_up_required`): start a step-up instead. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_change_v1_admin_providers_changes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Apply an egress change that is not an escalation, with a reason (administrators; audited)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/providers/changes/preview": {
+      "post": {
+        "description": "Computed by the database on the current policy (`policy_version`). An escalation needs a fresh sign-in at the identity provider (`step-ups`). Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_change_preview_v1_admin_providers_changes_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Preview an egress change: Now -> After, and whether it is an escalation (administrators; changes nothing)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/providers/step-ups": {
+      "post": {
+        "description": "The change must be an escalation on the current `policy_version`; `confirmation` is the organization's name, typed; a reason. Open `authorization_url` and sign in again as yourself: you return to the AI providers page with `?step_up=<id>`. No session is created or changed. 422 `step_up` `unavailable_no_connection` / `unavailable_no_identity` when your organization cannot step up (raising egress is then refused). Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_step_up_v1_admin_providers_step_ups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepUpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepUpStarted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Start a fresh identity-provider sign-in for one previewed escalation (administrators)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/providers/step-ups/{step_up_id}": {
+      "get": {
+        "operationId": "get_step_up_v1_admin_providers_step_ups__step_up_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "step_up_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Step Up Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepUpOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Your step-up's result (administrators; only the one who started it, in the same session)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/providers/step-ups/{step_up_id}/apply": {
+      "post": {
+        "description": "Exactly the previewed change, on exactly the previewed policy version, in the session that stepped up, within five minutes of the sign-in. 409 `step_up` `grant_consumed` / `grant_expired` / `grant_mismatch` / `session_ended`, or `policy_version` `changed`: preview and step up again. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_step_up_apply_v1_admin_providers_step_ups__step_up_id__apply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "step_up_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Step Up Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Apply the escalation a step-up authorized, once (administrators; audited)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/providers/{provider_id}/credential": {
+      "put": {
+        "description": "Encrypted at once (AES-256-GCM) for this organization; the previous key is revoked and destroyed. Never returned, logged or audited. A key changes no approval, enablement or ceiling: it never lets anything more leave Lattice. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "put_credential_v1_admin_providers__provider_id__credential_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Set or replace the provider's API key, with a reason (administrators; audited)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/providers/{provider_id}/credential/revoke": {
+      "post": {
+        "description": "Excluded from the next request; its ciphertext is destroyed. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_revoke_credential_v1_admin_providers__provider_id__credential_revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeCredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Revoke the provider's API key, with a reason (administrators; audited)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/providers/{provider_id}/endpoint": {
+      "put": {
+        "description": "The trust class cannot change; the approval given for the previous destination is withdrawn (approve again to send anything). Requires the X-Lattice-Request: 1 header.",
+        "operationId": "put_endpoint_v1_admin_providers__provider_id__endpoint_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EndpointRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Move an Ollama provider to another registered target, with a reason (administrators; audited)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/providers/{provider_id}/test": {
+      "post": {
+        "description": "No organization content is sent and nothing is generated (Gemini: the model's metadata; Ollama: the server's model list), through the outbound policy. A passing test approves nothing and permits nothing to be sent; the result is recorded on the provider. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_test_v1_admin_providers__provider_id__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Test the provider's credential or endpoint (administrators)",
         "tags": [
           "admin"
         ]

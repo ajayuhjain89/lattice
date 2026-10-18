@@ -18,7 +18,13 @@ changed since their source's latest sync, which applies them); and three P12.4 a
 the latest sign-in or test), ``identity·attention·configuration_rejected`` (the provider
 rejected the client or the token was invalid in the latest sign-in or test) and
 ``provisioning·attention·requests_refused`` (the identity provider's requests were
-refused in the last 24 hours). ``sources·awaiting_import`` / ``import_rejected`` arrive
+refused in the last 24 hours); and five P12.5 adds for AI providers:
+``ai_policy·optional·not_enabled`` (a provider is configured, none enabled),
+``ai_policy·attention·not_approved`` (the enabled provider has no explicit approval),
+``ai_policy·blocked·outbound_blocked`` (its endpoint is not permitted by the outbound
+policy, or its latest test was refused by it), ``ai_policy·attention·credential_missing``
+(none set) and ``ai_policy·attention·credential_invalid`` (the provider rejected the
+current credential in its latest test). ``sources·awaiting_import`` / ``import_rejected`` arrive
 with imports (P12.6). Identity and provisioning link to ``/settings/identity`` (P12.4).
 """
 
@@ -78,8 +84,15 @@ class AiFacts:
     model: str | None = None
     # The enabled provider cannot be built as configured (unsupported, bad endpoint).
     unusable: bool = False
+    # An administrator or operator approved it explicitly (generation needs it, P12.5).
+    approved: bool = True
+    # Its destination is permitted by the outbound policy (organization-controlled only).
+    outbound_permitted: bool = True
     credential_required: bool = False
+    credential_present: bool = False
     credential_available: bool = False
+    # The latest test of the current credential/endpoint (P12.5), if any.
+    last_test_result: str | None = None
     # Whether the policy lets the default question sensitivity reach the provider.
     allows_default: bool = False
 
@@ -181,6 +194,27 @@ MESSAGES: Final[dict[tuple[str, str], str]] = {
     ("provisioning", "no_valid_token"): (
         "Every provisioning token is revoked while provisioned members remain: changes in "
         "the identity provider no longer reach Lattice."
+    ),
+    ("ai_policy", "not_enabled"): (
+        "A generation provider is configured but not enabled: answers show their evidence "
+        "without a written answer."
+    ),
+    ("ai_policy", "not_approved"): (
+        "The enabled generation provider has not been approved for any data level: nothing "
+        "is sent to it, and answers show their evidence only."
+    ),
+    ("ai_policy", "outbound_blocked"): (
+        "Lattice's outbound policy does not permit the provider's endpoint (or refused its "
+        "latest test): nothing is sent. A private or self-hosted server must be approved for "
+        "this organization by your Lattice operator."
+    ),
+    ("ai_policy", "credential_missing"): (
+        "The enabled generation provider needs an API key and none is set: answers show "
+        "their evidence only."
+    ),
+    ("ai_policy", "credential_invalid"): (
+        "The provider rejected the current API key in its latest test: answers fall back to "
+        "evidence only until it is replaced."
     ),
     ("ai_policy", "evidence_only"): (
         "No generation provider is enabled: answers show their evidence without a written answer."
@@ -349,16 +383,33 @@ def _ai_policy(f: SetupFacts) -> Category:
         "model": ai.model if ai.enabled else None,
         "default_question_sensitivity": f.default_question_sensitivity,
     }
-    action = Action("/settings/providers", "View AI providers")
-    if not (ai.configured and ai.enabled):
+    action = Action("/settings/providers", "Open AI providers")
+    if not ai.configured:
         return _category("ai_policy", "optional", "evidence_only", facts, action)
+    if not ai.enabled:
+        return _category("ai_policy", "optional", "not_enabled", facts, action)
     if ai.unusable:
         return _category("ai_policy", "attention", "provider_unavailable", facts, action)
+    if not ai.approved:
+        return _category("ai_policy", "attention", "not_approved", facts, action)
+    if not ai.outbound_permitted or ai.last_test_result == "outbound_blocked":
+        return _category("ai_policy", "blocked", "outbound_blocked", facts, action)
+    if ai.credential_required and not ai.credential_present:
+        return _category("ai_policy", "attention", "credential_missing", facts, action)
     if ai.credential_required and not ai.credential_available:
         return _category("ai_policy", "attention", "credential_failed", facts, action)
+    if ai.last_test_result == "invalid_credential":
+        return _category("ai_policy", "attention", "credential_invalid", facts, action)
+    if ai.last_test_result in ("provider_unavailable", "configuration_invalid"):
+        return _category("ai_policy", "attention", "provider_unavailable", facts, action)
     if not ai.allows_default:
         return _category("ai_policy", "attention", "policy_excludes_default", facts, action)
     return _category("ai_policy", "complete", "generation_ready", facts, action)
+
+
+def ai_policy_category(f: SetupFacts) -> Category:
+    """The AI policy category alone (the AI providers page shows it, P12.5)."""
+    return _ai_policy(f)
 
 
 def _sources(f: SetupFacts) -> Category:

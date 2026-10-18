@@ -45,6 +45,7 @@ READY_AI = AiFacts(
     provider="gemini",
     model="m",
     credential_required=True,
+    credential_present=True,
     credential_available=True,
     allows_default=True,
 )
@@ -164,9 +165,45 @@ CASES: list[tuple[str, SetupFacts, str, str]] = [
         "ai_policy",
         replace(BASE, ai=AiFacts(configured=True, provider="gemini")),
         "optional",
-        "evidence_only",
+        "not_enabled",
     ),
     ("ai_policy", replace(BASE, ai=READY_AI), "complete", "generation_ready"),
+    (
+        "ai_policy",
+        replace(BASE, ai=replace(READY_AI, approved=False)),
+        "attention",
+        "not_approved",
+    ),
+    (
+        "ai_policy",
+        replace(BASE, ai=replace(READY_AI, outbound_permitted=False)),
+        "blocked",
+        "outbound_blocked",
+    ),
+    (
+        "ai_policy",
+        replace(BASE, ai=replace(READY_AI, last_test_result="outbound_blocked")),
+        "blocked",
+        "outbound_blocked",
+    ),
+    (
+        "ai_policy",
+        replace(BASE, ai=replace(READY_AI, credential_present=False, credential_available=False)),
+        "attention",
+        "credential_missing",
+    ),
+    (
+        "ai_policy",
+        replace(BASE, ai=replace(READY_AI, last_test_result="invalid_credential")),
+        "attention",
+        "credential_invalid",
+    ),
+    (
+        "ai_policy",
+        replace(BASE, ai=replace(READY_AI, last_test_result="provider_unavailable")),
+        "attention",
+        "provider_unavailable",
+    ),
     (
         "ai_policy",
         replace(BASE, ai=replace(READY_AI, credential_available=False)),
@@ -455,7 +492,7 @@ async def test_a_fresh_organization_and_its_transitions(
                 reason="test",
                 actor="operator:test",
             )
-        assert _states(await _setup(client))["ai_policy"] == ("attention", "credential_failed")
+        assert _states(await _setup(client))["ai_policy"] == ("attention", "credential_missing")
         async with owner_db.tenant_transaction(org) as s:
             await configuration.set_credential(
                 s,
@@ -698,7 +735,9 @@ async def test_the_audit_policy_admits_only_member_organization_events(
         ("member:x", "organization.created"),
         ("member:x", "secret.rekeyed"),
         ("member:x", "outbound.target_added"),
-        ("member:x", "egress.levels_changed"),
+        # P12.5 admits egress events from member actors only (ADR-017).
+        ("operator:x", "egress.levels_changed"),
+        ("scim:x", "provider.approval_changed"),
     ):
         with pytest.raises(DBAPIError, match="row-level security"):
             async with app_db.tenant_transaction(org) as s:

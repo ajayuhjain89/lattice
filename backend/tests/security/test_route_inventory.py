@@ -49,6 +49,16 @@ MEMBER = {
 }
 ADMIN = {
     ("GET", "/v1/admin/providers"),
+    ("POST", "/v1/admin/providers"),
+    ("POST", "/v1/admin/providers/changes/preview"),
+    ("POST", "/v1/admin/providers/changes"),
+    ("POST", "/v1/admin/providers/step-ups"),
+    ("GET", "/v1/admin/providers/step-ups/{step_up_id}"),
+    ("POST", "/v1/admin/providers/step-ups/{step_up_id}/apply"),
+    ("PUT", "/v1/admin/providers/{provider_id}/endpoint"),
+    ("PUT", "/v1/admin/providers/{provider_id}/credential"),
+    ("POST", "/v1/admin/providers/{provider_id}/credential/revoke"),
+    ("POST", "/v1/admin/providers/{provider_id}/test"),
     ("GET", "/v1/admin/sources"),
     ("GET", "/v1/admin/sources/{source_id}/failures"),
     ("POST", "/v1/admin/sources/{source_id}/sync"),
@@ -225,6 +235,43 @@ BODIES |= {
     ("POST", "/v1/admin/identity/scim/tokens/{token_id}/revoke/preview"): None,
     ("POST", "/v1/admin/identity/scim/tokens/{token_id}/revoke"): {"reason": "Probe"},
 }
+_CHANGE = {"kind": "settings", "default_query_sensitivity": "restricted"}
+BODIES |= {
+    ("POST", "/v1/admin/providers"): {
+        "provider": "fake",
+        "model": "fake-probe",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/providers/changes/preview"): {"change": _CHANGE},
+    ("POST", "/v1/admin/providers/changes"): {
+        "change": _CHANGE,
+        "policy_version": 0,
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/providers/step-ups"): {
+        "change": _CHANGE,
+        "policy_version": 0,
+        "reason": "Probe",
+        "confirmation": "Probe",
+    },
+    ("POST", "/v1/admin/providers/step-ups/{step_up_id}/apply"): None,
+    ("PUT", "/v1/admin/providers/{provider_id}/endpoint"): {
+        "target_id": str(uuid.uuid4()),
+        "policy_version": 0,
+        "reason": "Probe",
+    },
+    ("PUT", "/v1/admin/providers/{provider_id}/credential"): {
+        "api_key": "probe-api-key-value-0000",
+        "data_use": "paid",
+        "expected_credential_id": None,
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/providers/{provider_id}/credential/revoke"): {
+        "expected_credential_id": str(uuid.uuid4()),
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/providers/{provider_id}/test"): None,
+}
 QUERIES = {("GET", "/v1/admin/access/documents"): "?q=onboarding"}
 
 
@@ -262,6 +309,8 @@ def _random_ids() -> dict[str, str]:
         "connection_id",
         "token_id",
         "test_id",
+        "provider_id",
+        "step_up_id",
     )
     return {name: str(uuid.uuid4()) for name in names} | {"resource_id": str(uuid.uuid4())}
 
@@ -365,6 +414,46 @@ async def worlds(owner_db: Database, app_client: AppFactory) -> Worlds:
         resource: uuid.UUID = (
             await s.execute(text("SELECT id FROM directory_identities"))
         ).scalar_one()
+        # A generation provider and a pending egress step-up of Lena's (P12.5).
+        provider: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO model_providers (organization_id, purpose, provider, model, "
+                    "deployment, retention_mode, training_opt_out, enabled) VALUES (:o, "
+                    "'generation', 'gemini', 'gemini-3.5-flash-lite', 'external_api', 'none', "
+                    "true, false) RETURNING id"
+                ),
+                {"o": halden.id},
+            )
+        ).scalar_one()
+        lena_user: uuid.UUID = (
+            await s.execute(
+                text("SELECT user_id FROM memberships WHERE id = :m"), {"m": halden.members["lena"]}
+            )
+        ).scalar_one()
+        session: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO sessions (token_hash, user_id, organization_id, expires_at) "
+                    "VALUES (sha256('probe'::bytea), :u, :o, now() + interval '1 hour') "
+                    "RETURNING id"
+                ),
+                {"u": lena_user, "o": halden.id},
+            )
+        ).scalar_one()
+        step_up: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO oidc_login_attempts (organization_id, connection_id, "
+                    "state_hash, binding_hash, nonce, code_verifier, expires_at, purpose, "
+                    "membership_id, session_id, change, reason, policy_version) VALUES (:o, :c, "
+                    "sha256('s2'::bytea), sha256('b2'::bytea), repeat('n', 43), repeat('v', 43), "
+                    "now() + interval '10 minutes', 'step_up', :m, :s, "
+                    "'{\"kind\": \"settings\"}', 'Probe', 0) RETURNING id"
+                ),
+                {"o": halden.id, "c": connection, "m": halden.members["lena"], "s": session},
+            )
+        ).scalar_one()
     # A trace of Maya's.
     async with app_client() as c:
         assert (await login(c, "maya@halden.example")).status_code == 200
@@ -382,6 +471,8 @@ async def worlds(owner_db: Database, app_client: AppFactory) -> Worlds:
         "connection_id": str(connection),
         "token_id": str(token_id),
         "test_id": str(test_id),
+        "provider_id": str(provider),
+        "step_up_id": str(step_up),
     }
     return Worlds(halden, veridian, ids)
 
@@ -416,14 +507,19 @@ async def test_another_organizations_identifiers_are_unknown(
                     "memberships WHERE id = :m), (SELECT count(*) FROM jobs), "
                     "(SELECT count(*) FROM audit_events WHERE action LIKE 'access.%' "
                     "OR action LIKE 'account.%' OR action LIKE 'sso.%' "
-                    "OR action LIKE 'scim.%'), "
+                    "OR action LIKE 'scim.%' OR action LIKE 'provider.%' "
+                    "OR action LIKE 'credential.%' OR action LIKE 'egress.%'), "
                     "(SELECT count(*) FROM scim_tokens WHERE revoked_at IS NULL), "
-                    "(SELECT client_id || status FROM oidc_connections)"
+                    "(SELECT client_id || status FROM oidc_connections), "
+                    "(SELECT count(*) FROM provider_credentials), "
+                    "(SELECT count(*) FROM model_providers WHERE purpose = 'generation' "
+                    "AND (enabled OR approved_at IS NOT NULL OR last_test_at IS NOT NULL)), "
+                    "(SELECT count(*) FROM step_up_grants)"
                 ),
                 {"m": uuid.UUID(worlds.halden_ids["membership_id"])},
             )
         ).one()
-    assert tuple(state) == (1, "internal", 0, 0, 1, "latticeactive")
+    assert tuple(state) == (1, "internal", 0, 0, 1, "latticeactive", 0, 0, 0)
 
 
 @pytest.mark.parametrize(("method", "path"), sorted(ADMIN))

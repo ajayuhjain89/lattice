@@ -259,6 +259,24 @@
    "privilege": "INSERT"
   },
   {
+   "column": "last_test_at",
+   "grantee": "lattice_app",
+   "name": "model_providers",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "last_test_credential_id",
+   "grantee": "lattice_app",
+   "name": "model_providers",
+   "privilege": "UPDATE"
+  },
+  {
+   "column": "last_test_result",
+   "grantee": "lattice_app",
+   "name": "model_providers",
+   "privilege": "UPDATE"
+  },
+  {
    "column": "client_id",
    "grantee": "lattice_app",
    "name": "oidc_connections",
@@ -374,6 +392,12 @@
   },
   {
    "column": "status",
+   "grantee": "lattice_app",
+   "name": "oidc_connections",
+   "privilege": "SELECT"
+  },
+  {
+   "column": "step_up_acr_values",
    "grantee": "lattice_app",
    "name": "oidc_connections",
    "privilege": "SELECT"
@@ -628,6 +652,18 @@
   },
   {
    "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_apply_egress_change(uuid,uuid,jsonb,bigint,uuid)"
+  },
+  {
+   "grants": [
     "lattice_owner:EXECUTE",
     "PUBLIC:EXECUTE"
    ],
@@ -635,6 +671,17 @@
    "security_definer": false,
    "settings": null,
    "signature": "lattice_audit_events_immutable()"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_bump_egress_version()"
   },
   {
    "grants": [
@@ -681,7 +728,31 @@
    "settings": [
     "search_path=pg_catalog, public, pg_temp"
    ],
+   "signature": "lattice_create_provider(uuid,text,text,uuid,boolean)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
    "signature": "lattice_create_scim_token(uuid,bytea,text)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_create_step_up_grant(uuid,uuid,uuid,timestamp with time zone,text)"
   },
   {
    "grants": [
@@ -692,6 +763,39 @@
    "security_definer": false,
    "settings": null,
    "signature": "lattice_current_org_id()"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_egress_cells(uuid)"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_egress_version(uuid)"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_egress_write(uuid,jsonb)"
   },
   {
    "grants": [
@@ -834,6 +938,18 @@
    "settings": [
     "search_path=pg_catalog, public, pg_temp"
    ],
+   "signature": "lattice_preview_egress_change(uuid,jsonb)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
    "signature": "lattice_reinstate_member(uuid,uuid)"
   },
   {
@@ -890,7 +1006,51 @@
    "settings": [
     "search_path=pg_catalog, public, pg_temp"
    ],
+   "signature": "lattice_require_credential_audit()"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_require_egress_settings_audit()"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
    "signature": "lattice_require_mapping_audit()"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_require_policy_actor(uuid)"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_require_provider_audit()"
   },
   {
    "grants": [
@@ -916,6 +1076,17 @@
   },
   {
    "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_require_step_up_audit()"
+  },
+  {
+   "grants": [
     "lattice_app:EXECUTE",
     "lattice_auth:EXECUTE"
    ],
@@ -937,6 +1108,18 @@
     "search_path=pg_catalog, public, pg_temp"
    ],
    "signature": "lattice_resolve_session(bytea)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_revoke_provider_credential(uuid,text,uuid)"
   },
   {
    "grants": [
@@ -1025,6 +1208,30 @@
   },
   {
    "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_set_provider_credential(uuid,text,uuid,uuid,uuid,text,bytea,bytea,text,text)"
+  },
+  {
+   "grants": [
+    "lattice_app:EXECUTE",
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": true,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_set_provider_endpoint(uuid,uuid,bigint,uuid)"
+  },
+  {
+   "grants": [
     "lattice_owner:EXECUTE",
     "PUBLIC:EXECUTE"
    ],
@@ -1032,6 +1239,17 @@
    "security_definer": false,
    "settings": null,
    "signature": "lattice_set_updated_at()"
+  },
+  {
+   "grants": [
+    "lattice_owner:EXECUTE"
+   ],
+   "owner": "lattice_owner",
+   "security_definer": false,
+   "settings": [
+    "search_path=pg_catalog, public, pg_temp"
+   ],
+   "signature": "lattice_target_endpoint(uuid,uuid)"
   }
  ],
  "memberships": [
@@ -1262,7 +1480,7 @@
     "lattice_app"
    ],
    "using": null,
-   "with_check": "(((action ~~ 'access.%'::text) AND ((actor ~~ 'member:%'::text) OR (actor ~~ 'scim:%'::text))) OR ((action = ANY (ARRAY['organization.updated'::text, 'account.created'::text, 'account.updated'::text, 'account.archived'::text, 'account.reactivated'::text, 'account.mapping_changed'::text, 'sso.connection_created'::text, 'sso.connection_updated'::text, 'sso.connection_disabled'::text, 'sso.connection_enabled'::text, 'sso.connection_tested'::text, 'scim.token_created'::text, 'scim.token_rotated'::text, 'scim.token_revoked'::text])) AND (actor ~~ 'member:%'::text)) OR ((action = 'scim.request_refused'::text) AND (actor ~~ 'scim:%'::text)))"
+   "with_check": "(((action ~~ 'access.%'::text) AND ((actor ~~ 'member:%'::text) OR (actor ~~ 'scim:%'::text))) OR ((action = ANY (ARRAY['organization.updated'::text, 'account.created'::text, 'account.updated'::text, 'account.archived'::text, 'account.reactivated'::text, 'account.mapping_changed'::text, 'sso.connection_created'::text, 'sso.connection_updated'::text, 'sso.connection_disabled'::text, 'sso.connection_enabled'::text, 'sso.connection_tested'::text, 'scim.token_created'::text, 'scim.token_rotated'::text, 'scim.token_revoked'::text, 'provider.configured'::text, 'provider.enabled'::text, 'provider.disabled'::text, 'provider.approval_changed'::text, 'credential.set'::text, 'credential.rotated'::text, 'credential.revoked'::text, 'egress.levels_changed'::text, 'egress.step_up_completed'::text, 'egress.escalation_refused'::text])) AND (actor ~~ 'member:%'::text)) OR ((action = 'scim.request_refused'::text) AND (actor ~~ 'scim:%'::text)))"
   },
   {
    "command": "*",
@@ -1388,6 +1606,17 @@
   {
    "command": "*",
    "name": "documents",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
+   "name": "egress_policy_versions",
    "permissive": true,
    "policy": "tenant_isolation",
    "roles": [
@@ -1959,6 +2188,17 @@
   },
   {
    "command": "*",
+   "name": "step_up_grants",
+   "permissive": true,
+   "policy": "tenant_isolation",
+   "roles": [
+    "PUBLIC"
+   ],
+   "using": "(organization_id = lattice_current_org_id())",
+   "with_check": "(organization_id = lattice_current_org_id())"
+  },
+  {
+   "command": "*",
    "name": "sync_record_failures",
    "permissive": true,
    "policy": "tenant_isolation",
@@ -2332,6 +2572,12 @@
   {
    "grantable": false,
    "grantee": "lattice_app",
+   "name": "egress_policy_versions",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
    "name": "encrypted_secrets",
    "privilege": "SELECT"
   },
@@ -2627,6 +2873,12 @@
    "grantable": false,
    "grantee": "lattice_worker",
    "name": "sources",
+   "privilege": "SELECT"
+  },
+  {
+   "grantable": false,
+   "grantee": "lattice_app",
+   "name": "step_up_grants",
    "privilege": "SELECT"
   },
   {
@@ -2767,6 +3019,13 @@
   {
    "forced": true,
    "kind": "r",
+   "name": "egress_policy_versions",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
    "name": "encrypted_secrets",
    "owner": "lattice_owner",
    "rls": true
@@ -2894,6 +3153,13 @@
    "forced": true,
    "kind": "r",
    "name": "sources",
+   "owner": "lattice_owner",
+   "rls": true
+  },
+  {
+   "forced": true,
+   "kind": "r",
+   "name": "step_up_grants",
    "owner": "lattice_owner",
    "rls": true
   },
@@ -3076,6 +3342,22 @@
   {
    "deferrable": false,
    "enabled": "O",
+   "function": "lattice_bump_egress_version()",
+   "initially_deferred": false,
+   "name": "model_providers",
+   "trigger": "trg_model_providers_egress_version"
+  },
+  {
+   "deferrable": true,
+   "enabled": "O",
+   "function": "lattice_require_provider_audit()",
+   "initially_deferred": true,
+   "name": "model_providers",
+   "trigger": "trg_model_providers_setup_audit"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
    "function": "lattice_set_updated_at()",
    "initially_deferred": false,
    "name": "model_providers",
@@ -3096,6 +3378,22 @@
    "initially_deferred": false,
    "name": "oidc_connections",
    "trigger": "trg_oidc_connections_updated_at"
+  },
+  {
+   "deferrable": false,
+   "enabled": "O",
+   "function": "lattice_bump_egress_version()",
+   "initially_deferred": false,
+   "name": "org_settings",
+   "trigger": "trg_org_settings_egress_version"
+  },
+  {
+   "deferrable": true,
+   "enabled": "O",
+   "function": "lattice_require_egress_settings_audit()",
+   "initially_deferred": true,
+   "name": "org_settings",
+   "trigger": "trg_org_settings_setup_audit"
   },
   {
    "deferrable": false,
@@ -3124,6 +3422,14 @@
   {
    "deferrable": true,
    "enabled": "O",
+   "function": "lattice_require_credential_audit()",
+   "initially_deferred": true,
+   "name": "provider_credentials",
+   "trigger": "trg_provider_credentials_setup_audit"
+  },
+  {
+   "deferrable": true,
+   "enabled": "O",
    "function": "lattice_require_scim_token_audit()",
    "initially_deferred": true,
    "name": "scim_tokens",
@@ -3136,6 +3442,14 @@
    "initially_deferred": false,
    "name": "sources",
    "trigger": "trg_sources_updated_at"
+  },
+  {
+   "deferrable": true,
+   "enabled": "O",
+   "function": "lattice_require_step_up_audit()",
+   "initially_deferred": true,
+   "name": "step_up_grants",
+   "trigger": "trg_step_up_grants_setup_audit"
   },
   {
    "deferrable": false,

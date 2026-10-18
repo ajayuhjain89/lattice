@@ -275,10 +275,17 @@ Shared non-primitive pieces: `components/record` (the record grammar), `componen
     *Apply change* in a sticky action row. Every write leaves a persistent result line.
 11. **Audit ledger.** "Entries can't be edited or deleted", days under ink rules, each
     entry time · action and subject · the change · actor and quoted reason; keyset paging.
-12. **Egress lattice** (AI providers). A hatched read-only band naming the audited
-    commands, the policy line, levels × providers (filled may be sent, hatched not sent,
-    each cell named and explained on focus), the levels that never leave Lattice, the
-    provider ledger.
+12. **Egress lattice** (AI providers; editable since P12.5). The API's AI status line, a
+    hatched band stating the rule (raising needs a fresh sign-in, lowering applies at once),
+    the policy as ruled facts with *Change policy*, levels × providers drawn from the
+    server's reading (filled may be sent, hatched not sent, each cell named and explained on
+    focus), the levels that never leave Lattice, one ruled record per generation provider
+    (a status line in words — *Sends nothing above Internal*, never a green "connected" —
+    and configuration, approval, trust boundary, API key and latest test kept apart; *Test*
+    and an actions menu), the deployment's embedding ledger. Changes reuse the access Now →
+    After table; an escalation adds a boundary callout, the organization's name typed and
+    *Continue to sign in again*; the return from the identity provider is the page's one
+    tinted region until applied or dismissed. Keys go into empty masked fields only.
 13. **States: four families** (`StateBlock`). *Quiet* (nothing to show), *Boundary* (not
     available — identical for nonexistent and unreadable), *Fault* (the API's fixed
     message, its request reference, *Try again*), *Wait* (a limit, in time-signal ochre;

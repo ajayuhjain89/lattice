@@ -91,6 +91,7 @@ GENERATION_OUTCOMES: Final = frozenset(
         "timeout",
         "deadline_exceeded",
         "network",
+        "outbound_blocked",
         "unauthorized",
         "rate_limited",
         "quota_exhausted",
@@ -120,6 +121,10 @@ GENERATION_DECISIONS: Final = frozenset(
         "provider_data_use",
         "policy_unrecognised",
         "question_classification",
+        # P12.5: the outbound policy refused the endpoint; the call-time re-check refused.
+        "outbound_blocked",
+        "policy_changed",
+        "credential_revoked",
     }
 )
 REJECTION_CODES: Final = frozenset(
@@ -176,6 +181,48 @@ SSO_OUTCOMES: Final = frozenset(
         "inactive",
         "rate_limited",
         "test_completed",
+        "step_up_completed",
+    }
+)
+# P12.5: egress escalation commits and refusals, step-up results, provider tests.
+EGRESS_ESCALATION_OUTCOMES: Final = frozenset(
+    {
+        "committed",
+        "step_up_required",
+        "grant_invalid",
+        "grant_consumed",
+        "grant_expired",
+        "grant_mismatch",
+        "session_ended",
+        "policy_changed",
+    }
+)
+STEP_UP_OUTCOMES: Final = frozenset(
+    {
+        "granted",
+        "not_fresh",
+        "session_mismatch",
+        "assurance_insufficient",
+        "step_up_invalid",
+        "mismatched",
+        "not_provisioned",
+        "sign_in_failed",
+        "token_invalid",
+        "provider_unavailable",
+        "invalid_configuration",
+        "outbound_blocked",
+        "credentials_rejected",
+    }
+)
+PROVIDER_TEST_RESULTS: Final = frozenset(
+    {
+        "valid",
+        "invalid_credential",
+        "configuration_invalid",
+        "provider_unavailable",
+        "outbound_blocked",
+        "credential_missing",
+        "unsupported",
     }
 )
 SCIM_OPERATIONS_SET: Final = frozenset(
@@ -470,6 +517,25 @@ WAL_ARCHIVE_LAST_SUCCESS = Gauge(
 CLOCK_SKEW = Gauge(
     "lattice_clock_skew_seconds",
     "This process's clock minus the database's clock (API readiness checks, worker polls).",
+    registry=REGISTRY,
+)
+EGRESS_ESCALATIONS = Counter(
+    "lattice_egress_escalations_total",
+    "Attempts to commit an AI egress escalation (D-34) by fixed outcome: committed with a "
+    "fresh step-up grant, or refused.",
+    ["outcome"],
+    registry=REGISTRY,
+)
+STEP_UPS = Counter(
+    "lattice_step_ups_total",
+    "Egress step-up re-authentications (D-34) by fixed outcome.",
+    ["outcome"],
+    registry=REGISTRY,
+)
+PROVIDER_TESTS = Counter(
+    "lattice_provider_tests_total",
+    "Administrator provider tests (no organization content) by provider and fixed result.",
+    ["provider", "result"],
     registry=REGISTRY,
 )
 BUILD_INFO = Gauge(

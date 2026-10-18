@@ -182,6 +182,9 @@ async def _build(conn: AsyncConnection, spec: WorldSpec) -> Built:
             "'internal', 'working') RETURNING id",
             o=org,
         )
+        # Policy writes are bound to their organization, as every product writer binds
+        # it (0021's policy-version trigger refuses an unbound one, even a superuser's).
+        await conn.execute(text("SELECT set_config('app.org_id', :o, true)"), {"o": str(org)})
         await conn.execute(
             text(
                 "INSERT INTO model_providers (organization_id, purpose, provider, model, "
@@ -190,6 +193,7 @@ async def _build(conn: AsyncConnection, spec: WorldSpec) -> Built:
             ),
             {"o": org, "m": FAKE.model},
         )
+        await conn.execute(text("SELECT set_config('app.org_id', '', true)"))
         departments = [
             await _one(
                 conn,

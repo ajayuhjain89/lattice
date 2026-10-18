@@ -378,6 +378,12 @@ async def test_organization_controlled_needs_the_class_allowed_and_an_explicit_a
             }
         ]
     )
+    # The operator's configuration approves for internal explicitly (P12.5); without an
+    # explicit approval -- withdrawn here -- a generation record receives nothing.
+    async with org.owner.tenant_transaction(org.id) as s:
+        await s.execute(
+            text("UPDATE model_providers SET approved_at = NULL WHERE purpose = 'generation'")
+        )
     first = await run(app_db, org, "tom", QUESTION, harness)
     assert first.trace["egress"]["decision_reason"] == "provider_unapproved"
     await configure_generation(
@@ -419,6 +425,41 @@ async def test_another_organizations_configuration_is_never_used(
     outcome = await run(app_db, org, "tom", QUESTION, harness)
     assert outcome.trace["egress"]["decision_reason"] == "not_configured"
     assert harness.builds == 0
+
+
+async def test_an_operators_environment_key_serves_only_the_organization_it_was_recorded_for(
+    app_db: Database, owner_db: Database, org: Org
+) -> None:
+    """P12.0 compatibility and tenant isolation (ADR-011, P12.5): an operator-recorded
+    ``env:`` reference still serves its organization; the same deployment key is nothing
+    to another organization configured for the same provider (no fallback)."""
+    environ = {"LATTICE_PROVIDER_SECRET_HALDEN_GEMINI": KEY}
+    await _gemini(org, data_origin="synthetic")
+    await set_credential(
+        org, "gemini", "env:LATTICE_PROVIDER_SECRET_HALDEN_GEMINI", data_use="paid"
+    )
+    other = await new_org(owner_db, "veridian")
+    await other.member("tom")
+    await other.document("internal", "Onboarding checklist", [INTERNAL])
+    await _gemini(other, data_origin="synthetic")
+    valid = {
+        "claims": [],
+        "conflicts": [],
+        "unknowns": [],
+        "clarifying_question": "",
+        "status": "insufficient_evidence",
+    }
+    harness = Harness(outputs=[valid])
+    served = await run(app_db, org, "tom", QUESTION, harness, environ=environ)
+    assert served.trace["egress"]["decision_reason"] is None
+    assert [s.get_secret_value() for s in harness.secrets_seen] == [KEY]
+    assert len(harness.requests) == 1
+
+    refused = Harness(outputs=[valid])
+    outcome = await run(app_db, other, "tom", QUESTION, refused, environ=environ)
+    assert outcome.trace["egress"]["decision_reason"] == "credential_unavailable"
+    assert refused.builds == 0
+    assert refused.secrets_seen == []
 
 
 class _CountingStore(EnvironmentSecretStore):

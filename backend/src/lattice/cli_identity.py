@@ -150,6 +150,13 @@ async def run(args: argparse.Namespace) -> int:
                     subjects_unchanged=args.subjects_unchanged,
                     secret_value=value,
                     keyring=operator_keyring() if value is not None else None,
+                    **(
+                        {"step_up_acr": None}
+                        if args.no_step_up_acr
+                        else {"step_up_acr": args.step_up_acr}
+                        if args.step_up_acr
+                        else {}
+                    ),
                     reason=reason,
                     actor=actor,
                 )
@@ -283,6 +290,19 @@ def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]")
     )
     update.add_argument("--issuer")
     update.add_argument("--subject-claim")
+    acr = update.add_mutually_exclusive_group()
+    acr.add_argument(
+        "--step-up-acr",
+        action="append",
+        metavar="ACR",
+        help="an acr value an administrator's egress step-up must assert (repeatable; "
+        "D-34): only what your identity provider really asserts for a strong method",
+    )
+    acr.add_argument(
+        "--no-step-up-acr",
+        action="store_true",
+        help="no assurance requirement (a fresh sign-in is still required)",
+    )
     update.add_argument(
         "--subjects-unchanged",
         action="store_true",

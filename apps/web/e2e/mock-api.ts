@@ -25,8 +25,10 @@ import {
   PREVIEW_ADD_KESTREL,
   PREVIEW_REINSTATE,
   NOT_FOUND,
+  PREVIEW_LOWER_EXTERNAL,
   PROVIDERS,
   SETUP_FRESH,
+  STEP_UP_GRANTED,
   SOURCES_ADMIN,
   SOURCES_MEMBER,
   TRACE_ADMIN,
@@ -45,7 +47,15 @@ export interface MockOptions {
   ) => S["Answer"] | { status: number; body: unknown; headers?: Record<string, string> } | "network";
   evidence?: Record<string, S["EvidenceDetail"]>;
   traces?: Record<string, S["AskerTrace"] | S["AdminTrace"]>;
-  providers?: S["ProvidersResponse"] | "forbidden";
+  providers?: S["ProviderSettings"] | "forbidden";
+  /** P12.5: the preview of an egress change (default: PREVIEW_LOWER_EXTERNAL). */
+  providerPreview?: (change: Record<string, unknown>) => S["ChangePreview"] | { status: number; body: unknown };
+  /** Answer for every provider write (default: 200 with the current settings, unchanged). */
+  providerWrite?: (method: string, path: string, body: unknown) => S["ProviderSettings"] | { status: number; body: unknown } | undefined;
+  /** The step-up result (GET .../step-ups/{id}); POST .../step-ups answers with a URL back to the page. */
+  stepUp?: S["StepUpOut"];
+  /** Answer for POST .../{id}/test (default: valid). */
+  providerTest?: S["TestOut"]["result"];
   /** Milliseconds before the Ask response (to observe the pending state). */
   askDelay?: number;
   sources?: S["MemberSourcesResponse"];
@@ -112,6 +122,7 @@ export interface MockLog {
   reinstates: { id: string; body: S["ReinstateRequest"] }[];
   accountWrites: { path: string; body: unknown }[];
   identityWrites: { method: string; path: string; body: unknown }[];
+  providerWrites: { method: string; path: string; body: unknown }[];
 }
 
 const json = (route: Route, status: number, body: unknown, headers: Record<string, string> = {}) =>
@@ -140,6 +151,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     reinstates: [],
     accountWrites: [],
     identityWrites: [],
+    providerWrites: [],
   };
   const answer = (route: Route, ok: number, result: unknown) =>
     typeof result === "object" && result !== null && "status" in result && "body" in result && typeof result.status === "number"
@@ -150,6 +162,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
   // reload after a write reads what the write returned.
   const members: Record<string, S["MemberAccess"]> = { ...(options.member ?? { [MEMBER_MAYA.member.id]: MEMBER_MAYA }) };
   let identity: S["IdentitySettings"] | "forbidden" = options.identitySettings ?? IDENTITY_VERIFIED;
+  let providers: S["ProviderSettings"] | "forbidden" = options.providers ?? PROVIDERS;
   const forbidden = (route: Route) =>
     json(route, 403, { error: { code: "permission_denied", message: "You don't have permission to do this.", request_id: "req-403" } });
   const evidence = options.evidence ?? DETAILS;
@@ -322,12 +335,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
       const found = traces[tr[1]!];
       return found ? json(route, 200, found) : json(route, 404, NOT_FOUND);
     }
-    if (path === "/v1/admin/providers" && method === "GET") {
-      const p = options.providers ?? PROVIDERS;
-      return p === "forbidden"
-        ? json(route, 403, { error: { code: "permission_denied", message: "You don't have permission to do this.", request_id: "req-403" } })
-        : json(route, 200, p);
-    }
+    if (path.startsWith("/v1/admin/providers")) return providersRoute(route, path, method, request.postDataJSON?.() ?? null);
     if (path === "/v1/admin/setup" && method === "GET") {
       const setup = options.setup ?? SETUP_FRESH;
       if (setup === "forbidden") return forbidden(route);
@@ -472,6 +480,36 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
   return log;
 
   /** Identity administration (P12.4), as the API answers it, on a stateful copy. */
+  // AI providers (P12.5): the page re-reads after each write; a write answers with settings.
+  function providersRoute(route: Route, path: string, method: string, body: Record<string, unknown> | null) {
+    if (providers === "forbidden") return forbidden(route);
+    if (path === "/v1/admin/providers" && method === "GET") return json(route, 200, providers);
+    if (method !== "GET") log.providerWrites.push({ method, path, body });
+    if (path === "/v1/admin/providers/changes/preview" && method === "POST") {
+      const result = options.providerPreview?.((body?.change ?? {}) as Record<string, unknown>) ?? PREVIEW_LOWER_EXTERNAL;
+      return answer(route, 200, result);
+    }
+    if (path === "/v1/admin/providers/step-ups" && method === "POST") {
+      const id = options.stepUp?.id ?? STEP_UP_GRANTED.id;
+      const written = options.providerWrite?.(method, path, body);
+      if (written) return answer(route, 201, written);
+      return json(route, 201, { step_up_id: id, authorization_url: `/settings/providers?step_up=${id}` });
+    }
+    const stepUp = /^\/v1\/admin\/providers\/step-ups\/([^/]+)$/.exec(path);
+    if (stepUp && method === "GET") {
+      const found = options.stepUp ?? STEP_UP_GRANTED;
+      return found.id === stepUp[1] ? json(route, 200, found) : json(route, 404, NOT_FOUND);
+    }
+    const tested = /^\/v1\/admin\/providers\/([^/]+)\/test$/.exec(path);
+    if (tested && method === "POST") {
+      return json(route, 200, { provider_id: tested[1], result: options.providerTest ?? "valid", at: "2026-10-17T09:30:00Z", note: "A test proves only that the credential or endpoint works." });
+    }
+    const written = options.providerWrite?.(method, path, body);
+    if (written && "body" in written) return json(route, written.status, written.body);
+    if (written) providers = written;
+    return json(route, path === "/v1/admin/providers" && method === "POST" ? 201 : 200, providers);
+  }
+
   function identityRoute(route: Route, path: string, method: string, body: Record<string, unknown> | null) {
     const settings = identity;
     if (settings === "forbidden") return forbidden(route);

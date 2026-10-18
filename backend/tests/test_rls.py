@@ -64,6 +64,9 @@ TENANT_TABLES = (
     "outbound_targets",
     # Phase 12 (P12.3)
     "account_external_refs",
+    # Phase 12 (P12.5)
+    "egress_policy_versions",
+    "step_up_grants",
 )
 # Tables the runtime role may not read in full (written and read by operator tools; of
 # oidc_connections it reads named columns since 0014, all of them since 0020 -- the
@@ -309,8 +312,25 @@ async def two_orgs(owner_db: Database, app_db: Database) -> TwoOrgs:
     await _populate(owner_db, a)
     await _populate(owner_db, b)
     sessions = SessionService(app_db, SessionPolicy(idle_timeout=_HOUR, absolute_timeout=_HOUR))
-    await sessions.create(user_id=a.user_id, organization_id=a.organization_id)
-    await sessions.create(user_id=b.user_id, organization_id=b.organization_id)
+    for member in (a, b):
+        _, principal = await sessions.create(
+            user_id=member.user_id, organization_id=member.organization_id
+        )
+        # Phase 12 (P12.5): a step-up grant of the member's own session.
+        async with owner_db.tenant_transaction(member.organization_id) as s:
+            await s.execute(
+                text(
+                    "INSERT INTO step_up_grants (organization_id, membership_id, session_id, "
+                    "attempt_id, change, change_digest, reason, policy_version, auth_time, "
+                    "expires_at) VALUES (:o, :m, :s, gen_random_uuid(), '{}', "
+                    "sha256('c'::bytea), 'r', 0, now(), now() + interval '1 minute')"
+                ),
+                {
+                    "o": member.organization_id,
+                    "m": member.membership_id,
+                    "s": principal.session_id,
+                },
+            )
     return TwoOrgs(a, b)
 
 

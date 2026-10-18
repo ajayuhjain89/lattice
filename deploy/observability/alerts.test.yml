@@ -332,6 +332,28 @@ tests:
     exp_alerts: []
 - interval: 1m
   input_series:
+  - series: lattice_egress_escalations_total{job="lattice-api",outcome="committed"}
+    values: 0 0 1 1
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: LatticeEgressEscalation
+    exp_alerts:
+    - exp_labels:
+        severity: ticket
+        team: security
+      exp_annotations:
+        summary: An administrator raised what may leave Lattice (egress escalation committed).
+        runbook: docs/runbook.md#1017-egress-escalation
+- interval: 1m
+  input_series:
+  - series: lattice_egress_escalations_total{job="lattice-api",outcome="step_up_required"}
+    values: 0 1 2 3
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: LatticeEgressEscalation
+    exp_alerts: []
+- interval: 1m
+  input_series:
   - series: lattice_member_lifecycle_total{job="lattice-api",change="suspended",actor_kind="scim"}
     values: 0+5x12
   alert_rule_test:

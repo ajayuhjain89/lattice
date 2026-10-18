@@ -34,7 +34,7 @@ describe("OrganizationScreen", () => {
     expect(ai).toHaveTextContent("Needs attention");
     expect(ai).toHaveTextContent("The generation provider's credential is missing or cannot be used");
     expect(ai).toHaveTextContent("gemini · gemini-3.5-flash-lite · Questions default to Internal");
-    expect(within(ai).getByRole("link", { name: "View AI providers" })).toHaveAttribute("href", "/settings/providers");
+    expect(within(ai).getByRole("link", { name: "Open AI providers" })).toHaveAttribute("href", "/settings/providers");
     expect(row(list, "Identity provider")).toHaveTextContent("Last sign-in 8 Oct 2026, 08:41:07 UTC");
     expect(row(list, "Account mapping")).toHaveTextContent("2 unmapped references");
   });

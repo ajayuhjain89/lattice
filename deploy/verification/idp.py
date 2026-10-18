@@ -10,6 +10,10 @@ flow: discovery, JWKS, PKCE (S256), state and nonce round-trips, client authenti
 There is no login page. The "browser" (deploy/verification/identity_check.py) names the
 person by adding ``persona=<subject>`` to the authorization request; the provider
 approves at once and redirects to the client's redirect URI with a one-time code.
+Every authorization is therefore a fresh authentication: the ID token's ``auth_time`` is
+the moment of the authorization request (P12.5, D-34: ``max_age`` is honoured by
+construction; ``prompt=login`` changes nothing). ``IDP_ACR`` (optional) is asserted as
+``acr`` -- a label for drills, not a real authentication method.
 
 An operator endpoint drives the drills: ``PUT /admin/state`` (bearer
 ``IDP_ADMIN_TOKEN``) replaces the registered clients ``{client_id: secret | null}`` and
@@ -61,6 +65,7 @@ class Grant:
     redirect_uri: str
     client_id: str
     expires: float
+    auth_time: int
 
 
 class State:
@@ -157,7 +162,9 @@ class Handler(BaseHTTPRequestHandler):
                 }
             if "offsets" in body:
                 STATE.offsets = {
-                    k: int(v) for k, v in body["offsets"].items() if k in ("iat", "exp")
+                    k: int(v)
+                    for k, v in body["offsets"].items()
+                    if k in ("iat", "exp", "auth_time")
                 }
         self._json(200, {"clients": sorted(STATE.clients), "offsets": STATE.offsets})
 
@@ -192,6 +199,7 @@ class Handler(BaseHTTPRequestHandler):
                 redirect_uri=query["redirect_uri"],
                 client_id=query["client_id"],
                 expires=time.time() + CODE_TTL_SECONDS,
+                auth_time=int(time.time()),
             )
         location = f"{query['redirect_uri']}?{urlencode({'code': code, 'state': query['state']})}"
         self.send_response(302)
@@ -245,6 +253,9 @@ class Handler(BaseHTTPRequestHandler):
             "exp": now + offsets.get("exp", TOKEN_TTL_SECONDS),
             "nonce": grant.nonce,
             "email": f"{grant.subject}@verification.invalid",
+            # The person authenticated when they were sent here (no IdP session to reuse).
+            "auth_time": grant.auth_time + offsets.get("auth_time", 0),
+            **({"acr": os.environ["IDP_ACR"]} if os.environ.get("IDP_ACR") else {}),
         }
         id_token = jwt.encode(claims, STATE.key, algorithm="RS256", headers={"kid": STATE.kid})
         self._json(

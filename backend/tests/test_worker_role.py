@@ -62,6 +62,10 @@ WORKER_TABLES = {
     "outbound_targets": set(),
     # Phase 12 (P12.3): a sync resolves references through the mappings, read-only.
     "account_external_refs": {"SELECT"},
+    # Phase 12 (P12.5): egress administration is none of a sync's business (a sync's
+    # embedding record still raises the version, through a definer trigger).
+    "egress_policy_versions": set(),
+    "step_up_grants": set(),
 }
 
 

@@ -366,9 +366,12 @@ def outbound_client(
     *,
     ssl_context: ssl.SSLContext | None = None,
     connect_timeout: float = CONNECT_TIMEOUT_SECONDS,
+    timeout: float = TOTAL_TIMEOUT_SECONDS,
+    base_url: str = "",
 ) -> httpx.AsyncClient:
     """An HTTP client that can reach ``target`` only, through ``GuardedBackend``: no
-    redirects, no environment proxies, no retries."""
+    redirects, no environment proxies, no retries. ``timeout``: per read/write/pool (a
+    generation call may take minutes; discovery and keys keep the 10-second default)."""
     transport = httpx.AsyncHTTPTransport(retries=0, trust_env=False)
     # httpx 0.28 builds its httpcore pool privately; replace it with one whose network
     # backend is the guarded one (tests/test_outbound.py pins this attribute).
@@ -382,7 +385,8 @@ def outbound_client(
         transport=transport,
         follow_redirects=False,
         trust_env=False,
-        timeout=httpx.Timeout(TOTAL_TIMEOUT_SECONDS, connect=connect_timeout),
+        timeout=httpx.Timeout(timeout, connect=connect_timeout),
+        base_url=base_url,
     )
 
 

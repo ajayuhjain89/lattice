@@ -140,7 +140,13 @@ _ANSWERED_SQL = text(
 )
 
 
-async def _ai(
+_LAST_TEST_SQL = text(
+    "SELECT last_test_result, last_test_credential_id FROM model_providers "
+    "WHERE organization_id = :o AND id = :p AND last_test_at IS NOT NULL"
+)
+
+
+async def ai_facts(
     session: AsyncSession,
     org: uuid.UUID,
     default_sensitivity: str,
@@ -148,6 +154,7 @@ async def _ai(
     factory: GenerationFactory,
     secrets: SecretStore,
 ) -> AiFacts:
+    """The organization's generation configuration as the invocation rule sees it."""
     config = await records.generation_config(session, org)
     if config is None:
         return AiFacts()
@@ -159,11 +166,23 @@ async def _ai(
         enabled=True,
         provider=config.record.provider,
         model=config.record.model,
+        approved=config.record.explicitly_approved,
     )
     try:
         declared = factory.declare(config, credential)
     except GenerationUnavailable:
         return AiFacts(**{**base.__dict__, "unusable": True})
+    outbound_permitted = True
+    if declared.deployment == "organization_controlled":
+        policy = await policy_for(session, org, "generation")
+        outbound_permitted = access_class(policy, config.endpoint or "") != "not_permitted"
+    last_test = (await session.execute(_LAST_TEST_SQL, {"o": org, "p": config.id})).one_or_none()
+    current_test = (
+        None
+        if last_test is None
+        or last_test.last_test_credential_id != (credential.id if credential else None)
+        else str(last_test.last_test_result)
+    )
     available = False
     if credential is not None:
         sealed = await load_sealed(
@@ -181,13 +200,16 @@ async def _ai(
         training_opt_out=declared.training_opt_out,
     )
     return AiFacts(
-        configured=True,
-        enabled=True,
-        provider=config.record.provider,
-        model=config.record.model,
-        credential_required=declared.requires_credential,
-        credential_available=available,
-        allows_default=may_send(default_sensitivity, decision.level),
+        **{
+            **base.__dict__,
+            "outbound_permitted": outbound_permitted,
+            "credential_required": declared.requires_credential,
+            "credential_present": credential is not None,
+            "credential_available": available,
+            "last_test_result": current_test,
+            "allows_default": config.record.explicitly_approved
+            and may_send(default_sensitivity, decision.level),
+        }
     )
 
 
@@ -212,7 +234,7 @@ async def gather(
         active_members=people.active_members,
         **identity.__dict__,
         default_question_sensitivity=egress.default_query_sensitivity,
-        ai=await _ai(
+        ai=await ai_facts(
             session,
             org,
             egress.default_query_sensitivity,

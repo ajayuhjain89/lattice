@@ -13,8 +13,10 @@ policies live in the migration.
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -24,7 +26,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy import text as sql_text
-from sqlalchemy.dialects.postgresql import CITEXT
+from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from lattice.db.base import Base
@@ -156,6 +158,9 @@ class OidcConnection(Base):
     last_test_at: Mapped[datetime | None]
     last_test_kind: Mapped[str | None] = mapped_column(Text)
     last_test_result: Mapped[str | None] = mapped_column(Text)
+    # 0021: the ``acr`` values an egress step-up must assert (operator-configured; NULL =
+    # a fresh authentication is required, not a particular method).
+    step_up_acr_values: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
 
 
 class OidcLoginAttempt(Base):
@@ -174,6 +179,12 @@ class OidcLoginAttempt(Base):
             ["organization_id", "membership_id"],
             ["memberships.organization_id", "memberships.id"],
             name="fk_oidc_login_attempts_membership",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["session_id"],
+            ["sessions.id"],
+            name="fk_oidc_login_attempts_session",
             ondelete="CASCADE",
         ),
         UniqueConstraint("state_hash"),
@@ -199,6 +210,49 @@ class OidcLoginAttempt(Base):
     observed_identifier: Mapped[str | None] = mapped_column(Text)
     completed_at: Mapped[datetime | None]
     proof_used_at: Mapped[datetime | None]
+    # 0021, purpose ``step_up`` (D-34): the administrator's session, the exact previewed
+    # egress change, its reason and the policy version it was previewed on.
+    session_id: Mapped[uuid.UUID | None]
+    change: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    reason: Mapped[str | None] = mapped_column(Text)
+    policy_version: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class StepUpGrant(Base):
+    """A single-use authorization for one egress escalation (D-34, 0021): created by the
+    OIDC callback after a fresh identity-provider re-authentication, bound to the
+    organization, the administrator, their session, the exact change and the policy
+    version it was previewed on; consumed by ``lattice_apply_egress_change``."""
+
+    __tablename__ = "step_up_grants"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "membership_id"],
+            ["memberships.organization_id", "memberships.id"],
+            name="fk_step_up_grants_membership",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["session_id"], ["sessions.id"], name="fk_step_up_grants_session", ondelete="CASCADE"
+        ),
+        UniqueConstraint("attempt_id", name="uq_step_up_grants_attempt"),
+        Index("ix_step_up_grants_organization_session", "organization_id", "session_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_DEFAULT)
+    organization_id: Mapped[uuid.UUID]
+    membership_id: Mapped[uuid.UUID]
+    session_id: Mapped[uuid.UUID]
+    attempt_id: Mapped[uuid.UUID]
+    change: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    change_digest: Mapped[bytes] = mapped_column(LargeBinary)
+    reason: Mapped[str] = mapped_column(Text)
+    policy_version: Mapped[int] = mapped_column(BigInteger)
+    auth_time: Mapped[datetime]
+    acr: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    expires_at: Mapped[datetime]
+    consumed_at: Mapped[datetime | None]
 
 
 class DirectoryIdentity(Base):

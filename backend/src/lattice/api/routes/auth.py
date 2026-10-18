@@ -1,4 +1,5 @@
 import logging
+import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request, Response, status
@@ -10,7 +11,7 @@ from lattice.api.schemas import DevLoginRequest, MeResponse
 from lattice.config import Settings
 from lattice.errors import ErrorResponse, LatticeError
 from lattice.identity.dev_provider import DevIdentityProvider
-from lattice.identity.oidc import OidcFailure, OidcSignIn, TestCompleted
+from lattice.identity.oidc import OidcFailure, OidcSignIn, StepUpCompleted, TestCompleted
 from lattice.log import log_event
 from lattice.ratelimit import RateLimited
 
@@ -177,6 +178,17 @@ async def oidc_callback(
     state: str | None = None,
     error: str | None = None,
 ) -> Response:
+    async def current_session() -> uuid.UUID | None:
+        """The Lattice session this browser presents (a step-up must return to the session
+        it was bound to). Read only for a step-up; never created, rotated or revoked."""
+        token = request.cookies.get(settings.session_cookie_name)
+        if not token:
+            return None
+        try:
+            return (await sessions.authenticate(token)).session_id
+        except LatticeError:
+            return None
+
     try:
         await limits.sign_in.hit(client_address(request))
         signed = await _oidc(request).complete(
@@ -185,7 +197,16 @@ async def oidc_callback(
             state=state,
             binding=request.cookies.get(_binding_cookie(settings)),
             provider_error=error is not None,
+            current_session=current_session,
         )
+        if isinstance(signed, StepUpCompleted):
+            # An egress step-up (P12.5, D-34): no session is created or changed; back to
+            # the AI providers page, which reads the result by its ID.
+            stepped = RedirectResponse(
+                f"{signed.return_to}?step_up={signed.attempt_id}", status_code=303
+            )
+            _forget_binding(stepped, settings)
+            return stepped
         if isinstance(signed, TestCompleted):
             # An administrator's test sign-in (P12.4): no session is created or changed;
             # back to the identity settings, which read the result by its ID.

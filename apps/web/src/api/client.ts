@@ -64,7 +64,18 @@ import type {
   OrganizationChange,
   SetupOrganization,
   OwnActivityResponse,
-  ProvidersResponse,
+  ChangePreview,
+  ChangeRequest,
+  CredentialRequest,
+  EgressChange,
+  EndpointRequest,
+  NewProviderRequest,
+  ProviderSettings,
+  ProviderTestRun,
+  RevokeCredentialRequest,
+  StepUp,
+  StepUpRequest,
+  StepUpStarted,
   ReinstateRequest,
   SetupStatus,
   SyncJob,
@@ -133,7 +144,28 @@ export const api = {
       http.GET("/v1/traces/{trace_id}", { params: { path: { trace_id: id } }, signal }),
     ),
   providers: (signal?: AbortSignal) =>
-    call<ProvidersResponse>(() => http.GET("/v1/admin/providers", { signal })),
+    call<ProviderSettings>(() => http.GET("/v1/admin/providers", { signal })),
+  // AI providers, BYOK and egress (Phase 12, P12.5). Keys travel in one request body and
+  // never come back; an escalation goes through a fresh identity-provider sign-in.
+  createProvider: (body: NewProviderRequest) => call<ProviderSettings>(() => http.POST("/v1/admin/providers", { body })),
+  previewEgressChange: (change: EgressChange) =>
+    call<ChangePreview>(() => http.POST("/v1/admin/providers/changes/preview", { body: { change } })),
+  applyEgressChange: (body: ChangeRequest) => call<ProviderSettings>(() => http.POST("/v1/admin/providers/changes", { body })),
+  startStepUp: (body: StepUpRequest) => call<StepUpStarted>(() => http.POST("/v1/admin/providers/step-ups", { body })),
+  stepUp: (id: string, signal?: AbortSignal) =>
+    call<StepUp>(() => http.GET("/v1/admin/providers/step-ups/{step_up_id}", { params: { path: { step_up_id: id } }, signal })),
+  applyStepUp: (id: string) =>
+    call<ProviderSettings>(() => http.POST("/v1/admin/providers/step-ups/{step_up_id}/apply", { params: { path: { step_up_id: id } } })),
+  setProviderEndpoint: (id: string, body: EndpointRequest) =>
+    call<ProviderSettings>(() => http.PUT("/v1/admin/providers/{provider_id}/endpoint", { params: { path: { provider_id: id } }, body })),
+  setProviderCredential: (id: string, body: CredentialRequest) =>
+    call<ProviderSettings>(() => http.PUT("/v1/admin/providers/{provider_id}/credential", { params: { path: { provider_id: id } }, body })),
+  revokeProviderCredential: (id: string, body: RevokeCredentialRequest) =>
+    call<ProviderSettings>(() =>
+      http.POST("/v1/admin/providers/{provider_id}/credential/revoke", { params: { path: { provider_id: id } }, body }),
+    ),
+  testProvider: (id: string) =>
+    call<ProviderTestRun>(() => http.POST("/v1/admin/providers/{provider_id}/test", { params: { path: { provider_id: id } } })),
   setup: (signal?: AbortSignal) => call<SetupStatus>(() => http.GET("/v1/admin/setup", { signal })),
   renameOrganization: (body: OrganizationChange) =>
     call<SetupOrganization>(() => http.PATCH("/v1/admin/organization", { body })),

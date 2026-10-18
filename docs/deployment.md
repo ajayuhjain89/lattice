@@ -243,9 +243,9 @@ secret**: session tokens are random and stored as SHA-256 hashes.
 | Platform admin DB credential | platform owner | bootstrap, restore, logical export | per platform policy | — | no |
 | `LATTICE_OIDC_SECRET_<NAME>` (OIDC client secret) | organization's IdP administrator + operator | api (token exchange) | IdP-driven (runbook §9): same reference with a new value — the provider keeps both secrets during the switch, rolling api restart, then the old one is removed at the provider; or a new reference — the variable into every api instance first (rolling restart), then `lattice sso update --client-secret-ref` (P11.3), then the old variable removed. No session impact | yes, for a new value | no: the database holds only the reference `env:…` |
 | SCIM bearer tokens | organization administrator (Settings → Identity, P12.4) or operator (`lattice scim token create`) | the organization's IdP | *Rotate* (replacement now, old refused at once), or for no interruption: create a second → switch the IdP → revoke the old | no | hash only (SHA-256) + last four characters |
-| `LATTICE_PROVIDER_SECRET_<NAME>` (BYOK) | organization administrator via operator | api (generation; the worker presents no organization credential — its embedding provider is a deployment setting, P12.1 call-graph check) | add new variable → rolling restart → `lattice provider credential set` (revokes the old reference) → remove old variable | yes, to add a variable | no: reference only |
+| `LATTICE_PROVIDER_SECRET_<NAME>` (BYOK, operator-managed) | organization administrator via operator (or the administrator enters a key in the product instead: `vault:`, P12.5) — a deployment variable is recorded for one organization at a time and never becomes another's fallback | api (generation; the worker presents no organization credential — its embedding provider is a deployment setting, P12.1 call-graph check) | add new variable → rolling restart → `lattice provider credential set` (revokes the old reference) → remove old variable | yes, to add a variable | no: reference only |
 | Master keys `LATTICE_SECRET_KEYS` (P12.1) | operator | api, operators (never worker, migrate, web) | add new key + make it active + rolling restart → `lattice secrets rekey` → remove old key (keep it offline while old backups matter); runbook §9.1 | yes | **no** — and must be backed up separately: a restore without the key cannot open stored credentials |
-| Encrypted credentials (`vault:<id>`, P12.1) | operators (`org create`, `sso update --client-secret-stdin`, `provider credential set --value-stdin`); administrators set and replace OIDC client secrets in Settings → Identity (P12.4), provider keys from P12.5 | api (OIDC token exchange, generation) | a new value is sealed into a new row; the old ciphertext is destroyed (NULL); revocation destroys it | no | ciphertext only (AES-256-GCM, bound to organization, secret row, owner record, credential type and key ID) |
+| Encrypted credentials (`vault:<id>`, P12.1) | operators (`org create`, `sso update --client-secret-stdin`, `provider credential set --value-stdin`); administrators set and replace OIDC client secrets in Settings → Identity (P12.4) and provider API keys in Settings → AI providers (P12.5: sealed in the API, the previous ciphertext destroyed; administrators can never name an `env:` variable) | api (OIDC token exchange, generation) | a new value is sealed into a new row; the old ciphertext is destroyed (NULL); revocation destroys it | no | ciphertext only (AES-256-GCM, bound to organization, secret row, owner record, credential type and key ID) |
 | `LATTICE_CLIENT_KEY_SECRET` (P11.4) | operator | api | replace + rolling restart (resets pre-auth counters; during the roll the two key versions count separately, so a client may get up to twice the limit for a minute) | yes | no: the database holds only HMAC outputs |
 | Session tokens | — (generated) | browsers | rotated at every sign-in | no | hash only |
 | OIDC login state (state, nonce, PKCE verifier) | — (generated) | api | ten-minute single-use attempts | no | yes, transiently (`oidc_login_attempts`, deleted by retention, §11) |
@@ -749,3 +749,28 @@ P11.2.
   [App Platform 30 s default timeout](https://docs.digitalocean.com/support/my-php-app-is-timing-out-and-throwing-5xx-errors/),
   [App spec](https://docs.digitalocean.com/products/app-platform/reference/app-spec/),
   [community: 100 s hard limit](https://www.digitalocean.com/community/questions/app-platform-request-timeout).
+
+
+## P12.5 upgrade notes (migration 0021)
+
+- **Generation needs an explicit approval.** 0021 records an approval (`approved_at =
+  created_at`, at the level already recorded) for every existing generation record, so
+  nothing changes on upgrade. From now on a record an administrator creates in the product
+  starts disabled and unapproved; `lattice provider configure` keeps approving for
+  `internal`.
+- **Provider calls apply the outbound policy.** An organization-controlled generation
+  server (an Ollama endpoint outside the deployment) is reachable only as a target the
+  operator registered for the organization and purpose `generation`: before deploying, run
+  `lattice outbound allow --org <slug> --url <https://host:port> --purpose generation
+  --reason "…"` for each such endpoint. A loopback
+  (`local`) Ollama is the operator's and needs no registration. Gemini needs nothing (a
+  public https endpoint; the guard checks its addresses at connect time). No new
+  environment variable.
+- **Egress escalations in the product need OIDC.** Raising an organization's AI egress in
+  Settings → AI providers needs a fresh sign-in at its identity provider (D-34); an
+  organization without an OIDC connection raises through the operator commands. An
+  operator may require a sign-in assurance for the step-up per connection: `lattice sso
+  update --org <slug> --step-up-acr <acr value> --reason "…"` — only values the identity
+  provider really asserts for a strong method (otherwise every raise is refused).
+- **Alerting:** `LatticeEgressEscalation` (ticket, security) fires once per committed
+  escalation (runbook §10.17).
