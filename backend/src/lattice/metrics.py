@@ -233,7 +233,7 @@ SYNC_STATUSES: Final = frozenset({"succeeded", "partial", "failed", "aborted"})
 SYNC_STAGES: Final = frozenset(
     {"read", "parse", "validate", "normalize", "map_access", "chunk", "embed", "persist"}
 )
-JOB_KINDS: Final = frozenset({"source_sync"})
+JOB_KINDS: Final = frozenset({"source_sync", "import_check"})
 JOB_OUTCOMES: Final = frozenset({"succeeded", "failed", "retry", "abandoned"})
 # Phase 11 (P11.6): membership lifecycle by actor (provisioning bursts, threat T23) and
 # session revocations by cause.
@@ -249,6 +249,25 @@ REVOCATION_REASONS: Final = frozenset(
         "sso_identity_changed",
         "operator_revoke",
         "organization_suspended",
+    }
+)
+# Phase 12 (P12.6): import outcomes and refusal codes (lattice.imports.limits).
+IMPORT_OUTCOMES: Final = frozenset({"accepted", "rejected"})
+IMPORT_CODES: Final = frozenset(
+    {
+        "archive_invalid",
+        "too_large",
+        "too_many_entries",
+        "ratio_exceeded",
+        "unsafe_path",
+        "link_refused",
+        "duplicate_name",
+        "unsupported_layout",
+        "upload_incomplete",
+        "upload_timeout",
+        "storage_full",
+        "upload_abandoned",
+        "upload_failed",
     }
 )
 # Phase 12 (P12.1): recoverable credentials that could not be opened (C3.5).
@@ -432,6 +451,18 @@ JOBS = Counter(
     "lattice_jobs_total",
     "Background jobs finished by kind and outcome (retry: will run again).",
     ["kind", "outcome"],
+    registry=REGISTRY,
+)
+IMPORTS = Counter(
+    "lattice_imports_total",
+    "Export uploads by outcome and refusal code (none when accepted).",
+    ["outcome", "code"],
+    registry=REGISTRY,
+)
+IMPORT_DURATION = Histogram(
+    "lattice_import_duration_seconds",
+    "Time from registering an upload to its acceptance or refusal.",
+    buckets=_LONG,
     registry=REGISTRY,
 )
 JOB_DURATION = Histogram(

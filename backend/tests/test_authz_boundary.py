@@ -112,6 +112,11 @@ ALLOWED: dict[str, frozenset[str]] = {
     # --- Phase 11 (P11.5): restore verification names the access tables only to check
     # that their audit triggers survived a restore (catalog lookups, no row is read).
     "db.restore": frozenset({"access_group_members", "document_grants"}),
+    # --- Phase 12 (P12.6): source administration shows and edits a chat source's
+    # per-channel ``sensitivity`` setting, read from the source's configuration (the
+    # value the next sync applies through ingestion.access). No document is read and no
+    # condition is built; edits go through lattice_update_source.
+    "sources.admin": frozenset({"sensitivity"}),
 }
 
 

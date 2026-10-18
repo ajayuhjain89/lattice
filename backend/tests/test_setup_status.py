@@ -232,6 +232,20 @@ CASES: list[tuple[str, SetupFacts, str, str]] = [
     ("sources", replace(BASE, synced_sources=0), "required", "not_synced"),
     ("sources", replace(BASE, syncing_sources=1, failed_sources=1), "in_progress", "syncing"),
     ("sources", replace(BASE, failed_sources=1), "attention", "sync_failed"),
+    # P12.6: an organization-managed source waiting for its first export, or whose latest
+    # upload was refused (a refusal outranks an earlier synced source).
+    (
+        "sources",
+        replace(BASE, synced_sources=0, awaiting_import_sources=1),
+        "required",
+        "awaiting_import",
+    ),
+    (
+        "sources",
+        replace(BASE, awaiting_import_sources=1, rejected_import_sources=1),
+        "attention",
+        "import_rejected",
+    ),
     ("sources", BASE, "complete", "synced"),
     ("accounts", BASE, "optional", "not_needed"),
     ("accounts", replace(BASE, account_sources=1, synced_sources=0), "blocked", "sources_required"),

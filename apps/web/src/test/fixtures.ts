@@ -1023,6 +1023,11 @@ export const SOURCES_ADMIN: S["AdminSourcesResponse"] = {
     {
       id: SOURCE.drive,
       key: "drive",
+      managed_by: "operator",
+      version: 1,
+      import_status: null,
+      rejected_upload_code: null,
+      next_action: "wait",
       name: "Halden Drive",
       connector_type: "document_repository",
       status: "active",
@@ -1060,6 +1065,11 @@ export const SOURCES_ADMIN: S["AdminSourcesResponse"] = {
     {
       id: SOURCE.support,
       key: "support",
+      managed_by: "operator",
+      version: 1,
+      import_status: null,
+      rejected_upload_code: null,
+      next_action: "map_references",
       name: "Halden Support (Zendesk)",
       connector_type: "ticketing",
       status: "active",
@@ -1086,6 +1096,11 @@ export const SOURCES_ADMIN: S["AdminSourcesResponse"] = {
     {
       id: SOURCE.slack,
       key: "slack",
+      managed_by: "operator",
+      version: 1,
+      import_status: null,
+      rejected_upload_code: null,
+      next_action: "start_sync",
       name: "Halden Slack",
       connector_type: "chat_export",
       status: "active",
@@ -1123,6 +1138,7 @@ export const SOURCE_FAILED: S["AdminSourceOut"] = {
   key: "wiki",
   name: "Halden Wiki",
   documents: 37,
+  next_action: "retry_sync",
   last_synced_at: "2026-09-29T06:00:09Z",
   last_succeeded_at: "2026-09-12T06:00:04Z",
   acl_synced_at: "2026-09-12T06:00:04Z",
@@ -1153,6 +1169,217 @@ export const SOURCE_FAILED: S["AdminSourceOut"] = {
 
 /** "Now" for tests that read ages and day headings (the fixtures' week). */
 export const FIXTURE_NOW = "2026-09-29T10:00:00Z";
+
+// --- export sources operated in the product (Phase 12, P12.6) ---------------------------------
+
+export const ORG_SOURCE = {
+  escalations: "5d2c1b0a-6666-4e3f-9a8b-7c6d5e4f3a06",
+  handbook: "5d2c1b0a-7777-4e3f-9a8b-7c6d5e4f3a07",
+};
+
+const UPLOAD_LIMITS: S["UploadLimits"] = {
+  available: true,
+  formats: ["zip", "jsonl"],
+  max_upload_bytes: 100 * 1024 * 1024,
+  max_expanded_bytes: 512 * 1024 * 1024,
+  max_file_bytes: 32 * 1024 * 1024,
+  max_entries: 20_000,
+};
+
+/** A ready export of tickets whose check found two references, one still without an account. */
+export const IMPORT_ESCALATIONS: S["ImportOut"] = {
+  id: "8a1b2c3d-6666-4e5f-8a9b-0c1d2e3f4a06",
+  status: "ready",
+  format: "zip",
+  current: true,
+  size_bytes: 1_843_200,
+  sha256: "9f2c4e6a8b0d1f3e5a7c9e1b3d5f7a9c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f",
+  entries: 3,
+  ignored_entries: 1,
+  expanded_bytes: 7_340_032,
+  rejected_code: null,
+  created_at: "2026-09-29T09:20:00Z",
+  received_at: "2026-09-29T09:20:04Z",
+  ready_at: "2026-09-29T09:20:05Z",
+  superseded_at: null,
+  check: {
+    checked_at: "2026-09-29T09:20:09Z",
+    error_code: null,
+    records_seen: 42,
+    would_create: 39,
+    would_update: 0,
+    would_update_access: 0,
+    unchanged: 0,
+    invalid_records: 1,
+    would_quarantine: 2,
+    would_delete: 0,
+    deletion_guard: null,
+    failure_codes: [
+      { code: "access_unmappable:account", count: 2 },
+      { code: "malformed_json", count: 1 },
+    ],
+    unresolved_references: [
+      { external_ref: "360009913", records: 2, state: "unmapped" },
+      { external_ref: "360001002", records: 5, state: "mapped" },
+    ],
+    unresolved_total: 2,
+  },
+};
+
+/** An organization-managed ticketing source with a checked export, never synced. */
+export const SOURCE_RECORD_ESCALATIONS: S["SourceDetail"] = {
+  id: ORG_SOURCE.escalations,
+  key: "escalations",
+  connector_type: "ticketing",
+  managed_by: "organization",
+  status: "active",
+  version: 3,
+  settings: {
+    name: "Halden Escalations",
+    default_sensitivity: "internal",
+    default_departments: [{ key: "support", name: "Support" }],
+    authority: "working",
+    account_scoped: true,
+    channel_sensitivities: {},
+  },
+  documents: 0,
+  created_at: "2026-09-29T09:15:00Z",
+  last_synced_at: null,
+  last_succeeded_at: null,
+  current_import: IMPORT_ESCALATIONS,
+  latest_upload: null,
+  job: null,
+  next_action: "map_references",
+  can_sync: true,
+  sync_blocked_by: null,
+  upload: UPLOAD_LIMITS,
+};
+
+/** A Markdown documents source just added: no export yet. */
+export const SOURCE_RECORD_NEW: S["SourceDetail"] = {
+  id: ORG_SOURCE.handbook,
+  key: "handbook",
+  connector_type: "document_repository",
+  managed_by: "organization",
+  status: "active",
+  version: 1,
+  settings: {
+    name: "Halden Handbook",
+    default_sensitivity: "internal",
+    default_departments: [],
+    authority: "working",
+    account_scoped: false,
+    channel_sensitivities: {},
+  },
+  documents: 0,
+  created_at: "2026-09-29T09:40:00Z",
+  last_synced_at: null,
+  last_succeeded_at: null,
+  current_import: null,
+  latest_upload: null,
+  job: null,
+  next_action: "upload_import",
+  can_sync: false,
+  sync_blocked_by: "import_required",
+  upload: { ...UPLOAD_LIMITS, formats: ["zip"] },
+};
+
+/** The operator-managed Drive source's record (Phase 4 workflow: `lattice sync`). */
+export const SOURCE_RECORD_DRIVE: S["SourceDetail"] = {
+  id: SOURCE.drive,
+  key: "drive",
+  connector_type: "document_repository",
+  managed_by: "operator",
+  status: "active",
+  version: 1,
+  settings: {
+    name: "Halden Drive",
+    default_sensitivity: "internal",
+    default_departments: [],
+    authority: "working",
+    account_scoped: false,
+    channel_sensitivities: {},
+  },
+  documents: 58,
+  created_at: "2026-09-01T08:00:00Z",
+  last_synced_at: "2026-09-28T07:12:40Z",
+  last_succeeded_at: "2026-09-28T07:12:40Z",
+  current_import: null,
+  latest_upload: null,
+  job: null,
+  next_action: "none",
+  can_sync: true,
+  sync_blocked_by: null,
+  upload: { ...UPLOAD_LIMITS, formats: ["zip"] },
+};
+
+/** The register's rows for the two organization-managed sources. */
+export const SOURCES_ADMIN_ORG: S["AdminSourceOut"][] = [
+  {
+    ...SOURCES_ADMIN.sources[1]!,
+    id: ORG_SOURCE.escalations,
+    key: "escalations",
+    name: "Halden Escalations",
+    managed_by: "organization",
+    version: 3,
+    import_status: "ready",
+    next_action: "map_references",
+    documents: 0,
+    last_synced_at: null,
+    last_succeeded_at: null,
+    acl_synced_at: null,
+    last_run: null,
+    failure_codes: [],
+    job: null,
+  },
+  {
+    ...SOURCES_ADMIN.sources[0]!,
+    id: ORG_SOURCE.handbook,
+    key: "handbook",
+    name: "Halden Handbook",
+    managed_by: "organization",
+    version: 1,
+    import_status: null,
+    next_action: "upload_import",
+    documents: 0,
+    last_synced_at: null,
+    last_succeeded_at: null,
+    acl_synced_at: null,
+    last_run: null,
+    failure_codes: [],
+    job: null,
+  },
+];
+
+export const UPLOAD_ACCEPTED: S["UploadResult"] = {
+  import: { ...IMPORT_ESCALATIONS, id: "8a1b2c3d-7777-4e5f-8a9b-0c1d2e3f4a07", check: null, entries: 12, ignored_entries: 2 },
+  check_queued: true,
+};
+
+export const UPLOAD_REFUSED_LAYOUT = {
+  error: {
+    code: "validation_failed",
+    message: "The upload was refused: The archive does not have the structure this source type reads.",
+    request_id: "req-upload-fixture",
+    details: [{ field: "import", issue: "unsupported_layout" }],
+  },
+} as const;
+
+export const DISCONNECT_PREVIEW_ESCALATIONS: S["DisconnectPreview"] = {
+  documents: 39,
+  chunks: 117,
+  account_mappings: 1,
+  imports: 1,
+  queued_jobs: 0,
+  sync_running: false,
+  operator_managed: false,
+};
+
+export const SOURCE_PREVIEW_WIDENS: S["SourceChangePreview"] = {
+  changes: [{ field: "default_sensitivity", before: "confidential", after: "internal", effect: "widens" }],
+  widens: true,
+  takes_effect: "next_sync",
+};
 
 // --- activity (Phase 8) --------------------------------------------------------------------
 

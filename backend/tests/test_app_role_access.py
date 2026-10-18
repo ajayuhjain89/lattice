@@ -81,6 +81,9 @@ APP_TABLES = {
     # egress functions (grants) and by triggers of every writer (versions).
     "egress_policy_versions": {"SELECT"},
     "step_up_grants": {"SELECT"},
+    # Phase 12 (P12.6, 0022): import metadata is read for the Sources record; written only
+    # by the fenced lattice_*_import functions.
+    "source_imports": {"SELECT"},
 }
 # Column-level privileges (table-level ones above).
 COLUMN_PRIVILEGES = {

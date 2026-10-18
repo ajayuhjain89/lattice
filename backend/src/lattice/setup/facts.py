@@ -99,7 +99,7 @@ async def identity_facts(session: AsyncSession, org: uuid.UUID) -> IdentityFacts
 _SOURCES_SQL = text(
     """
     WITH connected AS (
-      SELECT id, account_scoped, config FROM sources
+      SELECT id, account_scoped, config, managed_by, import_id FROM sources
       WHERE organization_id = :o AND status IN ('active', 'paused')
     ), latest AS (
       SELECT DISTINCT ON (r.source_id) r.source_id, r.id, r.status, r.started_at
@@ -112,7 +112,17 @@ _SOURCES_SQL = text(
       (SELECT count(*) FROM latest WHERE status IN ('succeeded', 'partial')) AS synced_sources,
       (SELECT count(*) FROM latest WHERE status = 'failed') AS failed_sources,
       (SELECT count(DISTINCT j.source_id) FROM jobs j JOIN connected c ON c.id = j.source_id
-        WHERE j.organization_id = :o AND j.status IN ('queued', 'running')) AS syncing_sources,
+        WHERE j.organization_id = :o AND j.status IN ('queued', 'running')
+          AND j.kind = 'source_sync') AS syncing_sources,
+      -- P12.6: organization-managed sources with no current import, and those whose
+      -- latest upload was refused.
+      (SELECT count(*) FROM connected c WHERE c.managed_by = 'organization'
+        AND c.import_id IS NULL) AS awaiting_import_sources,
+      (SELECT count(*) FROM connected c WHERE c.managed_by = 'organization'
+        AND c.import_id IS NULL AND (
+          SELECT i.rejected_code FROM source_imports i
+          WHERE i.organization_id = :o AND i.source_id = c.id
+          ORDER BY i.created_at DESC, i.id LIMIT 1) IS NOT NULL) AS rejected_import_sources,
       (SELECT count(*) FROM connected c
         WHERE c.account_scoped OR EXISTS (
           SELECT 1 FROM account_external_refs m
@@ -245,6 +255,8 @@ async def gather(
         synced_sources=sources.synced_sources,
         failed_sources=sources.failed_sources,
         syncing_sources=sources.syncing_sources,
+        awaiting_import_sources=sources.awaiting_import_sources,
+        rejected_import_sources=sources.rejected_import_sources,
         account_sources=sources.account_sources,
         unmapped_references=sources.unmapped_references,
         references_awaiting_sync=sources.references_awaiting_sync,

@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lattice.authz import AuthorizationContext, Document, readable_documents_predicate
 from lattice.jobs.queue import JobView, latest_jobs
+from lattice.sources.admin import next_action
 from lattice.sources.models import Source, SourceSyncRun, SyncRecordFailure
 
 DOCUMENTS = Document.__table__
@@ -108,6 +109,13 @@ class AdminSource:
     last_run: RunSummary | None
     failure_codes: list[FailureCount]
     job: JobView | None
+    # P12.6: who configures it, the edit version, its current import, the latest upload's
+    # refusal (when newer than the current import), and the next action (server-decided).
+    managed_by: str = "operator"
+    version: int = 1
+    import_status: str | None = None
+    rejected_upload_code: str | None = None
+    next_action: str = "none"
 
 
 @dataclass(frozen=True)
@@ -120,6 +128,47 @@ class FailureView:
     record_kind: str
     record: str
     created_at: datetime
+
+
+_IMPORTS_SQL = text(
+    """
+    SELECT s.id, ci.status AS import_status, ci.created_at AS import_created_at,
+           ci.check_error_code,
+           (SELECT count(*) FROM jsonb_array_elements(
+              coalesce(ci.check_result -> 'unresolved_references', '[]'::jsonb)) ref
+            WHERE NOT EXISTS (
+              SELECT 1 FROM account_external_refs m WHERE m.organization_id = :o
+                AND m.source_id = s.id AND m.external_ref = ref ->> 'ref'
+                AND m.account_id IS NOT NULL)) AS check_unmapped,
+           lu.rejected_code AS latest_rejected_code, lu.created_at AS latest_at
+    FROM sources s
+    LEFT JOIN source_imports ci ON ci.organization_id = s.organization_id AND ci.id = s.import_id
+    LEFT JOIN LATERAL (
+      SELECT i.rejected_code, i.created_at FROM source_imports i
+      WHERE i.organization_id = :o AND i.source_id = s.id
+      ORDER BY i.created_at DESC, i.id LIMIT 1) lu ON true
+    WHERE s.organization_id = :o
+    """
+)
+# References the latest run of each source could not map and that are still unmapped.
+_UNMAPPED_AFTER_RUN_SQL = text(
+    """
+    WITH latest AS (
+      SELECT DISTINCT ON (source_id) source_id, id FROM source_sync_runs
+      WHERE organization_id = :o ORDER BY source_id, started_at DESC, id
+    )
+    SELECT l.source_id, count(DISTINCT f.message_params ->> 'external_account_ref')
+    FROM latest l JOIN sync_record_failures f
+      ON f.organization_id = :o AND f.sync_run_id = l.id
+    WHERE f.error_code = 'access_unmappable:account' AND f.message_params ? 'external_account_ref'
+      AND NOT EXISTS (
+        SELECT 1 FROM account_external_refs m WHERE m.organization_id = :o
+          AND m.source_id = l.source_id
+          AND m.external_ref = f.message_params ->> 'external_account_ref'
+          AND m.account_id IS NOT NULL)
+    GROUP BY l.source_id
+    """
+)
 
 
 def _latest_runs() -> Any:
@@ -156,7 +205,12 @@ async def member_sources(session: AsyncSession, ctx: AuthorizationContext) -> li
         )
         .join(readable, readable.c.source_id == SOURCES.c.id)
         .outerjoin(latest, latest.c.source_id == SOURCES.c.id)
-        .where(SOURCES.c.organization_id == org, SOURCES.c.status == "active", readable.c.n > 0)
+        # A paused source's content stays searchable (P12.6): it stays listed.
+        .where(
+            SOURCES.c.organization_id == org,
+            SOURCES.c.status.in_(("active", "paused")),
+            readable.c.n > 0,
+        )
         .order_by(SOURCES.c.name, SOURCES.c.id)
     )
     return [MemberSource(*row) for row in rows]
@@ -204,6 +258,11 @@ async def admin_sources(session: AsyncSession, organization_id: uuid.UUID) -> li
         ):
             codes.setdefault(run_id, []).append(FailureCount(stage, code, int(count)))
     jobs = await latest_jobs(session, organization_id)
+    imports = {r.id: r for r in await session.execute(_IMPORTS_SQL, {"o": organization_id})}
+    unmapped = {
+        source_id: int(n)
+        for source_id, n in await session.execute(_UNMAPPED_AFTER_RUN_SQL, {"o": organization_id})
+    }
     result: list[AdminSource] = []
     for r in rows:
         run = (
@@ -218,6 +277,18 @@ async def admin_sources(session: AsyncSession, organization_id: uuid.UUID) -> li
                 error_code=r.run_error_code,
             )
             if r.run_id is not None
+            else None
+        )
+        imp = imports.get(r.id)
+        job = jobs.get(r.id)
+        active = job is not None and job.status in ("queued", "running")
+        has_import = imp is not None and imp.import_status is not None
+        invalid = imp is not None and has_import and imp.check_error_code is not None
+        rejected = (
+            imp.latest_rejected_code
+            if imp is not None
+            and imp.latest_rejected_code is not None
+            and (imp.import_created_at is None or imp.latest_at > imp.import_created_at)
             else None
         )
         result.append(
@@ -236,7 +307,25 @@ async def admin_sources(session: AsyncSession, organization_id: uuid.UUID) -> li
                 acl_synced_at=r.acl_synced_at,
                 last_run=run,
                 failure_codes=codes.get(r.run_id, [])[:10] if r.run_id else [],
-                job=jobs.get(r.id),
+                job=job,
+                managed_by=r.managed_by,
+                version=int(r.version),
+                import_status=imp.import_status if imp is not None else None,
+                rejected_upload_code=rejected,
+                next_action=(
+                    "none"
+                    if r.status == "deleting"
+                    else next_action(
+                        status=r.status,
+                        managed_by=r.managed_by,
+                        has_import=has_import,
+                        import_invalid=bool(invalid),
+                        check_unmapped=bool(imp is not None and imp.check_unmapped),
+                        job_active=active,
+                        latest_run=r.run_status,
+                        unmapped_after_run=unmapped.get(r.id, 0),
+                    )
+                ),
             )
         )
     return result

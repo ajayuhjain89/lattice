@@ -27,6 +27,9 @@ import {
   EV,
   EVIDENCE_ONLY,
   FIXTURE_NOW,
+  ORG_SOURCE,
+  SOURCES_ADMIN,
+  SOURCES_ADMIN_ORG,
   MANY_MEMBERS,
   MEMBER_MAYA,
   MEMBER_WIDE,
@@ -308,6 +311,24 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
     await at(page, { me: ME_LENA, adminSources: { sources: [] } });
     await page.goto("/sources");
     await page.getByRole("heading", { name: "No sources are connected" }).waitFor();
+  },
+  // P12.6: an organization-managed source's record (checked export, references waiting),
+  // a new one waiting for its first export, and the disconnect review.
+  "source-record": async (page) => {
+    await at(page, { me: ME_LENA, adminSources: { sources: [...SOURCES_ADMIN.sources, ...SOURCES_ADMIN_ORG] } });
+    await page.goto(`/sources/${ORG_SOURCE.escalations}`);
+    await page.getByTestId("check-result").waitFor();
+  },
+  "source-record-new": async (page) => {
+    await at(page, { me: ME_LENA, adminSources: { sources: [...SOURCES_ADMIN.sources, ...SOURCES_ADMIN_ORG] } });
+    await page.goto(`/sources/${ORG_SOURCE.handbook}`);
+    await page.getByTestId("no-import").waitFor();
+  },
+  "source-disconnect": async (page) => {
+    await at(page, { me: ME_LENA, adminSources: { sources: [...SOURCES_ADMIN.sources, ...SOURCES_ADMIN_ORG] } });
+    await page.goto(`/sources/${ORG_SOURCE.escalations}`);
+    await page.getByRole("button", { name: "Disconnect" }).click();
+    await page.getByTestId("disconnect-preview").waitFor();
   },
   "activity-member": async (page) => {
     await at(page);

@@ -308,27 +308,58 @@ re-embedding (they don't — access is joined at query time).
 
 ### sources
 
-**As built (Phase 4).** One row per configured source, upserted by `lattice sync` from
-the organization's `sources.yaml` (Lattice-side configuration, `lattice.sources.config`).
+**As built (Phase 4; P12.6).** One row per configured source: *operator-managed* rows are
+upserted by `lattice sync` from the organization's `sources.yaml` (Lattice-side
+configuration, `lattice.sources.config`); *organization-managed* rows are created and
+edited by administrators in the product through fenced functions (migration 0022,
+ADR-017) and fed by uploaded imports.
 
 | Field               | Type    | Req     | Notes                                                        |
 | ------------------- | ------- | ------- | ------------------------------------------------------------ |
 | id                  | uuid PK | CITE    | UQ (organization_id, id) — composite FK target                |
 | organization_id     | uuid    | ISO     |                                                              |
 | key                 | citext  | VER     | Stable operator key (`drive`, `support`, `slack`), UQ per organization, slug format |
-| connector_type      | enum    |         | `document_repository`, `ticketing`, `chat_export`. A sync refuses a changed type (`source_config:connector_type_changed`) |
+| connector_type      | enum    |         | `document_repository`, `ticketing`, `chat_export`. Immutable (0022 trigger, every writer: `source_identity_immutable`, also for `key` and the organization); a sources file naming another type is refused (`source_config:connector_type_changed`) |
 | name                | text    | CITE    | "Halden Drive"                                               |
-| config              | jsonb   |         | The validated configuration: export path, default departments (by key), ticketing organization → account key, channel settings. Never secrets |
+| config              | jsonb   |         | The validated configuration: export path (operator-managed only — a CHECK forbids a `path` in an organization-managed source's configuration), default departments (by key), channel settings. Account mappings live in `account_external_refs` (P12.3). Never secrets |
 | default_sensitivity | enum    | AUTHZ   | **Required** (`internal` or `confidential`). Applied when a record carries no sensitivity |
 | account_scoped      | bool    | ACCT    | If true, every record must map to an account or it is not indexed |
 | authority           | enum    | AUTH-R  | Default authority for records: `system_of_record`, `working`, `conversational` |
-| status              | enum    | DEL     | `active`, `paused`, `deleting` (a `deleting` source refuses syncs). *Current:* nothing sets `paused`. *Phase 12 target:* pause/resume from the product (P12.6) |
+| status              | enum    | DEL     | `active`, `paused`, `deleting`. **Paused** (P12.6, `lattice_set_source_paused`): requested syncs are refused and a queued one fails when claimed; its documents stay searchable; checks and uploads still work. A `deleting` source refuses everything until purged |
+| managed_by          | text    |         | P12.6: `operator` (the sources file; every source before 0022) or `organization` (the product). The product edits only the latter's settings; `lattice sync` refuses the latter (`source_config:managed_in_product`) |
+| version             | bigint  | VER     | P12.6: raised by a trigger on every administrator-visible setting change (never by sync timestamps); product edits are optimistic (409 `source_changed`) |
+| import_id           | uuid?   |         | P12.6: the **current import** (organization-managed sources), composite FK to `source_imports`; a trigger requires a *ready* import of this very source (`import_not_attachable`) |
 | opaque_ref_key      | bytea   | DBG     | 32 random bytes keying the opaque references of its failures (security-model §10). Never displayed |
 | last_synced_at, last_succeeded_at, acl_synced_at | timestamptz? | DBG, FRESH | Last run; last fully successful run; last run that applied the source's access state |
 
 Default departments are kept in `config` by key and validated against the organization
 on every sync (`source_config:unknown_department`), rather than as a `uuid[]` column
 that could not carry foreign keys.
+
+### source_imports (Phase 12 P12.6, migration 0022)
+
+An export uploaded to an organization-managed source: IDs, sizes, a digest, counts, fixed
+codes and times — never a path, a file name or content. Storage locations are derived from
+the organization and import UUIDs by the import store (`lattice.imports`;
+deployment.md §4).
+
+| Field | Type | Notes |
+| ----- | ---- | ----- |
+| id, organization_id | uuid | UQ (organization_id, id); server-generated |
+| source_id | uuid? | composite FK to `sources`, `ON DELETE SET NULL (source_id)`: after a purge an import keeps no source and can never be attached again |
+| format | text | `zip` \| `jsonl` (Tickets only) |
+| status | text | `receiving → validating → ready \| rejected`; `ready → superseded`; `→ deleted` |
+| size_bytes, sha256, entries, ignored_entries, expanded_bytes | | of the received upload; `entries` = files the connector reads, `ignored_entries` = everything else |
+| rejected_code | text? | a fixed code (C8.3 as built), set exactly for `rejected` (and kept when deleted) |
+| created_by | text | `member:<uuid>` (CHECK) |
+| created_at, received_at, ready_at, superseded_at, deleted_at | timestamptz | |
+| checked_at, check_result, check_error_code | | the latest **check** (the dry-run pipeline, written by `lattice_record_import_check`): counts, failure codes with counts, the exact unresolved account references with record counts — validated key by key, no free text |
+
+Forced RLS with the tenant policy; `lattice_app` and `lattice_worker` have `SELECT` only.
+One `receiving`/`validating` row per source at a time (an upload older than an hour is
+abandoned). Rejected imports, superseded imports no queued or running job reads, abandoned
+uploads and imports without a source are marked deleted by the worker's import retention,
+which then removes their files.
 
 ### source_sync_runs
 
@@ -340,7 +371,8 @@ chunks_policy_excluded, embedding_failures`), `deletion_guard_tripped`, `error_c
 (CHECK: a code such as `deletion_guard:mass_deletion`, never free text). There is no
 `error_summary` column. `incremental` mode is not built (no connector supports
 checkpoints yet). A run is `partial` when any record failed, any embedding failed or
-the deletion guard tripped; `succeeded` only when nothing did. Req: **DBG**, **DEL**.
+the deletion guard tripped; `succeeded` only when nothing did. P12.6: `import_id` (composite
+FK, `SET NULL`) records the import an organization-managed source's run read. Req: **DBG**, **DEL**.
 
 ### sync_record_failures
 
@@ -364,7 +396,8 @@ only.
 | Field | Type | Notes |
 | ----- | ---- | ----- |
 | id, organization_id | uuid | UQ (organization_id, id) |
-| kind | text | CHECK `source_sync` |
+| kind | text | CHECK `source_sync` \| `import_check` (P12.6: the dry run of an import; writes nothing, calls no provider, allowed on a paused source) |
+| import_id | uuid? | P12.6: the import the job reads, set when requested (a sync reads the import that was current then); a definer trigger requires it to belong to the job's source, and an organization-managed source's sync to name its current import |
 | source_id | uuid | composite FK to `sources`, CASCADE |
 | mode | text | CHECK `full` \| `acl_only` (the web app requests `full`) |
 | requested_by | uuid | composite FK to `memberships` (the administrator), CASCADE |

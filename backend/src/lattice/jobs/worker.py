@@ -18,9 +18,19 @@ Loop::
 
 Properties:
 
-* **Configuration is read-only here.** The source's configuration and export path are
-  the ones the operator's last ``lattice sync`` recorded; the worker's role can update
-  only a source's three sync timestamps, so no job can redirect a sync elsewhere.
+* **Configuration is read-only here.** An operator-managed source's configuration and
+  export path are the ones the operator's last ``lattice sync`` recorded; an
+  organization-managed source (P12.6) syncs the import its job names -- resolved by ID
+  through the import store, never a path from the database -- and only while that import
+  is ``ready`` or ``superseded`` and belongs to the job's source. The worker's role can
+  update only a source's three sync timestamps, so no job can redirect a sync elsewhere.
+* **Checks** (``import_check``, P12.6): the same pipeline as a dry run (no writes, no
+  provider call) of the job's import; its counts and codes are recorded on the import
+  through ``lattice_record_import_check`` (validated key by key in the database).
+* **Import retention** (P12.6): every minute, ``lattice_expire_imports`` marks deleted
+  what may go (rejected, superseded and not read by an active job, abandoned uploads,
+  imports of purged sources) and the worker removes their files; directories without a
+  live import, older than an hour, are removed too (the API may have died mid-upload).
 * **Tenant-safe.** The worker's role sees every organization's *jobs* (IDs and codes
   only) and nothing else across organizations: every sync statement runs in a
   transaction bound to the job's organization, under forced row-level security, and a
@@ -46,6 +56,7 @@ Properties:
 
 import asyncio
 import contextlib
+import json
 import logging
 import time
 import uuid
@@ -54,9 +65,11 @@ from pathlib import Path
 from typing import Any, Final
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from lattice import metrics
 from lattice.db.engine import Database
+from lattice.imports.store import ImportStore, ImportUnavailable
 from lattice.ingestion.sync import SyncError, SyncOptions, SyncResult, sync_source
 from lattice.jobs.retention import RetentionPolicy, run_retention
 from lattice.log import log_event
@@ -87,7 +100,8 @@ _CLAIM_SQL = text(
     UPDATE jobs j SET status = 'running', attempts = j.attempts + 1, started_at = now(),
       lease_expires_at = now() + make_interval(secs => :lease), error_code = NULL
     FROM next WHERE j.id = next.id
-    RETURNING j.id, j.organization_id, j.kind, j.source_id, j.mode, j.attempts, j.max_attempts
+    RETURNING j.id, j.organization_id, j.kind, j.source_id, j.mode, j.attempts, j.max_attempts,
+      j.import_id
     """
 )
 _RENEW_SQL = text(
@@ -115,8 +129,19 @@ _ARCHIVER_SQL = text("SELECT last_archived_time, last_failed_time FROM pg_stat_a
 STATS_INTERVAL_SECONDS: Final = 60.0
 _SOURCE_SQL = text(
     "SELECT key, connector_type, name, config, default_sensitivity, account_scoped, authority, "
-    "status FROM sources WHERE organization_id = :o AND id = :s"
+    "status, managed_by FROM sources WHERE organization_id = :o AND id = :s"
 )
+_IMPORT_SQL = text(
+    "SELECT status, source_id FROM source_imports WHERE organization_id = :o AND id = :i"
+)
+_RECORD_CHECK_SQL = text("SELECT lattice_record_import_check(:i, CAST(:r AS jsonb), :e)")
+_EXPIRE_IMPORTS_SQL = text("SELECT organization_id, import_id FROM lattice_expire_imports(:n)")
+_LIVE_IMPORTS_SQL = text(
+    "SELECT id FROM source_imports WHERE organization_id = :o AND status <> 'deleted'"
+)
+IMPORT_RETENTION_INTERVAL_SECONDS: Final = 60.0
+ORPHAN_AGE_SECONDS: Final = 3600.0
+_CHECK_REFERENCES: Final = 200
 # An organization suspended by an operator (``lattice org suspend``, D-26) runs no sync.
 _ORGANIZATION_STATUS_SQL = text("SELECT status FROM organizations WHERE id = :o")
 
@@ -130,6 +155,7 @@ class ClaimedJob:
     mode: str
     attempt: int
     max_attempts: int
+    import_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -146,12 +172,16 @@ class _Unrunnable(Exception):
         self.code = code
 
 
-def source_config(row: Any) -> tuple[SourceConfig, Path]:
-    """Rebuild a source's configuration from its row, as the last CLI sync recorded it
-    (``ingestion.store.upsert_source``). The export path is the absolute path recorded
-    then; the API cannot change it (the runtime role only reads ``sources``)."""
+def source_config(row: Any, tree: Path | None = None) -> tuple[SourceConfig, Path]:
+    """Rebuild a source's configuration from its row. An operator-managed source reads the
+    absolute path its last CLI sync recorded (``ingestion.store.upsert_source``; the API
+    cannot change it); an organization-managed one reads ``tree``, its job's import as
+    the import store resolved it by ID."""
     stored: dict[str, Any] = dict(row.config or {})
-    path = stored.get("path")
+    if tree is not None:
+        path: object = str(tree)
+    else:
+        path = stored.get("path")
     if not isinstance(path, str) or not Path(path).is_absolute():
         raise _Unrunnable("source_config:path_unknown")
     config = SourceConfig(
@@ -196,12 +226,14 @@ class Worker:
         lease_seconds: int = 300,
         heartbeat: Heartbeat | None = None,
         retention: RetentionPolicy | None = None,
+        store: ImportStore | None = None,
     ) -> None:
         self.db = db
         self.embedding = embedding
         self.lease_seconds = lease_seconds
         self.heartbeat = heartbeat or Heartbeat()
         self.retention = retention or RetentionPolicy()
+        self.store = store
 
     # --- queue ------------------------------------------------------------------------
 
@@ -248,6 +280,37 @@ class Worker:
         """Retention (P11.4): every class's expired rows, in bounded batches, as far as
         the database's floors allow (``lattice.jobs.retention``)."""
         return await run_retention(self.db, self.retention)
+
+    async def import_retention(self) -> int:
+        """Remove the files of every import the database marked deleted, then of import
+        directories with no live import that are older than an hour. Returns the number
+        of import directories removed."""
+        store = self.store
+        if store is None:
+            return 0
+        removed = 0
+        while True:
+            async with self.db.unscoped_transaction() as s:
+                expired = (await s.execute(_EXPIRE_IMPORTS_SQL, {"n": 100})).all()
+            for organization_id, import_id in expired:
+                await asyncio.to_thread(store.delete, organization_id, import_id)
+                removed += 1
+            if len(expired) < 100:
+                break
+        cutoff = time.time() - ORPHAN_AGE_SECONDS
+        for organization_id in await asyncio.to_thread(store.organizations):
+            async with self.db.tenant_transaction(organization_id) as s:
+                live: set[uuid.UUID] = set(
+                    (await s.execute(_LIVE_IMPORTS_SQL, {"o": organization_id})).scalars()
+                )
+            for import_id, modified in await asyncio.to_thread(store.stored, organization_id):
+                if import_id not in live and modified < cutoff:
+                    await asyncio.to_thread(store.delete, organization_id, import_id)
+                    removed += 1
+        if removed:
+            metrics.MAINTENANCE_ROWS.labels(task="imports").inc(removed)
+        metrics.MAINTENANCE_LAST_SUCCESS.labels(task="imports").set(time.time())
+        return removed
 
     # --- one job ------------------------------------------------------------------------
 
@@ -304,6 +367,7 @@ class Worker:
         return outcome
 
     async def _execute(self, job: ClaimedJob) -> JobOutcome:
+        check = job.kind == "import_check"
         try:
             result = await self._sync(job)
         except _Unrunnable as exc:
@@ -311,6 +375,9 @@ class Worker:
         except SyncError as exc:
             if exc.code == "source_busy":
                 return await self._retry(job, exc.code)
+            if check:
+                # The check ran: the import cannot be synced as a whole (recorded on it).
+                return await self._checked(job, None, exc.code)
             return await self._finish(job, "failed", exc.code, None)
         except Exception as exc:
             # The run (if one opened) is already recorded aborted by the sync itself.
@@ -322,12 +389,24 @@ class Worker:
                 error_type=type(exc).__name__,
             )
             return await self._retry(job, "internal_error")
+        if check:
+            return await self._checked(job, result, None)
         if result.status == "failed":
             return await self._finish(job, "failed", result.error_code, result)
         return await self._finish(job, "succeeded", None, result)
 
+    async def _checked(
+        self, job: ClaimedJob, result: SyncResult | None, error: str | None
+    ) -> JobOutcome:
+        try:
+            await self._record_check(job, result, error)
+        except DBAPIError:
+            # The import went away meanwhile (replaced, or its source disconnected).
+            return await self._finish(job, "failed", "import_unavailable", None)
+        return await self._finish(job, "succeeded", None, None)
+
     async def _sync(self, job: ClaimedJob) -> SyncResult:
-        if job.kind != "source_sync":
+        if job.kind not in ("source_sync", "import_check"):
             raise _Unrunnable("job_kind_unsupported")
         async with self.db.tenant_transaction(job.organization_id) as s:
             organization = (
@@ -336,20 +415,85 @@ class Worker:
             row = (
                 await s.execute(_SOURCE_SQL, {"o": job.organization_id, "s": job.source_id})
             ).one_or_none()
+            imported = (
+                None
+                if job.import_id is None
+                else (
+                    await s.execute(_IMPORT_SQL, {"o": job.organization_id, "i": job.import_id})
+                ).one_or_none()
+            )
         if organization != "active":
             raise _Unrunnable("organization_suspended")
         if row is None:
             raise _Unrunnable("source_config:source_missing")
-        if row.status != "active":
+        check = job.kind == "import_check"
+        if row.status != "active" and not (check and row.status == "paused"):
             raise _Unrunnable(f"source_config:source_{row.status}")
-        config, path = source_config(row)
+        tree = None
+        if row.managed_by == "organization":
+            tree = self._tree(job, imported)
+        elif job.import_id is not None or check:
+            raise _Unrunnable("import_unavailable")
+        config, path = source_config(row, tree)
+        if check:
+            # The dry run: reads everything, writes nothing, calls no provider.
+            options = SyncOptions(dry_run=True, record_config=False)
+            return await sync_source(self.db, job.organization_id, config, path, None, options)
         # The recorded configuration is used as it is: the worker never writes it.
         options = SyncOptions(
-            mode="acl_only" if job.mode == "acl_only" else "full", record_config=False
+            mode="acl_only" if job.mode == "acl_only" else "full",
+            record_config=False,
+            import_id=job.import_id,
         )
         return await sync_source(
             self.db, job.organization_id, config, path, self.embedding, options
         )
+
+    def _tree(self, job: ClaimedJob, imported: Any) -> Path:
+        """The job's import, by ID, if it may still be read: an import of this very source
+        that is ready (or superseded while this job waited) -- never deleted."""
+        if job.import_id is None or imported is None:
+            raise _Unrunnable("import_unavailable")
+        if imported.source_id != job.source_id or imported.status not in ("ready", "superseded"):
+            raise _Unrunnable("import_unavailable")
+        if self.store is None:
+            raise _Unrunnable("storage_unavailable")
+        try:
+            return self.store.tree(job.organization_id, job.import_id)
+        except ImportUnavailable:
+            raise _Unrunnable("import_unavailable") from None
+
+    async def _record_check(
+        self, job: ClaimedJob, result: SyncResult | None, error: str | None
+    ) -> None:
+        """The check's counts and codes on the import (never a name or content)."""
+        payload = None
+        if result is not None:
+            refs = sorted(result.unmapped_refs.items(), key=lambda item: (-item[1], item[0]))
+            payload = json.dumps(
+                {
+                    "records_seen": result.records_seen,
+                    "would_create": result.created,
+                    "would_update": result.updated,
+                    "would_update_access": result.access_updated,
+                    "unchanged": result.unchanged,
+                    "invalid_records": result.failed,
+                    "would_quarantine": result.quarantined,
+                    "would_delete": result.would_delete,
+                    "deletion_guard": result.error_code if result.deletion_guard_tripped else None,
+                    "failure_codes": dict(sorted(result.failure_codes.items())),
+                    "unresolved_references": [
+                        {"ref": ref, "records": count} for ref, count in refs[:_CHECK_REFERENCES]
+                    ],
+                    "unresolved_total": len(refs),
+                },
+                sort_keys=True,
+            )
+        async with self.db.tenant_transaction(job.organization_id) as s:
+            await s.execute(
+                _RECORD_CHECK_SQL,
+                {"i": job.import_id, "r": payload, "e": None if payload else _job_code(error)},
+            )
 
     async def _finish(
         self, job: ClaimedJob, status: str, code: str | None, result: SyncResult | None
@@ -402,6 +546,18 @@ class Worker:
                 )
             self.heartbeat.beat()
 
+    async def _import_retention_safely(self) -> None:
+        try:
+            await self.import_retention()
+        except Exception as exc:  # the next pass retries; never stop the loop for it
+            metrics.MAINTENANCE_FAILURES.labels(task="imports").inc()
+            log_event(
+                _log,
+                logging.WARNING,
+                "maintenance.import_retention_failed",
+                error_type=type(exc).__name__,
+            )
+
     # --- the loop ------------------------------------------------------------------------
 
     async def run_forever(
@@ -418,6 +574,7 @@ class Worker:
                     next_maintenance = time.monotonic() + maintenance_seconds
                 if time.monotonic() >= next_stats:
                     await self.database_stats()
+                    await self._import_retention_safely()
                     next_stats = time.monotonic() + STATS_INTERVAL_SECONDS
                 metrics.JOBS_WAITING.set(await self.waiting())
                 metrics.CLOCK_SKEW.set(await self.db.clock_skew())

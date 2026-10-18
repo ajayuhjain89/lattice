@@ -232,4 +232,13 @@ async def test_openapi_documents_the_error_envelope(client: httpx.AsyncClient) -
         "/v1/admin/providers/{provider_id}/credential/revoke",
         "/v1/admin/providers/{provider_id}/endpoint",
         "/v1/admin/providers/{provider_id}/test",
+        # Phase 12 (P12.6): export sources, their settings, lifecycle and imports
+        "/v1/admin/sources/{source_id}",
+        "/v1/admin/sources/{source_id}/changes/preview",
+        "/v1/admin/sources/{source_id}/pause",
+        "/v1/admin/sources/{source_id}/resume",
+        "/v1/admin/sources/{source_id}/disconnect-preview",
+        "/v1/admin/sources/{source_id}/disconnect",
+        "/v1/admin/sources/{source_id}/imports",
+        "/v1/admin/sources/{source_id}/check",
     }

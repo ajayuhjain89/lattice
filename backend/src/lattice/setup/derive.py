@@ -24,8 +24,11 @@ refused in the last 24 hours); and five P12.5 adds for AI providers:
 ``ai_policy·blocked·outbound_blocked`` (its endpoint is not permitted by the outbound
 policy, or its latest test was refused by it), ``ai_policy·attention·credential_missing``
 (none set) and ``ai_policy·attention·credential_invalid`` (the provider rejected the
-current credential in its latest test). ``sources·awaiting_import`` / ``import_rejected`` arrive
-with imports (P12.6). Identity and provisioning link to ``/settings/identity`` (P12.4).
+current credential in its latest test). P12.6 builds C12's ``sources·required·awaiting_import``
+(an organization-managed source with no current import) and ``sources·attention·import_rejected``
+(its latest upload was refused), and ``sources·required·no_sources`` now links to ``/sources``
+(administrators create sources there). A queued or running *check* of an import is not a sync.
+Identity and provisioning link to ``/settings/identity`` (P12.4).
 """
 
 from dataclasses import dataclass, field
@@ -123,6 +126,10 @@ class SetupFacts:
     synced_sources: int = 0
     failed_sources: int = 0
     syncing_sources: int = 0
+    # P12.6: organization-managed sources without a current import / whose latest
+    # upload was refused (of those).
+    awaiting_import_sources: int = 0
+    rejected_import_sources: int = 0
     account_sources: int = 0
     # References the latest runs could not map and that are still unmapped (P12.3).
     unmapped_references: int = 0
@@ -238,6 +245,12 @@ MESSAGES: Final[dict[tuple[str, str], str]] = {
     ("sources", "no_sources"): "No source is connected yet.",
     ("sources", "not_synced"): "A source is connected but has not synced yet.",
     ("sources", "syncing"): "A sync is queued or running.",
+    ("sources", "awaiting_import"): (
+        "A source is waiting for its first export: upload one on its record."
+    ),
+    ("sources", "import_rejected"): (
+        "The latest export uploaded to a source was refused. Fix the export and upload it again."
+    ),
     ("sources", "sync_failed"): "The latest sync of a source failed.",
     ("sources", "synced"): "At least one source has synced.",
     ("accounts", "not_needed"): (
@@ -418,16 +431,21 @@ def _sources(f: SetupFacts) -> Category:
         "synced_sources": f.synced_sources,
         "failed_sources": f.failed_sources,
         "syncing_sources": f.syncing_sources,
+        "awaiting_import_sources": f.awaiting_import_sources,
     }
     action = Action("/sources", "Open Sources")
     if f.connected_sources == 0:
-        return _category("sources", "required", "no_sources", facts)
+        return _category("sources", "required", "no_sources", facts, action)
     if f.syncing_sources > 0:
         return _category("sources", "in_progress", "syncing", facts, action)
     if f.failed_sources > 0:
         return _category("sources", "attention", "sync_failed", facts, action)
+    if f.rejected_import_sources > 0:
+        return _category("sources", "attention", "import_rejected", facts, action)
     if f.synced_sources > 0:
         return _category("sources", "complete", "synced", facts, action)
+    if f.awaiting_import_sources > 0:
+        return _category("sources", "required", "awaiting_import", facts, action)
     return _category("sources", "required", "not_synced", facts, action)
 
 

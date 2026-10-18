@@ -47,6 +47,13 @@ ADMIN_SOURCE_KEYS = {
     "last_run",
     "failure_codes",
     "job",
+    # P12.6: who manages the source, its version, its current import's status (never a
+    # path or a file name) and the server's next action.
+    "managed_by",
+    "version",
+    "import_status",
+    "rejected_upload_code",
+    "next_action",
 }
 
 

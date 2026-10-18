@@ -34,6 +34,13 @@ class Job(Base):
             ["source_sync_runs.organization_id", "source_sync_runs.id"],
             ondelete="SET NULL (sync_run_id)",
         ),
+        # The import the job reads (P12.6): the source's current import when requested.
+        ForeignKeyConstraint(
+            ["organization_id", "import_id"],
+            ["source_imports.organization_id", "source_imports.id"],
+            ondelete="SET NULL (import_id)",
+        ),
+        Index("ix_jobs_import_id", "import_id", postgresql_where=text("import_id IS NOT NULL")),
         Index(
             "uq_jobs_one_active_per_source",
             "organization_id",
@@ -67,6 +74,7 @@ class Job(Base):
     run_after: Mapped[datetime] = mapped_column(server_default=text("now()"))
     lease_expires_at: Mapped[datetime | None]
     sync_run_id: Mapped[uuid.UUID | None]
+    import_id: Mapped[uuid.UUID | None]
     error_code: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
     started_at: Mapped[datetime | None]

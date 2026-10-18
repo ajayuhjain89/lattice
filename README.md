@@ -23,7 +23,14 @@ mapping never widens who can read a record) and P12.4 identity administration (S
 Identity: the OIDC connection — test sign-in, check, client secret sealed in the vault,
 client ID, issuer or claim with the administrator's own matched test sign-in,
 disable/enable — and SCIM tokens shown once, rotated, revoked; every OIDC request through
-the outbound policy); P12.5 providers, BYOK and egress with the D-34 step-up is delivered locally and awaits review; P12.6–P12.8 are not started.** What runs today: a FastAPI
+the outbound policy) and P12.5 providers, BYOK and egress with the D-34 step-up; P12.6
+customer-operable export sources (Sources → *Add source*, a record per source, exports
+uploaded with real progress into a filesystem import store with strict archive checks and
+their own ingress limit, a deterministic check before any sync, pause/resume and
+disconnect, the existing worker syncing from the import) is delivered locally and awaits
+review; P12.7–P12.8 are not started. The three source types are **export-based**
+(Markdown documents, Lattice ticket JSON Lines, Slack workspace export) — not live
+integrations.** What runs today: a FastAPI
 backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced
 row-level security for organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool

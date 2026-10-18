@@ -552,6 +552,18 @@
             "title": "Id",
             "type": "string"
           },
+          "import_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The current import's status, if any.",
+            "title": "Import Status"
+          },
           "job": {
             "anyOf": [
               {
@@ -600,13 +612,52 @@
             ],
             "title": "Last Synced At"
           },
+          "managed_by": {
+            "description": "operator: an operator's sources file configures it; organization: configured here and fed by uploaded exports.",
+            "enum": [
+              "operator",
+              "organization"
+            ],
+            "title": "Managed By",
+            "type": "string"
+          },
           "name": {
             "title": "Name",
             "type": "string"
           },
+          "next_action": {
+            "enum": [
+              "upload_import",
+              "replace_import",
+              "wait",
+              "map_references",
+              "start_sync",
+              "retry_sync",
+              "resume",
+              "none"
+            ],
+            "title": "Next Action",
+            "type": "string"
+          },
+          "rejected_upload_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The latest upload's refusal code, when it is newer than the current import.",
+            "title": "Rejected Upload Code"
+          },
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
           }
         },
         "required": [
@@ -624,7 +675,12 @@
           "acl_synced_at",
           "last_run",
           "failure_codes",
-          "job"
+          "job",
+          "managed_by",
+          "version",
+          "import_status",
+          "rejected_upload_code",
+          "next_action"
         ],
         "title": "AdminSourceOut",
         "type": "object"
@@ -2068,6 +2124,31 @@
         "title": "CredentialRequest",
         "type": "object"
       },
+      "DepartmentRef": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "DepartmentRef",
+        "type": "object"
+      },
       "DestinationOut": {
         "properties": {
           "access": {
@@ -2261,6 +2342,117 @@
           "members"
         ],
         "title": "DirectoryGroup",
+        "type": "object"
+      },
+      "DisconnectPreview": {
+        "properties": {
+          "account_mappings": {
+            "title": "Account Mappings",
+            "type": "integer"
+          },
+          "chunks": {
+            "title": "Chunks",
+            "type": "integer"
+          },
+          "documents": {
+            "title": "Documents",
+            "type": "integer"
+          },
+          "imports": {
+            "title": "Imports",
+            "type": "integer"
+          },
+          "operator_managed": {
+            "description": "An operator's sources file configures it: re-running the file connects it again as a new source.",
+            "title": "Operator Managed",
+            "type": "boolean"
+          },
+          "queued_jobs": {
+            "title": "Queued Jobs",
+            "type": "integer"
+          },
+          "sync_running": {
+            "title": "Sync Running",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "documents",
+          "chunks",
+          "account_mappings",
+          "imports",
+          "queued_jobs",
+          "sync_running",
+          "operator_managed"
+        ],
+        "title": "DisconnectPreview",
+        "type": "object"
+      },
+      "DisconnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_key": {
+            "maxLength": 63,
+            "minLength": 1,
+            "title": "Confirm Key",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reason",
+          "version",
+          "confirm_key"
+        ],
+        "title": "DisconnectRequest",
+        "type": "object"
+      },
+      "DisconnectResult": {
+        "properties": {
+          "account_mappings": {
+            "title": "Account Mappings",
+            "type": "integer"
+          },
+          "cancelled_jobs": {
+            "title": "Cancelled Jobs",
+            "type": "integer"
+          },
+          "chunks": {
+            "title": "Chunks",
+            "type": "integer"
+          },
+          "documents": {
+            "title": "Documents",
+            "type": "integer"
+          },
+          "imports": {
+            "title": "Imports",
+            "type": "integer"
+          },
+          "purged": {
+            "title": "Purged",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "documents",
+          "chunks",
+          "account_mappings",
+          "imports",
+          "cancelled_jobs",
+          "purged"
+        ],
+        "title": "DisconnectResult",
         "type": "object"
       },
       "DocumentExplanation": {
@@ -2936,6 +3128,24 @@
         "title": "EvidenceItem",
         "type": "object"
       },
+      "FailureCodeCount": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "count"
+        ],
+        "title": "FailureCodeCount",
+        "type": "object"
+      },
       "FailureCountOut": {
         "properties": {
           "code": {
@@ -3569,6 +3779,278 @@
         "title": "IdentitySetupStatus",
         "type": "object"
       },
+      "ImportCheck": {
+        "description": "The deterministic check of an import: the sync pipeline as a dry run (no writes,\nno provider call). Counts and codes only.",
+        "properties": {
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "deletion_guard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deletion Guard"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The import cannot be synced as a whole (e.g. a Slack export without users.json); null when the check read it.",
+            "title": "Error Code"
+          },
+          "failure_codes": {
+            "items": {
+              "$ref": "#/components/schemas/FailureCodeCount"
+            },
+            "title": "Failure Codes",
+            "type": "array"
+          },
+          "invalid_records": {
+            "title": "Invalid Records",
+            "type": "integer"
+          },
+          "records_seen": {
+            "title": "Records Seen",
+            "type": "integer"
+          },
+          "unchanged": {
+            "title": "Unchanged",
+            "type": "integer"
+          },
+          "unresolved_references": {
+            "items": {
+              "$ref": "#/components/schemas/UnresolvedReference"
+            },
+            "title": "Unresolved References",
+            "type": "array"
+          },
+          "unresolved_total": {
+            "title": "Unresolved Total",
+            "type": "integer"
+          },
+          "would_create": {
+            "title": "Would Create",
+            "type": "integer"
+          },
+          "would_delete": {
+            "title": "Would Delete",
+            "type": "integer"
+          },
+          "would_quarantine": {
+            "title": "Would Quarantine",
+            "type": "integer"
+          },
+          "would_update": {
+            "title": "Would Update",
+            "type": "integer"
+          },
+          "would_update_access": {
+            "title": "Would Update Access",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "checked_at",
+          "error_code",
+          "records_seen",
+          "would_create",
+          "would_update",
+          "would_update_access",
+          "unchanged",
+          "invalid_records",
+          "would_quarantine",
+          "would_delete",
+          "deletion_guard",
+          "failure_codes",
+          "unresolved_references",
+          "unresolved_total"
+        ],
+        "title": "ImportCheck",
+        "type": "object"
+      },
+      "ImportOut": {
+        "properties": {
+          "check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImportCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current": {
+            "description": "The import the next sync reads.",
+            "title": "Current",
+            "type": "boolean"
+          },
+          "entries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Files kept (the ones this source type reads).",
+            "title": "Entries"
+          },
+          "expanded_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expanded Bytes"
+          },
+          "format": {
+            "enum": [
+              "zip",
+              "jsonl"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "ignored_entries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ignored Entries"
+          },
+          "ready_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ready At"
+          },
+          "received_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Received At"
+          },
+          "rejected_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Code"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "status": {
+            "enum": [
+              "receiving",
+              "validating",
+              "ready",
+              "rejected",
+              "superseded",
+              "deleted"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "superseded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded At"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "format",
+          "current",
+          "size_bytes",
+          "sha256",
+          "entries",
+          "ignored_entries",
+          "expanded_bytes",
+          "rejected_code",
+          "created_at",
+          "received_at",
+          "ready_at",
+          "superseded_at",
+          "check"
+        ],
+        "title": "ImportOut",
+        "type": "object"
+      },
       "JobOut": {
         "properties": {
           "attempts": {
@@ -3606,6 +4088,27 @@
           "id": {
             "format": "uuid",
             "title": "Id",
+            "type": "string"
+          },
+          "import_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Id"
+          },
+          "kind": {
+            "default": "source_sync",
+            "enum": [
+              "source_sync",
+              "import_check"
+            ],
+            "title": "Kind",
             "type": "string"
           },
           "mode": {
@@ -4971,6 +5474,77 @@
         "title": "NewProviderRequest",
         "type": "object"
       },
+      "NewSourceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_scoped": {
+            "title": "Account Scoped",
+            "type": "boolean"
+          },
+          "authority": {
+            "enum": [
+              "system_of_record",
+              "working",
+              "conversational"
+            ],
+            "title": "Authority",
+            "type": "string"
+          },
+          "connector_type": {
+            "enum": [
+              "document_repository",
+              "ticketing",
+              "chat_export"
+            ],
+            "title": "Connector Type",
+            "type": "string"
+          },
+          "default_departments": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Departments",
+            "type": "array"
+          },
+          "default_sensitivity": {
+            "enum": [
+              "internal",
+              "confidential"
+            ],
+            "title": "Default Sensitivity",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 63,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "connector_type",
+          "key",
+          "name",
+          "default_sensitivity",
+          "authority",
+          "account_scoped"
+        ],
+        "title": "NewSourceRequest",
+        "type": "object"
+      },
       "Notice": {
         "additionalProperties": false,
         "properties": {
@@ -6046,6 +6620,53 @@
         "title": "ScimTokenOut",
         "type": "object"
       },
+      "SettingChange": {
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "effect": {
+            "enum": [
+              "narrows",
+              "widens",
+              "neutral"
+            ],
+            "title": "Effect",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "before",
+          "after",
+          "effect"
+        ],
+        "title": "SettingChange",
+        "type": "object"
+      },
       "SettingsChange": {
         "additionalProperties": false,
         "description": "Set the named fields of the organization's egress policy (omitted ones stay).",
@@ -6266,6 +6887,425 @@
         "title": "SetupStatus",
         "type": "object"
       },
+      "SourceChangePreview": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/SettingChange"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "takes_effect": {
+            "const": "next_sync",
+            "default": "next_sync",
+            "title": "Takes Effect",
+            "type": "string"
+          },
+          "widens": {
+            "title": "Widens",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changes",
+          "widens"
+        ],
+        "title": "SourceChangePreview",
+        "type": "object"
+      },
+      "SourceChangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_scoped": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Scoped"
+          },
+          "acknowledge_widening": {
+            "default": false,
+            "title": "Acknowledge Widening",
+            "type": "boolean"
+          },
+          "authority": {
+            "anyOf": [
+              {
+                "enum": [
+                  "system_of_record",
+                  "working",
+                  "conversational"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authority"
+          },
+          "channel_sensitivities": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "enum": [
+                    "internal",
+                    "confidential"
+                  ],
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Sensitivities"
+          },
+          "default_departments": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Departments"
+          },
+          "default_sensitivity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "internal",
+                  "confidential"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Sensitivity"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reason",
+          "version"
+        ],
+        "title": "SourceChangeRequest",
+        "type": "object"
+      },
+      "SourceDetail": {
+        "properties": {
+          "can_sync": {
+            "title": "Can Sync",
+            "type": "boolean"
+          },
+          "connector_type": {
+            "enum": [
+              "document_repository",
+              "ticketing",
+              "chat_export"
+            ],
+            "title": "Connector Type",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_import": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImportOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "documents": {
+            "description": "Active documents in the source (aggregate).",
+            "title": "Documents",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "last_succeeded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Succeeded At"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "latest_upload": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImportOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The most recent upload when it is not the current import (e.g. one being received, or rejected)."
+          },
+          "managed_by": {
+            "enum": [
+              "operator",
+              "organization"
+            ],
+            "title": "Managed By",
+            "type": "string"
+          },
+          "next_action": {
+            "enum": [
+              "upload_import",
+              "replace_import",
+              "wait",
+              "map_references",
+              "start_sync",
+              "retry_sync",
+              "resume",
+              "none"
+            ],
+            "title": "Next Action",
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/SourceSettings"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "paused"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "sync_blocked_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Blocked By"
+          },
+          "upload": {
+            "$ref": "#/components/schemas/UploadLimits"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "connector_type",
+          "managed_by",
+          "status",
+          "version",
+          "settings",
+          "documents",
+          "created_at",
+          "last_synced_at",
+          "last_succeeded_at",
+          "current_import",
+          "latest_upload",
+          "job",
+          "next_action",
+          "can_sync",
+          "sync_blocked_by",
+          "upload"
+        ],
+        "title": "SourceDetail",
+        "type": "object"
+      },
+      "SourceJob": {
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "import_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Id"
+          },
+          "kind": {
+            "enum": [
+              "source_sync",
+              "import_check"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "sync_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Run Id"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "mode",
+          "status",
+          "attempts",
+          "error_code",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "sync_run_id",
+          "import_id"
+        ],
+        "title": "SourceJob",
+        "type": "object"
+      },
       "SourceRef": {
         "properties": {
           "connector_type": {
@@ -6288,6 +7328,51 @@
           "connector_type"
         ],
         "title": "SourceRef",
+        "type": "object"
+      },
+      "SourceSettings": {
+        "properties": {
+          "account_scoped": {
+            "title": "Account Scoped",
+            "type": "boolean"
+          },
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "channel_sensitivities": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Chat sources: each configured channel's level, by channel ID (IDs only, never names).",
+            "title": "Channel Sensitivities",
+            "type": "object"
+          },
+          "default_departments": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentRef"
+            },
+            "title": "Default Departments",
+            "type": "array"
+          },
+          "default_sensitivity": {
+            "title": "Default Sensitivity",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "default_sensitivity",
+          "default_departments",
+          "authority",
+          "account_scoped",
+          "channel_sensitivities"
+        ],
+        "title": "SourceSettings",
         "type": "object"
       },
       "StatusPreview": {
@@ -7119,6 +8204,97 @@
         "title": "UnmappedReferences",
         "type": "object"
       },
+      "UnresolvedReference": {
+        "properties": {
+          "external_ref": {
+            "description": "The exact reference (a ticketing organization ID or a channel ID).",
+            "title": "External Ref",
+            "type": "string"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "unmapped",
+              "mapped"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "external_ref",
+          "records",
+          "state"
+        ],
+        "title": "UnresolvedReference",
+        "type": "object"
+      },
+      "UploadLimits": {
+        "properties": {
+          "available": {
+            "description": "False: this deployment has no import area.",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "formats": {
+            "items": {
+              "enum": [
+                "zip",
+                "jsonl"
+              ],
+              "type": "string"
+            },
+            "title": "Formats",
+            "type": "array"
+          },
+          "max_entries": {
+            "title": "Max Entries",
+            "type": "integer"
+          },
+          "max_expanded_bytes": {
+            "title": "Max Expanded Bytes",
+            "type": "integer"
+          },
+          "max_file_bytes": {
+            "title": "Max File Bytes",
+            "type": "integer"
+          },
+          "max_upload_bytes": {
+            "title": "Max Upload Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "available",
+          "formats",
+          "max_upload_bytes",
+          "max_expanded_bytes",
+          "max_file_bytes",
+          "max_entries"
+        ],
+        "title": "UploadLimits",
+        "type": "object"
+      },
+      "UploadResult": {
+        "properties": {
+          "check_queued": {
+            "title": "Check Queued",
+            "type": "boolean"
+          },
+          "import": {
+            "$ref": "#/components/schemas/ImportOut"
+          }
+        },
+        "required": [
+          "import",
+          "check_queued"
+        ],
+        "title": "UploadResult",
+        "type": "object"
+      },
       "UserOut": {
         "properties": {
           "display_name": {
@@ -7181,6 +8357,28 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VersionedRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reason",
+          "version"
+        ],
+        "title": "VersionedRequest",
         "type": "object"
       },
       "VisibleAccount": {
@@ -12519,6 +13717,657 @@
         "tags": [
           "sources"
         ]
+      },
+      "post": {
+        "description": "Documents (Markdown export), Tickets (JSON Lines export) or a Slack workspace export, configured here and fed by uploaded exports. It holds nothing until an import is synced and grants nobody anything. The key is immutable; 409 when another source has it. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_source_v1_admin_sources_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewSourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Create an export source, with a reason (administrators; audited)",
+        "tags": [
+          "sources"
+        ]
+      }
+    },
+    "/v1/admin/sources/{source_id}": {
+      "get": {
+        "description": "Operational metadata only: no document, ticket or message content, no file names from imports, no private channel names.",
+        "operationId": "get_source_v1_admin_sources__source_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "A source's record: settings, imports, latest job, next action (administrators)",
+        "tags": [
+          "sources"
+        ]
+      },
+      "patch": {
+        "description": "A change that makes records readable to more people needs acknowledge_widening (preview first). 409 when the source changed. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "patch_source_v1_admin_sources__source_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Change a source's safe settings, with the version and a reason (administrators; audited). Applies at the next sync",
+        "tags": [
+          "sources"
+        ]
+      }
+    },
+    "/v1/admin/sources/{source_id}/changes/preview": {
+      "post": {
+        "description": "Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_source_change_preview_v1_admin_sources__source_id__changes_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceChangePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Preview a settings change: what changes and whether it widens who can read records at the next sync (administrators; changes nothing)",
+        "tags": [
+          "sources"
+        ]
+      }
+    },
+    "/v1/admin/sources/{source_id}/check": {
+      "post": {
+        "description": "Useful after mapping account references. Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_source_check_v1_admin_sources__source_id__check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "A check is queued"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Check the current import again (the dry run of the sync pipeline, as a job; writes nothing, calls no provider)",
+        "tags": [
+          "sources"
+        ]
+      }
+    },
+    "/v1/admin/sources/{source_id}/disconnect": {
+      "post": {
+        "description": "Its documents stop being readable at once, then are deleted with their chunks, grants, synced groups, runs, account mappings and imports. Accounts, other sources, traces (re-authorized on read) and the audit trail stay. Refused while a sync runs (409). Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_source_disconnect_v1_admin_sources__source_id__disconnect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisconnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisconnectResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Disconnect and purge a source, with its key typed and a reason (administrators; audited)",
+        "tags": [
+          "sources"
+        ]
+      }
+    },
+    "/v1/admin/sources/{source_id}/disconnect-preview": {
+      "get": {
+        "operationId": "get_disconnect_preview_v1_admin_sources__source_id__disconnect_preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisconnectPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "What disconnecting would remove: counts only (administrators)",
+        "tags": [
+          "sources"
+        ]
       }
     },
     "/v1/admin/sources/{source_id}/failures": {
@@ -12589,6 +14438,345 @@
           }
         },
         "summary": "The latest sync's failed records: codes, and identifiers only for documents you can read (administrators)",
+        "tags": [
+          "sources"
+        ]
+      }
+    },
+    "/v1/admin/sources/{source_id}/imports": {
+      "post": {
+        "description": "The body is the file itself (not a form): a zip archive, or for a Tickets source one JSON Lines page. Its format is decided by its content; no file name is read. It is validated entry by entry within the deployment's limits and, if valid, becomes the source's current import (the previous one is superseded) and is checked; nothing syncs until a sync is requested. A refused upload changes nothing (422 with its code; 413 when too large). One upload per source at a time (409). Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_source_import_v1_admin_sources__source_id__imports_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-ndjson": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            },
+            "application/zip": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Upload an export as the source's next import (administrators; streamed)",
+        "tags": [
+          "sources"
+        ]
+      }
+    },
+    "/v1/admin/sources/{source_id}/pause": {
+      "post": {
+        "description": "Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_source_pause_v1_admin_sources__source_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Pause a source: requested syncs are refused; its content stays searchable (administrators; audited)",
+        "tags": [
+          "sources"
+        ]
+      }
+    },
+    "/v1/admin/sources/{source_id}/resume": {
+      "post": {
+        "description": "Requires the X-Lattice-Request: 1 header.",
+        "operationId": "post_source_resume_v1_admin_sources__source_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Resume a paused source; no sync starts by itself (administrators; audited)",
         "tags": [
           "sources"
         ]

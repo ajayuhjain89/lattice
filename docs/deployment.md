@@ -136,8 +136,8 @@ the application (§4), whatever command starts it.
 | TLS | HTTPS only at the public origin, HTTP redirected; HSTS is sent by the applications in production. The origin equals `LATTICE_PUBLIC_URL` exactly (scheme, host, port) | Caddy's internal CA (`tls internal`), on `https://localhost:8443` (and `https://caddy:8443` inside the network for `lattice smoke`); `http://localhost:8080` redirects (308) keeping the port. **Not** equivalent to a public certificate: browsers warn, nothing trusts it |
 | OIDC callback origin | `LATTICE_PUBLIC_URL` + `/api/v1/auth/oidc/<login key>/callback` must reach the API unchanged (path and query) | `LATTICE_PUBLIC_URL=https://localhost:8443` |
 | Client address | The ingress is the **only** trusted forwarding boundary. It discards any client-supplied `X-Forwarded-For`/`-Proto` (or appends to them) and states the peer it accepted. The API accepts forwarding headers only from `LATTICE_TRUSTED_PROXIES` (IP addresses or CIDR networks; never `*`), applied inside the application by uvicorn's `ProxyHeadersMiddleware`, which takes the right-most address not belonging to a trusted hop; from any other peer the TCP address is the client. Where a platform edge stands in front of the routing layer, the routing layer derives the client from that edge's documented header and is itself the only peer the API trusts (Appendix A) | Caddy has a fixed address (172.31.250.10) on the private network; `LATTICE_TRUSTED_PROXIES=172.31.250.10`. Caddy has no `trusted_proxies`, so it replaces client-supplied forwarding headers with the connection it accepted |
-| Timeouts | Upstream response timeout to the API **≥ 150 s** (an Ask may spend `LATTICE_GENERATION_DEADLINE_SECONDS`, default 120 s, in generation plus retrieval). Connect timeout ≤ 5 s | `response_header_timeout 180s`, `dial_timeout 5s`; request header/body read 10 s / 30 s; web upstream 30 s |
-| Body size | The API's own cap, `LATTICE_MAX_REQUEST_BYTES` (64 KiB, 413 `request_too_large`), is authoritative. The ingress may only stop larger uploads, above that cap and ≤ 10 MiB, so it never answers first for a body the API would accept. No route needs more than 64 KiB | `request_body max_size 1MB`: bodies between 64 KiB and 1 MB get the API's typed 413 |
+| Timeouts | Upstream response timeout to the API **≥ 150 s** (an Ask may spend `LATTICE_GENERATION_DEADLINE_SECONDS`, default 120 s, in generation plus retrieval). Connect timeout ≤ 5 s. **P12.6:** the export upload route (below) needs a request-body read time and a response time of at least `LATTICE_IMPORT_UPLOAD_TIMEOUT_SECONDS` (600 s): the API answers once the upload is received **and** validated | `response_header_timeout 180s`, `dial_timeout 5s`; request header/body read 10 s / 30 s; web upstream 30 s. Upload route: `request_body read_timeout 600s` and its own `reverse_proxy` with `response_header_timeout 600s` (the shared `(api_pool)` snippet) |
+| Body size | The API's own cap, `LATTICE_MAX_REQUEST_BYTES` (64 KiB, 413 `request_too_large`), is authoritative. The ingress may only stop larger uploads, above that cap and ≤ 10 MiB, so it never answers first for a body the API would accept. No other route needs more than 64 KiB. **P12.6 — one exception:** `POST /api/v1/admin/sources/<uuid>/imports` (an export, streamed as the request body) has the API's own cap `LATTICE_IMPORT_MAX_UPLOAD_BYTES` (default 100 MiB, 413 `request_too_large`); the ingress limit for that route alone must be slightly **above** it and the body must be streamed, never buffered by the ingress. Raising the API's cap means raising the ingress limit with it | `@import_upload` (POST + that exact path) → `request_body max_size 101MiB`; every other request (`not` that matcher) → `request_body max_size 1MB`: bodies between 64 KiB and 1 MB get the API's typed 413. Caddy streams request bodies to the upstream; `test_deployment_files.py` pins that the large limit applies to that route only |
 | Health routing | The ingress (or platform) probes each api instance at `/v1/health/ready` on the instance port, not through the public route. Liveness `/v1/health/live`. The public `https://<origin>/api/v1/health/ready` is for the external availability probe | as stated; container health checks per process (§10) |
 | Maintenance | During a migrating release (§9.2) the ingress answers `/api/*` with 503 and `Retry-After` | **P11.2:** while `deploy/maintenance/api` exists (mounted read-only at `/srv/maintenance`), `/api/*` answers 503, `Retry-After: 30`, the API's `default-src 'none'` CSP and the API's error envelope (`service_unavailable`); web pages keep serving |
 | Ingress failures (**P11.7**) | When the ingress itself cannot answer `/api/*` — no instance passes readiness (the database is down), the chosen instance died mid-request, no response header within the timeout — the client gets what the API answers when it is unavailable: 503 `service_unavailable`, `Retry-After`, the API's error envelope; never the ingress's own empty error page | `handle_errors 502 503 504` for `/api/*` (matched on the original path): 503, `Retry-After: 5`, `default-src 'none'`, the envelope. A request that was in flight on a killed instance is **not** replayed (an Ask is not idempotent at the transport level); the client may retry |
@@ -180,6 +180,9 @@ secret). Only settings that exist today are listed unless marked *target*.
 | `LATTICE_BUILD_REVISION` / `LATTICE_BUILD_VERSION` | deployment | baked into the image at build (P11.1); never set by hand |
 | `LATTICE_TRUSTED_PROXIES` | deployment | **P11.1:** the ingress addresses or networks (comma-separated IPs/CIDRs; `*` refused); unset = trust no forwarding header. Run uvicorn with `--no-proxy-headers` (the image does) |
 | `LATTICE_FAKE_GENERATION_DELAY_SECONDS` | config | test double only: refused (must be 0) in production; the verification overlay uses it for the long-Ask proof |
+| `LATTICE_IMPORTS_ROOT` | deployment | **P12.6:** absolute path of the import area (§14), the same volume on every api instance and the worker; unset = uploads answer 503 `storage_unavailable` and organization-managed sources cannot sync. Reference stack: `/srv/lattice/imports` |
+| `LATTICE_IMPORT_MAX_UPLOAD_BYTES` / `_MAX_EXPANDED_BYTES` / `_MAX_ENTRIES` / `_MAX_FILE_BYTES` / `_ORGANIZATION_QUOTA_BYTES` | config | **P12.6** defaults for the 8 GB reference machine: 100 MiB / 512 MiB / 20,000 / 32 MiB / 2 GiB (bounds checked at start). Raise for larger hosts; the upload cap also needs the ingress limit (§4) |
+| `LATTICE_IMPORT_UPLOAD_TIMEOUT_SECONDS` / `LATTICE_IMPORT_CONCURRENT_UPLOADS` | config | **P12.6:** 600 (receive + validate; the ingress body and response timeouts follow it) / 2 per api process |
 
 ### 5.2 worker (`WorkerSettings`)
 
@@ -194,6 +197,7 @@ secret). Only settings that exist today are listed unless marked *target*.
 | `LATTICE_TRACE_RETENTION_DAYS` | config | **P11.4:** 90 (minimum 90; the database floor, §13) |
 | `LATTICE_METRICS_ADDRESS` | deployment | `0.0.0.0:9465` private, **required in production** (P11.6); scraped as job `lattice-worker`; carries the heartbeat gauge `lattice smoke` reads |
 | provider keys / `LATTICE_PROVIDER_SECRET_*`, model settings | secret / config | as the api, only for the embedding provider the worker uses |
+| `LATTICE_IMPORTS_ROOT` | deployment | **P12.6:** the api's import area (same volume, read-write: the worker reads imports and deletes expired ones); unset = organization-managed sources' syncs and checks fail `import_unavailable` |
 
 ### 5.3 migrate and operator commands (`MigrationSettings`)
 
@@ -503,6 +507,7 @@ tables, never content.
 | | `rate_limit_counters` | window started more than 2 days ago (longest window: 1 day) | the same | worker |
 | | `pre_auth_rate_limits` | window started more than 2 days ago | the same, inside `lattice_pre_auth_retention` (owner `lattice_auth`, `EXECUTE` for `lattice_worker` only) | worker |
 | | `ask_slots` | lease expired more than 1 hour ago | the same | worker |
+| Uploaded exports (**P12.6**) | `source_imports` rows and their files | **rejected** imports at once; **superseded** imports as soon as no queued or running job reads them; uploads abandoned for **1 hour**; imports of a disconnected source. Rows stay (status `deleted`, IDs and counts only); files are removed. Also: files with no row, older than 1 hour (an interrupted write) | `lattice_expire_imports` (owner function, `EXECUTE` for `lattice_worker` only) decides; the worker never deletes a row | worker, every **60 s** (`import_retention`) |
 | Logs | stdout JSON | platform log retention; **duration to decide with the platform** (no content in logs, SEC-8) | — | platform |
 
 Safety: each batch is its own transaction, deletes by key and re-checks eligibility, so a
@@ -519,6 +524,7 @@ counted and logged and does not stop the others. Metrics per task:
 | ------ | --------- | ---- |
 | Source exports | worker (read-only), operator `lattice sync` (writes the configuration that names the path) | Required while connectors read local exports (all three today). The worker syncs only the path the operator's last `lattice sync` recorded (ADR-013), so operator and worker must see the **same path**. Reference stack: `./data` mounted read-only at `/srv/lattice/data` in `worker` and `ops`. Staging handling: P11.2 |
 | Model cache | api and worker, only with `local` embeddings | read-only, filled and verified by `lattice models fetch` |
+| Imports (**P12.6**) | every api instance (read-write: uploads are received, validated and published here) and the worker (read-write: reads imports, deletes expired ones); **never** web or the ingress | One shared filesystem at `LATTICE_IMPORTS_ROOT`. Layout `<root>/<organization uuid>/<import uuid>/{archive.partial, archive, staging/, tree/}` — locations derived from generated UUIDs only; directories 0750, files 0640, owned by the service user (uid 10001; the backend image creates `/srv/lattice/imports` with that owner so a fresh named volume inherits it), nothing executable or served. Size it for the per-organization quota (default 2 GiB) times the organizations, plus the 256 MiB free-space reserve the API keeps (`storage_full` below it). Back it up only if re-uploading exports is not acceptable: imports are inputs, the database holds what was synced. Reference stack: named volume `imports` mounted at `/srv/lattice/imports` in `api1`, `api2` and `worker`. A managed platform needs a volume shared by the api instances and the worker (Appendix A's "export volume" row applies) |
 
 ## 15. Local reference stack (P11.1–P11.7)
 
@@ -774,3 +780,20 @@ P11.2.
   provider really asserts for a strong method (otherwise every raise is refused).
 - **Alerting:** `LatticeEgressEscalation` (ticket, security) fires once per committed
   escalation (runbook §10.17).
+
+## P12.6 upgrade notes (migration 0022)
+
+- **Migration 0022** adds `sources.managed_by` (every existing source becomes `operator`),
+  `sources.version`, `sources.import_id`, the `source_imports` table, `jobs.kind`
+  `import_check` and `jobs.import_id`, and `source_sync_runs.import_id`; no row is
+  rewritten. Declared irreversible (the downgrade drops every import). Operator-managed
+  sources keep working unchanged (`lattice sync`, the worker reading the recorded path).
+- **The import area.** Before deploying, give every api instance and the worker one shared
+  read-write volume and set `LATTICE_IMPORTS_ROOT` on both (§5.1, §14); the image's
+  `/srv/lattice/imports` is owned by uid 10001. Without it, administrators can create
+  sources but uploads answer 503 `storage_unavailable`.
+- **The ingress.** Add the route-specific body limit and timeouts for `POST
+  /api/v1/admin/sources/<uuid>/imports` (§4) — and only for it. A platform that cannot
+  set a per-route body limit must keep the 1 MB limit everywhere else by other means.
+- **New metrics:** `lattice_imports_total{outcome}` and `lattice_import_duration_seconds`.
+

@@ -1616,3 +1616,96 @@ events (P12.6); per-organization embedding credentials (they need the worker to 
 organization secrets and a re-index; Phase 13/14 dependency); cancellation of an in-flight
 provider request; pruning of old step-up grants (a few rows per escalation); organization
 purge (Phase 15); `make prod-authz` coverage of the provider routes (P12.8).
+
+## P12.6 Customer-operable export sources, imports and first sync (2026-10-18)
+
+Delivered on `phase/12-org-setup-integrations` (local commit, not pushed) after the
+product owner approved P12.5. Migration **0022** (`SCHEMA_REVISION` 0022; declared
+irreversible: the downgrade drops every import and the sources' link to them). The
+development database is not migrated. The three source types stay **export-based**
+(C7) — no live integration, OAuth, marketplace or new connector.
+
+| Contract | Built | Where |
+| -------- | ----- | ----- |
+| C7 source product model | `sources.managed_by`: `operator` (the sources file; every existing source) or `organization` (created in the product). Administrators **create** (type, name, key, default sensitivity, default departments, authority, account scoping, reason), **edit** settings (name, sensitivity, departments, authority, scoping, chat channel sensitivities by channel ID; preview first — the server says which change *widens* readership at the next sync and a widening change must be acknowledged), **pause/resume** (`paused` finally has a meaning: requested syncs refused, a queued sync fails when claimed, content stays searchable; checks and uploads still work), **sync / retry** (the Phase 8 request), **disconnect** (the existing purge). Type and key immutable for every writer; `sources.version` makes edits optimistic. Operator-managed sources are read-only in the product (settings stay the operator file's) but can be synced, paused, resumed and disconnected | `lattice.sources.admin`, `admin_models`, `api/routes/sources.py`, 0022 |
+| Separate facts (§3) | canonical source (`sources`), uploaded import (`source_imports`), validation result (the import's status + its **check**), synchronization job (`jobs`, `kind` `source_sync` \| `import_check`, `import_id`), ingestion result (`source_sync_runs`, with the `import_id` it read) | 0022 |
+| C8.1 ImportStore | `ImportStore` protocol (`begin` → an `UploadWriter` with `append`/`seal`/`abort`; `extract`, `tree`, `delete`, `free_bytes`, `organizations`/`stored` for the orphan sweep) + `FilesystemImportStore` at `LATTICE_IMPORTS_ROOT`: `<root>/<org>/<import>/{archive.partial, archive, staging, tree}`, 0750/0640, publish by rename; locations derived from generated UUIDs only; the worker resolves an import by the job's ID. No object storage, no new service | `lattice.imports.store` |
+| C8.2 lifecycle | `receiving → validating → ready \| rejected`, `ready → superseded`, `→ deleted`. A valid upload **becomes the current import at once** (the previous one superseded) and an `import_check` job is queued; a refused upload leaves the current import untouched; one upload per source at a time; an upload abandoned for an hour is reclaimed. A sync reads the import current when it was requested | 0022 `lattice_*_import`, `sources.uploads` |
+| C8.3 archive security | Streamed, counted as it arrives (declared length checked, never trusted; a body longer or shorter than declared refused), then validated entry by entry before writing: EOCD entry-count pre-check, UTF-8 names, `unsafe_path` (absolute, drive, `..`, backslash, empty, depth, length), `link_refused` (symlink, hard link, device, FIFO, socket, reparse point), `duplicate_name` (also case/NFC), overlapping entries and encryption/unsupported compression (`archive_invalid`), ratio, per-file and total caps while streaming (`ratio_exceeded`, `too_large`), `too_many_entries`; only files the connector reads are expanded (`O_EXCL \| O_NOFOLLOW`), a single wrapping folder stripped, `unsupported_layout` when the type's files are missing. Defaults: 100 MiB upload, 512 MiB expanded, 20,000 entries, 32 MiB per file, ratio 100, 2 GiB per-organization quota, 256 MiB free-space reserve (`storage_full`), 600 s budget, 2 concurrent uploads per API process | `lattice.imports.archive`, `limits`, `config` |
+| C8.4 transport | The upload route alone gets its own body cap (API `BodyLimit` via `UPLOAD_ROUTE`; Caddy `request_body @import_upload` 101 MiB, `read_timeout 600s`, its own upstream with `response_header_timeout 600s`); the 64 KiB API cap and the 1 MB ingress cap are unchanged for everything else. Reference stack: named volume `imports` read-write in api1, api2 and worker, `LATTICE_IMPORTS_ROOT=/srv/lattice/imports`, created owned by uid 10001 in the image | `api/middleware.py`, `deploy/caddy/Caddyfile`, `compose.production.yaml`, `backend/Dockerfile` |
+| C8 retention | The worker's `import_retention()` every 60 s: `lattice_expire_imports` marks deleted rejected imports, superseded imports no queued/running job reads, abandoned uploads and imports without a source; the worker removes their files and file trees with no row older than an hour. Rows are kept (`deleted`, counts only) | `jobs/worker.py`, 0022 |
+| §11–12 validation | **The check** = the existing sync pipeline as a dry run on the import (`SyncOptions(dry_run=True)`: no writes, no provider call, deterministic), recorded by `lattice_record_import_check` key by key: records read, would create / update / update access / delete, unchanged, invalid, held back, deletion guard, failure codes with counts, the exact unresolved references with record counts, or a whole-import error code. Run automatically after an upload and on demand (*Check export again*). Not audited (C11) | `jobs/worker.py`, `ingestion.sync` |
+| §13 account references | No new mapping system: the unmapped-references view (P12.3) reads a source's current import's check when it is newer than its latest run, so references can be mapped **before** the first sync; mapping uses the existing map/remap/unmap; unresolved references stay **fail closed** on every source (P12.3 correction) — held back, never indexed without their account | `accounts.service`, `ingestion` (unchanged rules) |
+| §14 operator vs product | `lattice sync --sources` refuses a product-managed source (`source_config:managed_in_product`) and writes `source.created/updated` as `operator:sync`; operator syncs never touch product sources or their mappings; `lattice source disconnect` records `source.disconnected` and marks the imports deleted | `ingestion.store`, `lifecycle`, `cli_worker` |
+| §15–19 first sync | Sync now for an organization-managed source requires its current import (`import_required`, `import_invalid`, `source_not_active` when paused), audited `source.sync_requested`, one queued/running job per source (a repeat returns it); the worker reads the import through the store and runs the unchanged pipeline (idempotency, versioning, deletion guard, ACLs, quarantine, retries, lease recovery). Job and run errors are fixed codes (`import_unavailable`, `source_config:*`, `source_unavailable:*`, …). Readership after a product sync equals the operator sync of the same export, by the authorization predicate | `api/routes/sources.py`, `jobs/worker.py`, `test_first_sync.py` |
+| §20 disconnect | Preview (documents, chunks, account mappings, imports, queued jobs, whether a sync runs, whether an operator file configures it), the key typed, a reason; refused while a sync runs; queued jobs end `source_disconnected`; documents unreadable at once then purged with chunks, grants, synced groups, runs, failures, this source's mappings and imports. Accounts, other sources, traces (re-authorized on read) and the audit trail stay. Not an organization purge | 0022 `lattice_disconnect_source` / `lattice_purge_source` |
+| C9 privacy | Responses carry counts, codes, sizes, a SHA-256, times and IDs only; no file name is sent or kept (the body is the file; the format is decided by content); private channels by ID; nothing from records. Another organization's source answers every route exactly as a random ID (the upload route checks the source before the import area) | `admin_models`, route inventory |
+| C11 audit | `source.created`, `updated`, `paused`, `resumed`, `disconnected`, `import_accepted`, `import_rejected`, `sync_requested`, coupled by deferred triggers; the audit ledger names the source. Metrics `lattice_imports_total{outcome}`, `lattice_import_duration_seconds` | 0022, `access.audit`, `metrics` |
+| C12 setup status | `sources·required·awaiting_import` (an organization-managed source without a current import), `sources·attention·import_rejected` (its latest upload was refused); `no_sources` now links to Sources; a queued/running *check* does not count as syncing | `setup.derive`, `setup.facts` |
+| ADR-017 fences | Every write a fenced function (ADR-017 "Implemented in P12.6"); `lattice_app` gains `SELECT` on `source_imports` only; the worker `SELECT` and two functions; privilege snapshot updated; direct API-role SQL refused statement by statement | 0022 |
+| §24–28 UI | Sources (design-system v2): *Add source* (export format radios, name/key, defaults, reason); linked names; a *Next* cell from the server's `next_action`. **Source record** `/sources/{id}`: the next-step band, actions (Sync now / Retry sync, Check export again, Edit settings, Pause/Resume, Disconnect), *Export* (expected structure per type, the deployment's limits, replace semantics, native file input, XHR upload with real bytes-sent progress then an honest "validating" state, cancel), *Check* (counts, codes, references without an account → Access), *Sync* (job, last run counts, failed records), *Settings*; dialogs for settings (server preview, widening acknowledgement), pause/resume, disconnect (preview, typed key, reason). Polling only while the server is working (3 s, the existing pattern) | `SourcesScreen.tsx`, `SourceScreen.tsx`, `SourceDialogs.tsx`, `source-copy.ts`, `upload.ts` |
+
+**Deviations from Part II, and why**
+
+1. **Lower default limits than C8.3** (100 MiB / 512 MiB / 20,000 entries / 32 MiB per
+   file, instead of 200 MiB / 1 GiB / 50,000 / 100 MiB): derived from the 8 GB reference
+   machine and its 3 GB Docker allowance; all configurable (`LATTICE_IMPORT_*`).
+2. **Superseded imports are deleted as soon as no queued or running job reads them**, not
+   after 7 days and not only after a successful sync: keeps disk bounded; a sync always
+   reads the import that was current when requested, so nothing in flight loses its input.
+3. **An accepted upload becomes the current import at once and is checked automatically**
+   (C8.2 kept *ready* and *current* apart, with a separate attach step and an on-demand
+   *Check import*): one fewer state and step; a refused upload still changes nothing, and
+   nothing syncs until a sync is requested.
+4. **Operator-managed sources are read-only in the product** (C7 implied editing any
+   source): their settings belong to the operator's file, which would overwrite edits at
+   its next run. Sync, pause, resume and disconnect work on both.
+5. **Registered export locations (C8.1 `export_locations`, `lattice source location add`)
+   were not built**: operator-managed sources keep the existing `lattice sync` path
+   workflow unchanged; nothing in P12.6 needed a second operator path.
+6. **0018's mapping-audit trigger was changed** to exempt the cascade deletes of a
+   disconnected source's purge (found by test: the product purge was refused); the
+   `source.disconnected` event records how many mappings went.
+7. **Refusal codes added** beyond C8.3's list: `upload_incomplete`, `upload_timeout`,
+   `storage_full`, `upload_abandoned`, `upload_failed` (transport and storage failures
+   need their own words; still fixed codes).
+8. **The sync request keeps its Phase 8 refusal for a paused source**
+   (`source_not_active`); the record's `sync_blocked_by` says `source_paused`.
+9. **`source_identity_immutable`** (0022) is enforced for every writer: a sources file
+   naming another type for an existing key is still refused by the sync
+   (`connector_type_changed`) — the stored row can no longer be changed under it.
+
+**Verification (2026-10-18).** Fixing the existing suites' fallout: the route inventory
+(ten new administrator routes, swept for anonymous, member and cross-organization calls —
+the upload route now resolves the source before reporting a missing import area, so an
+unknown source answers 404 whatever the deployment), the app/worker role and RLS
+inventories (`source_imports`, direct writes refused), the setup reason cases, the
+administrator listing's keys and job keys, the OpenAPI path pin, the authz-boundary scan
+(a reviewed allowance for `sources.admin` reading a channel's configured level) and the
+sync test that changed a stored connector type (now refused by the database; the case
+changes the sources file instead). Results: full backend suite **3,207** (3,206 passed in
+17 min; the one failure — the boundary scan — fixed and re-run); ruff, format and strict
+mypy clean; privilege snapshot regenerated. The real API → worker flow is
+`tests/sources/test_first_sync.py`: an administrator creates each of the three source
+types through the API, uploads the export, the import store keeps it, the check runs,
+the existing worker syncs from the import; tickets with an unmapped organization are held
+back and reported by reference, mapping it in the product and syncing again indexes them;
+readership equals the operator sync of the same export by the authorization predicate;
+private Slack channels stay grants-only and unnamed; repeated syncs are idempotent; an
+interrupted sync is retried without duplicates. Web: lint, type check, **277** unit tests,
+production build; Playwright `source-record.spec.ts` (add, register next actions, record,
+upload, refused upload, widening acknowledgement, stale version, pause/resume, sync and
+retry, disconnect, operator-managed, refusals, axe on the register, record and every
+dialog, keyboard, tablet/phone/320 px/200 % zoom reflow, forced colours and reduced motion)
+and the full functional run **375 passed**, 56 skipped by viewport design, 0 failed
+(desktop, mobile, production); `make audit`: backend clean, web only the approved
+GHSA-vfj7-8cjw-p6xm. The Caddyfile was validated with the pinned Caddy image (`caddy
+adapt`: the 101 MiB / 600 s limits apply to the upload route only, 1 MB to everything
+else); the reference stack was not rebuilt for P12.6 and the development database is not
+migrated.
+
+**Not built (later checkpoints, or outside P12.6):** registered export locations (C8.1);
+object-storage backend; resumable or chunked uploads; record-level sync progress (the
+worker reports none — the UI shows queued/running/finished); per-file results in a check
+(counts and codes only, by design); the end-to-end onboarding journey (P12.7); `make
+prod-authz` coverage of the source routes (P12.8).

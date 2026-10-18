@@ -19,7 +19,8 @@ source of another organization is invisible, so it answers exactly as a random I
   source -- a missing mapping never widens who can read them -- until it is mapped again.
   The Phase 4 rules, deterministic, never an ad-hoc rewrite of stored evidence.
 * **Unmapped references**: from the latest run's ``access_unmappable:account`` failures,
-  grouped by reference -- the exact reference and a count, nothing from the records.
+  grouped by reference -- the exact reference and a count, nothing from the records -- or,
+  for a source whose current import was checked since (P12.6), from that check.
 
 Each write and its audit event share a transaction; the 0018 triggers refuse to commit
 one without the other. Changing a mapping changes which account a record belongs to; it
@@ -523,6 +524,9 @@ async def _current(
     return (False, None) if row is None else (True, row.account_id)
 
 
+# The latest run of each source -- or, when the source's current import was checked after
+# that run started (an uploaded export before its first sync, P12.6), the check: the same
+# exact references and counts, from the dry run of the same pipeline.
 _LATEST_RUNS = """
     WITH latest AS (
       SELECT DISTINCT ON (r.source_id) r.source_id, r.id, r.started_at
@@ -531,13 +535,26 @@ _LATEST_RUNS = """
       WHERE r.organization_id = :o AND s.status <> 'deleting'
         AND s.connector_type IN ('ticketing', 'chat_export')
       ORDER BY r.source_id, r.started_at DESC, r.id
+    ), checked AS (
+      SELECT s.id AS source_id, i.checked_at AS started_at, i.check_result
+      FROM sources s JOIN source_imports i
+        ON i.organization_id = s.organization_id AND i.id = s.import_id
+      WHERE s.organization_id = :o AND s.status <> 'deleting'
+        AND s.connector_type IN ('ticketing', 'chat_export') AND i.checked_at IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM latest l WHERE l.source_id = s.id AND l.started_at >= i.checked_at)
     ), waiting AS (
       SELECT l.source_id, l.started_at, f.message_params ->> 'external_account_ref' AS ref,
              count(*) AS records
       FROM sync_record_failures f JOIN latest l ON l.id = f.sync_run_id
       WHERE f.organization_id = :o AND f.error_code = 'access_unmappable:account'
         AND f.message_params ? 'external_account_ref'
+        AND l.source_id NOT IN (SELECT source_id FROM checked)
       GROUP BY l.source_id, l.started_at, f.message_params ->> 'external_account_ref'
+      UNION ALL
+      SELECT c.source_id, c.started_at, r ->> 'ref', (r ->> 'records')::bigint
+      FROM checked c CROSS JOIN LATERAL jsonb_array_elements(
+        coalesce(c.check_result -> 'unresolved_references', '[]'::jsonb)) r
     )
 """
 

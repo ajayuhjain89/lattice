@@ -67,6 +67,8 @@ TENANT_TABLES = (
     # Phase 12 (P12.5)
     "egress_policy_versions",
     "step_up_grants",
+    # Phase 12 (P12.6)
+    "source_imports",
 )
 # Tables the runtime role may not read in full (written and read by operator tools; of
 # oidc_connections it reads named columns since 0014, all of them since 0020 -- the
@@ -299,6 +301,14 @@ async def _populate(db: Database, member: Member) -> None:
                 "'360001001', :a, 'operator:test')"
             ),
             {"o": member.organization_id, "s": source, "a": account},
+        )
+        # Phase 12 (P12.6): an import being received for the source.
+        await s.execute(
+            text(
+                "INSERT INTO source_imports (organization_id, source_id, format, created_by) "
+                "VALUES (:o, :s, 'zip', :by)"
+            ),
+            {"o": member.organization_id, "s": source, "by": f"member:{member.membership_id}"},
         )
 
 
@@ -600,6 +610,13 @@ async def test_cannot_update_another_organizations_sessions(
         "(lattice_current_org_id(), 'x', 'x', now())",
         "INSERT INTO departments (organization_id, key, name) VALUES "
         "(lattice_current_org_id(), 'x', 'x')",
+        # 0022: sources and imports change only through the P12.6 fenced functions.
+        "INSERT INTO source_imports (organization_id, format, created_by) VALUES "
+        "(lattice_current_org_id(), 'zip', 'x')",
+        "UPDATE source_imports SET status = 'ready'",
+        "DELETE FROM source_imports",
+        "UPDATE sources SET managed_by = 'organization'",
+        "UPDATE sources SET import_id = NULL",
     ],
 )
 async def test_runtime_role_lacks_unneeded_privileges(

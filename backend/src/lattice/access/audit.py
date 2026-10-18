@@ -11,7 +11,11 @@ The Phase 6 provider and egress events (``provider.*``, ``credential.*``,
 account events (``account.created`` / ``updated`` / ``archived`` / ``reactivated``, target
 ``account_id``; ``account.mapping_changed``, target ``source_id``, ``ref_kind``,
 ``external_ref``, before/after ``account_id``) by ``lattice.accounts`` (P12.3), shown with
-the account and source names resolved at read time.
+the account and source names resolved at read time; the source events (``source.created``,
+``updated``, ``paused``, ``resumed``, ``disconnected``, ``import_accepted``,
+``import_rejected``, ``sync_requested``; target ``source_id`` and, for imports,
+``import_id``) by ``lattice.sources`` and ``lattice.jobs.queue`` (P12.6), with the source's
+name resolved at read time.
 
 Actors: ``member:<membership id>`` (the API), ``scim:<token id>`` (the identity
 provider's provisioning, Phase 10: ``access.member_changed`` and
@@ -270,6 +274,8 @@ async def audit_page(
     accounts: set[uuid.UUID] = set()
     sources: set[uuid.UUID] = set()
     for e in events:
+        if e.action.startswith("source.") and (src := _uuid(e.target.get("source_id"))):
+            sources.add(src)
         if e.action.startswith("account."):
             for part in (e.target, e.before, e.after):
                 if isinstance(part, dict) and (a := _uuid(part.get("account_id"))) is not None:
@@ -319,6 +325,19 @@ async def audit_page(
                 details = _details({}, e.before, e.after)
         elif e.action.startswith("account."):
             details = _account_details(e, names, source_names)
+        elif e.action.startswith("source."):
+            # Source events (P12.6): the source by name (resolved now; None once purged),
+            # then what changed. Counts, codes, sizes and IDs only -- never content.
+            source = _uuid(e.target.get("source_id"))
+            shown = {k: v for k, v in e.target.items() if k != "source_id"}
+            details = [
+                AuditDetail(
+                    field="source",
+                    before=None,
+                    after=source_names.get(source) if source else None,
+                ),
+                *_details(shown, e.before, e.after),
+            ]
         elif e.action == REQUEST_REFUSED:
             # The member the provider's request collided with, by name; the token and
             # operation as details; never a value from the request (none is stored).

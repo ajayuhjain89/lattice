@@ -80,6 +80,14 @@ import type {
   SetupStatus,
   SyncJob,
   Trace,
+  DisconnectPreview,
+  DisconnectRequest,
+  DisconnectResult,
+  NewSourceRequest,
+  SourceChangePreview,
+  SourceChangeRequest,
+  SourceDetail,
+  SourceLifecycleRequest,
 } from "./types";
 
 const csrf: Middleware = {
@@ -184,6 +192,29 @@ export const api = {
         body: { mode: "full" },
       }),
     ),
+  // Export sources operated in the product (Phase 12, P12.6). Uploads do not go through
+  // here: they stream the file with progress (sources/upload.ts).
+  source: (id: string, signal?: AbortSignal) =>
+    call<SourceDetail>(() => http.GET("/v1/admin/sources/{source_id}", { params: { path: { source_id: id } }, signal })),
+  createSource: (body: NewSourceRequest) => call<SourceDetail>(() => http.POST("/v1/admin/sources", { body })),
+  previewSourceChange: (id: string, body: SourceChangeRequest) =>
+    call<SourceChangePreview>(() =>
+      http.POST("/v1/admin/sources/{source_id}/changes/preview", { params: { path: { source_id: id } }, body }),
+    ),
+  updateSource: (id: string, body: SourceChangeRequest) =>
+    call<SourceDetail>(() => http.PATCH("/v1/admin/sources/{source_id}", { params: { path: { source_id: id } }, body })),
+  pauseSource: (id: string, body: SourceLifecycleRequest) =>
+    call<SourceDetail>(() => http.POST("/v1/admin/sources/{source_id}/pause", { params: { path: { source_id: id } }, body })),
+  resumeSource: (id: string, body: SourceLifecycleRequest) =>
+    call<SourceDetail>(() => http.POST("/v1/admin/sources/{source_id}/resume", { params: { path: { source_id: id } }, body })),
+  disconnectPreview: (id: string, signal?: AbortSignal) =>
+    call<DisconnectPreview>(() =>
+      http.GET("/v1/admin/sources/{source_id}/disconnect-preview", { params: { path: { source_id: id } }, signal }),
+    ),
+  disconnectSource: (id: string, body: DisconnectRequest) =>
+    call<DisconnectResult>(() => http.POST("/v1/admin/sources/{source_id}/disconnect", { params: { path: { source_id: id } }, body })),
+  checkImport: (id: string) =>
+    call<SyncJob>(() => http.POST("/v1/admin/sources/{source_id}/check", { params: { path: { source_id: id } } })),
   activity: (before?: string, signal?: AbortSignal) =>
     call<OwnActivityResponse>(() =>
       http.GET("/v1/activity", { params: { query: before ? { before } : {} }, signal }),

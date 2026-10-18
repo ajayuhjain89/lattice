@@ -327,3 +327,56 @@ leaves the database, not the caller, to decide what is an escalation).
 `tests/test_app_role_access.py`, `tests/test_rls.py`, `tests/test_worker_role.py`,
 `tests/providers/test_egress_fences.py` (direct API-role SQL), `test_step_up.py`,
 `test_provider_admin.py`, `test_egress_lattice.py` and the privilege snapshot pin them.
+
+## Implemented in P12.6 (2026-10-18, migration 0022)
+
+The `sources` and `source_imports` rows of the operation table, plus requested jobs. No
+broad write is granted: `lattice_app` keeps `SELECT` only on `sources` and gains `SELECT`
+only on `source_imports`; every write is a fenced function (`SECURITY DEFINER`, owned by
+`lattice_owner`, search path pinned, `EXECUTE` for `lattice_app` only) that re-checks an
+active administrator of the bound organization and refuses with SQLSTATE `LA001` and a
+fixed reason.
+
+- **Sources**: `lattice_create_source` (an export source *managed by the organization*;
+  the function builds the configuration from validated values — default departments by
+  key, no channel settings — and never accepts a path; a CHECK forbids a `path` in an
+  organization-managed source's configuration), `lattice_update_source` (name, default
+  sensitivity, default departments, authority, account scoping, channel sensitivities by
+  channel ID — never the type, key, path or import; `operator_managed` for sources the
+  operator's file configures; `no_change`), `lattice_set_source_paused` (`active ↔
+  paused`, any source), `lattice_disconnect_source` (queued jobs end
+  `source_disconnected`, refused while one runs, the source `deleting`, its documents
+  `deleted` and its imports marked deleted in the same transaction) and
+  `lattice_purge_source` (only a `deleting` source; resumable). Every edit compares
+  `sources.version` (raised by a trigger on administrator-visible settings only, never by
+  the worker's sync timestamps).
+- **Imports**: `lattice_begin_import`, `lattice_import_received`, `lattice_finish_import`,
+  `lattice_reject_import`, `lattice_mark_import_deleted` — the lifecycle `receiving →
+  validating → ready | rejected`, `ready → superseded`, `→ deleted`; one upload per source
+  at a time; finishing makes the import the source's current import under the source's row
+  lock, supersedes the previous one and queues an `import_check` job when no job of the
+  source is active.
+- **Integrity for every writer** (operators and the worker included): a source's
+  `import_id` must name a *ready* import of that very source (`import_not_attachable`), a
+  source's type, key and organization never change (`source_identity_immutable`); a job's
+  `import_id` must belong to its source, and an organization-managed source's sync must
+  name its current import (`lattice_check_job_import`, definer, `FOR SHARE` on the source).
+  After a purge an import keeps no source (`SET NULL`) and can never be attached again.
+- **The worker** gains `SELECT` on `source_imports` and two functions of its own:
+  `lattice_record_import_check(import, result, error)` (counts and codes validated key by
+  key; no free text) and `lattice_expire_imports(limit)` (marks deleted rejected imports,
+  superseded imports no queued or running job reads, uploads abandoned for an hour, and
+  imports left without a source, returning them so it removes their files). It still has
+  no write on `sources` beyond its sync timestamps and no organization-admin authority.
+- **Audit coupling** (deferred constraint triggers, `lattice_app` only):
+  `source.created`, `source.updated`, `source.paused`, `source.resumed`,
+  `source.disconnected`, `source.import_accepted` (naming the import),
+  `source.import_rejected` (naming it), `source.sync_requested`; a check is not audited
+  (C11). The audit insert policy admits the `source.*` family from `member:` actors. 0018's
+  per-mapping coupling now exempts the cascade deletes of a disconnected source's purge
+  (the `source.disconnected` event records how many mappings go).
+
+`tests/test_rls.py` (direct API-role writes on `sources` and `source_imports` refused),
+`tests/test_app_role_access.py`, `tests/test_worker_role.py`,
+`tests/sources/test_source_fences.py`, `test_sources_api.py`, `test_uploads.py`,
+`test_first_sync.py` and the privilege snapshot pin them.

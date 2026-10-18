@@ -31,6 +31,11 @@ import {
   STEP_UP_GRANTED,
   SOURCES_ADMIN,
   SOURCES_MEMBER,
+  DISCONNECT_PREVIEW_ESCALATIONS,
+  SOURCE_RECORD_DRIVE,
+  SOURCE_RECORD_ESCALATIONS,
+  SOURCE_RECORD_NEW,
+  UPLOAD_ACCEPTED,
   TRACE_ADMIN,
   TRACE_ASKER,
   TRACE_HIDDEN,
@@ -96,6 +101,15 @@ export interface MockOptions {
   unmapped?: S["UnmappedReferences"];
   /** Answer for every account or mapping write instead of applying it (e.g. a 409). */
   accountWrite?: (path: string, body: unknown) => { status: number; body: unknown } | undefined;
+  /** P12.6: source records by ID (default: Escalations, Handbook and Drive), changed by the writes below. */
+  sourceRecords?: Record<string, S["SourceDetail"]>;
+  /** Answer for POST .../imports (default: 201, the export accepted), after `uploadDelay` ms. */
+  upload?: (sourceId: string, bytes: number) => { status: number; body: unknown } | undefined;
+  uploadDelay?: number;
+  /** Answer for every other source write instead of applying it (e.g. a 409). */
+  sourceWrite?: (method: string, path: string, body: unknown) => { status: number; body: unknown } | undefined;
+  /** The disconnect preview (default: DISCONNECT_PREVIEW_ESCALATIONS). */
+  disconnectPreview?: S["DisconnectPreview"];
   /** P12.4: the identity settings (GET /v1/admin/identity), changed by the writes below. */
   identitySettings?: S["IdentitySettings"] | "forbidden";
   /** The result of every test sign-in (default: matched, the connection as configured). */
@@ -123,6 +137,8 @@ export interface MockLog {
   accountWrites: { path: string; body: unknown }[];
   identityWrites: { method: string; path: string; body: unknown }[];
   providerWrites: { method: string; path: string; body: unknown }[];
+  sourceWrites: { method: string; path: string; body: unknown }[];
+  uploads: { sourceId: string; bytes: number; headers: Record<string, string> }[];
 }
 
 const json = (route: Route, status: number, body: unknown, headers: Record<string, string> = {}) =>
@@ -152,6 +168,8 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     accountWrites: [],
     identityWrites: [],
     providerWrites: [],
+    sourceWrites: [],
+    uploads: [],
   };
   const answer = (route: Route, ok: number, result: unknown) =>
     typeof result === "object" && result !== null && "status" in result && "body" in result && typeof result.status === "number"
@@ -291,6 +309,93 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
     return json(route, 404, NOT_FOUND);
   };
 
+  // Sources operated in the product (P12.6), applied in memory like accounts.
+  const sourceRecords: Record<string, S["SourceDetail"]> = {
+    ...(options.sourceRecords ?? {
+      [SOURCE_RECORD_ESCALATIONS.id]: SOURCE_RECORD_ESCALATIONS,
+      [SOURCE_RECORD_NEW.id]: SOURCE_RECORD_NEW,
+      [SOURCE_RECORD_DRIVE.id]: SOURCE_RECORD_DRIVE,
+    }),
+  };
+  const sourceRoute = async (route: Route, id: string, rest: string, method: string) => {
+    const current = sourceRecords[id];
+    if (!current) return json(route, 404, NOT_FOUND);
+    if (rest === "/imports" && method === "POST") {
+      const bytes = route.request().postDataBuffer()?.length ?? 0;
+      log.uploads.push({ sourceId: id, bytes, headers: route.request().headers() });
+      if (options.uploadDelay) await new Promise((done) => setTimeout(done, options.uploadDelay));
+      const answer = options.upload?.(id, bytes);
+      if (answer) return json(route, answer.status, answer.body);
+      sourceRecords[id] = {
+        ...current,
+        current_import: { ...UPLOAD_ACCEPTED.import, size_bytes: bytes },
+        next_action: "wait",
+        can_sync: false,
+        sync_blocked_by: "job_active",
+        job: { id: "7f2a1b0c-8888-4d3e-9f4a-1b2c3d4e5f88", kind: "import_check", mode: "full", status: "queued", attempts: 0, error_code: null, created_at: "2026-09-29T09:50:00Z", started_at: null, finished_at: null, sync_run_id: null, import_id: UPLOAD_ACCEPTED.import.id },
+      };
+      return json(route, 201, { ...UPLOAD_ACCEPTED, import: { ...UPLOAD_ACCEPTED.import, size_bytes: bytes } });
+    }
+    if (rest === "" && method === "GET") return json(route, 200, current);
+    if (rest === "/disconnect-preview" && method === "GET") return json(route, 200, options.disconnectPreview ?? DISCONNECT_PREVIEW_ESCALATIONS);
+    const body = method === "GET" ? null : (route.request().postDataJSON() as Record<string, unknown> | null);
+    log.sourceWrites.push({ method, path: rest, body });
+    const refused = options.sourceWrite?.(method, rest, body);
+    if (refused) return json(route, refused.status, refused.body);
+    const bumped = (changes: Partial<S["SourceDetail"]>): S["SourceDetail"] => ({ ...current, ...changes, version: current.version + 1 });
+    if (rest === "/changes/preview" && method === "POST") {
+      const b = body as S["SourceChangeRequest"];
+      const changes: S["SettingChange"][] = [];
+      if (b.name) changes.push({ field: "name", before: current.settings.name, after: b.name, effect: "neutral" });
+      if (b.default_sensitivity)
+        changes.push({
+          field: "default_sensitivity",
+          before: current.settings.default_sensitivity,
+          after: b.default_sensitivity,
+          effect: b.default_sensitivity === "internal" ? "widens" : "narrows",
+        });
+      if (b.authority) changes.push({ field: "authority", before: current.settings.authority, after: b.authority, effect: "neutral" });
+      if (b.account_scoped !== undefined && b.account_scoped !== null)
+        changes.push({ field: "account_scoped", before: current.settings.account_scoped ? "yes" : "no", after: b.account_scoped ? "yes" : "no", effect: b.account_scoped ? "narrows" : "widens" });
+      return json(route, 200, { changes, widens: changes.some((c) => c.effect === "widens"), takes_effect: "next_sync" } satisfies S["SourceChangePreview"]);
+    }
+    if (rest === "" && method === "PATCH") {
+      const b = body as S["SourceChangeRequest"];
+      const widens = (b.default_sensitivity === "internal" && current.settings.default_sensitivity !== "internal") || b.account_scoped === false;
+      if (widens && !b.acknowledge_widening)
+        return json(route, 422, { error: { code: "validation_failed", message: "Acknowledge.", request_id: "r", details: [{ field: "change", issue: "widening_not_acknowledged" }] } });
+      sourceRecords[id] = bumped({
+        settings: {
+          ...current.settings,
+          ...(b.name ? { name: b.name } : {}),
+          ...(b.default_sensitivity ? { default_sensitivity: b.default_sensitivity } : {}),
+          ...(b.authority ? { authority: b.authority } : {}),
+          ...(typeof b.account_scoped === "boolean" ? { account_scoped: b.account_scoped } : {}),
+        },
+      });
+      return json(route, 200, sourceRecords[id]);
+    }
+    if ((rest === "/pause" || rest === "/resume") && method === "POST") {
+      const pause = rest === "/pause";
+      sourceRecords[id] = bumped({
+        status: pause ? "paused" : "active",
+        next_action: pause ? "resume" : SOURCE_RECORD_ESCALATIONS.next_action,
+        can_sync: !pause,
+        sync_blocked_by: pause ? "source_paused" : null,
+      });
+      return json(route, 200, sourceRecords[id]);
+    }
+    if (rest === "/disconnect" && method === "POST") {
+      delete sourceRecords[id];
+      const p = options.disconnectPreview ?? DISCONNECT_PREVIEW_ESCALATIONS;
+      return json(route, 200, { documents: p.documents, chunks: p.chunks, account_mappings: p.account_mappings, imports: p.imports, cancelled_jobs: p.queued_jobs, purged: true } satisfies S["DisconnectResult"]);
+    }
+    if (rest === "/check" && method === "POST") {
+      return json(route, 202, { id: "7f2a1b0c-7777-4d3e-9f4a-1b2c3d4e5f77", source_id: id, kind: "import_check", import_id: current.current_import?.id ?? null, mode: "full", status: "queued", attempts: 0, error_code: null, created_at: "2026-09-29T09:55:00Z", started_at: null, finished_at: null, sync_run_id: null } satisfies S["JobOut"]);
+    }
+    return json(route, 404, NOT_FOUND);
+  };
+
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -377,6 +482,24 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Mo
         sync_run_id: null,
       } satisfies S["JobOut"]);
     }
+    if (path === "/v1/admin/sources" && method === "POST") {
+      const body = request.postDataJSON() as S["NewSourceRequest"];
+      log.sourceWrites.push({ method, path, body });
+      const refused = options.sourceWrite?.(method, path, body);
+      if (refused) return json(route, refused.status, refused.body);
+      const created: S["SourceDetail"] = {
+        ...SOURCE_RECORD_NEW,
+        id: "5d2c1b0a-8888-4e3f-9a8b-7c6d5e4f3a08",
+        key: body.key,
+        connector_type: body.connector_type,
+        settings: { ...SOURCE_RECORD_NEW.settings, name: body.name, default_sensitivity: body.default_sensitivity, authority: body.authority, account_scoped: body.account_scoped },
+        upload: { ...SOURCE_RECORD_NEW.upload, formats: body.connector_type === "ticketing" ? ["zip", "jsonl"] : ["zip"] },
+      };
+      sourceRecords[created.id] = created;
+      return json(route, 201, created);
+    }
+    const sourceMatch = /^\/v1\/admin\/sources\/([^/]+)(\/.*)?$/.exec(path);
+    if (sourceMatch) return sourceRoute(route, sourceMatch[1]!, sourceMatch[2] ?? "", method);
     if (path === "/v1/activity" && method === "GET") return json(route, 200, options.activity ?? ACTIVITY_OWN);
     if (path === "/v1/admin/activity" && method === "GET") {
       const a = options.adminActivity ?? ACTIVITY_ADMIN;

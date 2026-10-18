@@ -1069,6 +1069,111 @@ export interface paths {
     /** Every source's sync status and aggregate totals (administrators) */
     get: operations["get_admin_sources_v1_admin_sources_get"];
     put?: never;
+    /**
+     * Create an export source, with a reason (administrators; audited)
+     * @description Documents (Markdown export), Tickets (JSON Lines export) or a Slack workspace export, configured here and fed by uploaded exports. It holds nothing until an import is synced and grants nobody anything. The key is immutable; 409 when another source has it. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_source_v1_admin_sources_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/sources/{source_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * A source's record: settings, imports, latest job, next action (administrators)
+     * @description Operational metadata only: no document, ticket or message content, no file names from imports, no private channel names.
+     */
+    get: operations["get_source_v1_admin_sources__source_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Change a source's safe settings, with the version and a reason (administrators; audited). Applies at the next sync
+     * @description A change that makes records readable to more people needs acknowledge_widening (preview first). 409 when the source changed. Requires the X-Lattice-Request: 1 header.
+     */
+    patch: operations["patch_source_v1_admin_sources__source_id__patch"];
+    trace?: never;
+  };
+  "/v1/admin/sources/{source_id}/changes/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Preview a settings change: what changes and whether it widens who can read records at the next sync (administrators; changes nothing)
+     * @description Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_source_change_preview_v1_admin_sources__source_id__changes_preview_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/sources/{source_id}/check": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Check the current import again (the dry run of the sync pipeline, as a job; writes nothing, calls no provider)
+     * @description Useful after mapping account references. Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_source_check_v1_admin_sources__source_id__check_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/sources/{source_id}/disconnect": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Disconnect and purge a source, with its key typed and a reason (administrators; audited)
+     * @description Its documents stop being readable at once, then are deleted with their chunks, grants, synced groups, runs, account mappings and imports. Accounts, other sources, traces (re-authorized on read) and the audit trail stay. Refused while a sync runs (409). Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_source_disconnect_v1_admin_sources__source_id__disconnect_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/sources/{source_id}/disconnect-preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** What disconnecting would remove: counts only (administrators) */
+    get: operations["get_disconnect_preview_v1_admin_sources__source_id__disconnect_preview_get"];
+    put?: never;
     post?: never;
     delete?: never;
     options?: never;
@@ -1087,6 +1192,66 @@ export interface paths {
     get: operations["get_source_failures_v1_admin_sources__source_id__failures_get"];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/sources/{source_id}/imports": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Upload an export as the source's next import (administrators; streamed)
+     * @description The body is the file itself (not a form): a zip archive, or for a Tickets source one JSON Lines page. Its format is decided by its content; no file name is read. It is validated entry by entry within the deployment's limits and, if valid, becomes the source's current import (the previous one is superseded) and is checked; nothing syncs until a sync is requested. A refused upload changes nothing (422 with its code; 413 when too large). One upload per source at a time (409). Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_source_import_v1_admin_sources__source_id__imports_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/sources/{source_id}/pause": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Pause a source: requested syncs are refused; its content stays searchable (administrators; audited)
+     * @description Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_source_pause_v1_admin_sources__source_id__pause_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/sources/{source_id}/resume": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Resume a paused source; no sync starts by itself (administrators; audited)
+     * @description Requires the X-Lattice-Request: 1 header.
+     */
+    post: operations["post_source_resume_v1_admin_sources__source_id__resume_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1592,6 +1757,11 @@ export interface components {
        * Format: uuid
        */
       id: string;
+      /**
+       * Import Status
+       * @description The current import's status, if any.
+       */
+      import_status: string | null;
       job: components["schemas"]["JobOut"] | null;
       /** Key */
       key: string;
@@ -1600,10 +1770,36 @@ export interface components {
       last_succeeded_at: string | null;
       /** Last Synced At */
       last_synced_at: string | null;
+      /**
+       * Managed By
+       * @description operator: an operator's sources file configures it; organization: configured here and fed by uploaded exports.
+       * @enum {string}
+       */
+      managed_by: "operator" | "organization";
       /** Name */
       name: string;
+      /**
+       * Next Action
+       * @enum {string}
+       */
+      next_action:
+        | "upload_import"
+        | "replace_import"
+        | "wait"
+        | "map_references"
+        | "start_sync"
+        | "retry_sync"
+        | "resume"
+        | "none";
+      /**
+       * Rejected Upload Code
+       * @description The latest upload's refusal code, when it is newer than the current import.
+       */
+      rejected_upload_code: string | null;
       /** Status */
       status: string;
+      /** Version */
+      version: number;
     };
     /** AdminSourcesResponse */
     AdminSourcesResponse: {
@@ -2162,6 +2358,13 @@ export interface components {
       /** Reason */
       reason: string;
     };
+    /** DepartmentRef */
+    DepartmentRef: {
+      /** Key */
+      key: string;
+      /** Name */
+      name: string | null;
+    };
     /** DestinationOut */
     DestinationOut: {
       /**
@@ -2250,6 +2453,50 @@ export interface components {
       members: number;
       /** Name */
       name: string;
+    };
+    /** DisconnectPreview */
+    DisconnectPreview: {
+      /** Account Mappings */
+      account_mappings: number;
+      /** Chunks */
+      chunks: number;
+      /** Documents */
+      documents: number;
+      /** Imports */
+      imports: number;
+      /**
+       * Operator Managed
+       * @description An operator's sources file configures it: re-running the file connects it again as a new source.
+       */
+      operator_managed: boolean;
+      /** Queued Jobs */
+      queued_jobs: number;
+      /** Sync Running */
+      sync_running: boolean;
+    };
+    /** DisconnectRequest */
+    DisconnectRequest: {
+      /** Confirm Key */
+      confirm_key: string;
+      /** Reason */
+      reason: string;
+      /** Version */
+      version: number;
+    };
+    /** DisconnectResult */
+    DisconnectResult: {
+      /** Account Mappings */
+      account_mappings: number;
+      /** Cancelled Jobs */
+      cancelled_jobs: number;
+      /** Chunks */
+      chunks: number;
+      /** Documents */
+      documents: number;
+      /** Imports */
+      imports: number;
+      /** Purged */
+      purged: boolean;
     };
     /**
      * DocumentExplanation
@@ -2511,6 +2758,13 @@ export interface components {
       used_for_answer: boolean;
       /** Version */
       version: number;
+    };
+    /** FailureCodeCount */
+    FailureCodeCount: {
+      /** Code */
+      code: string;
+      /** Count */
+      count: number;
     };
     /** FailureCountOut */
     FailureCountOut: {
@@ -2785,6 +3039,97 @@ export interface components {
        */
       state: "complete" | "required" | "optional" | "in_progress" | "attention" | "blocked";
     };
+    /**
+     * ImportCheck
+     * @description The deterministic check of an import: the sync pipeline as a dry run (no writes,
+     *     no provider call). Counts and codes only.
+     */
+    ImportCheck: {
+      /**
+       * Checked At
+       * Format: date-time
+       */
+      checked_at: string;
+      /** Deletion Guard */
+      deletion_guard: string | null;
+      /**
+       * Error Code
+       * @description The import cannot be synced as a whole (e.g. a Slack export without users.json); null when the check read it.
+       */
+      error_code: string | null;
+      /** Failure Codes */
+      failure_codes: components["schemas"]["FailureCodeCount"][];
+      /** Invalid Records */
+      invalid_records: number;
+      /** Records Seen */
+      records_seen: number;
+      /** Unchanged */
+      unchanged: number;
+      /** Unresolved References */
+      unresolved_references: components["schemas"]["UnresolvedReference"][];
+      /** Unresolved Total */
+      unresolved_total: number;
+      /** Would Create */
+      would_create: number;
+      /** Would Delete */
+      would_delete: number;
+      /** Would Quarantine */
+      would_quarantine: number;
+      /** Would Update */
+      would_update: number;
+      /** Would Update Access */
+      would_update_access: number;
+    };
+    /** ImportOut */
+    ImportOut: {
+      check: components["schemas"]["ImportCheck"] | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Current
+       * @description The import the next sync reads.
+       */
+      current: boolean;
+      /**
+       * Entries
+       * @description Files kept (the ones this source type reads).
+       */
+      entries: number | null;
+      /** Expanded Bytes */
+      expanded_bytes: number | null;
+      /**
+       * Format
+       * @enum {string}
+       */
+      format: "zip" | "jsonl";
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Ignored Entries */
+      ignored_entries: number | null;
+      /** Ready At */
+      ready_at: string | null;
+      /** Received At */
+      received_at: string | null;
+      /** Rejected Code */
+      rejected_code: string | null;
+      /** Sha256 */
+      sha256: string | null;
+      /** Size Bytes */
+      size_bytes: number | null;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "receiving" | "validating" | "ready" | "rejected" | "superseded" | "deleted";
+      /** Superseded At */
+      superseded_at: string | null;
+    };
     /** JobOut */
     JobOut: {
       /** Attempts */
@@ -2803,6 +3148,14 @@ export interface components {
        * Format: uuid
        */
       id: string;
+      /** Import Id */
+      import_id?: string | null;
+      /**
+       * Kind
+       * @default source_sync
+       * @enum {string}
+       */
+      kind?: "source_sync" | "import_check";
       /** Mode */
       mode: string;
       /**
@@ -3344,6 +3697,34 @@ export interface components {
        */
       training_opt_out?: boolean | null;
     };
+    /** NewSourceRequest */
+    NewSourceRequest: {
+      /** Account Scoped */
+      account_scoped: boolean;
+      /**
+       * Authority
+       * @enum {string}
+       */
+      authority: "system_of_record" | "working" | "conversational";
+      /**
+       * Connector Type
+       * @enum {string}
+       */
+      connector_type: "document_repository" | "ticketing" | "chat_export";
+      /** Default Departments */
+      default_departments?: string[];
+      /**
+       * Default Sensitivity
+       * @enum {string}
+       */
+      default_sensitivity: "internal" | "confidential";
+      /** Key */
+      key: string;
+      /** Name */
+      name: string;
+      /** Reason */
+      reason: string;
+    };
     /** Notice */
     Notice: {
       /**
@@ -3789,6 +4170,20 @@ export interface components {
       /** Revoked At */
       revoked_at: string | null;
     };
+    /** SettingChange */
+    SettingChange: {
+      /** After */
+      after: string | null;
+      /** Before */
+      before: string | null;
+      /**
+       * Effect
+       * @enum {string}
+       */
+      effect: "narrows" | "widens" | "neutral";
+      /** Field */
+      field: string;
+    };
     /**
      * SettingsChange
      * @description Set the named fields of the organization's egress policy (omitted ones stay).
@@ -3870,6 +4265,146 @@ export interface components {
       categories: components["schemas"]["SetupCategory"][];
       organization: components["schemas"]["SetupOrganization"];
     };
+    /** SourceChangePreview */
+    SourceChangePreview: {
+      /** Changes */
+      changes: components["schemas"]["SettingChange"][];
+      /**
+       * Takes Effect
+       * @default next_sync
+       * @constant
+       */
+      takes_effect?: "next_sync";
+      /** Widens */
+      widens: boolean;
+    };
+    /** SourceChangeRequest */
+    SourceChangeRequest: {
+      /** Account Scoped */
+      account_scoped?: boolean | null;
+      /**
+       * Acknowledge Widening
+       * @default false
+       */
+      acknowledge_widening?: boolean;
+      /** Authority */
+      authority?: ("system_of_record" | "working" | "conversational") | null;
+      /** Channel Sensitivities */
+      channel_sensitivities?: {
+        [key: string]: "internal" | "confidential";
+      } | null;
+      /** Default Departments */
+      default_departments?: string[] | null;
+      /** Default Sensitivity */
+      default_sensitivity?: ("internal" | "confidential") | null;
+      /** Name */
+      name?: string | null;
+      /** Reason */
+      reason: string;
+      /** Version */
+      version: number;
+    };
+    /** SourceDetail */
+    SourceDetail: {
+      /** Can Sync */
+      can_sync: boolean;
+      /**
+       * Connector Type
+       * @enum {string}
+       */
+      connector_type: "document_repository" | "ticketing" | "chat_export";
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      current_import: components["schemas"]["ImportOut"] | null;
+      /**
+       * Documents
+       * @description Active documents in the source (aggregate).
+       */
+      documents: number;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      job: components["schemas"]["SourceJob"] | null;
+      /** Key */
+      key: string;
+      /** Last Succeeded At */
+      last_succeeded_at: string | null;
+      /** Last Synced At */
+      last_synced_at: string | null;
+      /** @description The most recent upload when it is not the current import (e.g. one being received, or rejected). */
+      latest_upload: components["schemas"]["ImportOut"] | null;
+      /**
+       * Managed By
+       * @enum {string}
+       */
+      managed_by: "operator" | "organization";
+      /**
+       * Next Action
+       * @enum {string}
+       */
+      next_action:
+        | "upload_import"
+        | "replace_import"
+        | "wait"
+        | "map_references"
+        | "start_sync"
+        | "retry_sync"
+        | "resume"
+        | "none";
+      settings: components["schemas"]["SourceSettings"];
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "active" | "paused";
+      /** Sync Blocked By */
+      sync_blocked_by: string | null;
+      upload: components["schemas"]["UploadLimits"];
+      /** Version */
+      version: number;
+    };
+    /** SourceJob */
+    SourceJob: {
+      /** Attempts */
+      attempts: number;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Error Code */
+      error_code: string | null;
+      /** Finished At */
+      finished_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Import Id */
+      import_id: string | null;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "source_sync" | "import_check";
+      /** Mode */
+      mode: string;
+      /** Started At */
+      started_at: string | null;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "queued" | "running" | "succeeded" | "failed";
+      /** Sync Run Id */
+      sync_run_id: string | null;
+    };
     /** SourceRef */
     SourceRef: {
       /** Connector Type */
@@ -3879,6 +4414,26 @@ export interface components {
        * Format: uuid
        */
       id: string;
+      /** Name */
+      name: string;
+    };
+    /** SourceSettings */
+    SourceSettings: {
+      /** Account Scoped */
+      account_scoped: boolean;
+      /** Authority */
+      authority: string;
+      /**
+       * Channel Sensitivities
+       * @description Chat sources: each configured channel's level, by channel ID (IDs only, never names).
+       */
+      channel_sensitivities: {
+        [key: string]: string;
+      };
+      /** Default Departments */
+      default_departments: components["schemas"]["DepartmentRef"][];
+      /** Default Sensitivity */
+      default_sensitivity: string;
       /** Name */
       name: string;
     };
@@ -4285,6 +4840,45 @@ export interface components {
       /** Items */
       items: components["schemas"]["UnmappedReference"][];
     };
+    /** UnresolvedReference */
+    UnresolvedReference: {
+      /**
+       * External Ref
+       * @description The exact reference (a ticketing organization ID or a channel ID).
+       */
+      external_ref: string;
+      /** Records */
+      records: number;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "unmapped" | "mapped";
+    };
+    /** UploadLimits */
+    UploadLimits: {
+      /**
+       * Available
+       * @description False: this deployment has no import area.
+       */
+      available: boolean;
+      /** Formats */
+      formats: ("zip" | "jsonl")[];
+      /** Max Entries */
+      max_entries: number;
+      /** Max Expanded Bytes */
+      max_expanded_bytes: number;
+      /** Max File Bytes */
+      max_file_bytes: number;
+      /** Max Upload Bytes */
+      max_upload_bytes: number;
+    };
+    /** UploadResult */
+    UploadResult: {
+      /** Check Queued */
+      check_queued: boolean;
+      import: components["schemas"]["ImportOut"];
+    };
     /** UserOut */
     UserOut: {
       /** Display Name */
@@ -4309,6 +4903,13 @@ export interface components {
       msg: string;
       /** Error Type */
       type: string;
+    };
+    /** VersionedRequest */
+    VersionedRequest: {
+      /** Reason */
+      reason: string;
+      /** Version */
+      version: number;
     };
     /** VisibleAccount */
     VisibleAccount: {
@@ -8473,6 +9074,525 @@ export interface operations {
       };
     };
   };
+  post_source_v1_admin_sources_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["NewSourceRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SourceDetail"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_source_v1_admin_sources__source_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SourceDetail"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  patch_source_v1_admin_sources__source_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SourceChangeRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SourceDetail"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_source_change_preview_v1_admin_sources__source_id__changes_preview_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SourceChangeRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SourceChangePreview"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_source_check_v1_admin_sources__source_id__check_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A check is queued */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JobOut"];
+        };
+      };
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JobOut"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_source_disconnect_v1_admin_sources__source_id__disconnect_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DisconnectRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DisconnectResult"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  get_disconnect_preview_v1_admin_sources__source_id__disconnect_preview_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DisconnectPreview"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   get_source_failures_v1_admin_sources__source_id__failures_get: {
     parameters: {
       query?: never;
@@ -8522,6 +9642,265 @@ export interface operations {
       };
       /** @description Unprocessable Entity */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_source_import_v1_admin_sources__source_id__imports_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/x-ndjson": string;
+        "application/zip": string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UploadResult"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_source_pause_v1_admin_sources__source_id__pause_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VersionedRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SourceDetail"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  post_source_resume_v1_admin_sources__source_id__resume_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VersionedRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SourceDetail"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
         headers: {
           [name: string]: unknown;
         };

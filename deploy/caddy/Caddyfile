@@ -16,7 +16,8 @@
 	https_port 8443
 	servers {
 		timeouts {
-			# Time to receive a request; responses are bounded per upstream below.
+			# Time to receive a request; responses are bounded per upstream below. The
+			# export upload route sets its own, longer body deadline (request_body below).
 			read_header 10s
 			read_body 30s
 			idle 2m
@@ -24,13 +25,51 @@
 	}
 }
 
+# The API pool (both instances), with the time an instance may take to start answering
+# once the whole request is written ({args[0]}).
+(api_pool) {
+	reverse_proxy api1:8000 api2:8000 {
+		lb_policy round_robin
+		lb_try_duration 5s
+		health_uri /v1/health/ready
+		health_interval 5s
+		health_timeout 3s
+		health_status 200
+		fail_duration 10s
+		transport http {
+			dial_timeout 5s
+			response_header_timeout {args[0]}
+		}
+	}
+}
+
 https://localhost:8443, https://caddy:8443 {
 	tls internal
 
-	# The API's own 64 KiB cap (LATTICE_MAX_REQUEST_BYTES, 413 request_too_large) is the
-	# authoritative limit; this only stops oversized uploads at the edge. No route needs
-	# more than 64 KiB.
-	request_body {
+	# The one route that accepts a large body (P12.6): an export uploaded to a source,
+	# POST /api/v1/admin/sources/<uuid>/imports. Its body is streamed to the API (never
+	# buffered here) and the API's own limits are authoritative (LATTICE_IMPORT_MAX_UPLOAD_BYTES,
+	# 100 MiB by default, 413 request_too_large; LATTICE_IMPORT_UPLOAD_TIMEOUT_SECONDS, 600 s).
+	# The edge stops a body just above that size and one still arriving after 600 s.
+	# Raising the API's limits means raising these with them (docs/deployment.md §4).
+	@import_upload {
+		method POST
+		path_regexp ^/api/v1/admin/sources/[0-9a-fA-F-]{36}/imports$
+	}
+	request_body @import_upload {
+		max_size 101MiB
+		read_timeout 600s
+	}
+	# All other requests: the API's own 64 KiB cap (LATTICE_MAX_REQUEST_BYTES, 413
+	# request_too_large) is the authoritative limit; this only stops oversized bodies at
+	# the edge. No other route needs more than 64 KiB.
+	@ordinary_body {
+		not {
+			method POST
+			path_regexp ^/api/v1/admin/sources/[0-9a-fA-F-]{36}/imports$
+		}
+	}
+	request_body @ordinary_body {
 		max_size 1MB
 	}
 
@@ -52,22 +91,19 @@ https://localhost:8443, https://caddy:8443 {
 			header Content-Security-Policy "default-src 'none'"
 			respond `{"error":{"code":"service_unavailable","message":"Lattice is being updated. Try again shortly.","request_id":""}}` 503
 		}
+		# An upload is answered once it has been received AND validated (the archive is
+		# checked entry by entry before the response): up to the API's 600 s upload budget.
+		@import_upload_api {
+			method POST
+			path_regexp ^/v1/admin/sources/[0-9a-fA-F-]{36}/imports$
+		}
+		handle @import_upload_api {
+			import api_pool 600s
+		}
 		handle {
-			reverse_proxy api1:8000 api2:8000 {
-				lb_policy round_robin
-				lb_try_duration 5s
-				health_uri /v1/health/ready
-				health_interval 5s
-				health_timeout 3s
-				health_status 200
-				fail_duration 10s
-				transport http {
-					dial_timeout 5s
-					# An Ask may spend LATTICE_GENERATION_DEADLINE_SECONDS (120 s)
-					# generating plus retrieval: the contract asks for at least 150 s.
-					response_header_timeout 180s
-				}
-			}
+			# An Ask may spend LATTICE_GENERATION_DEADLINE_SECONDS (120 s) generating plus
+			# retrieval: the contract asks for at least 150 s.
+			import api_pool 180s
 		}
 	}
 

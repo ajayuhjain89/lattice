@@ -97,10 +97,11 @@ exports so that switching to API-backed readers later changes only the reader.
 Lattice's Markdown interchange format; *Tickets (JSON Lines export)* is Lattice's ticket
 interchange format shaped like a Zendesk export — not a Zendesk integration; *Slack
 workspace export* is Slack's own export format — not a live Slack integration. Phase 12
-adds no live connector (GitHub Issues is the first future candidate). *Current:* exports
-are read from a path an operator's `lattice sync` recorded. *Phase 12 target (not built):*
-administrators upload exports through the import store (phase-12-plan C8) or pick an
-operator-registered location; the connectors are unchanged.
+adds no live connector (GitHub Issues is the first future candidate). Exports reach the
+connectors two ways, both read by the same unchanged connectors: **uploaded** by an
+organization's administrator on the source's record (P12.6, §3.4: an *organization-managed*
+source, fed by the import store) or read from a server folder an operator's `lattice sync`
+recorded (an *operator-managed* source, configured by the operator's `sources.yaml`).
 
 ### 3.1 `document_repository` — Markdown with front matter
 
@@ -200,6 +201,30 @@ The real Slack export layout: `channels.json`, `groups.json` (private channels, 
   `users.json`/`channels.json`/`groups.json` makes the source unavailable: without them
   no message can be attributed and no private channel's membership is known.
 Capabilities: snapshot ✔, incremental ✗ (exports are full snapshots), acl_export ✔.
+
+### 3.4 Uploaded exports — what each source type accepts (P12.6)
+
+An administrator uploads the export **as the request body** (`POST
+/v1/admin/sources/{id}/imports`, no form, no file name sent or kept); its format is decided
+by its content (a zip's signature), never by a name or a MIME type. The archive is checked
+entry by entry and **only the files the connector reads are expanded**; everything else
+(attachments, images, `__MACOSX`, nested archives) is counted as ignored. A single wrapping
+folder (the way most tools zip a folder) is treated as the export's root.
+
+| Source type | Accepted upload | Files read (relative to the root) | Refused as `unsupported_layout` when |
+| ----------- | --------------- | ---------------------------------- | ------------------------------------ |
+| Documents (Markdown export), `document_repository` | a `.zip` | every `*.md` file, at any depth (§3.1 front matter) | no `.md` file |
+| Tickets (JSON Lines export), `ticketing` | a `.zip`, **or one `.jsonl` page** sent as is | every top-level `*.jsonl` file (§3.2 lines; a single page is stored as `export.jsonl`) | no top-level `.jsonl` file |
+| Slack workspace export, `chat_export` | a `.zip` (Slack's download, unchanged) | `users.json`, `channels.json`, `groups.json` at the root; `<channel>/<day>.json` one level down (§3.3) | `users.json` or `channels.json` missing |
+
+Native help-desk exports are **not** accepted by the Tickets type: each line must be the
+Lattice ticket interchange record of §3.2. Archive safety and limits (refusal codes,
+defaults, where they are configured) are phase-12-plan C8.3 as built (Part III, P12.6) and
+deployment.md §4. A refused upload changes nothing; an accepted one becomes the source's
+**current import** and is **checked** — the connector and the sync pipeline as a dry run
+(no writes, no provider call) — so the record can show record counts, held-back and
+invalid counts, failure codes and the exact account references that have no account,
+before any sync. A sync reads the import that was current when it was requested.
 
 ## 4. External identifier normalization
 

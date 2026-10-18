@@ -86,6 +86,8 @@ class SyncOptions:
     # False: sync an existing source with the configuration already recorded on its row
     # (the worker, ADR-013), never writing it; True: record ``config`` first (the CLI).
     record_config: bool = True
+    # The import an organization-managed source's run reads (P12.6), recorded on the run.
+    import_id: uuid.UUID | None = None
 
 
 @dataclass
@@ -115,6 +117,9 @@ class SyncResult:
     # Why the configured provider may receive nothing (egress policy), if so.
     egress_block: str | None = None
     failure_codes: Counter[str] = field(default_factory=Counter)
+    # access_unmappable:account failures by the external reference they name (an
+    # import's check reports them before the first sync; P12.6).
+    unmapped_refs: Counter[str] = field(default_factory=Counter)
 
     def run_counts(self) -> dict[str, int | bool | str | None]:
         return {
@@ -269,6 +274,8 @@ class Syncer:
             store.Failure(stage, code, external_id, location, tuple(sorted((params or {}).items())))
         )
         self.result.failure_codes[code] += 1
+        if code == "access_unmappable:account" and params and "external_account_ref" in params:
+            self.result.unmapped_refs[str(params["external_account_ref"])] += 1
         if count:
             self.result.failed += 1
 
@@ -281,10 +288,19 @@ class Syncer:
                 store.check_config(self.config, directory)
                 if self.options.dry_run or not self.options.record_config:
                     source = await store.get_source(s, self.org, self.config.key)
-                    if source is not None and source.status != "active":
+                    # A dry run writes nothing, so a paused source may be checked (P12.6).
+                    runnable = ("active", "paused") if self.options.dry_run else ("active",)
+                    if source is not None and source.status not in runnable:
                         raise store.SourceConfigurationError(
                             f"source_config:source_{source.status}"
                         )
+                    if (
+                        self.options.record_config
+                        and source is not None
+                        and source.managed_by != "operator"
+                    ):
+                        # A sources file never configures a source created in the product.
+                        raise store.SourceConfigurationError("source_config:managed_in_product")
                     if source is None and not self.options.dry_run:
                         raise store.SourceConfigurationError("source_config:source_missing")
                 else:
@@ -321,7 +337,9 @@ class Syncer:
                         source_id=str(source.id),
                         runs=interrupted,
                     )
-                self.result.run_id = await store.open_run(s, self.org, source.id, self.options.mode)
+                self.result.run_id = await store.open_run(
+                    s, self.org, source.id, self.options.mode, self.options.import_id
+                )
             try:
                 await self._run(directory)
             except (SourceUnavailable, store.SourceConfigurationError) as exc:

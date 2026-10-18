@@ -112,6 +112,17 @@ ADMIN = {
     ("POST", "/v1/admin/identity/scim/tokens/{token_id}/rotate"),
     ("POST", "/v1/admin/identity/scim/tokens/{token_id}/revoke/preview"),
     ("POST", "/v1/admin/identity/scim/tokens/{token_id}/revoke"),
+    # Phase 12 (P12.6): customer-operable export sources and their imports.
+    ("POST", "/v1/admin/sources"),
+    ("GET", "/v1/admin/sources/{source_id}"),
+    ("PATCH", "/v1/admin/sources/{source_id}"),
+    ("POST", "/v1/admin/sources/{source_id}/changes/preview"),
+    ("POST", "/v1/admin/sources/{source_id}/pause"),
+    ("POST", "/v1/admin/sources/{source_id}/resume"),
+    ("GET", "/v1/admin/sources/{source_id}/disconnect-preview"),
+    ("POST", "/v1/admin/sources/{source_id}/disconnect"),
+    ("POST", "/v1/admin/sources/{source_id}/imports"),
+    ("POST", "/v1/admin/sources/{source_id}/check"),
 }
 SCIM = {
     ("GET", "/scim/v2/ServiceProviderConfig"),
@@ -271,6 +282,32 @@ BODIES |= {
         "reason": "Probe",
     },
     ("POST", "/v1/admin/providers/{provider_id}/test"): None,
+}
+_SOURCE_VERSIONED = {"version": 1, "reason": "Probe"}
+BODIES |= {
+    ("POST", "/v1/admin/sources"): {
+        "connector_type": "document_repository",
+        "key": "probe-docs",
+        "name": "Probe",
+        "default_sensitivity": "internal",
+        "authority": "working",
+        "account_scoped": False,
+        "reason": "Probe",
+    },
+    ("PATCH", "/v1/admin/sources/{source_id}"): {"name": "Probe", **_SOURCE_VERSIONED},
+    ("POST", "/v1/admin/sources/{source_id}/changes/preview"): {
+        "name": "Probe",
+        **_SOURCE_VERSIONED,
+    },
+    ("POST", "/v1/admin/sources/{source_id}/pause"): _SOURCE_VERSIONED,
+    ("POST", "/v1/admin/sources/{source_id}/resume"): _SOURCE_VERSIONED,
+    ("POST", "/v1/admin/sources/{source_id}/disconnect"): {
+        "confirm_key": "probe",
+        **_SOURCE_VERSIONED,
+    },
+    # The upload's body is the file itself; an empty one is refused after authority.
+    ("POST", "/v1/admin/sources/{source_id}/imports"): None,
+    ("POST", "/v1/admin/sources/{source_id}/check"): None,
 }
 QUERIES = {("GET", "/v1/admin/access/documents"): "?q=onboarding"}
 
@@ -508,18 +545,21 @@ async def test_another_organizations_identifiers_are_unknown(
                     "(SELECT count(*) FROM audit_events WHERE action LIKE 'access.%' "
                     "OR action LIKE 'account.%' OR action LIKE 'sso.%' "
                     "OR action LIKE 'scim.%' OR action LIKE 'provider.%' "
-                    "OR action LIKE 'credential.%' OR action LIKE 'egress.%'), "
+                    "OR action LIKE 'credential.%' OR action LIKE 'egress.%' "
+                    "OR action LIKE 'source.%'), "
                     "(SELECT count(*) FROM scim_tokens WHERE revoked_at IS NULL), "
                     "(SELECT client_id || status FROM oidc_connections), "
                     "(SELECT count(*) FROM provider_credentials), "
                     "(SELECT count(*) FROM model_providers WHERE purpose = 'generation' "
                     "AND (enabled OR approved_at IS NOT NULL OR last_test_at IS NOT NULL)), "
-                    "(SELECT count(*) FROM step_up_grants)"
+                    "(SELECT count(*) FROM step_up_grants), "
+                    "(SELECT count(*) FROM source_imports), "
+                    "(SELECT string_agg(status || ':' || version, ',') FROM sources)"
                 ),
                 {"m": uuid.UUID(worlds.halden_ids["membership_id"])},
             )
         ).one()
-    assert tuple(state) == (1, "internal", 0, 0, 1, "latticeactive", 0, 0, 0)
+    assert tuple(state) == (1, "internal", 0, 0, 1, "latticeactive", 0, 0, 0, 0, "active:1")
 
 
 @pytest.mark.parametrize(("method", "path"), sorted(ADMIN))

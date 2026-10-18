@@ -29,11 +29,13 @@ from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.expression import null
 
 from lattice.connectors.contract import DocumentKind, ExternalGroup
 from lattice.ingestion.access import MappedAccess, OrgDirectory
 from lattice.ingestion.canonical import CanonicalDocument
 from lattice.sources.config import SourceConfig
+from lattice.tracing.models import AuditEvent
 
 _NAMESPACE = uuid.UUID("0b8c5c2e-7c3a-4d5e-9f11-2a6b4c8d9e01")
 
@@ -77,6 +79,7 @@ class SourceRow:
     connector_type: str
     status: str
     opaque_ref_key: bytes
+    managed_by: str = "operator"
 
 
 async def organization_id(session: AsyncSession, slug: str) -> uuid.UUID | None:
@@ -116,24 +119,57 @@ async def get_source(session: AsyncSession, org: uuid.UUID, key: str) -> SourceR
     row = (
         await session.execute(
             text(
-                "SELECT id, key, connector_type, status, opaque_ref_key FROM sources "
+                "SELECT id, key, connector_type, status, opaque_ref_key, managed_by FROM sources "
                 "WHERE organization_id = :o AND key = :k"
             ),
             {"o": org, "k": key},
         )
     ).first()
-    return None if row is None else SourceRow(row[0], str(row[1]), row[2], row[3], bytes(row[4]))
+    return (
+        None
+        if row is None
+        else SourceRow(row[0], str(row[1]), row[2], row[3], bytes(row[4]), row[5])
+    )
+
+
+_SETTINGS_SQL = text(
+    "SELECT name, config, default_sensitivity, account_scoped, authority FROM sources "
+    "WHERE organization_id = :o AND key = :k"
+)
+
+
+def _audited_settings(row: Any) -> dict[str, Any]:
+    config: dict[str, Any] = dict(row.config or {})
+    return {
+        "name": row.name,
+        "default_sensitivity": row.default_sensitivity,
+        "default_departments": sorted(str(d) for d in config.get("default_departments") or []),
+        "authority": row.authority,
+        "account_scoped": bool(row.account_scoped),
+        "channel_sensitivities": {
+            k: v["sensitivity"]
+            for k, v in sorted((config.get("channels") or {}).items())
+            if isinstance(v, dict) and v.get("sensitivity")
+        },
+    }
 
 
 async def upsert_source(
     session: AsyncSession, org: uuid.UUID, config: SourceConfig, export_path: str
 ) -> SourceRow:
+    """Create or update the operator's source as the file says, audited as
+    ``operator:sync`` (``source.created`` / ``source.updated``, phase-12-plan C11) -- the
+    export path itself is never written into an event. A source created in the product
+    (``managed_by = organization``) is never taken over by a file (refused)."""
     existing = await get_source(session, org, config.key)
     if existing is not None:
+        if existing.managed_by != "operator":
+            raise SourceConfigurationError("source_config:managed_in_product")
         if existing.connector_type != config.connector_type:
             raise SourceConfigurationError("source_config:connector_type_changed")
         if existing.status != "active":
             raise SourceConfigurationError(f"source_config:source_{existing.status}")
+    before_row = (await session.execute(_SETTINGS_SQL, {"o": org, "k": config.key})).first()
     # Account mappings live in account_external_refs (P12.3), not in the configuration:
     # ``lattice.accounts.refs.apply_file_mappings`` writes the file's, audited.
     channels = {
@@ -145,33 +181,60 @@ async def upsert_source(
         "default_departments": config.default_departments,
         "channels": {k: v for k, v in channels.items() if v},
     }
-    await session.execute(
-        text(
-            "INSERT INTO sources (organization_id, key, connector_type, name, config, "
-            "default_sensitivity, account_scoped, authority) "
-            "VALUES (:o, :k, :t, :n, CAST(:c AS jsonb), :ds, :as, :au) "
-            "ON CONFLICT (organization_id, key) DO UPDATE SET "
-            "name = EXCLUDED.name, config = EXCLUDED.config, "
-            "default_sensitivity = EXCLUDED.default_sensitivity, "
-            "account_scoped = EXCLUDED.account_scoped, authority = EXCLUDED.authority "
-            "WHERE (sources.name, sources.config, sources.default_sensitivity, "
-            "sources.account_scoped, sources.authority) IS DISTINCT FROM "
-            "(EXCLUDED.name, EXCLUDED.config, EXCLUDED.default_sensitivity, "
-            "EXCLUDED.account_scoped, EXCLUDED.authority)"
-        ),
-        {
-            "o": org,
-            "k": config.key,
-            "t": config.connector_type,
-            "n": config.name,
-            "c": json.dumps(settings, sort_keys=True),
-            "ds": config.default_sensitivity,
-            "as": config.account_scoped,
-            "au": config.authority,
-        },
-    )
+    changed = (
+        await session.execute(
+            text(
+                "INSERT INTO sources (organization_id, key, connector_type, name, config, "
+                "default_sensitivity, account_scoped, authority) "
+                "VALUES (:o, :k, :t, :n, CAST(:c AS jsonb), :ds, :as, :au) "
+                "ON CONFLICT (organization_id, key) DO UPDATE SET "
+                "name = EXCLUDED.name, config = EXCLUDED.config, "
+                "default_sensitivity = EXCLUDED.default_sensitivity, "
+                "account_scoped = EXCLUDED.account_scoped, authority = EXCLUDED.authority "
+                "WHERE (sources.name, sources.config, sources.default_sensitivity, "
+                "sources.account_scoped, sources.authority) IS DISTINCT FROM "
+                "(EXCLUDED.name, EXCLUDED.config, EXCLUDED.default_sensitivity, "
+                "EXCLUDED.account_scoped, EXCLUDED.authority) RETURNING id"
+            ),
+            {
+                "o": org,
+                "k": config.key,
+                "t": config.connector_type,
+                "n": config.name,
+                "c": json.dumps(settings, sort_keys=True),
+                "ds": config.default_sensitivity,
+                "as": config.account_scoped,
+                "au": config.authority,
+            },
+        )
+    ).first()
     row = await get_source(session, org, config.key)
     assert row is not None  # noqa: S101 - just upserted
+    if changed is not None:
+        after_row = (await session.execute(_SETTINGS_SQL, {"o": org, "k": config.key})).one()
+        before = None if before_row is None else _audited_settings(before_row)
+        after = _audited_settings(after_row)
+        if before != after:  # a path-only change is not an administrator-visible setting
+            session.add(
+                AuditEvent(
+                    organization_id=org,
+                    actor="operator:sync",
+                    action="source.created" if before is None else "source.updated",
+                    target={"source_id": str(row.id)},
+                    before=null() if before is None else before,
+                    after={
+                        **after,
+                        **(
+                            {"key": config.key, "connector_type": config.connector_type}
+                            if before is None
+                            else {}
+                        ),
+                        "managed_by": "operator",
+                    },
+                    reason="Configured by the operator's sources file",
+                )
+            )
+            await session.flush()
     return row
 
 
@@ -878,15 +941,19 @@ async def abort_interrupted_runs(
 
 
 async def open_run(
-    session: AsyncSession, org: uuid.UUID, source_id: uuid.UUID, mode: str
+    session: AsyncSession,
+    org: uuid.UUID,
+    source_id: uuid.UUID,
+    mode: str,
+    import_id: uuid.UUID | None = None,
 ) -> uuid.UUID:
     run_id: uuid.UUID = (
         await session.execute(
             text(
-                "INSERT INTO source_sync_runs (organization_id, source_id, mode) "
-                "VALUES (:o, :s, :m) RETURNING id"
+                "INSERT INTO source_sync_runs (organization_id, source_id, mode, import_id) "
+                "VALUES (:o, :s, :m, :i) RETURNING id"
             ),
-            {"o": org, "s": source_id, "m": mode},
+            {"o": org, "s": source_id, "m": mode, "i": import_id},
         )
     ).scalar_one()
     return run_id

@@ -15,6 +15,7 @@ started; production runs uvicorn with ``--no-proxy-headers`` so the server adds 
 implicit trust of its own (its default trusts 127.0.0.1).
 """
 
+import asyncio
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -56,6 +57,7 @@ from lattice.db.role_check import verify_runtime_role
 from lattice.identity.dev_provider import DevIdentityProvider
 from lattice.identity.oidc import OidcClient, OidcSignIn
 from lattice.identity.sessions import SessionPolicy, SessionService
+from lattice.imports.store import FilesystemImportStore
 from lattice.log import configure_logging
 from lattice.providers.factory import build_embedding_provider
 from lattice.providers.generation_factory import DefaultGenerationFactory
@@ -127,6 +129,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         web_origin=settings.web_origin,
         secrets=secret_store,
     )
+    # Export uploads (P12.6): the import area, its limits, and a per-process bound on
+    # uploads received at once (each streams to disk, then validates).
+    app.state.import_store = (
+        None
+        if settings.imports_root is None
+        else FilesystemImportStore(
+            root=settings.imports_root, max_upload_bytes=settings.import_max_upload_bytes
+        )
+    )
+    app.state.import_limits = settings.import_limits()
+    app.state.import_uploads = asyncio.Semaphore(settings.import_concurrent_uploads)
     # Administrator provider tests (P12.5): no organization content, through the outbound
     # policy (tests replace its transport).
     app.state.provider_tester = ProviderTester()
@@ -174,7 +187,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app, settings)
     # add_middleware wraps: the last added is outermost.
     app.add_middleware(CsrfMiddleware)
-    app.add_middleware(BodyLimitMiddleware, max_bytes=settings.max_request_bytes)
+    app.add_middleware(
+        BodyLimitMiddleware,
+        max_bytes=settings.max_request_bytes,
+        upload_max_bytes=settings.import_max_upload_bytes,
+    )
     app.add_middleware(RequestContextMiddleware, production=production)
     if settings.trusted_proxies:
         # Outermost: every other layer sees the client the trusted ingress reported.

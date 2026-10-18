@@ -64,6 +64,17 @@ Ingestion is an operator tool. It connects as `lattice_owner` and writes **throu
 row-level security, one organization bound per transaction, exactly like the seed. The
 runtime role (`lattice_app`) has SELECT only on the ingestion tables.
 
+**Organization-managed sources (P12.6).** The same pipeline runs from the worker for a
+source created in the product: its configuration comes from the `sources` row (no
+`sources.yaml`, no path), and the connector reads the tree of the job's import through the
+import store (`lattice.imports`; the import that was current when the sync was requested,
+recorded on the run as `import_id`). An `import_check` job runs the pipeline with
+`dry_run` — every step up to persistence, no write, no provider call — and records its
+counts, codes and unresolved references on the import (connector-design §3.4). Everything
+in this document (idempotency, versioning, the deletion guard, fail-closed access mapping,
+quarantine) applies unchanged; `lattice sync` refuses such a source
+(`source_config:managed_in_product`).
+
 ## 2. Idempotency and determinism
 
 - Idempotency key: `(organization_id, source_id, external_id)`.

@@ -46,6 +46,9 @@ JOB_KEYS = {
     "started_at",
     "finished_at",
     "sync_run_id",
+    # P12.6: what the job is (a sync or an import check) and the import it reads (an ID).
+    "kind",
+    "import_id",
 }
 
 

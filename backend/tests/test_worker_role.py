@@ -66,6 +66,9 @@ WORKER_TABLES = {
     # embedding record still raises the version, through a definer trigger).
     "egress_policy_versions": set(),
     "step_up_grants": set(),
+    # Phase 12 (P12.6, 0022): a sync reads the import it consumes; check results and
+    # expiry are written only through lattice_record_import_check / lattice_expire_imports.
+    "source_imports": {"SELECT"},
 }
 
 
@@ -120,13 +123,22 @@ async def test_column_grants(superuser_engine: AsyncEngine) -> None:
         assert await column("lattice_worker", "memberships", "authz_updated_at", "UPDATE")
         for col in ("last_synced_at", "last_succeeded_at", "acl_synced_at"):
             assert await column("lattice_worker", "sources", col, "UPDATE"), col
-        for col in ("config", "name", "status", "default_sensitivity", "account_scoped"):
+        for col in (
+            "config",
+            "name",
+            "status",
+            "default_sensitivity",
+            "account_scoped",
+            "managed_by",
+            "import_id",
+            "version",
+        ):
             assert not await column("lattice_worker", "sources", col, "UPDATE"), col
         for col in ("clearance", "account_scope", "is_admin", "status"):
             assert not await column("lattice_worker", "memberships", col, "UPDATE"), col
         for col in ("status", "attempts", "lease_expires_at", "error_code", "sync_run_id"):
             assert await column("lattice_worker", "jobs", col, "UPDATE"), col
-        for col in ("organization_id", "source_id", "requested_by", "kind", "mode"):
+        for col in ("organization_id", "source_id", "requested_by", "kind", "mode", "import_id"):
             assert not await column("lattice_worker", "jobs", col, "UPDATE"), col
         # The API queues jobs: it may insert the request columns, never change a job.
         for col in ("organization_id", "kind", "source_id", "mode", "requested_by"):

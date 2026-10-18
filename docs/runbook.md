@@ -294,6 +294,27 @@ member stuck at 429 `ask_concurrent` after an API crash waits for the lease to e
 | Retention failing | `lattice_maintenance_failures_total{task}` rising or `lattice_maintenance_last_success_timestamp_seconds{task}` older than a few hours; the `maintenance.retention_failed` log event names the task and the error type. Other tasks keep running; the failed one is retried at the next run. Typical causes: database unreachable or a statement timeout on a very large backlog (it resumes where it stopped, batch by batch) |
 | Embeddings of requested syncs | `LATTICE_SYNC_EMBEDDING` (default `none`: new chunks stay `pending` until a sync with a provider). Use the provider the corpus was synced with |
 
+### 7.5a Export sources and uploaded imports — *implemented (P12.6)*
+
+Administrators add export sources and upload exports on **Sources → the source's record**;
+operator-managed sources (`lattice sync --sources`) keep the §7.5 workflow and are
+read-only in the product (sync, pause, resume and disconnect still work there).
+
+| Situation | Action |
+| --------- | ------ |
+| Uploads answer 503 `storage_unavailable` | `LATTICE_IMPORTS_ROOT` is unset on that api instance, or the volume is not mounted ([deployment.md](deployment.md) §5.1, §14). Set it on every api instance and the worker (same volume) and restart |
+| `storage_full` (the record says the upload was refused for space) | The organization's retained imports would pass `LATTICE_IMPORT_ORGANIZATION_QUOTA_BYTES` (2 GiB), or the volume has less than 256 MiB free beyond the upload's worst case. Check free space (`df` on the volume; `LatticeStorageHigh`); superseded imports are removed by the worker within a minute once no job reads them; grow the volume or raise the quota |
+| An upload is refused with another code | The record explains it (`archive_invalid`, `too_large`, `too_many_entries`, `ratio_exceeded`, `unsafe_path`, `link_refused`, `duplicate_name`, `unsupported_layout`, `upload_incomplete`, `upload_timeout`, `upload_failed`). Nothing was kept; the current export is unchanged. `too_large` for a legitimate export: raise `LATTICE_IMPORT_MAX_*` **and** the ingress limit for the upload route (§4) |
+| 413 with Caddy's (not the API's) answer, or a cut-off upload | The ingress limit or body timeout for the upload route is below the API's (`deploy/caddy/Caddyfile` `@import_upload`) |
+| "Another upload to this source is being received" | One upload per source at a time. A stuck `receiving`/`validating` row older than an hour is abandoned by the next upload and its files removed by retention |
+| A sync or check fails `import_unavailable` | The worker cannot read the import (no `LATTICE_IMPORTS_ROOT` on the worker, a different volume than the API's, or files removed by hand). Fix the mount; upload the export again if its files are gone |
+| A check shows held-back records / unresolved references | Expected fail-closed behaviour: map each reference in **Access → Accounts → Unmapped references**, then *Check export again* or sync. Records are never indexed without their account |
+| Import retention | Every 60 s the worker marks deleted rejected imports, superseded ones no job reads, uploads abandoned for an hour and imports of disconnected sources (`lattice_expire_imports`), removes their files, and removes file trees with no row older than an hour. Failures: `maintenance.import_retention_failed` log event; retried next minute |
+| Disconnect | On the record: the preview counts what goes, the key typed and a reason. Refused while a sync runs (queued work is cancelled). Operators: `lattice source disconnect` (records `source.disconnected` too) |
+
+Metrics: `lattice_imports_total{outcome}`, `lattice_import_duration_seconds`; audit events
+`source.created/updated/paused/resumed/disconnected/import_accepted/import_rejected/sync_requested`.
+
 ### 7.6 Deployment checklist
 
 Production refuses to start on any of: `LATTICE_ENV` unset; development login enabled;
@@ -785,7 +806,9 @@ the source with `lattice sync` to see the failure directly.
 
 `LatticeRepeatedSyncFailures` (ticket): three or more sync runs failed in 6 hours. §2 "A
 sync run is partial or failed": the Sources page or `sync_record_failures` give the codes;
-`source_unavailable:*` is the export mount, `source_config:*` the operator's `sources.yaml`.
+`source_unavailable:*` is the export mount (or, for an organization-managed source, the
+uploaded export: the record's check says what is missing), `source_config:*` the operator's
+`sources.yaml`; `import_unavailable` the import area (§7.5a).
 
 ### 10.13 Security invariant violation
 

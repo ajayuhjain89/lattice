@@ -48,6 +48,11 @@ import type {
   NewProviderRequest,
   RevokeCredentialRequest,
   StepUpRequest,
+  NewSourceRequest,
+  SourceChangeRequest,
+  SourceDetail,
+  SourceLifecycleRequest,
+  DisconnectRequest,
 } from "./types";
 
 export const queryKeys = {
@@ -59,6 +64,9 @@ export const queryKeys = {
   sources: ["sources"] as const,
   adminSources: ["admin", "sources"] as const,
   sourceFailures: (id: string) => ["admin", "sources", id, "failures"] as const,
+  // Under ["admin", "sources"]: every source change refreshes the register and records.
+  source: (id: string) => ["admin", "sources", "one", id] as const,
+  disconnectPreview: (id: string) => ["admin", "sources", "one", id, "disconnect-preview"] as const,
   activity: ["activity"] as const,
   adminActivity: ["admin", "activity"] as const,
   accounts: ["accounts"] as const,
@@ -199,8 +207,114 @@ export function useRequestSync() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (sourceId: string) => api.requestSync(sourceId),
-    onSettled: () => client.invalidateQueries({ queryKey: queryKeys.adminSources }),
+    onSettled: () =>
+      Promise.all([client.invalidateQueries({ queryKey: queryKeys.adminSources }), client.invalidateQueries({ queryKey: queryKeys.setup })]),
   });
+}
+
+/* --- export sources operated in the product (P12.6) --- */
+
+/** Work the server is doing for a source: a check or sync, or an upload it is validating. */
+export function sourceBusy(source: SourceDetail | undefined): boolean {
+  if (!source) return false;
+  const job = source.job?.status === "queued" || source.job?.status === "running";
+  const upload = source.latest_upload?.status === "receiving" || source.latest_upload?.status === "validating";
+  return job || upload;
+}
+
+/** One source's record; refreshed every 3 s only while the server is working on it. */
+export function useSource(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.source(id),
+    queryFn: ({ signal }) => api.source(id, signal),
+    enabled,
+    refetchInterval: (query) => (sourceBusy(query.state.data) ? 3000 : false),
+    ...REAUTHORIZED,
+  });
+}
+
+/** Sources feed the register, the records, the setup record and the audit trail. */
+function useSourcesChanged() {
+  const client = useQueryClient();
+  return () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: queryKeys.adminSources }),
+      client.invalidateQueries({ queryKey: queryKeys.sources }),
+      client.invalidateQueries({ queryKey: queryKeys.setup }),
+      client.invalidateQueries({ queryKey: queryKeys.audit }),
+    ]);
+}
+
+export function useCreateSource() {
+  const client = useQueryClient();
+  const changed = useSourcesChanged();
+  return useMutation({
+    mutationFn: (body: NewSourceRequest) => api.createSource(body),
+    onSuccess: (source) => client.setQueryData(queryKeys.source(source.id), source),
+    onSettled: changed,
+  });
+}
+
+export function usePreviewSourceChange(id: string) {
+  return useMutation({ mutationFn: (body: SourceChangeRequest) => api.previewSourceChange(id, body) });
+}
+
+export function useUpdateSource(id: string) {
+  const client = useQueryClient();
+  const changed = useSourcesChanged();
+  return useMutation({
+    mutationFn: (body: SourceChangeRequest) => api.updateSource(id, body),
+    onSuccess: (source) => client.setQueryData(queryKeys.source(id), source),
+    onSettled: changed,
+  });
+}
+
+export function useSourceLifecycle(id: string, pause: boolean) {
+  const client = useQueryClient();
+  const changed = useSourcesChanged();
+  return useMutation({
+    mutationFn: (body: SourceLifecycleRequest) => (pause ? api.pauseSource(id, body) : api.resumeSource(id, body)),
+    onSuccess: (source) => client.setQueryData(queryKeys.source(id), source),
+    onSettled: changed,
+  });
+}
+
+export function useDisconnectPreview(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.disconnectPreview(id),
+    queryFn: ({ signal }) => api.disconnectPreview(id, signal),
+    enabled,
+    ...REAUTHORIZED,
+  });
+}
+
+export function useDisconnectSource(id: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DisconnectRequest) => api.disconnectSource(id, body),
+    // Not awaited, and never the record itself: it is gone, and the page moves on at once.
+    onSettled: () => {
+      const own = (key: readonly unknown[]) => key[2] === "one" && key[3] === id;
+      void client.invalidateQueries({ queryKey: queryKeys.adminSources, predicate: (q) => !own(q.queryKey) });
+      void client.invalidateQueries({ queryKey: queryKeys.sources });
+      void client.invalidateQueries({ queryKey: queryKeys.setup });
+      void client.invalidateQueries({ queryKey: queryKeys.audit });
+      void client.invalidateQueries({ queryKey: ["admin", "access", "account-references"] });
+    },
+  });
+}
+
+export function useCheckImport(id: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.checkImport(id),
+    onSettled: () => client.invalidateQueries({ queryKey: queryKeys.source(id) }),
+  });
+}
+
+/** After an upload (sent outside this client, with progress): the record and register. */
+export function useUploadSettled() {
+  return useSourcesChanged();
 }
 
 const PAGE = 25;

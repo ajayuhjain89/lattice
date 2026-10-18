@@ -576,8 +576,10 @@ content is logged or stored.
 
 Decided in P12.0 (2026-10-06, [phase-12-plan](phase-12-plan.md) Part II and
 [ADR-017](decisions/017-setup-mutation-trust-boundary.md)). **P12.1 (2026-10-08) built the
-foundations below, P12.2 (2026-10-09) members and administrators and P12.3 (2026-10-12)
-accounts and their external references; the rest is contract, not yet implemented.**
+foundations below, P12.2 (2026-10-09) members and administrators, P12.3 (2026-10-12)
+accounts and their external references, P12.4 identity administration, P12.5 providers and
+egress, and P12.6 (2026-10-18) export sources and imports; the rest is contract, not yet
+implemented.**
 
 **Built in P12.1:**
 
@@ -769,5 +771,53 @@ accounts and their external references; the rest is contract, not yet implemente
 - **Tests** send no organization content and generate nothing (Gemini: model metadata;
   Ollama: its model list); results are facts, never approvals; not audited (C11).
 
-**Contracts not yet implemented:** imports (C8, P12.6); and on every setup surface
-administrators stay non-readers of content (C9, C10).
+**Export sources and imports (P12.6, migration 0022; phase-12-plan Part III).**
+- **Administrators only; writes only through fenced functions** (`lattice_create_source`,
+  `lattice_update_source`, `lattice_set_source_paused`, `lattice_disconnect_source`,
+  `lattice_purge_source`, the five `lattice_*_import` functions), each re-checking an
+  active administrator, each audit-coupled (`source.*`); the API role has no table write on
+  `sources` or `source_imports` (tested statement by statement). Another organization's
+  source answers every route exactly as a random ID (route inventory, upload included).
+- **No path from the product.** Sources and imports are identified by server-generated
+  UUIDs; storage locations are derived from the organization and import UUIDs by the
+  import store under `LATTICE_IMPORTS_ROOT`; an organization-managed source's
+  configuration cannot hold a path (CHECK). No file name, MIME type or `Content-Length`
+  is trusted: the format is decided by content, the body is counted as it streams.
+- **Archive safety** (C8.3 as built): checked entry by entry before anything is written —
+  EOCD entry-count pre-check; UTF-8 names; absolute paths, drive letters, `..`,
+  backslashes, empty components, excessive depth or length refused (`unsafe_path`);
+  symlinks, hard links, devices, FIFOs, sockets and Windows reparse points refused
+  (`link_refused`); duplicate names, also ignoring case and Unicode form
+  (`duplicate_name`); overlapping entries and encrypted or non-deflate/stored entries
+  (`archive_invalid`); per-entry ratio, per-file and total expanded size counted while
+  streaming, never trusted from headers (`ratio_exceeded`, `too_large`); entry count
+  (`too_many_entries`). Only files the connector reads are expanded, each created
+  exclusively (`O_EXCL | O_NOFOLLOW`, mode 0640, directories 0750) in a fresh staging
+  directory published by one rename. Uploaded files are never served, never executable,
+  and reachable only by the API instances and the worker (deployment.md §4).
+- **Bounded resources.** A route-specific body cap (default 100 MiB, at the API and the
+  ingress) and a 600 s budget for receiving and validating; the ordinary 64 KiB / 1 MB
+  limits are unchanged for every other route; two concurrent uploads per API process; one
+  upload per source at a time; a 2 GiB per-organization quota of retained imports and a
+  256 MiB free-space reserve checked before accepting (`storage_full`). Interrupted,
+  timed-out, oversized or refused uploads leave nothing available (partial files
+  removed; abandoned rows expire after an hour).
+- **Admin ≠ content** (C9). The record, the check and the register show counts, fixed
+  codes, sizes, a SHA-256, times, IDs and the exact account references (ticketing
+  organization IDs, channel **IDs**) — never document, ticket or message text, file names
+  from an import, private channel names or content-derived suggestions. Creating or
+  configuring a source grants nobody anything; source settings only fill in what a record
+  leaves out, and a settings change that would let more people read records at the next
+  sync must be acknowledged after the server's preview (`widening_not_acknowledged`).
+  Imported records keep the Phase 4 rules: private Slack channels stay grants-only to
+  their members; a record without trustworthy access information, or with an account
+  reference that has no account, is held back (fail closed, P12.3) — tested with the
+  authorization predicate (`test_first_sync.py`).
+- **The worker** reads an organization-managed source's import through the store by the
+  job's import ID (the import current when the sync was requested); it gains no
+  organization-admin authority — only `SELECT` on `source_imports` and two functions of
+  its own (check results, expiry).
+
+**Contracts not yet implemented:** operator-registered export locations (C8.1 —
+operator-managed sources keep the `lattice sync` path workflow); and on every setup
+surface administrators stay non-readers of content (C9, C10).
