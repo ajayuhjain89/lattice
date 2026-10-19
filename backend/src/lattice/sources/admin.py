@@ -35,7 +35,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lattice.access.audit import record_event
+from lattice.access.audit import MEMBER_CHANGED, record_event
+from lattice.access.directory import access_snapshot, source_group_members
 from lattice.db.engine import Database
 from lattice.errors import ErrorCode, ErrorDetail, LatticeError
 from lattice.imports.limits import ImportLimits
@@ -812,7 +813,11 @@ async def disconnect(
     purged = False
     try:
         async with fenced(), db.tenant_transaction(organization_id) as session:
-            purged = bool(
+            # Members of the source's synced groups (private channels) lose them with it:
+            # an access change, which the audit coupling requires an event for (P12.7).
+            losing = await source_group_members(session, organization_id, source_id)
+            snapshots = {m: await access_snapshot(session, organization_id, m) for m in losing}
+            done = bool(
                 (
                     await session.execute(
                         text("SELECT lattice_purge_source(:a, :s)"),
@@ -820,6 +825,21 @@ async def disconnect(
                     )
                 ).scalar_one()
             )
+            for membership_id, groups in sorted(losing.items()):
+                snapshot = snapshots[membership_id]
+                if not done or snapshot is None:
+                    continue
+                await record_event(
+                    session,
+                    organization_id,
+                    actor=_actor(actor_membership_id),
+                    action=MEMBER_CHANGED,
+                    target={"membership_id": str(membership_id), "source_id": str(source_id)},
+                    before=snapshot[0].as_json(),
+                    after={**snapshot[0].as_json(), "source_groups_lost": groups},
+                    reason=f"Source disconnected: {request.reason}",
+                )
+        purged = done  # only once the purge committed
     except Exception as exc:  # the source stays deleting: invisible, resumable
         log_event(
             _log,

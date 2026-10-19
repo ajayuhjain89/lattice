@@ -312,8 +312,14 @@ read-only in the product (sync, pause, resume and disconnect still work there).
 | Import retention | Every 60 s the worker marks deleted rejected imports, superseded ones no job reads, uploads abandoned for an hour and imports of disconnected sources (`lattice_expire_imports`), removes their files, and removes file trees with no row older than an hour. Failures: `maintenance.import_retention_failed` log event; retried next minute |
 | Disconnect | On the record: the preview counts what goes, the key typed and a reason. Refused while a sync runs (queued work is cancelled). Operators: `lattice source disconnect` (records `source.disconnected` too) |
 
-Metrics: `lattice_imports_total{outcome}`, `lattice_import_duration_seconds`; audit events
+| An accepted replacement's check failed as a whole (*Next: Replace the export*; Sync now refused `import_invalid`) | Upload a good export again: the previous one is deleted once no job reads it and cannot be restored. Indexed content is untouched until a sync runs ([onboarding.md](onboarding.md) §10) |
+
+Metrics: `lattice_imports_total{outcome,code}` — since P12.7 also uploads refused before
+they were registered (not an archive by their first bytes, `storage_full`,
+`upload_timeout`; log event `sources.import_refused`, no audit event: nothing was
+received) — and `lattice_import_duration_seconds`; audit events
 `source.created/updated/paused/resumed/disconnected/import_accepted/import_rejected/sync_requested`.
+Onboarding a new organization end to end: [onboarding.md](onboarding.md).
 
 ### 7.6 Deployment checklist
 
@@ -420,6 +426,7 @@ Docker has 3 GB).
 | Sign in as a persona / run an Ask | `make prod-up VERIFY=1 [FAKE_DELAY=40]`: test env, development sign-in, fake providers (deploy/compose.verify.yaml); then `make prod-seed VERIFY=1` (synthetic-only: seed with `--require-synthetic`, sync with fake embeddings, admin grants) |
 | Database checks | `make prod-check` (`lattice check-deployment`), `make prod-migrate` (`lattice migrate --status`) |
 | Re-run the verification | `make prod-up VERIFY=1 IDP=1 FAKE_DELAY=20`, `make prod-seed VERIFY=1 IDP=1`, then `make prod-limits`, `prod-authz`, `prod-drills` (each with `VERIFY=1 IDP=1`); `prod-perf` needs the API instances at `FAKE_DELAY=0`. Each prints PASS/FAIL per case and exits 1 on any failure; results are recorded in §8 |
+| Verify organization onboarding end to end (**P12.7**) | `make prod-up IDP=1` (production mode, no `VERIFY`), then `make prod-onboard IDP=1` (`UI=0` skips the browser half). Two new run-unique organizations per run, nothing seeded; it rolls the API instances onto `deploy/verification/compose.small-imports.yaml` for its upload-boundary cases and back. See [onboarding.md](onboarding.md) §9 |
 | `bootstrap` fails with `password authentication failed for user "platform_admin"` | The volume was initialised before P11.2 (superuser bootstrap): `make prod-destroy`, then `make prod-up` |
 | A container is `unhealthy` | `make prod-ps`; `docker logs lattice-reference-<service>-1`. api: readiness (database or schema). worker: heartbeat older than 300 s (frozen or blocked). web: `GET /` failing |
 | Changed `deploy/caddy/Caddyfile` | Recreate Caddy (`… up -d --force-recreate caddy`): it is a single-file bind mount, so an editor that replaces the file leaves the container on the old one |

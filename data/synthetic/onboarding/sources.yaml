@@ -1,0 +1,10 @@
+# An operator's sources file for the onboarding fixture (P12.7, connector-design §3):
+# an operator-managed Documents source next to the product-managed ones. Run inside the
+# reference stack's ops container (paths are relative to this file).
+sources:
+  - key: operator-handbook
+    connector_type: document_repository
+    name: Operator handbook (server folder)
+    path: documents
+    default_sensitivity: internal
+    authority: working

@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits prod-authz prod-drills prod-perf prod-backup alerts-test privilege-snapshot
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits prod-authz prod-drills prod-perf prod-onboard prod-backup alerts-test privilege-snapshot
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -258,6 +258,19 @@ prod-perf: ## Performance sanity through the ingress (needs VERIFY=1 IDP=1, FAKE
 	  { echo "prod-perf needs VERIFY=1 IDP=1 and FAKE_DELAY=0"; exit 2; }
 	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
 	  ../deploy/verification/perf_check.py
+
+# End-to-end organization onboarding (P12.7; phase-12-plan §20) against the stack in
+# production mode -- `make prod-up IDP=1` first, without VERIFY (OIDC sign-in only, no seed,
+# no fake model). Each run onboards new run-unique organizations (`lattice org create`)
+# through the product: first the API journey (deploy/verification/onboard_check.py), then
+# the same journey in the real web app through Caddy (Playwright project `onboarding-stack`;
+# UI=0 skips it). It rolls the API instances once onto, and back off, a small-limits overlay.
+prod-onboard: ## End-to-end onboarding drill, org create → first Ask, API + browser (needs `make prod-up IDP=1`)
+	@[ -n "$(IDP)" ] && [ -z "$(VERIFY)" ] || { echo "prod-onboard needs IDP=1 without VERIFY=1 (production sign-in)"; exit 2; }
+	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
+	  ../deploy/verification/onboard_check.py
+	$(if $(filter 0,$(UI)),@echo "UI=0: browser journey skipped",cd apps/web && \
+	  LATTICE_ONBOARD_STACK=1 LATTICE_COMPOSE="$(PROD_COMPOSE)" pnpm exec playwright test --workers=1)
 
 # Backups (P11.5): restore and verification with deploy/backup.sh restore <id> [...].
 prod-backup: ## Base backup of the reference database + row-count manifest (deploy/backup.sh)

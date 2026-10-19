@@ -265,6 +265,14 @@ CASES: list[tuple[str, SetupFacts, str, str]] = [
     ("first_answer", replace(BASE, synced_sources=0), "blocked", "sources_required"),
     ("first_answer", BASE, "required", "no_answer_yet"),
     ("first_answer", replace(BASE, synced_sources=0, answered=True), "complete", "answered"),
+    # P12.7: an evidence-only organization (no generation provider) completes it too.
+    ("first_answer", replace(BASE, evidence_returned=True), "complete", "evidence_returned"),
+    (
+        "first_answer",
+        replace(BASE, answered=True, evidence_returned=True),
+        "complete",
+        "answered",
+    ),
 ]
 
 
@@ -478,16 +486,25 @@ async def test_a_fresh_organization_and_its_transitions(
         assert accounts["facts"]["unmapped_references"] == 2
         assert "9001" not in str(accounts)  # counts, not the references themselves
         assert _states(body)["first_answer"] == ("required", "no_answer_yet")
-        async with owner_db.tenant_transaction(org) as s:
-            await s.execute(
-                text(
-                    "INSERT INTO query_traces (organization_id, membership_id, question_text, "
-                    "question_sensitivity, authz_snapshot, retrieval, egress, validation, "
-                    "status, timings_ms) VALUES (:o, :m, 'q', 'internal', '{}', '{}', '{}', "
-                    "'{}', 'answered', '{}')"
-                ),
-                {"o": org, "m": halden["member"].membership_id},
-            )
+
+        async def trace(status: str) -> None:
+            async with owner_db.tenant_transaction(org) as s:
+                await s.execute(
+                    text(
+                        "INSERT INTO query_traces (organization_id, membership_id, "
+                        "question_text, question_sensitivity, authz_snapshot, retrieval, "
+                        "egress, validation, status, timings_ms) VALUES (:o, :m, 'q', "
+                        "'internal', '{}', '{}', '{}', '{}', :st, '{}')"
+                    ),
+                    {"o": org, "m": halden["member"].membership_id, "st": status},
+                )
+
+        # No evidence is not a first answer; evidence without a written answer is.
+        await trace("insufficient_evidence")
+        assert _states(await _setup(client))["first_answer"] == ("required", "no_answer_yet")
+        await trace("evidence_only")
+        assert _states(await _setup(client))["first_answer"] == ("complete", "evidence_returned")
+        await trace("answered")
         assert _states(await _setup(client))["first_answer"] == ("complete", "answered")
 
         # AI policy: an external provider without a credential, then an encrypted one,

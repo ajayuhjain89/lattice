@@ -818,6 +818,22 @@ implemented.**
   organization-admin authority — only `SELECT` on `source_imports` and two functions of
   its own (check results, expiry).
 
+**End-to-end onboarding (P12.7, 2026-10-19; phase-12-plan Part III).** Verified across the
+product boundaries on the reference stack in production mode (`make prod-onboard`) and in
+`backend/tests/onboarding`, with no new mechanism: an organization created by `lattice org
+create` is signed into only through exact directory identities (no e-mail match, no JIT);
+its administrators configure everything and read none of it (the authorization predicate,
+the Ask, evidence and trace endpoints all agree); ticket references without a mapping stay
+unreadable to every member, the assigned one included, until mapped and synced; a member
+without the account gets `insufficient_evidence` with no snippet, and the same 404 as a
+random ID for the other member's evidence and trace; a second organization sees none of it
+and its errors are indistinguishable from random IDs; secrets and protected content never
+reach logs. Refined: the authz-boundary scanner's allowance for `sources.admin` is now
+**key-only** — the module may name `sensitivity` only as a whole mapping key, never as an
+attribute, keyword, model or inside SQL (tests prove each is still flagged); uploads
+refused before registration are now counted and logged (`lattice_imports_total`,
+`sources.import_refused`).
+
 **Contracts not yet implemented:** operator-registered export locations (C8.1 —
 operator-managed sources keep the `lattice sync` path workflow); and on every setup
 surface administrators stay non-readers of content (C9, C10).

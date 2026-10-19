@@ -27,8 +27,11 @@ the outbound policy) and P12.5 providers, BYOK and egress with the D-34 step-up;
 customer-operable export sources (Sources → *Add source*, a record per source, exports
 uploaded with real progress into a filesystem import store with strict archive checks and
 their own ingress limit, a deterministic check before any sync, pause/resume and
-disconnect, the existing worker syncing from the import) is delivered locally and awaits
-review; P12.7–P12.8 are not started. The three source types are **export-based**
+disconnect, the existing worker syncing from the import) and P12.7 end-to-end onboarding
+(an organization from `lattice org create` to a member's first Ask, proved on the local
+reference stack in production mode by `make prod-onboard` — API and browser — and in the
+backend suite; [docs/onboarding.md](docs/onboarding.md)) are delivered locally and await
+review; P12.8 is not started. The three source types are **export-based**
 (Markdown documents, Lattice ticket JSON Lines, Slack workspace export) — not live
 integrations.** What runs today: a FastAPI
 backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced

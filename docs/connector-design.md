@@ -226,6 +226,16 @@ deployment.md §4. A refused upload changes nothing; an accepted one becomes the
 invalid counts, failure codes and the exact account references that have no account,
 before any sync. A sync reads the import that was current when it was requested.
 
+**Replacing an export (verified in P12.7).** Uploading to a source that already synced
+replaces its current import only if the new upload is accepted; indexed content changes
+only when a sync runs. A sync already queued or running keeps reading the import it was
+given, and that import is kept until the job ends. The previous import is then deleted
+(nothing restores it): if the replacement is accepted but its check fails as a whole
+(`import_invalid` — e.g. a Slack export whose `users.json` cannot be read), syncing is
+refused and the administrator recovers by uploading a good export again. A minimal
+example of each format, as a customer would upload it, is in `data/synthetic/onboarding/`
+(the P12.7 onboarding fixture: [onboarding.md](onboarding.md) §6).
+
 ## 4. External identifier normalization
 
 - `external_id` must be stable across syncs and unique within the source:

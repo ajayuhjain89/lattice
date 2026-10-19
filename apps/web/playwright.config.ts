@@ -8,6 +8,12 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = 3100;
 // A second server with development sign-in off: production sign-in, as it really renders.
 const PRODUCTION_PORT = 3101;
+/**
+ * `make prod-onboard` (P12.7): the onboarding journey against the running reference stack
+ * (https://localhost:8443, the real API, worker and identity provider) -- only then, and
+ * then alone: no local servers are started for it and no other project runs.
+ */
+const ONBOARD_STACK = !!process.env.LATTICE_ONBOARD_STACK;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -22,8 +28,16 @@ export default defineConfig({
     timezoneId: "UTC",
     locale: "en-GB",
   },
-  projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }, testIgnore: /(screens|production)\.spec/ },
+  projects: ONBOARD_STACK
+    ? [
+        {
+          name: "onboarding-stack",
+          use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 }, baseURL: "https://localhost:8443", ignoreHTTPSErrors: true },
+          testMatch: /onboarding-stack\.spec/,
+        },
+      ]
+    : [
+    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }, testIgnore: /(screens|production|onboarding-stack)\.spec/ },
     { name: "mobile", use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } }, testMatch: /(shell|responsive|mobile)\.spec/ },
     { name: "screens", use: { ...devices["Desktop Chrome"] }, testMatch: /screens\.spec/ },
     {
@@ -32,7 +46,7 @@ export default defineConfig({
       testMatch: /production\.spec/,
     },
   ],
-  webServer: [
+  webServer: ONBOARD_STACK ? undefined : [
     {
       command: `pnpm exec next start --port ${PORT} --hostname 127.0.0.1`,
       url: `http://127.0.0.1:${PORT}/sign-in`,

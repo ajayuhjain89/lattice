@@ -140,29 +140,30 @@ async def receive_upload(
     # After the target: an unknown source answers the same whatever the deployment.
     if store is None:
         raise _unavailable()
+    early = time.perf_counter()
     deadline = time.monotonic() + ctx.timeout_seconds
     body = aiter(body)
     try:
         async with asyncio.timeout(ctx.timeout_seconds):
             head = await _head(body)
     except TimeoutError:
-        raise _rejected("upload_timeout") from None
+        raise _refused_early(source_id, "upload_timeout", early) from None
     if not head:
-        raise _rejected("archive_invalid")
+        raise _refused_early(source_id, "archive_invalid", early)
     if is_zip(head):
         fmt = "zip"
     elif source.connector_type == "ticketing":
         fmt = "jsonl"
     else:
-        raise _rejected("archive_invalid")
+        raise _refused_early(source_id, "archive_invalid", early)
     if usage + limits.worst_case_bytes > limits.organization_quota_bytes:
-        raise _rejected("storage_full")
+        raise _refused_early(source_id, "storage_full", early)
     try:
         free = await asyncio.to_thread(store.free_bytes)
     except ImportUnavailable:
         raise _unavailable() from None
     if free < limits.worst_case_bytes + limits.reserve_free_bytes:
-        raise _rejected("storage_full")
+        raise _refused_early(source_id, "storage_full", early)
 
     async with fenced(), ctx.db.tenant_transaction(organization_id) as session:
         import_id: uuid.UUID = (
@@ -376,6 +377,15 @@ async def _reject(
         import_id=str(import_id),
         code=code,
     )
+
+
+def _refused_early(source_id: uuid.UUID, code: RejectCode, started: float) -> LatticeError:
+    """An upload refused before it was registered (no import row, no file): counted and
+    logged like any refused upload (P12.7: these were invisible to operators), with no
+    audit event -- nothing was received."""
+    _observe("rejected", code, started)
+    log_event(_log, logging.INFO, "sources.import_refused", source_id=str(source_id), code=code)
+    return _rejected(code)
 
 
 def _observe(outcome: str, code: str | None, started: float) -> None:

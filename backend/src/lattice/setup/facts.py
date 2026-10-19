@@ -146,7 +146,9 @@ _SOURCES_SQL = text(
 )
 _ANSWERED_SQL = text(
     "SELECT EXISTS (SELECT 1 FROM query_traces WHERE organization_id = :o "
-    "AND status IN ('answered', 'partial'))"
+    "AND status IN ('answered', 'partial')), "
+    "EXISTS (SELECT 1 FROM query_traces WHERE organization_id = :o "
+    "AND status = 'evidence_only')"
 )
 
 
@@ -236,7 +238,7 @@ async def gather(
     people = (await session.execute(_PEOPLE_SQL, {"o": org})).one()
     identity = await identity_facts(session, org)
     sources = (await session.execute(_SOURCES_SQL, {"o": org})).one()
-    answered: bool = (await session.execute(_ANSWERED_SQL, {"o": org})).scalar_one()
+    answered, evidence_returned = (await session.execute(_ANSWERED_SQL, {"o": org})).one()
     egress = await records.org_egress(session, org)
     return SetupFacts(
         organization_status=status,
@@ -260,5 +262,6 @@ async def gather(
         account_sources=sources.account_sources,
         unmapped_references=sources.unmapped_references,
         references_awaiting_sync=sources.references_awaiting_sync,
-        answered=answered,
+        answered=bool(answered),
+        evidence_returned=bool(evidence_returned),
     )

@@ -156,7 +156,9 @@ async def test_migrate_refuses_while_an_application_session_is_open(
 
 async def test_migrate_applies_pending_revisions_and_verifies(quiet_database: None) -> None:
     head = migration_headers()[SCHEMA_REVISION]
-    assert head.reversible is False  # the head cannot be downgraded safely in production
+    # Each revision declares its reversibility (0023 is; 0022 below it is not, so a
+    # downgrade past it is refused: test_migrate_refuses_to_downgrade_an_irreversible_revision).
+    assert isinstance(head.reversible, bool)
     below = f"{int(SCHEMA_REVISION) - 1:04d}"
     await asyncio.to_thread(command.downgrade, alembic_config(), below)
     try:

@@ -152,6 +152,26 @@ async def access_snapshot(
     )
 
 
+_SOURCE_GROUP_MEMBERS_SQL = text(
+    """
+    SELECT gm.membership_id, count(*) AS groups
+    FROM access_group_members gm
+    JOIN access_groups g ON g.organization_id = gm.organization_id AND g.id = gm.group_id
+    WHERE g.organization_id = :o AND g.source_id = :s
+    GROUP BY gm.membership_id
+    """
+)
+
+
+async def source_group_members(
+    session: AsyncSession, organization_id: uuid.UUID, source_id: uuid.UUID
+) -> dict[uuid.UUID, int]:
+    """Members of a source's synced groups (a chat export's private channels) and how
+    many of them each is in: who loses access when the source is purged (P12.7)."""
+    rows = await session.execute(_SOURCE_GROUP_MEMBERS_SQL, {"o": organization_id, "s": source_id})
+    return {row.membership_id: int(row.groups) for row in rows}
+
+
 def _member_columns() -> list[Any]:
     assigned = (
         select(func.count())

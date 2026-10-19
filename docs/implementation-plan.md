@@ -1212,8 +1212,8 @@ service; real external staging stays a Phase 15 gate.
 | P12.3 | Accounts and `account_external_refs` | Delivered (local; phase-12-plan Part III) |
 | P12.4 | OIDC and SCIM setup | Delivered (local; phase-12-plan Part III) |
 | P12.5 | Providers, credentials, egress with step-up | Delivered (local; phase-12-plan Part III) |
-| P12.6 | Export-based sources, imports, first sync | Delivered (local, awaiting review; phase-12-plan Part III) |
-| P12.7 | End-to-end onboarding journey | Not started |
+| P12.6 | Export-based sources, imports, first sync | Delivered (local; phase-12-plan Part III) |
+| P12.7 | End-to-end onboarding journey | Delivered (local, awaiting review; `make prod-onboard`, docs/onboarding.md, phase-12-plan Part III) |
 | P12.8 | Security, accessibility, closure | Not started |
 
 ---

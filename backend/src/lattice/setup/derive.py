@@ -28,7 +28,11 @@ current credential in its latest test). P12.6 builds C12's ``sources·required·
 (an organization-managed source with no current import) and ``sources·attention·import_rejected``
 (its latest upload was refused), and ``sources·required·no_sources`` now links to ``/sources``
 (administrators create sources there). A queued or running *check* of an import is not a sync.
-Identity and provisioning link to ``/settings/identity`` (P12.4).
+Identity and provisioning link to ``/settings/identity`` (P12.4). P12.7 adds
+``first_answer·complete·evidence_returned``: a member's question returned authorized
+evidence without a written answer (status ``evidence_only`` -- no generation provider is
+enabled, which is a legitimate configuration, or the egress policy kept the evidence from
+it). Without it an evidence-only organization could never complete its first answer.
 """
 
 from dataclasses import dataclass, field
@@ -136,6 +140,8 @@ class SetupFacts:
     # Mappings created or changed after their source's latest run started.
     references_awaiting_sync: int = 0
     answered: bool = False
+    # A trace with status ``evidence_only``: authorized evidence, no written answer (P12.7).
+    evidence_returned: bool = False
 
 
 MESSAGES: Final[dict[tuple[str, str], str]] = {
@@ -272,6 +278,11 @@ MESSAGES: Final[dict[tuple[str, str], str]] = {
     ): "The first question can be asked once a source has synced.",
     ("first_answer", "no_answer_yet"): "Nobody has received an answer yet.",
     ("first_answer", "answered"): "Members have received answers.",
+    ("first_answer", "evidence_returned"): (
+        "Members have received the evidence for their questions, without a written answer: "
+        "no generation provider may be used for them. Written answers need one enabled and "
+        "approved on the AI providers page."
+    ),
 }
 
 
@@ -477,9 +488,14 @@ def _accounts(f: SetupFacts) -> Category:
 
 
 def _first_answer(f: SetupFacts, sources: Category) -> Category:
-    facts: dict[str, FactValue] = {"answered": f.answered}
+    facts: dict[str, FactValue] = {
+        "answered": f.answered,
+        "evidence_returned": f.evidence_returned,
+    }
     if f.answered:
         return _category("first_answer", "complete", "answered", facts)
+    if f.evidence_returned:
+        return _category("first_answer", "complete", "evidence_returned", facts)
     if sources.state != "complete":
         return _category("first_answer", "blocked", "sources_required", facts)
     return _category(

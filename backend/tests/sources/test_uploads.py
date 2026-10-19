@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from lattice import metrics
 from lattice.api.app import create_app
 from lattice.db.engine import Database
 from lattice.imports.limits import MIB
@@ -149,6 +150,26 @@ async def test_refused_uploads_leave_nothing_and_say_why(
     assert "readme" not in response.text
     assert _left_on_disk(imports_root) == []
     assert (await detail(admin, source["id"]))["current_import"] is None
+
+
+def _refused(code: str) -> float:
+    labels = {"outcome": "rejected", "code": code}
+    return metrics.REGISTRY.get_sample_value("lattice_imports_total", labels) or 0.0
+
+
+async def test_uploads_refused_before_registration_are_counted(
+    halden: Org, admin: httpx.AsyncClient, imports_root: Path
+) -> None:
+    """P12.7: an upload refused by its first bytes (no import row, no file) is still an
+    import validation failure an operator must see: counted and logged with its code."""
+    source = await create(admin, "document_repository", "docs")
+    before = _refused("archive_invalid")
+    for body in (b"plain text, not an archive", b""):
+        response = await upload(admin, source["id"], body)
+        assert response.status_code == 422
+        assert _issue(response) == "archive_invalid"
+    assert _refused("archive_invalid") == before + 2
+    assert _left_on_disk(imports_root) == []
 
 
 # --- size, streaming and interruption ---------------------------------------------------------
@@ -321,9 +342,11 @@ async def test_a_full_import_area_refuses_before_receiving(
 ) -> None:
     source = await create(admin, "document_repository", "docs")
     monkeypatch.setattr(FilesystemImportStore, "free_bytes", lambda self: 10 * MIB)
+    before = _refused("storage_full")
     response = await upload(admin, source["id"], VALID)
     assert (response.status_code, _issue(response)) == (503, "storage_full")
     assert await _imports(owner_db, halden) == []
+    assert _refused("storage_full") == before + 1
 
 
 async def test_the_organization_quota_bounds_retained_imports(

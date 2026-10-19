@@ -526,7 +526,7 @@ counted and logged and does not stop the others. Metrics per task:
 | Model cache | api and worker, only with `local` embeddings | read-only, filled and verified by `lattice models fetch` |
 | Imports (**P12.6**) | every api instance (read-write: uploads are received, validated and published here) and the worker (read-write: reads imports, deletes expired ones); **never** web or the ingress | One shared filesystem at `LATTICE_IMPORTS_ROOT`. Layout `<root>/<organization uuid>/<import uuid>/{archive.partial, archive, staging/, tree/}` — locations derived from generated UUIDs only; directories 0750, files 0640, owned by the service user (uid 10001; the backend image creates `/srv/lattice/imports` with that owner so a fresh named volume inherits it), nothing executable or served. Size it for the per-organization quota (default 2 GiB) times the organizations, plus the 256 MiB free-space reserve the API keeps (`storage_full` below it). Back it up only if re-uploading exports is not acceptable: imports are inputs, the database holds what was synced. Reference stack: named volume `imports` mounted at `/srv/lattice/imports` in `api1`, `api2` and `worker`. A managed platform needs a volume shared by the api instances and the worker (Appendix A's "export volume" row applies) |
 
-## 15. Local reference stack (P11.1–P11.7)
+## 15. Local reference stack (P11.1–P11.7, P12.7)
 
 `compose.production.yaml` (Compose project `lattice-reference`, separate from the
 development `compose.yaml`) runs the production topology on one machine: PostgreSQL,
@@ -562,6 +562,7 @@ administrative role and extension allow-list. The `bootstrap` job then runs
 | `make prod-authz VERIFY=1 IDP=1` (P11.7) | the deployed authorization suite of plan §15.2 (`deploy/verification/authz_check.py`): the route sweep read from the API's own routers (anonymous 401, SCIM without a token 401, one identical 403 for a member on every administrator route, another organization's real identifiers answering exactly like random ones with nothing changed), administrator ≠ content on traces, an Access suspension ending the session on both instances, `check-deployment`, a requested sync per organization, and the `eval retrieval` / `eval answer` security gates as an operator job inside the stack. Grants Veridian's most privileged persona the administrator capability for the sweep (audited) and takes it back |
 | `make prod-drills VERIFY=1 IDP=1` (P11.7) | the failure drills of plan §18 (`deploy/verification/drills_check.py`; `FAKE_DELAY=20`): an API instance killed and one stopped during an Ask, the database stopped and started, the generation provider unreachable (a `local` record on a loopback port where nothing listens), the dead process's Ask slot freed at lease expiry |
 | `make prod-perf VERIFY=1 IDP=1` (P11.7) | performance sanity through the ingress (`deploy/verification/perf_check.py`, `FAKE_DELAY=0`): p50/p95 of `/api/v1/me`, `/api/v1/sources` and an Ask with the fake model — a local regression signal, not a capacity figure |
+| `make prod-onboard IDP=1` (**P12.7**) | organization onboarding end to end in **production mode** (no `VERIFY`: OIDC only, no seed, no fake model): `deploy/verification/onboard_check.py` creates two run-unique organizations with `lattice org create` (secret on stdin, private issuer registered) and takes them from first sign-in to a member's first Ask through the ingress — setup record at each step, SCIM, members, accounts, providers and the D-34 step-up (no model is called), the three export types uploaded on the dedicated route, the worker's checks and syncs from the exact import, fail-closed mapping, denied Asks, two tenants, ingress and upload limits (the API instances rolled onto `deploy/verification/compose.small-imports.yaml` — the smallest limits the settings accept, verification only — and back), import replacement while a sync is queued, pause/resume/disconnect, operator sources, logs; then the same journey in the real web app (Playwright project `onboarding-stack`, `apps/web/e2e/onboarding-stack.spec.ts`; `UI=0` skips it). [onboarding.md](onboarding.md) |
 
 It runs the production defaults (`LATTICE_ENV=production`, `LATTICE_QUERY_EMBEDDING=none`,
 no development sign-in). It is a verification environment, not a deployment recipe, and
@@ -797,3 +798,17 @@ P11.2.
   set a per-route body limit must keep the 1 MB limit everywhere else by other means.
 - **New metrics:** `lattice_imports_total{outcome}` and `lattice_import_duration_seconds`.
 
+
+## P12.7 upgrade notes (migration 0023)
+
+- **Migration 0023** replaces one function, `lattice_require_access_audit` (0013's deferred
+  access-audit trigger): a `DELETE` of a grant whose document, or of a group membership
+  whose group, no longer exists in the transaction — the cascade of a source's purge — no
+  longer needs a per-member event. Without it the product's *Disconnect* failed for every
+  source with group or department grants (Slack private channels, documents with
+  `grants:`) and left the source `deleting`. Reversible (the downgrade restores 0013's body);
+  no table, row, privilege or snapshot change. A source left `deleting` by the earlier
+  build is finished by `lattice source disconnect --org <slug> --source <key>` (verified on
+  the reference stack).
+- **Metrics:** `lattice_imports_total{outcome="rejected"}` now also counts uploads refused
+  before they were registered (log event `sources.import_refused`).

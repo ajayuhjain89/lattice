@@ -4,13 +4,15 @@ Status: **Plan approved (2026-10-06). P12.0 (contracts, Part II) written; P12.1
 (foundations) implemented 2026-10-08, P12.2 (members and administrators) 2026-10-09 and
 P12.3 (accounts and external-reference mapping) 2026-10-12 with its fail-closed correction
 2026-10-13, P12.4 (identity administration: OIDC and SCIM) 2026-10-13 and P12.5 (providers,
-BYOK and egress with the D-34 step-up) 2026-10-17 (Part III).** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
+BYOK and egress with the D-34 step-up) 2026-10-17, P12.6 (customer-operable export sources)
+2026-10-18 and P12.7 (end-to-end onboarding) 2026-10-19 (Part III).** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
 D-28–D-33, D-35, D-36 and D-37B are approved (§22, with the contracts of Part II);
 D-34 (raising egress ceilings: IdP step-up, C6) and D-37A (organization purge: semantics
 now, executable purge in Phase 15, C14) were decided by engineering under the product
 owner's delegation, as were corrections to D-31 and D-36 (C18). **P12.1 delivered
-(2026-10-08), P12.2 (2026-10-09), P12.3 (2026-10-12), P12.4 (2026-10-13) and P12.5
-(2026-10-17), local commits; Part III.** P12.6 waits for the product owner's go-ahead.
+(2026-10-08), P12.2 (2026-10-09), P12.3 (2026-10-12), P12.4 (2026-10-13), P12.5
+(2026-10-17), P12.6 (2026-10-18) and P12.7 (2026-10-19), local commits; Part III.** P12.8
+waits for the product owner's go-ahead.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 12. Phase 11
 is closed (143392f); real external staging validation stays deferred and remains a
@@ -1709,3 +1711,127 @@ object-storage backend; resumable or chunked uploads; record-level sync progress
 worker reports none — the UI shows queued/running/finished); per-file results in a check
 (counts and codes only, by design); the end-to-end onboarding journey (P12.7); `make
 prod-authz` coverage of the source routes (P12.8).
+
+## P12.7 End-to-end organization onboarding (2026-10-19)
+
+Delivered on `phase/12-org-setup-integrations` (local commit, not pushed) after the
+product owner approved P12.6 (5a0c33e). Integration, not new architecture: no new
+service, product surface, connector or wizard. Migration **0023** (`SCHEMA_REVISION`
+0023; reversible) fixes one defect the journey found. The development database is not
+migrated (still 0018); the reference database went 0021 → 0022 → 0023 through the
+production `lattice migrate` job.
+
+**The journey, proved three ways.**
+
+| Where | What | Result |
+| ----- | ---- | ------ |
+| `make prod-onboard IDP=1` — API (`deploy/verification/onboard_check.py`) | the reference stack in **production mode** (OIDC only, no seed, no fake model, evidence-only Ask), Caddy → api ×2 → ImportStore → worker → PostgreSQL, the verification IdP; two new run-unique organizations per run | **118/118** in 139 s |
+| `make prod-onboard IDP=1` — browser (Playwright project `onboarding-stack`) | the real web app through Caddy: setup record after bootstrap, *Add member*, *Add source*, upload and check, refused replacement, mapping recovery (new account from the map dialog), first sync, member access change, setup-record destinations, the member's Ask, evidence inspector, trace, the record's first answer, the administrator's empty Ask | **7/7** in 53 s |
+| `backend/tests/onboarding` | the same journey in process (fake IdP, real worker and store) with the authorization predicate checked member by member; import replacement (refused, unreadable, queued and running syncs, retention, disconnect) | 6 tests |
+
+Fixture: `data/synthetic/onboarding/` — a tiny synthetic customer (Markdown documents with
+an internal, a confidential and an account page; a Tickets JSON Lines page naming two
+unmapped ticket organizations; a minimal Slack export with one private channel) and two
+operator sources files. Customer and operator guide: `docs/onboarding.md`.
+
+**Covered (each a PASS case in the drill unless noted).** Bootstrap: one transaction and
+its four audit events, secret on stdin never printed, identical retry writes nothing,
+differing retry refused unchanged, another organization's IdP client refused, the
+private IdP's browser origin registered by the operator. Sign-in: e-mail-as-identifier
+and wrong-case identifiers refused, exact identity, admin capability, session on both
+instances. Setup record: all eight categories read before and after each step (state,
+reason and destination), including `first_answer·complete·evidence_returned`. SCIM token
+shown once, a provisioned member signs in, provisioning `in_use`. Members by exact
+identifier with least access; administrator capability granted with a preview stating no
+content-access change. Accounts created, edited, archived, reactivated; a stale edit 409.
+Providers: catalogue and trust classes, no test double in production, credential ≠
+permission, enable without step-up, D-34 (refused without a step-up, stale `auth_time`
+refused, fresh grant applies exactly once, reuse 409, a later policy change voids an unused
+grant, lowering needs none, ordinary session unaffected, escalation metric), credential
+revoked → `credential_missing` → evidence only, then disabled — no model ever called.
+Sources: no host path from the API, `import_required` before an import, three uploads on
+the dedicated route each checked by the worker on the exact import, responses free of
+names and content, unresolved references reported and listed before any sync, imports
+stored under the organization's directory by ID. First sync from the job's import; tickets
+of unmapped organizations unreadable even to the assigned member and not indexed; mapping →
+`sync_required` → `mapped`. Ask: the assigned member gets the ticket evidence
+(`evidence_only`), evidence and trace open; Sam and the administrator get
+`insufficient_evidence`, the same 404 as a random ID for that evidence, a 404 / operational
+trace view, no account side channel; administrator views free of protected words. Tenants:
+identities, sources, members, accounts, providers, references, evidence, traces, setup and
+audit confined to their organization, foreign IDs indistinguishable from random ones,
+vault secrets per connection. Ingress: production limits unchanged (100 MiB), a 3 MiB
+export through the upload route, 1 MB edge cap and 64 KiB API cap elsewhere, zip-slip
+refused with nothing written outside the root, cross-organization upload 404; with the
+API instances rolled onto the smallest configurable limits (verification overlay, then
+rolled back): declared and chunked over-limit uploads 413 `too_large`, nothing left on
+disk, an interrupted TLS upload `upload_incomplete` and removed, `storage_full` a safe 503.
+Replacement: three refused replacements keep the current import; an unreadable accepted
+export blocks syncing with `replace_import`/`import_invalid` and keeps indexed evidence;
+the superseded import removed once no job reads it; recovery by a new upload; with the
+worker paused, a replacement during a queued sync leaves that sync on its own import.
+Lifecycle: pause refuses syncs and keeps content searchable, stale resume 409, resume and
+sync; disconnect previews counts, is audited, removes only that source's records, its
+account mappings (the account stays) and its imports, widens nobody's access, keeps the
+trace readable. Operator sources: a sources file still syncs an operator-managed source,
+cannot take over a product-managed one (`source_config:managed_in_product`), leaves
+administrator mappings alone; an operator-managed source takes no upload. Members:
+suspension ends sessions on both instances and refuses sign-in; reactivation keeps old
+sessions ended and restores sign-in only. Logs: no secret plaintext, no protected content,
+codes only.
+
+**Defects found and fixed.**
+
+1. **Evidence-only organizations could never complete `first_answer`** (only `answered` /
+   `partial` traces counted; a legitimate configuration without a generation provider
+   produces `evidence_only`). New reason `first_answer·complete·evidence_returned`
+   (`setup.derive`, `setup.facts`).
+2. **The product *Disconnect* failed for every source with group or department grants**
+   (Slack private channels; documents with `grants:`) — 0013's access-audit trigger
+   demands a per-member event for each cascaded grant and group-membership delete, which a
+   group grant can never have — leaving the source `deleting`; and the API reported
+   `purged: true` because the flag was set before COMMIT. P12.6 had disconnected only a
+   Tickets source. Fixed by migration **0023** (the trigger exempts deletes whose document
+   or group the same transaction deleted — only `lattice_purge_source` can, `lattice_app`
+   has no delete privilege on either), by recording `access.member_changed` for each member
+   who loses one of the source's synced groups (actor, reason, before/after,
+   `source_groups_lost`), and by reporting `purged` only after commit. Sources left
+   `deleting` are finished by `lattice source disconnect` (verified on the stack).
+3. **Uploads refused before registration were invisible to operators** (not an archive by
+   their first bytes, `storage_full`, `upload_timeout`: no metric, no log). Now counted in
+   `lattice_imports_total{outcome="rejected",code}` and logged `sources.import_refused`
+   (no audit event: nothing was received).
+4. **Scanner allowance narrowed (§21).** `sources.admin` moved from `ALLOWED` (the name
+   anywhere) to a new `KEY_ONLY` list: `sensitivity` only as a whole mapping key; an
+   attribute, keyword, model or SQL use is still flagged (new negative tests). The member
+   lookup the disconnect fix needs lives in `access.directory`, already reviewed for those
+   tables.
+
+**Verified behaviour, recorded as limitations (no redesign).** A replaced export is not
+kept: once superseded and unread by any job it is deleted (P12.6 deviation 2), so after an
+accepted-but-unreadable replacement the administrator must upload a good export again;
+indexed evidence is untouched until a sync runs. Registered export locations (C8.1) remain
+unbuilt. Observability: existing alerts cover sync failures, abandoned jobs, provider
+failures and egress escalations; import refusals are a metric and the administrator's
+record, not an alert (customer-input errors).
+
+**Deviations.** Migration 0023 in an integration checkpoint (the smallest fix for defect
+2: one function body, reversible). The browser journey runs against the reference stack
+(opt-in project `onboarding-stack`, never in the ordinary runs) rather than the mocked API;
+the mocked specs of P12.1–P12.6 keep covering each screen. The drill's boundary cases use a
+verification-only overlay (`deploy/verification/compose.small-imports.yaml`) because the
+settings refuse limits below 1 MiB / 2 MiB quota; production defaults are unchanged and
+re-read after the roll back.
+
+**Verification (2026-10-19).** Backend: full suite **3,222 passed** (18.5 min; 15 new),
+ruff (`ruff check .`, format) and strict mypy clean (tests included); privilege snapshot
+regenerated unchanged. Reference stack, rebuilt and restarted clean (`make prod-down`,
+`make prod-build`, `make prod-up IDP=1`): `make prod-onboard IDP=1` **118/118** API cases
+and **7/7** browser steps; `make prod-check` 8/8 at schema 0023 (privilege snapshot, forced
+RLS, roles, secret keys). Web: lint, type check, **277** unit tests, production build;
+functional Playwright **375 passed**, 56 skipped by viewport design, 0 failed (desktop,
+mobile, production — unchanged from P12.6: the onboarding project runs only through
+`make prod-onboard`). `make audit`: backend clean, web only the approved
+GHSA-vfj7-8cjw-p6xm. Not re-run for P12.7 (unchanged surfaces): `prod-identity`,
+`prod-limits`, `prod-authz` (which still lacks the source routes — P12.8), `prod-drills`,
+`prod-perf`.
