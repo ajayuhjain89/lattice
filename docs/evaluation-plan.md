@@ -7,7 +7,9 @@ runner of §7 are built in Phase 5** (`lattice.evals.retrieval`, `lattice eval
 retrieval`; results in §9, real providers in §10, the rejected reranking experiment in
 §11, the frozen final status in §12). **Generation metrics, the optional judge and
 `lattice eval answer` are built in Phase 6** (`lattice.evals.answer`; results in §13). No
-real generation provider has been evaluated (§13).
+real generation provider has been evaluated (§13). **§14 is the Phase 13 (P13.0)
+baseline at `main` 00a15d2**, with what the harness measures and does not;
+[phase-13-plan.md](phase-13-plan.md) §9 holds the Phase 13 evaluation contracts.
 Related: `retrieval-design.md`, `security-model.md` §9, `product-brief.md` §8.
 
 Evaluation is built alongside the system: the retrieval harness lands in the same
@@ -750,3 +752,42 @@ unchanged: R@10 0.512 (§9).
 The security results are also enforced in CI on every push (`lattice eval answer
 --generation fake`) and by `tests/answering/golden/`, alongside the targeted suites and
 the 28-defect mutation check (implementation-plan, Phase 6 as built).
+
+## 14. Phase 13 baseline (P13.0, 2026-10-20)
+
+Measured at `main` 00a15d2 in an isolated database (Compose project `lattice-p13eval`,
+port 5440; the development database was not touched), seeded and synced as CI does
+(fake embeddings; 1,325 chunks, 36 `policy_excluded`), admin grants applied.
+`retrieval-6`, `rerank_v1`, `AS_OF` 27 September 2026, 89 items (68 with targets, 151
+targets). Reproduce: `make sync && make eval EMBEDDING=none`, `make eval`,
+`make eval-answer EMBEDDING=none`, `make eval-answer`.
+
+| Configuration | R@1 | R@5 | R@10 | R@20 | MRR | Security |
+| ------------- | --: | --: | ---: | ---: | --: | -------- |
+| A. Exact + lexical | 0.316 | 0.534 | **0.668** | 0.779 | 0.641 | all 0 |
+| B. Fake (*test double*) | 0.238 | 0.440 | 0.512 | 0.685 | 0.515 | all 0 |
+
+- A equals the committed retrieval-6 report to four decimals: retrieval ranking has not
+  changed since the Phase 5 closure.
+- B gives 0.5172 on CI's x86-64 runner (merge run 39416064098) for the same commit:
+  one target ranks differently across platforms. A is unaffected. Until the cause is
+  found (P13.1), B is compared per item, never as an exact number.
+- A, by number of targets: R@10 0.900 for the 20 single-target items, 0.437 for the 25
+  items with three or more.
+- The real-semantic results of §10–12 (local 0.695, Gemini 0.726) are historical:
+  same ranking code, not re-measured.
+
+Answer pipeline, fake extractive generation (96 runs; plumbing, **not answer quality**):
+security all 0 in A and B; status accuracy 0.771; context recall — expected relevant
+evidence that reached the prompt, macro over 71 answerable runs — **0.701** (A) and
+0.534 (B), computed from the reports' `targets_in_prompt`; citation coverage 0.528 (A),
+0.587 (B). Every one of the 13 expected `insufficient_evidence` runs and the 4 expected
+`evidence_only` runs reached the model and was answered: the relevance floor withheld
+nothing in A (it withheld 98 semantic-only items in B). Phase 13 gap G1 explains why
+(phase-13-plan §7).
+
+Planned in §5 but **not computed by the harness**: Precision@10 on exhaustive items,
+document-level recall, context recall, conflict coverage; retrieval stage latency is in
+every trace but not summarized. `acceptable` labels are linted but unused. Phase 13 adds
+these in P13.1 (phase-13-plan §9, §11).
+

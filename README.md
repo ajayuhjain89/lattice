@@ -5,13 +5,17 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–11 are implemented, and the frontend product-design overhaul (D0–D7,
+**Status: Phases 1–12 are implemented and merged (Phase 12: 00a15d2, 2026-10-20). Phase 13
+(Retrieval, Grounding and Answer Quality) is in planning: P13.0 — the measured baseline,
+known quality gaps, evaluation contracts and proposed checkpoints — is in
+[docs/phase-13-plan.md](docs/phase-13-plan.md) and awaits approval; no retrieval or
+answering behaviour has changed. History: Phases 1–11 and the frontend product-design overhaul (D0–D7,
 [design direction](docs/design-direction.md)) is merged; [design system
 v2](docs/design-system.md) is canonical. Phase 11 (Production Deployment, Identity
 Operations & Reliability) was verified on a local production-shaped stack only: real
 external staging validation is deferred and gates v1 GA ([plan](docs/phase-11-plan.md)
 §21.1). Phase 11 is merged (143392f). Phase 12 (Organization Setup, Identity
-Configuration & Integrations) is in progress: P12.1 foundations are built (encrypted
+Configuration & Integrations) delivered: P12.1 foundations are built (encrypted
 credentials, the outbound-target policy, `lattice org create`, the backend-owned setup
 record and the Organization page) and P12.2 members and administrators (members added by
 hand on their exact identity-provider identifier, the administrator capability with a
@@ -34,7 +38,7 @@ backend suite; [docs/onboarding.md](docs/onboarding.md)) and P12.8 closure (a se
 review that bounded the purge's audit exemption to the session's organization — migration
 0024 — the deployed authorization sweep extended to every Phase 12 route family, a
 product-consistency and accessibility review, and the deferred-capability register in
-[phase-12-plan](docs/phase-12-plan.md) Part III) are delivered locally and await review. The three source types are **export-based**
+[phase-12-plan](docs/phase-12-plan.md) Part III), merged to `main` as 00a15d2. The three source types are **export-based**
 (Markdown documents, Lattice ticket JSON Lines, Slack workspace export) — not live
 integrations.** What runs today: a FastAPI
 backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced

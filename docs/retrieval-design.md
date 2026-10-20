@@ -3,7 +3,9 @@
 Status: **Part I implemented in Phase 5** (`backend/src/lattice/retrieval/`, evaluated by
 `lattice eval retrieval`; tests in `backend/tests/retrieval/`). **Part II implemented in
 Phase 6** (`backend/src/lattice/answering/`, `lattice eval answer`; tests in
-`backend/tests/answering/`); §13 lists where the build differs from §8–11. Where Phase 5 differs from the Phase 0 draft, the section says so and
+`backend/tests/answering/`); §13 lists where the build differs from §8–11. Phase 13
+(P13.0) baseline and known quality gaps of this design as built:
+[phase-13-plan.md](phase-13-plan.md) §4–7. Where Phase 5 differs from the Phase 0 draft, the section says so and
 `implementation-plan.md` (Phase 5, as built) lists why.
 Related: `authorization-model.md`, `data-model.md` §6, ADR-003, ADR-004, ADR-006, ADR-008.
 
