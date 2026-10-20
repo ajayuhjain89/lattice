@@ -1191,6 +1191,9 @@ class Journey:
             and any((e["display_ref"] or "").startswith("WRN-") for e in still["evidence"]),
             checked["next_action"],
         )
+        broken_record, broken_why = setup_is(
+            self.admin, {"sources": ("attention", "import_invalid", "/sources")}
+        )
         # Recovery is a new upload of a good export: the superseded one is not kept.
         gone = wait_for(
             lambda: sql(f"SELECT status FROM source_imports WHERE id = '{current}'") == "deleted",
@@ -1207,6 +1210,15 @@ class Journey:
         case(
             "replacement: recovered by uploading a good export, then synced",
             sync(self.admin, slack)["job"]["status"] == "succeeded",
+        )
+        recovered, recovered_why = setup_is(
+            self.admin, {"sources": ("complete", "synced", "/sources")}
+        )
+        case(
+            "setup record (P12.8): an unreadable current export is attention·import_invalid, "
+            "complete·synced again once recovered",
+            broken_record and recovered,
+            broken_why or recovered_why,
         )
 
         # A replacement while a sync is queued: the sync reads the import it was given.

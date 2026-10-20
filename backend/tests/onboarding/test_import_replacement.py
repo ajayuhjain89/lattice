@@ -101,6 +101,12 @@ async def _run_import(owner_db: Database, org: uuid.UUID, run_id: uuid.UUID) -> 
         )
 
 
+async def _setup_sources(admin: httpx.AsyncClient) -> tuple[str, str]:
+    record = (await admin.get("/v1/admin/setup")).json()
+    [sources] = [c for c in record["categories"] if c["key"] == "sources"]
+    return sources["state"], sources["reason"]
+
+
 def _slack_with_broken_users() -> bytes:
     """A Slack export with every file in place but ``users.json`` unreadable: valid as an
     archive, invalid as an export (the check cannot read it as a whole)."""
@@ -193,6 +199,8 @@ async def test_an_unreadable_replacement_blocks_syncs_and_keeps_the_evidence(
         refused = await admin.post(f"/v1/admin/sources/{slack['id']}/sync", headers=CSRF)
         assert refused.status_code == 422
         assert refused.json()["error"]["details"][0]["issue"] == "import_invalid"
+        # The setup record says so (P12.8): not "complete" because an earlier export synced.
+        assert await _setup_sources(admin) == ("attention", "import_invalid")
         # Nothing indexed changed: a check writes nothing and no sync ran.
         assert await readable(app_db, org, riley) == before
 
@@ -205,6 +213,7 @@ async def test_an_unreadable_replacement_blocks_syncs_and_keeps_the_evidence(
         assert (await upload(admin, slack["id"], body)).status_code == 201
         assert (await world.work()).outcome == "succeeded"
         assert (await detail(admin, slack["id"]))["can_sync"] is True
+        assert await _setup_sources(admin) == ("complete", "synced")
         assert (
             await admin.post(f"/v1/admin/sources/{slack['id']}/sync", headers=CSRF)
         ).status_code == 202

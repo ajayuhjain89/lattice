@@ -673,7 +673,12 @@ Deferred constraint triggers on `memberships`, `account_assignments`,
 `membership_departments`, `access_group_members`, `document_grants` and
 `directory_identities` refuse to commit an INSERT, UPDATE or DELETE by `lattice_app`
 unless an `access.*` event of the same transaction names the same `membership_id`
-(`lattice_require_access_audit`). Operator and worker writes are not affected.
+(`lattice_require_access_audit`). Operator and worker writes are not affected. The one
+exemption is a source purge's cascade (0023): the DELETE of a grant whose document, or of
+a group membership whose group, no longer exists — only for a row of the organization the
+session is bound to (0024: the parents are read through row-level security at commit). The
+purge's members who lose a synced group are still audited one by one (their
+`memberships` rows are touched, which keeps the requirement).
 
 ### egress_policy_versions, step_up_grants (Phase 12 P12.5, migration 0021)
 

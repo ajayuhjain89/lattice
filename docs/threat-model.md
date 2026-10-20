@@ -58,6 +58,12 @@ operator with log access; a bug in our own code (the most likely adversary).
 - **Audit atomicity (ADR-014 residual) — fixed.** A second access writer (SCIM) made
   the code-only guarantee too weak: deferred constraint triggers now refuse to commit an
   unaudited access write by the API role (migration 0013).
+  *P12.8:* 0023's purge exemption (cascade deletes of a purged source's grants and group
+  memberships) read the parent rows through row-level security at commit, so a session
+  that rebound `app.org_id` before commit could have made an unrelated administrator
+  grant or group-member delete look like a cascade. 0024 grants the exemption only to
+  rows of the bound organization; the rebinding, same-transaction and cross-organization
+  attempts are tests (`tests/sources/test_purge_audit.py`).
 - **Cross-tenant identity — designed out.** Global users and `external_identities` would
   have let one organization's provider attach to or alter another's person; provisioned
   people are organization-owned users and identities are scoped to the connection.

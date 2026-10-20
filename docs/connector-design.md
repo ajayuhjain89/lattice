@@ -236,6 +236,17 @@ refused and the administrator recovers by uploading a good export again. A minim
 example of each format, as a customer would upload it, is in `data/synthetic/onboarding/`
 (the P12.7 onboarding fixture: [onboarding.md](onboarding.md) §6).
 
+**Two supported ways for an export to reach Lattice (reviewed in P12.8).** A
+*product-managed* source (`managed_by = organization`) takes uploads into the import store
+(above). An *operator-managed* source (`managed_by = operator`) keeps the Phase 4 workflow:
+its operator's `sources.yaml` names a server path and `lattice sync` reads it; in the
+product it can be synced, paused, resumed and disconnected but takes no upload and no
+settings edit. **Operator-registered export locations** (phase-12-plan C8.1
+`export_locations`, `lattice source location add`: a folder the operator registers and an
+administrator picks by name) are **not built** — accepted as P12.6 deviation 5 and kept as
+uncommitted future scope: uploads are D-32's customer-operable path, and large or
+automated exports already have the operator-managed path. No API takes a path.
+
 ## 4. External identifier normalization
 
 - `external_id` must be stable across syncs and unique within the source:

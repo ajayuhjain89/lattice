@@ -425,8 +425,9 @@ Docker has 3 GB).
 | Open it | `https://localhost:8443` (Caddy's internal CA: the browser warns). `http://localhost:8080` redirects |
 | Sign in as a persona / run an Ask | `make prod-up VERIFY=1 [FAKE_DELAY=40]`: test env, development sign-in, fake providers (deploy/compose.verify.yaml); then `make prod-seed VERIFY=1` (synthetic-only: seed with `--require-synthetic`, sync with fake embeddings, admin grants) |
 | Database checks | `make prod-check` (`lattice check-deployment`), `make prod-migrate` (`lattice migrate --status`) |
-| Re-run the verification | `make prod-up VERIFY=1 IDP=1 FAKE_DELAY=20`, `make prod-seed VERIFY=1 IDP=1`, then `make prod-limits`, `prod-authz`, `prod-drills` (each with `VERIFY=1 IDP=1`); `prod-perf` needs the API instances at `FAKE_DELAY=0`. Each prints PASS/FAIL per case and exits 1 on any failure; results are recorded in §8 |
+| Re-run the verification | `make prod-up VERIFY=1 IDP=1 FAKE_DELAY=20`, `make prod-seed VERIFY=1 IDP=1`, then `make prod-limits`, `prod-authz`, `prod-drills` (each with `VERIFY=1 IDP=1`; `prod-authz` also needs a `make prod-identity` on the same database within the last day, P12.8); `prod-perf` needs the API instances at `FAKE_DELAY=0`. Each prints PASS/FAIL per case and exits 1 on any failure; results are recorded in §8 |
 | Verify organization onboarding end to end (**P12.7**) | `make prod-up IDP=1` (production mode, no `VERIFY`), then `make prod-onboard IDP=1` (`UI=0` skips the browser half). Two new run-unique organizations per run, nothing seeded; it rolls the API instances onto `deploy/verification/compose.small-imports.yaml` for its upload-boundary cases and back. See [onboarding.md](onboarding.md) §9 |
+| Reset the reference stack after repeated drills (**P12.8**) | Every `prod-onboard` run adds two run-unique organizations and their imports, and organization purge is Phase 15, so drill data accumulates by design. The stack is disposable: `make prod-destroy` (the `lattice-reference` Compose project's volumes only; refused when `COMPOSE_PROJECT_NAME` names any other project, so never the development `lattice` database), then `make prod-up IDP=1` — plus `make prod-seed VERIFY=1 IDP=1` and `make prod-identity` before `prod-authz`. No command resets a development or production database |
 | `bootstrap` fails with `password authentication failed for user "platform_admin"` | The volume was initialised before P11.2 (superuser bootstrap): `make prod-destroy`, then `make prod-up` |
 | A container is `unhealthy` | `make prod-ps`; `docker logs lattice-reference-<service>-1`. api: readiness (database or schema). worker: heartbeat older than 300 s (frozen or blocked). web: `GET /` failing |
 | Changed `deploy/caddy/Caddyfile` | Recreate Caddy (`… up -d --force-recreate caddy`): it is a single-file bind mount, so an editor that replaces the file leaves the container on the old one |
@@ -610,6 +611,16 @@ metrics read to see which instance served a step; synthetic data only).
 | Roles | `check-deployment` 7/7; a requested sync per organization ran in the worker (`succeeded`) |
 | Eval security gates inside the stack | an operator job on the private network against `lattice_app`, golden set mounted read-only: retrieval 89 items, answer 96 items, **every security count 0** |
 | Not vacuous (hand mutation, not committed) | given Veridian's own identifiers as the "foreign" set, the sweep FAILS on the routes that answer 200 |
+
+**P12.8 (2026-10-20): `make prod-authz VERIFY=1 IDP=1` expanded to every Phase 12 route
+family — 24/24 passed in 107 s** (after `make prod-identity` 52/52 on the same database):
+78/78 routes 401 anonymous; 70/70 administrator routes one identical 403 to a member; 50
+identified routes (path and body identifiers, a real Halden identifier of all 12 kinds)
+answer Veridian's administrator exactly like random ones with nothing of Halden's changed;
+CSRF refused 104/104; no read returns a stored BYOK key, a deployment secret, a SCIM token
+or a private key; suspended member, administrator and organization each end sessions on
+both instances; `check-deployment` 8/8; eval security gates 0. Details: phase-12-plan
+Part III, P12.8.
 
 `make prod-drills VERIFY=1 IDP=1` — **18/18 passed in 205 s**:
 

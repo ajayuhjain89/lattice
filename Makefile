@@ -241,8 +241,10 @@ prod-limits: ## Shared-limit, retention and worker drills (needs VERIFY=1 IDP=1,
 	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
 	  ../deploy/verification/limits_check.py
 
-# The deployed authorization suite (plan §15.2, P11.7) and the failure drills (§18):
-# `make prod-up VERIFY=1 IDP=1 FAKE_DELAY=20 && make prod-seed VERIFY=1 IDP=1` first.
+# The deployed authorization suite (plan §15.2, P11.7; every route family since P12.8) and
+# the failure drills (§18): `make prod-up VERIFY=1 IDP=1 FAKE_DELAY=20 && make prod-seed
+# VERIFY=1 IDP=1` first; prod-authz also needs a `make prod-identity` on the same database
+# within the last day (the real step-up identifier its cross-organization sweep uses).
 prod-authz: ## Deployed authorization suite: route sweep, revocation, roles, eval security gates
 	@[ -n "$(VERIFY)" ] && [ -n "$(IDP)" ] || { echo "prod-authz needs VERIFY=1 IDP=1"; exit 2; }
 	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
@@ -282,5 +284,10 @@ prod-ps: ## Show the reference stack's containers and health
 prod-down: prod-env ## Stop the reference stack (volumes kept)
 	$(PROD_COMPOSE) down --remove-orphans
 
+# Only ever the reference stack: COMPOSE_PROJECT_NAME would override compose.production.yaml's
+# `name: lattice-reference` and point `down -v` at another project (e.g. the development
+# `lattice`), so any other value is refused.
 prod-destroy: prod-env ## DELETE the reference stack and its volumes
+	@[ -z "$$COMPOSE_PROJECT_NAME" ] || [ "$$COMPOSE_PROJECT_NAME" = lattice-reference ] || \
+	  { echo "prod-destroy refused: COMPOSE_PROJECT_NAME=$$COMPOSE_PROJECT_NAME is not the reference stack"; exit 2; }
 	$(PROD_COMPOSE) down -v

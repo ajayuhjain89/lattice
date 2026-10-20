@@ -38,13 +38,16 @@ test("administrators reach the setup record from the navigation and read it as t
   await axe(page);
 });
 
-test("a fresh organization: truthful states, who acts next, and no controls for what isn't built", async ({ page }) => {
+test("a fresh organization: truthful states, who acts next, and no controls but links", async ({ page }) => {
   await mockApi(page, { me: ME_LENA, setup: SETUP_FRESH });
   await page.goto("/settings");
   await expect(row(page, "Identity provider")).toContainText("Required");
-  // P12.4: the Identity page owns it; Sources still waits for the operator (P12.6).
+  // Each item needing a person links to the page that owns it (P12.2, P12.4, P12.6).
   await expect(row(page, "Identity provider").getByRole("link", { name: "Test sign-in" })).toHaveAttribute("href", "/settings/identity");
-  await expect(row(page, "Sources")).toContainText("Your Lattice operator acts on this");
+  await expect(row(page, "Organization").getByRole("link", { name: "Choose a second administrator" })).toHaveAttribute("href", "/access");
+  await expect(row(page, "Members").getByRole("link", { name: "Add a member" })).toHaveAttribute("href", "/access");
+  await expect(row(page, "Sources").getByRole("link", { name: "Open Sources" })).toHaveAttribute("href", "/sources");
+  await expect(page.locator("main")).not.toContainText("Your Lattice operator acts on this");
   await expect(row(page, "First answer")).toContainText("Blocked");
   await expect(row(page, "Provisioning (SCIM)")).toContainText("Optional");
   // Rename is the one control; the rest are links to pages that exist.

@@ -28,6 +28,10 @@ current credential in its latest test). P12.6 builds C12's ``sources·required·
 (an organization-managed source with no current import) and ``sources·attention·import_rejected``
 (its latest upload was refused), and ``sources·required·no_sources`` now links to ``/sources``
 (administrators create sources there). A queued or running *check* of an import is not a sync.
+P12.8 adds ``sources·attention·import_invalid``: a source's current import was accepted but
+failed its check, so the sync request refuses it (``import_invalid``) -- before, the record
+read "not synced yet" (or "complete" when an earlier export had synced) while no sync
+could run.
 Identity and provisioning link to ``/settings/identity`` (P12.4). P12.7 adds
 ``first_answer·complete·evidence_returned``: a member's question returned authorized
 evidence without a written answer (status ``evidence_only`` -- no generation provider is
@@ -134,6 +138,9 @@ class SetupFacts:
     # upload was refused (of those).
     awaiting_import_sources: int = 0
     rejected_import_sources: int = 0
+    # P12.8: organization-managed sources whose current import failed its check (every
+    # sync of them is refused until a good export is uploaded).
+    invalid_import_sources: int = 0
     account_sources: int = 0
     # References the latest runs could not map and that are still unmapped (P12.3).
     unmapped_references: int = 0
@@ -256,6 +263,10 @@ MESSAGES: Final[dict[tuple[str, str], str]] = {
     ),
     ("sources", "import_rejected"): (
         "The latest export uploaded to a source was refused. Fix the export and upload it again."
+    ),
+    ("sources", "import_invalid"): (
+        "A source's current export failed its check, so it can't sync. Upload a corrected "
+        "export on its record."
     ),
     ("sources", "sync_failed"): "The latest sync of a source failed.",
     ("sources", "synced"): "At least one source has synced.",
@@ -443,6 +454,7 @@ def _sources(f: SetupFacts) -> Category:
         "failed_sources": f.failed_sources,
         "syncing_sources": f.syncing_sources,
         "awaiting_import_sources": f.awaiting_import_sources,
+        "invalid_import_sources": f.invalid_import_sources,
     }
     action = Action("/sources", "Open Sources")
     if f.connected_sources == 0:
@@ -453,6 +465,8 @@ def _sources(f: SetupFacts) -> Category:
         return _category("sources", "attention", "sync_failed", facts, action)
     if f.rejected_import_sources > 0:
         return _category("sources", "attention", "import_rejected", facts, action)
+    if f.invalid_import_sources > 0:
+        return _category("sources", "attention", "import_invalid", facts, action)
     if f.synced_sources > 0:
         return _category("sources", "complete", "synced", facts, action)
     if f.awaiting_import_sources > 0:

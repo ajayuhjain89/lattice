@@ -5,14 +5,15 @@ Status: **Plan approved (2026-10-06). P12.0 (contracts, Part II) written; P12.1
 P12.3 (accounts and external-reference mapping) 2026-10-12 with its fail-closed correction
 2026-10-13, P12.4 (identity administration: OIDC and SCIM) 2026-10-13 and P12.5 (providers,
 BYOK and egress with the D-34 step-up) 2026-10-17, P12.6 (customer-operable export sources)
-2026-10-18 and P12.7 (end-to-end onboarding) 2026-10-19 (Part III).** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
+2026-10-18, P12.7 (end-to-end onboarding) 2026-10-19 and P12.8 (security, product quality
+and closure) 2026-10-20 (Part III).** Branch `phase/12-org-setup-integrations` from `main` 143392f. Decisions
 D-28–D-33, D-35, D-36 and D-37B are approved (§22, with the contracts of Part II);
 D-34 (raising egress ceilings: IdP step-up, C6) and D-37A (organization purge: semantics
 now, executable purge in Phase 15, C14) were decided by engineering under the product
 owner's delegation, as were corrections to D-31 and D-36 (C18). **P12.1 delivered
 (2026-10-08), P12.2 (2026-10-09), P12.3 (2026-10-12), P12.4 (2026-10-13), P12.5
-(2026-10-17), P12.6 (2026-10-18) and P12.7 (2026-10-19), local commits; Part III.** P12.8
-waits for the product owner's go-ahead.
+(2026-10-17), P12.6 (2026-10-18), P12.7 (2026-10-19) and P12.8 (2026-10-20), local
+commits; Part III.** Phase 12 awaits the product owner's closure review and merge decision.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 12. Phase 11
 is closed (143392f); real external staging validation stays deferred and remains a
@@ -1088,7 +1089,7 @@ States: `complete` · `required` · `optional` · `in_progress` · `attention` �
 | `members` | `blocked·identity_required` · `required·only_administrators` (no active non-admin member) · `complete·members_active` |
 | `provisioning` | `optional·not_configured` · `optional·token_not_used_yet` · `complete·in_use` (an unrevoked token with `last_used_at`) · `attention·no_valid_token` (all revoked while IdP-managed members exist) |
 | `ai_policy` | `optional·evidence_only` (no enabled generation provider: answers show evidence without a written answer) · `complete·generation_ready` · `attention·credential_failed` (last test or last call `credential_unavailable`) · `attention·policy_excludes_default` (the provider is not allowed for the default question sensitivity) |
-| `sources` | `required·no_sources` · `required·awaiting_import` · `attention·import_rejected` · `in_progress·syncing` · `attention·sync_failed` (latest run `failed`) · `complete·synced` (≥ 1 active source with a `succeeded`/`partial` latest run) |
+| `sources` | `required·no_sources` · `required·awaiting_import` · `attention·import_rejected` · `attention·import_invalid` (P12.8: the current import failed its check; no sync can run) · `in_progress·syncing` · `attention·sync_failed` (latest run `failed`) · `complete·synced` (≥ 1 active source with a `succeeded`/`partial` latest run) |
 | `accounts` | `optional·not_needed` (no account-scoped source, no channel mapping) · `attention·unmapped_references` (count) · `complete·mapped` |
 | `first_answer` | `blocked·sources_required` · `required·no_answer_yet` · `complete·answered` (≥ 1 trace `answered`/`partial`) |
 
@@ -1835,3 +1836,172 @@ mobile, production — unchanged from P12.6: the onboarding project runs only th
 GHSA-vfj7-8cjw-p6xm. Not re-run for P12.7 (unchanged surfaces): `prod-identity`,
 `prod-limits`, `prod-authz` (which still lacks the source routes — P12.8), `prod-drills`,
 `prod-perf`.
+
+## P12.8 Phase 12 security, product quality and closure (2026-10-20)
+
+Delivered on `phase/12-org-setup-integrations` (local commit, not pushed) after the
+product owner approved P12.7 (69303f6). A consolidation checkpoint: no new capability.
+Migration **0024** (`SCHEMA_REVISION` 0024; reversible) corrects the one security defect
+the review found. The development database is not migrated (still 0018); the reference
+database went 0023 → 0024 through the production `lattice migrate` job.
+
+**1. Migration 0023's audit exemption — reviewed, one defect, corrected (0024).**
+0013's deferred trigger `lattice_require_access_audit` runs at COMMIT as `lattice_app`
+(SECURITY INVOKER) for every row the API role's transaction inserted, updated or deleted
+in the six access tables, and refuses the commit unless an `access.*` event of the same
+transaction names the row's membership. 0023 exempts, for `DELETE` only, a grant whose
+document — or a group membership whose group — no longer exists: `lattice_app` has no
+DELETE on documents or groups, so only `lattice_purge_source` (definer; a `deleting`
+source of the bound organization, an active administrator) removes them, by the composite
+`(organization_id, id)` cascades from `sources`; members who lose a synced group stay
+audited because the purge touches their `memberships` rows. **Defect:** the existence
+check reads `documents` / `access_groups` through row-level security *as bound at commit*,
+and `app.org_id` is an ordinary setting any role may change. A session that deleted one of
+its organization's administrator grants (or an administrator group's member) and then
+rebound to another organization — or to none — before COMMIT made the still-existing
+parent invisible, and the unaudited delete committed (before 0023 the same sequence failed
+closed). The application never rebinds inside a transaction, so this was reachable only
+by arbitrary SQL as the API role — exactly what ADR-014's database guarantee is for.
+**0024** grants the exemption only to a row of the organization the session is bound to
+(whose documents and groups RLS shows in full); everything else is 0023's.
+`backend/tests/sources/test_purge_audit.py` (real roles, real deferred trigger, two
+organizations) proves: a purge of a source with group, source-membership and
+administrator grants and a synced group commits with one `access.member_changed` per
+member who loses a group, and without them nothing of it commits (A, B, C, H); a direct
+administrator grant or administrator-group delete still needs its event (D, E), also
+before or after a purge in the same transaction (F), also after rebinding to another
+organization or none (the defect); a grant of a document the purge deletes goes with it;
+another organization's source and rows are out of reach and unchanged (G); a purge left
+`deleting` resumes, a completed one returns false and changes nothing anywhere (I, J); a
+purge never widens what any member can read — access paths are additive, so deleting
+grants and memberships only narrows (K); the audit trail is append-only and survives (L).
+Mutation checks (by hand, reverted): an unconditional grant exemption, an unconditional
+group-member exemption and a purge that no longer touches the losing members' rows are
+each caught by two tests; 0023's body without the 0024 bound fails the four rebinding
+cases. 0018/0022's mapping exemption needs no bound: the API role has no DELETE on
+`account_external_refs`.
+
+**2. Deployed authorization (`make prod-authz`), expanded.** The sweep now reads every
+router module of `lattice.api.routes` (less public sign-in, health and SCIM's own rule):
+78 member and administrator routes, exactly the in-process inventory — every Phase 12
+family (setup, members and administrators, accounts, references, OIDC, SCIM tokens,
+providers and BYOK, egress, D-34 step-ups, sources, imports, lifecycle). Before, routes
+with an identifier the driver had no value for (`provider_id`, `step_up_id`, and the
+accounts and identity routers it did not read) were compared with the literal `{name}`
+in both calls — a vacuous pass. Now the run fails unless it holds a real Halden
+identifier of every kind (12), and the cross-organization comparison also covers body
+identifiers (account references, provider changes, grants). New cases: CSRF refused on
+every state-changing route (no proof, and cross-site); no read returns a stored
+synthetic BYOK key, a deployment secret, a SCIM token or a private key; a suspended
+administrator and a suspended organization; Veridian's lists name nothing of Halden's.
+Result on the reference stack (`make prod-up VERIFY=1 IDP=1 FAKE_DELAY=20`, `make
+prod-seed`, after `make prod-identity`): **24/24 in 107 s** — 78/78 routes 401 anonymous,
+SCIM 7/7 401, 70/70 administrator routes one identical 403 to a member, 50 identified
+routes (path identifiers 404, body ones 404/422 — an unknown body `source_id` is a
+validation issue, `unknown_source`) identical to random for Veridian's administrator with
+nothing of Halden's changed (access, identity, providers, egress, step-ups, sources,
+imports, accounts, mappings, jobs, audit), 9 Veridian lists free of Halden, CSRF 104/104,
+a synthetic BYOK key stored, searched for in 25 reads × 2 people and revoked, suspended
+member / administrator / organization each ending sessions on both instances (78/78
+routes 401 for the suspended organization's administrator, Halden unaffected),
+`check-deployment` 8/8, a requested sync per organization. The first run was 22/24: two
+driver expectations predating Phase 12 (exactly 7 `check-deployment` checks — 8 since
+P12.1; a fake model assumed enabled after other drills disabled it), fixed in the driver.
+Not vacuous: Halden's own administrator gets 200 for the account, member, test sign-in,
+source, evidence and trace identifiers Veridian's gets 404 for (the step-up is visible
+only to the administrator and session that started it, by D-34).
+
+**3. Security regression (sections 4–10 of the brief).** Central invariant — the model
+never receives content the user may not read — unchanged and re-proved by the full suite
+(authorization equivalence, the pre-generation tripwire, call-time re-reads of readable
+classifications and of the outbound registration, D-13 question sensitivity, D-15 egress
+cells, D-17/D-18 administrator views, D-19/D-20 identity ownership and least-access
+lifecycle, D-34 step-up) and by the eval security gates inside the stack (retrieval 89 items, answer 96 items: every
+security count 0).
+The scanner's `sources.admin` allowance stays `KEY_ONLY` (`sensitivity` as a whole
+mapping key); its negative tests prove SQL, attribute, keyword and model uses are still
+flagged. New: `backend/tests/identity/test_flow_separation.py` — a test sign-in or an
+ordinary sign-in never yields a step-up grant, a step-up or an ordinary sign-in is never
+the proof of an issuer or claim change (each beside a passing control). Import
+replacement: the P12.7 limitation is safe (a refused or unreadable replacement never
+changes indexed evidence or anyone's access; syncing an unreadable one is refused) and is
+kept as a documented limitation, now also stated in the product (below). Registered
+export locations (C8.1): classified **uncommitted future scope**, not a Phase 12 blocker —
+D-32 chose uploads as the customer-operable path ("plus A for large or automated
+exports"), P12.6 deviation 5 recorded locations as not built and was accepted, and the
+operator-managed `sources.yaml` + `lattice sync` workflow (proved by `make prod-seed`,
+`backend/tests/ingestion`, the onboarding drill's operator-source cases) still serves
+large or automated exports. Both workflows remain functional.
+
+**4. Product consistency — two defects fixed.**
+1. **The setup record missed a source whose current export failed its check**
+   (accepted, then refused as a whole: every sync is refused `import_invalid`). The record
+   read "has not synced yet" — or *Complete* when an earlier export had synced — while no
+   sync could run. New reason `sources·attention·import_invalid` (`setup.facts`
+   `invalid_import_sources`, `setup.derive`; unit and onboarding tests).
+2. **A failed check looked ready.** The source record showed a green *Ready* beside "This
+   export can't be synced"; it now shows *Failed its check* (fault tone). The upload panel
+   states the P12.7 limitation where it matters: only the current export is kept, so after
+   a replacement fails its check the way back is a corrected upload.
+The web fixtures of the setup record had drifted from the API (they still showed
+"Your Lattice operator acts on this" for the organization, members and sources rows, which
+link to Access and Sources since P12.2/P12.6, and the accounts row linked to `/sources`);
+they now match `setup.derive` exactly, and the operator fallback is tested on an
+explicitly altered row. Reviewed and consistent: every action destination exists
+(`test_actions_link_only_to_pages_that_exist`); required/attention states always carry an
+action; blocked ones wait on the item their message names; no percentages; the frontend
+never derives readiness. The security distinctions are stated where they matter and
+nowhere else: administrative capability ≠ content access (Organization, Make
+administrator, Accounts, Sources); credential ≠ approval ≠ egress and fresh sign-in ≠ MFA
+(AI providers, step-up); uploaded ≠ synced, paused ≠ deleted (Sources); mapped ≠
+rewritten (references: "applies at the next sync"); archived ≠ deleted (Accounts);
+evidence-only ≠ failure (Ask, first answer).
+
+**5. Design and accessibility.** Reviewed in the screens harness at 1440 and 390 px —
+incomplete and in-use setup, identity configured / none / blocked by the outbound policy,
+providers (configured, escalation preview, step-up result), accounts, an archived
+account, unmapped references, a removed member's reinstatement, a source's record, a new
+source, a refused upload, a failed check, a failed sync and the disconnect review (new
+`screens.spec.ts` entries; canonical `docs/screens` not regenerated). Design-system v2
+holds: the three type roles, ledger rules and margin bars, no cards, gradients or
+decorative badges, one dialog pattern. Accessibility: the Phase 12 functional specs
+already cover axe, keyboard paths, focus return, 320 px reflow, 200 % zoom, forced colours
+and reduced motion for every page and dialog; the one new state (a failed check) gets its
+own axe and inert-control test.
+
+**6. Operations.** `make prod-destroy` refuses when `COMPOSE_PROJECT_NAME` names any
+project but `lattice-reference` (it would otherwise point `down -v` elsewhere). Repeated
+onboarding drills accumulate run-unique organizations by design (no executable purge
+before Phase 15); the reset workflow is `make prod-destroy` + `make prod-up`
+(onboarding.md §9, runbook); after this checkpoint's runs the reference database holds
+19 organizations in 28 MB and the imports volume 360 KB. `deploy/verification/
+identity_check.py` was not re-runnable on its own database (its step-up section created a
+gemini record and failed on the 409 `provider_exists` an earlier run left); it now reuses
+it. The onboarding drill gained one case (the setup record during an unreadable
+replacement and after recovery).
+
+**Verification (2026-10-20).** Backend: full suite **3,241 passed** (16.9 min; 19 new:
+15 purge-audit, 2 flow-separation, 2 setup-status), `ruff check .`, format and strict mypy
+clean (tests included); privilege snapshot unchanged. Web: lint, type check, **278** unit
+tests, production build; functional Playwright **376 passed**, 56 skipped by viewport
+design, 0 failed (desktop, mobile, production). Reference stack, images rebuilt (`make
+prod-build`), restarted (`make prod-down`, `make prod-up IDP=1`): `lattice migrate` 0023 →
+0024 in 0.4 s; `make prod-check` **8/8** at 0024; `make prod-identity` **52/52**; `make
+prod-onboard IDP=1` **119/119** API cases and **7/7** browser steps; then in verification
+mode `make prod-authz` **24/24**. `make audit`: backend clean; web only the approved
+GHSA-vfj7-8cjw-p6xm (braces 3.0.3 is still the latest release). **Reused, not re-run**
+(paths unchanged by P12.8): `prod-limits` 10/10 (P11.4), `prod-drills` 18/18 and
+`prod-perf` (P11.7), `prod-smoke` (P11.7). The development database was not touched
+(0018).
+
+### Deferred capability register (Phase 12 closure)
+
+| Item | Why deferred | User impact | Security / operational impact | Target |
+| ---- | ------------ | ----------- | ----------------------------- | ------ |
+| Executable organization purge (D-37A) | needs a platform-level deletion record outside the purged rows (C14) | an organization cannot be deleted from the product or CLI; operators suspend it | data of a departed tenant stays (suspended: no sign-in, SCIM or sync); drill data accumulates on the reference stack | **Phase 15** |
+| Changed-subject IdP migration (D-37B) | a subject change needs a verified mapping per person; not needed for v1 | changing to a provider with different subjects means re-provisioning members | none — a changed issuer or claim needs the administrator's own matched test sign-in, so subjects cannot be swapped silently | **post-v1** |
+| External cloud staging, managed PostgreSQL privileges, managed backup/PITR, public TLS/origin, external OIDC callback, provider deploy/rollback, cloud RPO/RTO (phase-11-plan §21.1) | no deployment budget (D-22 amended) | none locally; Lattice is not production-proven | the release gate: v1 GA may not be declared before it | **Phase 15 gate** |
+| Operator-registered export locations (C8.1) | uploads are D-32's customer path; operator sources cover large or automated exports | administrators cannot pick an operator folder by name | none (no API takes a path) | **uncommitted future scope** |
+| Import version restoration | not in the approved contract; a replacement that fails its check is recoverable by a corrected upload | no "restore previous export"; indexed evidence is unaffected until a sync | none: refused or unreadable replacements change no access or evidence | **documented limitation** (no phase) |
+| Account timeline workspace | not needed for v1 (scoped Ask covers the workflow) | no per-account timeline view | none | **post-v1** |
+| Live connectors (Slack, Zendesk, …) | D-33: export-based types only in Phase 12 | exports are uploaded by hand | none | **not Phase 12; uncommitted** |

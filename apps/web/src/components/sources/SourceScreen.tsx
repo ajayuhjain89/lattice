@@ -333,7 +333,7 @@ function ExportSection({ source, inputRef }: { source: SourceDetail; inputRef: R
           </p>
           <p className={styles.secondary}>
             {source.current_import
-              ? "A new export replaces the current one only once it passes validation; until then the current one stays. "
+              ? "A new export replaces the current one only once it passes validation; until then the current one stays. Only the current export is kept: if a replacement then fails its check, upload a corrected one — what's already synced stays searchable as it is. "
               : ""}
             Each upload is validated entry by entry, then checked automatically — a dry run that writes nothing and sends nothing to an AI provider. Nothing
             syncs until you start a sync.
@@ -434,7 +434,12 @@ function ImportFacts({ current }: { current: SourceImport }) {
   return (
     <dl className={styles.ledger} data-testid="current-import">
       <Fact label="Current export">
-        <StatusMark tone={current.status === "ready" ? "healthy" : "neutral"}>{importStatusLabel(current.status)}</StatusMark>{" "}
+        {/* Validated but failed its check: not "Ready" in green beside "can't be synced". */}
+        {current.status === "ready" && current.check?.error_code ? (
+          <StatusMark tone="fault">Failed its check</StatusMark>
+        ) : (
+          <StatusMark tone={current.status === "ready" ? "healthy" : "neutral"}>{importStatusLabel(current.status)}</StatusMark>
+        )}{" "}
         <span className={styles.when}>received {formatDayTime(current.received_at ?? current.created_at)}</span>
       </Fact>
       <Fact label="Size">

@@ -1898,18 +1898,19 @@ const SETUP_ORGANIZATION: S["SetupOrganization"] = {
   version: "2026-10-08T09:00:00.000000Z",
 };
 
-/** A freshly created organization: the operator's trust root, nothing else yet. */
+/** A freshly created organization: the operator's trust root, nothing else yet (as the API
+ * derives it at P12.8: every item needing a person links to the page that owns it). */
 export const SETUP_FRESH: S["SetupStatus"] = {
   organization: SETUP_ORGANIZATION,
   categories: [
-    { key: "organization", state: "attention", reason: "single_administrator", message: "One active administrator. If they leave, only your Lattice operator can appoint another; a second administrator avoids that.", facts: { active_administrators: 1 }, action: null },
+    { key: "organization", state: "attention", reason: "single_administrator", message: "One active administrator. If they leave, only your Lattice operator can appoint another; make a second member an administrator on the Access page to avoid that.", facts: { active_administrators: 1 }, action: { kind: "link", href: "/access", label: "Choose a second administrator" } },
     { key: "identity", state: "required", reason: "not_verified", message: "The identity provider is connected but no sign-in through it has succeeded yet. A test sign-in on the Identity page verifies it.", facts: { connection: "active", last_success_at: null, last_failure_at: null }, action: { kind: "link", href: "/settings/identity", label: "Test sign-in" } },
-    { key: "members", state: "required", reason: "only_administrators", message: "Only administrators are members so far. People join when your identity provider provisions them (SCIM) or when your Lattice operator adds them.", facts: { active_members: 1, active_administrators: 1 }, action: null },
+    { key: "members", state: "required", reason: "only_administrators", message: "Only administrators are members so far. Add members on the Access page with the exact identifier your identity provider sends for them, or let the identity provider provision them (SCIM).", facts: { active_members: 1, active_administrators: 1, manual_members_available: true }, action: { kind: "link", href: "/access", label: "Add a member" } },
     { key: "provisioning", state: "optional", reason: "not_configured", message: "Automatic provisioning (SCIM) is not set up. It is optional; create a provisioning token on the Identity page to use it.", facts: { live_tokens: 0, provisioned_members: 0, refused_recently: 0 }, action: { kind: "link", href: "/settings/identity", label: "Open Identity" } },
     { key: "ai_policy", state: "optional", reason: "evidence_only", message: "No generation provider is enabled: answers show their evidence without a written answer.", facts: { provider: null, model: null, default_question_sensitivity: "internal" }, action: { kind: "link", href: "/settings/providers", label: "Open AI providers" } },
-    { key: "sources", state: "required", reason: "no_sources", message: "No source is connected yet.", facts: { connected_sources: 0, synced_sources: 0, failed_sources: 0, syncing_sources: 0 }, action: null },
-    { key: "accounts", state: "optional", reason: "not_needed", message: "No source maps records to accounts, so no account mapping is needed.", facts: { account_sources: 0, unmapped_references: 0 }, action: null },
-    { key: "first_answer", state: "blocked", reason: "sources_required", message: "The first question can be asked once a source has synced.", facts: { answered: false }, action: null },
+    { key: "sources", state: "required", reason: "no_sources", message: "No source is connected yet.", facts: { connected_sources: 0, synced_sources: 0, failed_sources: 0, syncing_sources: 0, awaiting_import_sources: 0, invalid_import_sources: 0 }, action: { kind: "link", href: "/sources", label: "Open Sources" } },
+    { key: "accounts", state: "optional", reason: "not_needed", message: "No source maps records to accounts, so no account mapping is needed.", facts: { account_sources: 0, unmapped_references: 0, references_awaiting_sync: 0 }, action: null },
+    { key: "first_answer", state: "blocked", reason: "sources_required", message: "The first question can be asked once a source has synced.", facts: { answered: false, evidence_returned: false }, action: null },
   ],
 };
 
@@ -1922,9 +1923,9 @@ export const SETUP_IN_USE: S["SetupStatus"] = {
     { key: "members", state: "complete", reason: "members_active", message: "Members other than administrators are active.", facts: { active_members: 14, active_administrators: 2 }, action: { kind: "link", href: "/access", label: "Review access" } },
     { key: "provisioning", state: "complete", reason: "in_use", message: "The identity provider provisions members.", facts: { live_tokens: 1, provisioned_members: 12, refused_recently: 0 }, action: { kind: "link", href: "/settings/identity", label: "Open Identity" } },
     { key: "ai_policy", state: "attention", reason: "credential_failed", message: "The generation provider's credential is missing or cannot be used: answers fall back to evidence only.", facts: { provider: "gemini", model: "gemini-3.5-flash-lite", default_question_sensitivity: "internal" }, action: { kind: "link", href: "/settings/providers", label: "Open AI providers" } },
-    { key: "sources", state: "complete", reason: "synced", message: "At least one source has synced.", facts: { connected_sources: 3, synced_sources: 3, failed_sources: 0, syncing_sources: 0 }, action: { kind: "link", href: "/sources", label: "Open Sources" } },
-    { key: "accounts", state: "attention", reason: "unmapped_references", message: "Records reference accounts that are not mapped, and are not indexed until they are.", facts: { account_sources: 1, unmapped_references: 2 }, action: { kind: "link", href: "/sources", label: "See unmapped references" } },
-    { key: "first_answer", state: "complete", reason: "answered", message: "Members have received answers.", facts: { answered: true }, action: null },
+    { key: "sources", state: "complete", reason: "synced", message: "At least one source has synced.", facts: { connected_sources: 3, synced_sources: 3, failed_sources: 0, syncing_sources: 0, awaiting_import_sources: 0, invalid_import_sources: 0 }, action: { kind: "link", href: "/sources", label: "Open Sources" } },
+    { key: "accounts", state: "attention", reason: "unmapped_references", message: "Records reference accounts that are not mapped, and are not indexed until they are.", facts: { account_sources: 1, unmapped_references: 2, references_awaiting_sync: 0 }, action: { kind: "link", href: "/access/accounts/references", label: "Map references" } },
+    { key: "first_answer", state: "complete", reason: "answered", message: "Members have received answers.", facts: { answered: true, evidence_returned: true }, action: null },
   ],
 };
 

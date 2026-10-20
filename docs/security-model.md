@@ -484,7 +484,13 @@ evidence (D-5: off/deferred).
   administrator. **Since Phase 10 the database enforces it:** a deferred constraint
   trigger refuses to commit any access write by the API role unless the same transaction
   recorded an `access.*` event for that membership (`audit_events.txid`, migration 0013;
-  ADR-015). SCIM writes `access.member_changed` and `access.identity_changed` (actor
+  ADR-015). One exemption, for a source's purge only (0023, bounded in 0024): the delete
+  of a grant whose document, or of a group membership whose group, no longer exists —
+  the cascade of `lattice_purge_source`, the only way a document or group is deleted from
+  the API role — and only for a row of the organization the session is bound to; the
+  members who lose a synced group are still audited one by one, and any other grant or
+  membership delete, also beside a purge, still needs its event
+  (`tests/sources/test_purge_audit.py`). SCIM writes `access.member_changed` and `access.identity_changed` (actor
   `scim:<token id>`); operator commands write `sso.*`, `scim.token_*` and the
   administrator-capability change (`access.member_changed` by `operator:<user>`).
 - **Access management (Phase 9):** administrators review and change members' access on
@@ -834,6 +840,20 @@ attribute, keyword, model or inside SQL (tests prove each is still flagged); upl
 refused before registration are now counted and logged (`lattice_imports_total`,
 `sources.import_refused`).
 
-**Contracts not yet implemented:** operator-registered export locations (C8.1 —
-operator-managed sources keep the `lattice sync` path workflow); and on every setup
-surface administrators stay non-readers of content (C9, C10).
+**Phase 12 closure review (P12.8, 2026-10-20; phase-12-plan Part III).** One defect:
+0023's purge exemption from the access-audit coupling read the purged rows' parents
+through row-level security as bound at commit, so an API-role session that rebound
+`app.org_id` before commit could have committed an unrelated administrator-grant or
+administrator-group-member delete unaudited; migration 0024 binds the exemption to the
+session's organization (`tests/sources/test_purge_audit.py`, A–L and the rebinding cases).
+Re-proved without change: the model never receives unreadable content; administrators
+configure without reading; D-8, D-10, D-13, D-15, D-17–D-20 and D-34; a test sign-in, an
+ordinary sign-in and a step-up are never proof for one another
+(`tests/identity/test_flow_separation.py`); fail-closed account references. The deployed
+sweep (`make prod-authz`) now covers every route family with a real identifier of every
+kind, CSRF on every state-changing route, secret exposure, and suspended administrators
+and organizations.
+
+**Contracts not implemented (accepted):** operator-registered export locations (C8.1 —
+uncommitted future scope; operator-managed sources keep the `lattice sync` path workflow).
+On every setup surface administrators stay non-readers of content (C9, C10).

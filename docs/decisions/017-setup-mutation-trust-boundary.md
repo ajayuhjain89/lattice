@@ -4,8 +4,10 @@ Status: **Accepted as the P12.0 contract (2026-10-06).** Built checkpoint by che
 from P12.1 (phase-12-plan Part II); **P12.1 (2026-10-08) built the first fence and the
 foundations; P12.2 (2026-10-09) the member and administrator fences; P12.3 (2026-10-12) the
 account and mapping fences; P12.4 (2026-10-13) the identity fences; P12.5 (2026-10-17) the
-provider, credential, egress and step-up fences** — see "Implemented in P12.1" … "Implemented
-in P12.5" at the end.
+provider, credential, egress and step-up fences; P12.6 (2026-10-18) the source and import
+fences; P12.7 (2026-10-19) the purge's audit exemption (0023), bound to the session's
+organization by the P12.8 review (0024, 2026-10-20)** — see "Implemented in P12.1" …
+"Implemented in P12.5" at the end and phase-12-plan Part III.
 
 ## Context
 
@@ -374,7 +376,11 @@ fixed reason.
   `source.import_rejected` (naming it), `source.sync_requested`; a check is not audited
   (C11). The audit insert policy admits the `source.*` family from `member:` actors. 0018's
   per-mapping coupling now exempts the cascade deletes of a disconnected source's purge
-  (the `source.disconnected` event records how many mappings go).
+  (the `source.disconnected` event records how many mappings go). 0013's access coupling
+  exempts the purge's cascade of grants and group memberships too (0023, P12.7) — only
+  for rows of the bound organization (0024, P12.8: the parents are read through
+  row-level security at commit) — while each member who loses a synced group is
+  audited (`access.member_changed`).
 
 `tests/test_rls.py` (direct API-role writes on `sources` and `source_imports` refused),
 `tests/test_app_role_access.py`, `tests/test_worker_role.py`,

@@ -387,6 +387,10 @@ def step_up_cases(token: str, key: str) -> None:
         },
         headers=CSRF,
     )
+    # A re-run on the same database finds the record an earlier run left (disabled and
+    # unapproved, as every run ends): 409 provider_exists, then the settings as they are.
+    if created.status_code == 409 and "provider_exists" in created.text:
+        created = admin.client.get(api)
     settings = created.json()
     provider = next(p for p in settings["providers"] if p["provider"] == "gemini")
 

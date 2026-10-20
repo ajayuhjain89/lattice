@@ -42,6 +42,28 @@ describe("SourceScreen", () => {
     expect(screen.getByTestId("current-import")).toHaveTextContent("3 files read");
   });
 
+  it("an export that failed its check: never marked ready, no sync, and the way back is a corrected upload", async () => {
+    const current = SOURCE_RECORD_ESCALATIONS.current_import!;
+    const invalid = {
+      ...SOURCE_RECORD_ESCALATIONS,
+      current_import: { ...current, check: { ...current.check!, error_code: "source_unavailable:unreadable" } },
+      next_action: "replace_import" as const,
+      can_sync: false,
+      sync_blocked_by: "import_invalid",
+    };
+    mockFetch({ ...routes, [`GET /v1/admin/sources/${ORG_SOURCE.escalations}`]: [200, invalid] });
+    renderInWorkspace(<SourceScreen id={ORG_SOURCE.escalations} />, { me: ME_LENA });
+    const facts = await screen.findByTestId("current-import");
+    expect(facts).toHaveTextContent("Failed its check");
+    expect(facts).not.toHaveTextContent("Ready");
+    expect(screen.getByText("This export can't be synced")).toBeInTheDocument();
+    // Inert but focusable, with the server's reason as its description.
+    expect(screen.getByRole("button", { name: "Sync now" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Sync now" })).toHaveAccessibleDescription(/can't be synced/);
+    // The documented limitation (P12.7): only the current export is kept.
+    expect(screen.getByText(/Only the current export is kept/)).toBeInTheDocument();
+  });
+
   it("upload: bytes sent, then validating with no number, then accepted", async () => {
     const user = userEvent.setup();
     mockFetch(routes);

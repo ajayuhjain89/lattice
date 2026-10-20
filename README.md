@@ -30,8 +30,11 @@ their own ingress limit, a deterministic check before any sync, pause/resume and
 disconnect, the existing worker syncing from the import) and P12.7 end-to-end onboarding
 (an organization from `lattice org create` to a member's first Ask, proved on the local
 reference stack in production mode by `make prod-onboard` — API and browser — and in the
-backend suite; [docs/onboarding.md](docs/onboarding.md)) are delivered locally and await
-review; P12.8 is not started. The three source types are **export-based**
+backend suite; [docs/onboarding.md](docs/onboarding.md)) and P12.8 closure (a security
+review that bounded the purge's audit exemption to the session's organization — migration
+0024 — the deployed authorization sweep extended to every Phase 12 route family, a
+product-consistency and accessibility review, and the deferred-capability register in
+[phase-12-plan](docs/phase-12-plan.md) Part III) are delivered locally and await review. The three source types are **export-based**
 (Markdown documents, Lattice ticket JSON Lines, Slack workspace export) — not live
 integrations.** What runs today: a FastAPI
 backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced

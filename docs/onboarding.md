@@ -210,13 +210,25 @@ sources, member lifecycle, logs) and then the same journey in the real web app
 (Playwright project `onboarding-stack`). Synthetic data only
 (`data/synthetic/onboarding`); no model is called.
 
-## 10. Known limitations (P12.7)
+**Re-running and resetting.** Each run is additive: it creates two new run-unique
+organizations (and their imports in the stack's `imports` volume) and never deletes the
+previous runs' — organization purge is not executable before Phase 15, so there is no
+"clean up after the drill" command. The reference stack is disposable verification
+infrastructure: to start again from an empty database, `make prod-destroy` (deletes the
+`lattice-reference` Compose project's volumes only — its database, imports, backups and
+Caddy data; never the development project `lattice` or its database) and `make prod-up
+IDP=1`. Nothing in the drill or the Makefile resets a development or production database.
+
+## 10. Known limitations (P12.7, reviewed in P12.8)
 
 * **A replaced export is not kept.** An accepted upload becomes current at once; the
   previous export is deleted once no queued or running job reads it (within about a
   minute). If the new export then proves unusable (the check fails as a whole), the
   administrator must upload a good export again — there is no "restore the previous
-  export". Indexed evidence is not affected until a sync runs.
+  export". Indexed evidence is not affected until a sync runs. The source's record says
+  so beside the upload, marks such an export *Failed its check* and keeps *Sync now*
+  inert with the reason; the Organization page shows `sources·attention·import_invalid`
+  (P12.8).
 * **An export whose records partly fail** still becomes current; the check reports the
   invalid and would-be-quarantined counts before any sync. Syncing it applies the
   existing fail-closed rules: records that cannot be identified quarantine the documents

@@ -39,6 +39,14 @@ import {
   PROVIDERS_GEMINI_NEW,
   PREVIEW_APPROVE_GEMINI,
   STEP_UP_GRANTED,
+  ACCOUNT_IDS,
+  IDENTITY_BLOCKED,
+  IDENTITY_NONE,
+  MEMBER_RAE_REMOVED,
+  SOURCE_RECORD_DRIVE,
+  SOURCE_RECORD_ESCALATIONS,
+  SOURCE_RECORD_NEW,
+  UPLOAD_REFUSED_LAYOUT,
   SETUP_FRESH,
   SETUP_IN_USE,
   SOURCES_ADMIN_LONG,
@@ -429,6 +437,100 @@ const SCREENS: Record<string, (page: Page) => Promise<void>> = {
     await at(page, { me: ME_LENA, providers: PROVIDERS_EMPTY });
     await page.goto("/settings/providers");
     await page.getByRole("heading", { name: "No AI providers are configured" }).waitFor();
+  },
+  // P12.8: the Phase 12 states the closure review looks at -- identity, accounts and their
+  // references, a removed member's reinstatement, and a source's failures.
+  identity: async (page) => {
+    await at(page, { me: ME_LENA });
+    await page.goto("/settings/identity");
+    await page.getByTestId("connection-facts").waitFor();
+  },
+  "identity-none": async (page) => {
+    await at(page, { me: ME_LENA, identitySettings: IDENTITY_NONE });
+    await page.goto("/settings/identity");
+    await page.getByRole("heading", { level: 1 }).waitFor();
+  },
+  "identity-blocked": async (page) => {
+    await at(page, { me: ME_LENA, identitySettings: IDENTITY_BLOCKED });
+    await page.goto("/settings/identity");
+    await page.getByTestId("connection-facts").waitFor();
+  },
+  accounts: async (page) => {
+    await at(page, { me: ME_LENA });
+    await page.goto("/access/accounts");
+    await page.getByRole("table").and(page.locator(":not([aria-busy])")).waitFor();
+  },
+  "account-archived": async (page) => {
+    await at(page, { me: ME_LENA });
+    await page.goto(`/access/accounts/${ACCOUNT_IDS.orbital}`);
+    await page.getByRole("heading", { level: 1 }).waitFor();
+  },
+  "references-unmapped": async (page) => {
+    await at(page, { me: ME_LENA });
+    await page.goto("/access/accounts/references");
+    await page.getByRole("table").and(page.locator(":not([aria-busy])")).waitFor();
+  },
+  "member-reinstate": async (page) => {
+    await at(page, { me: ME_LENA, member: { [MEMBER_RAE_REMOVED.member.id]: MEMBER_RAE_REMOVED } });
+    await page.goto(`/access/members/${MEMBER_RAE_REMOVED.member.id}`);
+    const reinstate = page.getByRole("button", { name: "Reinstate" });
+    await hydrated(reinstate);
+    await reinstate.click();
+    await page.getByRole("dialog").waitFor();
+  },
+  "source-upload-refused": async (page) => {
+    await at(page, { me: ME_LENA, adminSources: { sources: [...SOURCES_ADMIN.sources, ...SOURCES_ADMIN_ORG] }, upload: () => ({ status: 422, body: UPLOAD_REFUSED_LAYOUT }) });
+    await page.goto(`/sources/${ORG_SOURCE.escalations}`);
+    const file = page.getByLabel("Export file");
+    await hydrated(file);
+    await file.setInputFiles({ name: "not-an-export.zip", mimeType: "application/zip", buffer: Buffer.from("PK\u0003\u0004 not an export") });
+    await page.getByRole("button", { name: "Upload a replacement" }).click();
+    await page.getByTestId("upload-status").getByText(/Not accepted/).waitFor();
+  },
+  "source-check-failed": async (page) => {
+    const current = SOURCE_RECORD_ESCALATIONS.current_import!;
+    const invalid = {
+      ...SOURCE_RECORD_ESCALATIONS,
+      current_import: { ...current, check: { ...current.check!, error_code: "source_unavailable:unreadable" } },
+      next_action: "replace_import",
+      can_sync: false,
+      sync_blocked_by: "import_invalid",
+    } as const;
+    await at(page, {
+      me: ME_LENA,
+      adminSources: { sources: [...SOURCES_ADMIN.sources, ...SOURCES_ADMIN_ORG] },
+      sourceRecords: { [invalid.id]: invalid, [SOURCE_RECORD_NEW.id]: SOURCE_RECORD_NEW, [SOURCE_RECORD_DRIVE.id]: SOURCE_RECORD_DRIVE },
+    });
+    await page.goto(`/sources/${ORG_SOURCE.escalations}`);
+    await page.getByText("This export can't be synced").waitFor();
+  },
+  "source-sync-failed": async (page) => {
+    const failed = {
+      ...SOURCE_RECORD_ESCALATIONS,
+      last_synced_at: "2026-09-29T06:00:09Z",
+      job: {
+        id: "7f2a1b0c-4444-4d3e-9f4a-1b2c3d4e5f09",
+        source_id: SOURCE_RECORD_ESCALATIONS.id,
+        kind: "source_sync",
+        import_id: SOURCE_RECORD_ESCALATIONS.current_import!.id,
+        mode: "full",
+        status: "failed",
+        attempts: 3,
+        error_code: "source_unavailable:timeout",
+        created_at: "2026-09-29T05:59:58Z",
+        started_at: "2026-09-29T06:00:01Z",
+        finished_at: "2026-09-29T06:00:09Z",
+        sync_run_id: null,
+      },
+      next_action: "retry_sync",
+    } as const;
+    await at(page, {
+      me: ME_LENA,
+      adminSources: { sources: [...SOURCES_ADMIN.sources, ...SOURCES_ADMIN_ORG] },
+      sourceRecords: { [failed.id]: failed, [SOURCE_RECORD_NEW.id]: SOURCE_RECORD_NEW, [SOURCE_RECORD_DRIVE.id]: SOURCE_RECORD_DRIVE },
+    });
+    await page.goto(`/sources/${ORG_SOURCE.escalations}`);
+    await page.getByRole("heading", { level: 1 }).waitFor();
   },
   "providers-forbidden": async (page) => {
     await at(page, { providers: "forbidden" });

@@ -4,7 +4,10 @@ Status: Accepted (Phase 5 closure, 2026-09-28; D-15 and D-16 resolved in the fin
 Phase 5 closure, 2026-09-29). The policy core, including the D-15 trust classes, is
 implemented and tested. Organization-scoped credential storage is scheduled for the
 Phase 6 backend and the administrative UX for Phase 7 (D-16, below). Neither is built
-in Phase 5.
+in Phase 5. *Since then:* configuration and credential references in Phase 6, the
+read-only page in Phase 7, encrypted-at-rest custody amended 2026-10-06 (D-29), and the
+administrator's providers, BYOK and egress with the D-34 step-up built in Phase 12 (P12.5;
+reviewed in P12.8).
 
 ## Context
 

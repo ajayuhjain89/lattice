@@ -123,6 +123,11 @@ _SOURCES_SQL = text(
           SELECT i.rejected_code FROM source_imports i
           WHERE i.organization_id = :o AND i.source_id = c.id
           ORDER BY i.created_at DESC, i.id LIMIT 1) IS NOT NULL) AS rejected_import_sources,
+      -- P12.8: those whose current import failed its check (no sync can run).
+      (SELECT count(*) FROM connected c JOIN source_imports i
+        ON i.organization_id = :o AND i.id = c.import_id
+        WHERE c.managed_by = 'organization' AND i.check_error_code IS NOT NULL)
+        AS invalid_import_sources,
       (SELECT count(*) FROM connected c
         WHERE c.account_scoped OR EXISTS (
           SELECT 1 FROM account_external_refs m
@@ -259,6 +264,7 @@ async def gather(
         syncing_sources=sources.syncing_sources,
         awaiting_import_sources=sources.awaiting_import_sources,
         rejected_import_sources=sources.rejected_import_sources,
+        invalid_import_sources=sources.invalid_import_sources,
         account_sources=sources.account_sources,
         unmapped_references=sources.unmapped_references,
         references_awaiting_sync=sources.references_awaiting_sync,

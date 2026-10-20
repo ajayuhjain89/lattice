@@ -53,19 +53,27 @@ describe("OrganizationScreen", () => {
     expect(sources).not.toHaveTextContent("Complete");
   });
 
-  it("says who acts when no page in the product owns the item yet, and offers no dead controls", async () => {
-    mockFetch({ "GET /v1/admin/setup": [200, SETUP_FRESH] });
+  it("links each item to the page that owns it, says who acts when none does, and offers no dead controls", async () => {
+    // A required item without an action (none in the API today: P12.6 gave Sources its
+    // page) is the operator's; an optional or blocked one asks nobody.
+    const operator = {
+      ...SETUP_FRESH,
+      categories: SETUP_FRESH.categories.map((c) => (c.key === "sources" ? { ...c, action: null } : c)),
+    };
+    mockFetch({ "GET /v1/admin/setup": [200, operator] });
     const { container } = renderInWorkspace(<OrganizationScreen />, { me: ME_LENA });
     const list = await record();
-    // P12.4: identity is the Identity page's; sources still wait for the operator (P12.6).
     expect(within(row(list, "Identity provider")).getByRole("link", { name: "Test sign-in" })).toHaveAttribute("href", "/settings/identity");
+    expect(within(row(list, "Organization")).getByRole("link", { name: "Choose a second administrator" })).toHaveAttribute("href", "/access");
+    expect(within(row(list, "Members")).getByRole("link", { name: "Add a member" })).toHaveAttribute("href", "/access");
     expect(row(list, "Sources")).toHaveTextContent("Your Lattice operator acts on this");
+    expect(row(list, "Members")).not.toHaveTextContent("Your Lattice operator acts on this");
     expect(row(list, "Provisioning (SCIM)")).not.toHaveTextContent("Your Lattice operator acts on this"); // optional
     expect(row(list, "First answer")).not.toHaveTextContent("Your Lattice operator acts on this"); // blocked: waits on Sources
     // The only controls: Rename, and links to pages that exist.
     expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Rename"]);
     for (const link of within(list).getAllByRole("link")) {
-      expect(["/settings/providers", "/settings/identity", "/sources", "/access", "/ask"]).toContain(link.getAttribute("href"));
+      expect(["/settings/providers", "/settings/identity", "/sources", "/access", "/access/accounts", "/access/accounts/references", "/ask"]).toContain(link.getAttribute("href"));
     }
     expect(container.querySelectorAll("input, select, textarea")).toHaveLength(0);
     expect(container.textContent).not.toMatch(/%|score|progress/i);

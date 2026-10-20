@@ -164,6 +164,28 @@ test("settings: the server's preview, an explicit acknowledgement for a widening
   await expect(page.getByTestId("settings")).toContainText("Records belong to an account only when they name one");
 });
 
+test("an export that failed its check: marked so, no sync, the corrected upload offered, and axe passes", async ({ page }) => {
+  const current = SOURCE_RECORD_ESCALATIONS.current_import!;
+  const invalid = {
+    ...SOURCE_RECORD_ESCALATIONS,
+    current_import: { ...current, check: { ...current.check!, error_code: "source_unavailable:unreadable" } },
+    next_action: "replace_import" as const,
+    can_sync: false,
+    sync_blocked_by: "import_invalid",
+  };
+  const log = await openRecord(page, ORG_SOURCE.escalations, {
+    sourceRecords: { [invalid.id]: invalid, [SOURCE_RECORD_NEW.id]: SOURCE_RECORD_NEW, [SOURCE_RECORD_DRIVE.id]: SOURCE_RECORD_DRIVE },
+  });
+  await expect(page.getByTestId("current-import")).toContainText("Failed its check");
+  await expect(page.getByTestId("current-import")).not.toContainText("Ready");
+  const sync = page.getByRole("button", { name: "Sync now" });
+  await expect(sync).toHaveAttribute("aria-disabled", "true");
+  await sync.click({ force: true });
+  expect(log.syncs).toEqual([]);
+  await expect(page.getByText(/Only the current export is kept/)).toBeVisible();
+  await audit(page);
+});
+
 test("a stale version is refused with a way back to the latest", async ({ page }) => {
   await openRecord(page, ORG_SOURCE.escalations, {
     sourceWrite: (method) =>

@@ -60,7 +60,9 @@ administrator can read (`authz.readable_documents_predicate`, 404 otherwise); on
   enforced by the code path only. Migration 0013 (ADR-015, decision 5) adds deferred
   constraint triggers: an access write by `lattice_app` cannot commit unless its
   transaction recorded an `access.*` event for that membership
-  (`tests/test_access_audit_enforcement.py`). What remains: the event's actor and
+  (`tests/test_access_audit_enforcement.py`). The only exemption is a source's purge
+  cascade, bound to the session's organization (0023, 0024;
+  `tests/sources/test_purge_audit.py`). What remains: the event's actor and
   reason are written by the API and not authenticated by the database. Alerting on
   access events is Phase 11.
 - `lattice_owner` tools stay authoritative for provisioning: re-running `make seed`

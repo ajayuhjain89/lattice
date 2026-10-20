@@ -246,6 +246,15 @@ CASES: list[tuple[str, SetupFacts, str, str]] = [
         "attention",
         "import_rejected",
     ),
+    # P12.8: a current import that failed its check blocks every sync of its source, even
+    # when another source (or an earlier export) synced.
+    ("sources", replace(BASE, invalid_import_sources=1), "attention", "import_invalid"),
+    (
+        "sources",
+        replace(BASE, synced_sources=0, invalid_import_sources=1),
+        "attention",
+        "import_invalid",
+    ),
     ("sources", BASE, "complete", "synced"),
     ("accounts", BASE, "optional", "not_needed"),
     ("accounts", replace(BASE, account_sources=1, synced_sources=0), "blocked", "sources_required"),
