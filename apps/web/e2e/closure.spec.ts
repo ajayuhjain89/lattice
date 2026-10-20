@@ -36,6 +36,7 @@ const ROUTES: Route[] = [
   { name: "member", path: `/access/members/${ID.maya}`, options: { me: ME_LENA }, title: /^Member access · Lattice$/, ready: h1("Maya Okafor") },
   { name: "audit", path: "/access/audit", options: { me: ME_LENA }, title: /^Audit log · Lattice$/, ready: (p) => p.getByTestId("audit-entry").first().waitFor() },
   { name: "providers", path: "/settings/providers", options: { me: ME_LENA }, title: /^AI providers · Lattice$/, ready: (p) => p.getByTestId("egress-lattice").waitFor() },
+  { name: "organization", path: "/settings", options: { me: ME_LENA }, title: /^Organization · Lattice$/, ready: (p) => p.getByTestId("setup-record").waitFor() },
   { name: "not available", path: `/evidence/${EV.missing}`, title: /^Evidence · Lattice$/, ready: (p) => p.getByText("Not available").first().waitFor() },
   { name: "not found", path: "/no-such-page", title: /^Not found · Lattice$/, ready: h1("This page doesn't exist") },
 ];

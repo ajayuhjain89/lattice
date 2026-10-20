@@ -66,7 +66,9 @@ test.describe("masthead", () => {
       ["/activity", "Activity"],
       ["/sources", "Sources"],
       ["/access", "Access"],
+      ["/settings/identity", "Identity"],
       ["/settings/providers", "AI providers"],
+      ["/settings", "Organization"],
       [`/traces/${TRACE.answered}`, "Activity"],
       ["/access/audit", "Access"],
     ] as const) {
@@ -89,11 +91,12 @@ test.describe("masthead", () => {
     await expect(primary(page).getByRole("link")).toHaveText(["Ask", "Activity", "Sources"]);
     await expect(page.getByRole("link", { name: "Access" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "AI providers" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Organization" })).toHaveCount(0);
 
     await mockApi(page, { me: ME_LENA });
     await page.goto("/ask");
     await expect(primary(page).getByRole("list", { name: "Workspace" }).getByRole("link")).toHaveText(["Ask", "Activity", "Sources"]);
-    await expect(primary(page).getByRole("list", { name: "Administration" }).getByRole("link")).toHaveText(["Access", "AI providers"]);
+    await expect(primary(page).getByRole("list", { name: "Administration" }).getByRole("link")).toHaveText(["Organization", "Identity", "Access", "AI providers"]);
   });
 
   test("a long organization name truncates in the bar, stays whole in the account menu, and never crowds out destinations", async ({ page }) => {
@@ -141,7 +144,7 @@ test.describe("masthead", () => {
     await openAsk(page, { me: ME_LENA });
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "Skip to main content" })).toBeFocused();
-    for (const name of ["Lattice — Ask", "Ask", "Activity", "Sources", "Access", "AI providers", "Jump", "Account: Lena Brandt"]) {
+    for (const name of ["Lattice — Ask", "Ask", "Activity", "Sources", "Organization", "Identity", "Access", "AI providers", "Jump", "Account: Lena Brandt"]) {
       await page.keyboard.press("Tab");
       await expect(page.locator(":focus")).toHaveAccessibleName(name);
     }
@@ -312,7 +315,7 @@ test.describe("Jump", () => {
     // once the shell has hydrated (a chord pressed earlier is lost).
     await openAsk(page, { me: ME_LENA });
     await page.keyboard.press(await jumpChord(page));
-    await expect(page.getByRole("group", { name: "Go to" }).getByRole("option")).toHaveText(["Ask", "Activity", "Sources", "Access", "AI providers", "Organization runs, Activity", "Audit log, Access"]);
+    await expect(page.getByRole("group", { name: "Go to" }).getByRole("option")).toHaveText(["Ask", "Activity", "Sources", "Organization", "Identity", "Access", "AI providers", "Organization runs, Activity", "Audit log, Access"]);
     // No member is listed, or requested, before anything is typed.
     expect(admin).toEqual([]);
     const input = page.getByRole("combobox", { name: "Jump to" });
@@ -453,7 +456,7 @@ test.describe("phone", () => {
     await more.click();
     const sheet = page.getByRole("dialog", { name: "More" });
     await expect(sheet.getByRole("heading", { name: "Administration" })).toBeVisible();
-    await expect(sheet.getByRole("link")).toHaveText(["Access", "AI providers"]);
+    await expect(sheet.getByRole("link")).toHaveText(["Organization", "Identity", "Access", "AI providers"]);
     await expect(sheet).toContainText("lena.brandt@halden.example");
     await expect(sheet.getByRole("button", { name: "Sign out" })).toBeVisible();
     await audit(page);

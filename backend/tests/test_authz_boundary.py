@@ -114,6 +114,18 @@ ALLOWED: dict[str, frozenset[str]] = {
     "db.restore": frozenset({"access_group_members", "document_grants"}),
 }
 
+# module -> names it may use ONLY as a whole string literal, i.e. a key of a configuration
+# mapping (``channel["sensitivity"]``). Never as an attribute, a keyword argument, a model
+# name or inside SQL or any longer string, so the module still cannot read or filter an
+# access column. Narrower than ``ALLOWED``; reviewed the same way.
+KEY_ONLY: dict[str, frozenset[str]] = {
+    # --- Phase 12 (P12.6, narrowed in P12.7): source administration shows and edits a
+    # chat source's per-channel ``sensitivity`` setting, read from the source's stored
+    # configuration (the value the next sync applies through ingestion.access). No
+    # document is read and no condition is built; edits go through lattice_update_source.
+    "sources.admin": frozenset({"sensitivity"}),
+}
+
 
 @dataclass(frozen=True)
 class Violation:
@@ -143,6 +155,7 @@ def _absolute(module: str, node: ast.ImportFrom) -> str:
 def check_source(module: str, source: str) -> list[Violation]:
     tree = ast.parse(source)
     allowed = ALLOWED.get(module, frozenset())
+    keys = KEY_ONLY.get(module, frozenset())
     docstrings = _docstring_nodes(tree)
     found: list[Violation] = []
 
@@ -176,7 +189,7 @@ def check_source(module: str, source: str) -> list[Violation]:
         elif isinstance(node, ast.Name) and node.id in ACCESS_NAMES - allowed:
             flag(node, f"uses access table model {node.id}")
         elif isinstance(node, ast.Constant) and isinstance(node.value, str):
-            if id(node) in docstrings:
+            if id(node) in docstrings or node.value in keys:
                 continue
             # Every access name in the string: an allowed name early in a statement
             # must not hide a disallowed one later in it.
@@ -259,6 +272,27 @@ def test_an_allowed_name_does_not_hide_a_disallowed_one_in_the_same_string() -> 
     assert [v.detail for v in check_source("admin_grants", source)] == [
         "names access column/table 'access_groups' in a string"
     ]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "q = text('SELECT id FROM documents WHERE sensitivity = :s')",
+        "q = select(Document.id).where(Document.sensitivity == 'internal')",
+        "row = Document(sensitivity='internal')",
+        "level = config.sensitivity",
+        "q = 'sensitivity = :s'",
+        "q = text('SELECT 1 FROM document_grants')",
+    ],
+)
+def test_a_key_only_allowance_admits_nothing_but_the_mapping_key(source: str) -> None:
+    """P12.7: ``sources.admin`` may read a channel's configured level by its key; any
+    attribute, keyword, model or SQL use of the access vocabulary is still flagged."""
+    assert "sources.admin" not in ALLOWED
+    assert check_source("sources.admin", source), source
+    assert check_source("sources.admin", 'level = channel["sensitivity"]') == []
+    assert check_source("sources.admin", 'ok = channel.get("sensitivity")') == []
+    assert check_source("sources.status", 'level = channel["sensitivity"]')
 
 
 @pytest.mark.parametrize(

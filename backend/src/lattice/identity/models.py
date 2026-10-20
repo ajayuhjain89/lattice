@@ -13,8 +13,10 @@ policies live in the migration.
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -24,7 +26,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy import text as sql_text
-from sqlalchemy.dialects.postgresql import CITEXT
+from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from lattice.db.base import Base
@@ -117,7 +119,8 @@ class Session(Base):
 
 
 class OidcConnection(Base):
-    """An organization's OIDC identity provider (ADR-015). Operator-managed."""
+    """An organization's OIDC identity provider (ADR-015). Operator-managed until P12.4;
+    administrators now change it through the 0020 fenced functions."""
 
     __tablename__ = "oidc_connections"
     __table_args__ = (
@@ -139,22 +142,49 @@ class OidcConnection(Base):
     login_key: Mapped[str] = mapped_column(Text)
     issuer: Mapped[str] = mapped_column(Text)
     client_id: Mapped[str] = mapped_column(Text)
-    # A reference (env:LATTICE_OIDC_SECRET_<NAME>), never the secret.
+    # A reference (env:LATTICE_OIDC_SECRET_<NAME> or vault:<id>), never the secret.
     client_secret_ref: Mapped[str | None] = mapped_column(Text)
     subject_claim: Mapped[str] = mapped_column(Text, server_default="sub")
     status: Mapped[str] = mapped_column(Text, server_default="active")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    # Sign-in facts for the setup record (0016, C12): the last successful sign-in, and
+    # the last one the provider (or the client secret) failed.
+    last_success_at: Mapped[datetime | None]
+    last_failure_at: Mapped[datetime | None]
+    # Why the last failure happened (0020): provider_unavailable, outbound_blocked or
+    # credentials_rejected. And the last administrator test (a check or a test sign-in).
+    last_failure_code: Mapped[str | None] = mapped_column(Text)
+    last_test_at: Mapped[datetime | None]
+    last_test_kind: Mapped[str | None] = mapped_column(Text)
+    last_test_result: Mapped[str | None] = mapped_column(Text)
+    # 0021: the ``acr`` values an egress step-up must assert (operator-configured; NULL =
+    # a fresh authentication is required, not a particular method).
+    step_up_acr_values: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
 
 
 class OidcLoginAttempt(Base):
-    """Server-side state of one authorization-code flow: single use, short-lived."""
+    """Server-side state of one authorization-code flow: single use, short-lived. A
+    ``test`` attempt (0020) is an administrator's test sign-in: it creates no session and
+    keeps its outcome -- and the administrator's own identifier -- until it expires."""
 
     __tablename__ = "oidc_login_attempts"
     __table_args__ = (
         ForeignKeyConstraint(
             ["organization_id", "connection_id"],
             ["oidc_connections.organization_id", "oidc_connections.id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "membership_id"],
+            ["memberships.organization_id", "memberships.id"],
+            name="fk_oidc_login_attempts_membership",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["session_id"],
+            ["sessions.id"],
+            name="fk_oidc_login_attempts_session",
             ondelete="CASCADE",
         ),
         UniqueConstraint("state_hash"),
@@ -172,11 +202,65 @@ class OidcLoginAttempt(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     expires_at: Mapped[datetime]
     consumed_at: Mapped[datetime | None]
+    purpose: Mapped[str] = mapped_column(Text, server_default="sign_in")
+    membership_id: Mapped[uuid.UUID | None]
+    proposed_issuer: Mapped[str | None] = mapped_column(Text)
+    proposed_subject_claim: Mapped[str | None] = mapped_column(Text)
+    outcome: Mapped[str | None] = mapped_column(Text)
+    observed_identifier: Mapped[str | None] = mapped_column(Text)
+    completed_at: Mapped[datetime | None]
+    proof_used_at: Mapped[datetime | None]
+    # 0021, purpose ``step_up`` (D-34): the administrator's session, the exact previewed
+    # egress change, its reason and the policy version it was previewed on.
+    session_id: Mapped[uuid.UUID | None]
+    change: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    reason: Mapped[str | None] = mapped_column(Text)
+    policy_version: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class StepUpGrant(Base):
+    """A single-use authorization for one egress escalation (D-34, 0021): created by the
+    OIDC callback after a fresh identity-provider re-authentication, bound to the
+    organization, the administrator, their session, the exact change and the policy
+    version it was previewed on; consumed by ``lattice_apply_egress_change``."""
+
+    __tablename__ = "step_up_grants"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "membership_id"],
+            ["memberships.organization_id", "memberships.id"],
+            name="fk_step_up_grants_membership",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["session_id"], ["sessions.id"], name="fk_step_up_grants_session", ondelete="CASCADE"
+        ),
+        UniqueConstraint("attempt_id", name="uq_step_up_grants_attempt"),
+        Index("ix_step_up_grants_organization_session", "organization_id", "session_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_DEFAULT)
+    organization_id: Mapped[uuid.UUID]
+    membership_id: Mapped[uuid.UUID]
+    session_id: Mapped[uuid.UUID]
+    attempt_id: Mapped[uuid.UUID]
+    change: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    change_digest: Mapped[bytes] = mapped_column(LargeBinary)
+    reason: Mapped[str] = mapped_column(Text)
+    policy_version: Mapped[int] = mapped_column(BigInteger)
+    auth_time: Mapped[datetime]
+    acr: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    expires_at: Mapped[datetime]
+    consumed_at: Mapped[datetime | None]
 
 
 class DirectoryIdentity(Base):
     """The identity provider's person in one organization: (connection, external ID) ->
-    membership. Written by SCIM provisioning; read by OIDC sign-in."""
+    membership. Written by SCIM provisioning (``managed_by = identity_provider``) or, for
+    a member an administrator added by hand or the operator's first administrator, by
+    the fenced ``lattice_create_member`` / ``org create`` (``organization``); read by
+    OIDC sign-in."""
 
     __tablename__ = "directory_identities"
     __table_args__ = (
@@ -208,6 +292,7 @@ class DirectoryIdentity(Base):
     given_name: Mapped[str | None] = mapped_column(Text)
     family_name: Mapped[str | None] = mapped_column(Text)
     version: Mapped[int] = mapped_column(server_default=sql_text("1"))
+    managed_by: Mapped[str] = mapped_column(Text, server_default="identity_provider")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
@@ -231,3 +316,6 @@ class ScimToken(Base):
     token_hash: Mapped[bytes] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     revoked_at: Mapped[datetime | None]
+    # 0020: minute precision, written by the SCIM path; the token's last four characters.
+    last_used_at: Mapped[datetime | None]
+    hint: Mapped[str | None] = mapped_column(Text)

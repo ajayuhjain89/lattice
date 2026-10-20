@@ -59,10 +59,22 @@ TENANT_TABLES = (
     "rate_limit_counters",
     # Phase 11 (P11.4)
     "ask_slots",
+    # Phase 12 (P12.1)
+    "encrypted_secrets",
+    "outbound_targets",
+    # Phase 12 (P12.3)
+    "account_external_refs",
+    # Phase 12 (P12.5)
+    "egress_policy_versions",
+    "step_up_grants",
+    # Phase 12 (P12.6)
+    "source_imports",
 )
-# Tables the runtime role may not read (written and read by operator tools; of
-# oidc_connections it reads only id, organization_id and status since 0014).
-RUNTIME_UNREADABLE = frozenset({"audit_events", "oidc_connections", "scim_tokens"})
+# Tables the runtime role may not read in full (written and read by operator tools; of
+# oidc_connections it reads named columns since 0014, all of them since 0020 -- the
+# client secret's *reference*, never the secret; of scim_tokens never token_hash; it
+# reads outbound_targets since 0020, to apply the operator's registrations).
+RUNTIME_UNREADABLE = frozenset({"audit_events", "scim_tokens"})
 GLOBAL_TABLES = ("organizations", "users", "external_identities")
 ALL_TABLES = (*GLOBAL_TABLES, *TENANT_TABLES)
 # No organization and no login role's privilege: reached only through lattice_auth
@@ -77,7 +89,8 @@ class TwoOrgs:
 
 
 async def _populate(db: Database, member: Member) -> None:
-    source = await create_source(db, member.organization_id)
+    # A ticketing source (P12.3): its reference mapping is one of the tenant rows.
+    source = await create_source(db, member.organization_id, connector_type="ticketing")
     async with db.tenant_transaction(member.organization_id) as s:
         dept: uuid.UUID = (
             await s.execute(
@@ -264,6 +277,39 @@ async def _populate(db: Database, member: Member) -> None:
             ),
             {"o": member.organization_id, "m": member.membership_id},
         )
+        await s.execute(
+            text(
+                "INSERT INTO encrypted_secrets (id, organization_id, owner_kind, owner_id, "
+                "key_id, nonce, ciphertext) VALUES (gen_random_uuid(), :o, 'provider_api_key', "
+                "gen_random_uuid(), 'a', '\\x000000000000000000000000'::bytea, "
+                "'\\x0000000000000000000000000000000000'::bytea)"
+            ),
+            {"o": member.organization_id},
+        )
+        await s.execute(
+            text(
+                "INSERT INTO outbound_targets (organization_id, purpose, scheme, host, port) "
+                "VALUES (:o, 'oidc', 'https', 'idp.internal', 9443)"
+            ),
+            {"o": member.organization_id},
+        )
+        # Phase 12 (P12.3): the same reference in both organizations, for their own account.
+        await s.execute(
+            text(
+                "INSERT INTO account_external_refs (organization_id, source_id, ref_kind, "
+                "external_ref, account_id, created_by) VALUES (:o, :s, 'ticketing_organization', "
+                "'360001001', :a, 'operator:test')"
+            ),
+            {"o": member.organization_id, "s": source, "a": account},
+        )
+        # Phase 12 (P12.6): an import being received for the source.
+        await s.execute(
+            text(
+                "INSERT INTO source_imports (organization_id, source_id, format, created_by) "
+                "VALUES (:o, :s, 'zip', :by)"
+            ),
+            {"o": member.organization_id, "s": source, "by": f"member:{member.membership_id}"},
+        )
 
 
 _HOUR = timedelta(hours=1)
@@ -276,8 +322,25 @@ async def two_orgs(owner_db: Database, app_db: Database) -> TwoOrgs:
     await _populate(owner_db, a)
     await _populate(owner_db, b)
     sessions = SessionService(app_db, SessionPolicy(idle_timeout=_HOUR, absolute_timeout=_HOUR))
-    await sessions.create(user_id=a.user_id, organization_id=a.organization_id)
-    await sessions.create(user_id=b.user_id, organization_id=b.organization_id)
+    for member in (a, b):
+        _, principal = await sessions.create(
+            user_id=member.user_id, organization_id=member.organization_id
+        )
+        # Phase 12 (P12.5): a step-up grant of the member's own session.
+        async with owner_db.tenant_transaction(member.organization_id) as s:
+            await s.execute(
+                text(
+                    "INSERT INTO step_up_grants (organization_id, membership_id, session_id, "
+                    "attempt_id, change, change_digest, reason, policy_version, auth_time, "
+                    "expires_at) VALUES (:o, :m, :s, gen_random_uuid(), '{}', "
+                    "sha256('c'::bytea), 'r', 0, now(), now() + interval '1 minute')"
+                ),
+                {
+                    "o": member.organization_id,
+                    "m": member.membership_id,
+                    "s": principal.session_id,
+                },
+            )
     return TwoOrgs(a, b)
 
 
@@ -449,12 +512,40 @@ async def test_cannot_update_another_organizations_sessions(
         # Phase 10: identity provider configuration is the operator's.
         "INSERT INTO oidc_connections (organization_id, login_key, issuer, client_id) VALUES "
         "(lattice_current_org_id(), 'kkkkkkkkkkkkkkkkkkkkkk', 'https://i.example', 'c')",
-        # 0014: only id, organization_id and status (the session-creation check, D-25).
-        "SELECT client_id FROM oidc_connections",
-        "SELECT issuer, client_secret_ref, login_key FROM oidc_connections",
-        "SELECT * FROM oidc_connections",
-        "SELECT 1 FROM scim_tokens",
+        # 0020: connections are read in full by the identity settings (the client
+        # secret's reference only); never a token hash.
+        "SELECT token_hash FROM scim_tokens",
+        "SELECT * FROM scim_tokens",
+        # 0016: the API reads ciphertext but never writes it; outbound targets are the
+        # operator's; only the organization's name is renamable.
+        "UPDATE encrypted_secrets SET key_id = key_id",
+        "DELETE FROM encrypted_secrets",
+        "INSERT INTO outbound_targets (organization_id, purpose, scheme, host, port) VALUES "
+        "(lattice_current_org_id(), 'oidc', 'https', 'idp.internal', 443)",
+        # 0018: mappings only through lattice_set_account_ref; accounts never deleted, the
+        # key and the lifecycle never written directly.
+        "INSERT INTO account_external_refs (organization_id, source_id, ref_kind, "
+        "external_ref, account_id, created_by) SELECT organization_id, source_id, ref_kind, "
+        "'1', account_id, 'member:x' FROM account_external_refs",
+        "UPDATE account_external_refs SET external_ref = external_ref",
+        "DELETE FROM account_external_refs",
+        "DELETE FROM accounts",
+        "UPDATE accounts SET key = key",
+        "UPDATE accounts SET archived_at = now()",
+        "UPDATE organizations SET slug = 'x'",
+        "UPDATE organizations SET status = 'suspended'",
+        "UPDATE oidc_connections SET issuer = 'https://x.example'",
+        "UPDATE oidc_connections SET client_secret_ref = NULL",
         "UPDATE scim_tokens SET revoked_at = NULL",
+        # 0020: connections and tokens change only through the fenced functions.
+        "UPDATE oidc_connections SET status = 'disabled'",
+        "UPDATE oidc_connections SET client_id = 'x'",
+        "UPDATE oidc_connections SET subject_claim = 'email'",
+        "UPDATE scim_tokens SET revoked_at = now()",
+        "UPDATE scim_tokens SET last_used_at = now()",
+        "UPDATE oidc_login_attempts SET proof_used_at = now()",
+        "UPDATE outbound_targets SET revoked_at = now()",
+        "DELETE FROM outbound_targets",
         "UPDATE directory_identities SET external_id = 'x'",
         "UPDATE directory_identities SET membership_id = membership_id",
         "DELETE FROM directory_identities",
@@ -514,10 +605,18 @@ async def test_cannot_update_another_organizations_sessions(
         "UPDATE document_grants SET origin = 'admin'",
         "UPDATE access_group_members SET group_id = group_id",
         "UPDATE account_assignments SET account_id = account_id",
-        "INSERT INTO accounts (organization_id, key, name) VALUES (lattice_current_org_id(), "
-        "'x', 'x')",
+        # 0018: administrators create accounts (audit-coupled), never archived ones.
+        "INSERT INTO accounts (organization_id, key, name, archived_at) VALUES "
+        "(lattice_current_org_id(), 'x', 'x', now())",
         "INSERT INTO departments (organization_id, key, name) VALUES "
         "(lattice_current_org_id(), 'x', 'x')",
+        # 0022: sources and imports change only through the P12.6 fenced functions.
+        "INSERT INTO source_imports (organization_id, format, created_by) VALUES "
+        "(lattice_current_org_id(), 'zip', 'x')",
+        "UPDATE source_imports SET status = 'ready'",
+        "DELETE FROM source_imports",
+        "UPDATE sources SET managed_by = 'organization'",
+        "UPDATE sources SET import_id = NULL",
     ],
 )
 async def test_runtime_role_lacks_unneeded_privileges(

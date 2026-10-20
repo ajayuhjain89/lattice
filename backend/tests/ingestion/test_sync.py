@@ -434,23 +434,35 @@ async def test_an_unexpected_error_aborts_the_run_and_is_raised(
 async def test_source_configuration_problems_refuse_the_sync(
     owner_db: Database, halden: Org, change: str, code: str
 ) -> None:
-    await sync(owner_db, halden, "support", None)
+    key = "drive" if change == "connector_type" else "support"
+    await sync(owner_db, halden, key, None)
     before = await row_versions(owner_db, halden.id)
     if change == "deleting":
         async with owner_db.tenant_transaction(halden.id) as s:
             await s.execute(text("UPDATE sources SET status = 'deleting' WHERE key = 'support'"))
         before = await row_versions(owner_db, halden.id)
     elif change == "connector_type":
+        # The stored type is immutable (0022 refuses changing it); the file is what changes.
         async with owner_db.tenant_transaction(halden.id) as s:
-            await s.execute(
-                text("UPDATE sources SET connector_type = 'chat_export' WHERE key = 'support'")
+            with pytest.raises(DBAPIError, match="source_identity_immutable"):
+                await s.execute(
+                    text("UPDATE sources SET connector_type = 'chat_export' WHERE key = 'drive'")
+                )
+        path = halden.root / "sources.yaml"
+        configured = path.read_text()
+        assert "  - key: drive\n    connector_type: document_repository\n" in configured
+        path.write_text(
+            configured.replace(
+                "  - key: drive\n    connector_type: document_repository\n",
+                "  - key: drive\n    connector_type: ticketing\n",
             )
-        before = await row_versions(owner_db, halden.id)
+        )
+        halden.reload()
     else:
         path = halden.root / "sources.yaml"
         path.write_text(path.read_text().replace("360001001: acme-corp", "360001001: globex"))
         halden.reload()
     with pytest.raises(SyncError) as caught:
-        await sync(owner_db, halden, "support", None)
+        await sync(owner_db, halden, key, None)
     assert caught.value.code == code
     assert changed_tables(before, await row_versions(owner_db, halden.id)) == set()

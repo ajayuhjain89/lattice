@@ -27,6 +27,10 @@ Facts used from the official API reference (checked 2026-09-29): the response te
 * **Data use**: declared with the credential (``unpaid`` / ``paid``, ADR-010). Unpaid
   means ``training_opt_out = False``: the egress policy then allows synthetic
   organizations only, and the factory refuses the key in production.
+* **Outbound policy (P12.5, C4)**: the client reaches the API's own origin only, checked
+  at connect time under the organization's ``generation`` policy (public https on 443,
+  globally routable addresses), no redirects, no environment proxies
+  (``lattice.providers.http``); a refusal is ``generation_failed:outbound_blocked``.
 * **Retries**: none for quota (429 ⇒ ``rate_limited``, or ``quota_exhausted`` when the
   error names a per-day quota, after which this instance sends nothing more); one retry
   for 5xx or a timeout. Other statuses fail with a fixed code; bodies are never read
@@ -40,8 +44,10 @@ from typing import Any, Final, Literal
 import httpx
 from pydantic import SecretStr
 
+from lattice.outbound import OutboundPolicy, OutboundRefused
 from lattice.providers.egress import Deployment
 from lattice.providers.generation import GenerationError, GenerationRequest, GenerationResult
+from lattice.providers.http import provider_client, refused_code
 
 DEFAULT_MODEL: Final = "gemini-3.5-flash-lite"
 DEFAULT_BASE_URL: Final = "https://generativelanguage.googleapis.com/v1beta"
@@ -64,6 +70,7 @@ class GeminiGenerationProvider:
         max_attempts: int = 2,
         backoff_seconds: float = 2.0,
         transport: httpx.AsyncBaseTransport | None = None,
+        outbound: OutboundPolicy | None = None,
     ) -> None:
         if not api_key.get_secret_value():
             raise ValueError("a Gemini API key is required")
@@ -79,6 +86,7 @@ class GeminiGenerationProvider:
         self._max_attempts = max_attempts
         self._backoff = backoff_seconds
         self._transport = transport
+        self._outbound = outbound
         self._quota_exhausted = False
         self.requests = 0  # operational counter (evaluation reports)
 
@@ -103,16 +111,35 @@ class GeminiGenerationProvider:
         headers = {"x-goog-api-key": self._api_key.get_secret_value()}
         url = f"/models/{self.model}:generateContent"
         body = self.payload(request)
-        async with httpx.AsyncClient(
-            base_url=self._base_url, timeout=self._timeout, transport=self._transport
-        ) as client:
+        try:
+            return await self._call(url, body, headers)
+        except OutboundRefused as refused:
+            code = "outbound_blocked" if refused_code(refused) else "network"
+            raise GenerationError(f"generation_failed:{code}") from None
+
+    def client(self, timeout: float) -> Any:
+        """The HTTP client for the API (``lattice.providers.http``)."""
+        return provider_client(
+            self._base_url,
+            timeout_seconds=timeout,
+            outbound=self._outbound,
+            transport=self._transport,
+        )
+
+    async def _call(
+        self, url: str, body: dict[str, Any], headers: dict[str, str]
+    ) -> GenerationResult:
+        code = "generation_failed:network"
+        async with self.client(self._timeout) as client:
             for attempt in range(1, self._max_attempts + 1):
                 self.requests += 1
                 try:
                     response = await client.post(url, json=body, headers=headers)
                 except httpx.TimeoutException:
                     code = "generation_failed:timeout"
-                except httpx.HTTPError:
+                except httpx.HTTPError as exc:
+                    if refused_code(exc):
+                        raise GenerationError("generation_failed:outbound_blocked") from None
                     code = "generation_failed:network"
                 else:
                     status = response.status_code

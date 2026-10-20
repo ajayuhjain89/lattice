@@ -24,7 +24,7 @@ describe("navigation model", () => {
     expect(visibleNav(ME_MAYA).map((s) => [s.section.label, s.destinations.map((d) => d.label)])).toEqual([["Workspace", ["Ask", "Activity", "Sources"]]]);
     expect(visibleNav(ME_LENA).map((s) => [s.section.label, s.destinations.map((d) => d.label)])).toEqual([
       ["Workspace", ["Ask", "Activity", "Sources"]],
-      ["Administration", ["Access", "AI providers"]],
+      ["Administration", ["Organization", "Identity", "Access", "AI providers"]],
     ]);
     expect(visibleSubpages(ME_MAYA)).toEqual([]);
     expect(visibleSubpages(ME_LENA).map((p) => p.label)).toEqual(["Organization runs", "Audit log"]);
@@ -38,13 +38,15 @@ describe("navigation model", () => {
     expect(at("/access/members/x")).toBe("Access");
     expect(at("/access/audit")).toBe("Access");
     expect(at("/settings/providers")).toBe("AI providers");
+    expect(at("/settings")).toBe("Organization");
+    expect(at("/settings/identity")).toBe("Identity");
     expect(at("/sign-in")).toBeUndefined();
   });
 
   it("phones: tab-priority destinations become tabs (at most four); the rest go to More, by section", () => {
     const lena = phoneSplit(visibleNav(ME_LENA));
     expect(lena.tabs.map((d) => d.label)).toEqual(["Ask", "Activity", "Sources"]);
-    expect(lena.more.map((s) => [s.section.label, s.destinations.map((d) => d.label)])).toEqual([["Administration", ["Access", "AI providers"]]]);
+    expect(lena.more.map((s) => [s.section.label, s.destinations.map((d) => d.label)])).toEqual([["Administration", ["Organization", "Identity", "Access", "AI providers"]]]);
     expect(phoneSplit(visibleNav(ME_MAYA)).more).toEqual([]);
 
     // Growth: a sixth and seventh workspace destination don't widen the bar.

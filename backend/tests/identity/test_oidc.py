@@ -28,8 +28,9 @@ from lattice.identity.oidc import (
     resolve_client_secret,
     safe_return_to,
 )
+from lattice.outbound import OutboundPolicy, parse_target
 
-from ..conftest import AppFactory
+from ..conftest import AppFactory, FreshWindow
 from ..factories import (
     Member,
     create_member,
@@ -38,7 +39,7 @@ from ..factories import (
     create_provisioned_member,
     login,
 )
-from .fake_idp import FakeIdp
+from .fake_idp import FakeIdp, oidc_client, public_resolver, resolving_to
 
 KEY = "halden-login-key-0123456789"
 FAILED = "/sign-in?error=sso_failed"
@@ -73,9 +74,7 @@ def _configure(idp: FakeIdp) -> Any:
     def configure(app: FastAPI) -> None:
         app.state.oidc = OidcSignIn(
             app.state.db,
-            OidcClient(
-                timeout_seconds=5, require_https=False, transport=httpx.MockTransport(idp.handler)
-            ),
+            oidc_client(idp.handler),
             web_origin="http://127.0.0.1:3000",
         )
 
@@ -446,38 +445,62 @@ async def test_provider_faults_are_sso_unavailable(
         assert await _me(client) is None
 
 
-async def test_https_is_required_when_configured() -> None:
+async def test_an_http_or_private_issuer_is_refused_unless_an_operator_registered_it() -> None:
+    """The outbound policy (C4) decides before any request: https on 443 to a public
+    address, or a target registered for the organization -- never localhost by default."""
     client = OidcClient(
-        timeout_seconds=1,
-        require_https=True,
-        transport=httpx.MockTransport(lambda request: httpx.Response(500)),
+        timeout_seconds=1, transport=httpx.MockTransport(lambda request: httpx.Response(500))
+    )
+    public = OutboundPolicy(resolver=public_resolver)
+    for policy, issuer in (
+        (public, "http://idp.example"),
+        (public, "https://idp.example:8443"),
+        (OutboundPolicy(resolver=resolving_to("10.0.0.5")), "https://idp.example"),
+        (OutboundPolicy(resolver=resolving_to("127.0.0.1")), "https://idp.example"),
+        (OutboundPolicy(resolver=resolving_to("169.254.169.254")), "https://idp.example"),
+    ):
+        with pytest.raises(OidcFailure) as failure:
+            await client.metadata(policy, issuer)
+        assert failure.value.outcome == "outbound_blocked", issuer
+    # Registered for the organization: the same private address is allowed.
+    registered = OutboundPolicy(
+        frozenset({parse_target("https://idp.example:8443")}), resolver=resolving_to("10.0.0.5")
     )
     with pytest.raises(OidcFailure) as failure:
-        await client.metadata("http://idp.example")
-    assert failure.value.outcome == "provider_error"
+        await client.metadata(registered, "https://idp.example:8443")
+    assert failure.value.outcome == "provider_error"  # reached: the provider answered 500
 
 
 async def test_redirects_are_not_followed() -> None:
-    client = OidcClient(
-        timeout_seconds=1,
-        require_https=False,
-        transport=httpx.MockTransport(
-            lambda request: httpx.Response(302, headers={"location": "http://169.254.169.254/"})
-        ),
+    client = oidc_client(
+        lambda request: httpx.Response(302, headers={"location": "http://169.254.169.254/"})
     )
-    with pytest.raises(OidcFailure):
-        await client.metadata("https://idp.example")
+    with pytest.raises(OidcFailure) as failure:
+        await client.metadata(OutboundPolicy(resolver=public_resolver), "https://idp.example")
+    assert failure.value.outcome == "provider_error"
+
+
+async def test_discovery_cannot_point_a_public_issuer_at_a_private_address() -> None:
+    idp = FakeIdp()
+
+    async def split(host: str, port: int) -> list[Any]:
+        found = await (resolving_to("10.1.2.3") if host == "keys.internal" else public_resolver)(
+            host, port
+        )
+        return list(found)
+
+    document = {**idp.discovery(), "jwks_uri": "https://keys.internal/jwks"}
+    client = oidc_client(lambda request: httpx.Response(200, json=document), resolver=split)
+    with pytest.raises(OidcFailure) as failure:
+        await client.metadata(OutboundPolicy(resolver=split), idp.issuer)
+    assert failure.value.outcome == "outbound_blocked"
 
 
 async def test_a_key_rotation_is_picked_up_once_a_minute_at_most() -> None:
     idp = FakeIdp()
     now = [0.0]
-    client = OidcClient(
-        timeout_seconds=1,
-        require_https=False,
-        transport=httpx.MockTransport(idp.handler),
-        clock=lambda: now[0],
-    )
+    client = oidc_client(idp.handler, clock=lambda: now[0])
+    policy = OutboundPolicy(resolver=public_resolver)
     metadata = ProviderMetadata(
         issuer=idp.issuer,
         authorization_endpoint=f"{idp.issuer}/authorize",
@@ -489,7 +512,7 @@ async def test_a_key_rotation_is_picked_up_once_a_minute_at_most() -> None:
     token = idp._id_token(idp.grants.setdefault("c", _grant()))
     for _ in range(3):
         with pytest.raises(OidcFailure):
-            await client.verify(token, metadata, connection, nonce="n" * 43)
+            await client.verify(policy, token, metadata, connection, nonce="n" * 43)
     jwks_fetches = [r for r in idp.requests if r.url.path.endswith("/jwks")]
     assert len(jwks_fetches) == 2  # the first fetch and one refresh
 
@@ -510,9 +533,10 @@ def test_safe_return_to() -> None:
 
 
 async def test_sign_in_is_rate_limited_per_client(
-    app_client: AppFactory, idp: FakeIdp, world: World
+    app_client: AppFactory, idp: FakeIdp, world: World, fresh_window: FreshWindow
 ) -> None:
     async with app_client(_configure(idp), rate_limit_sign_in_per_minute=2) as client:
+        await fresh_window()
         assert (await _sign_in(client, idp)).headers["location"] == "/ask"  # start + callback
         start = await client.get(f"/v1/auth/oidc/{KEY}/start")
         assert start.headers["location"] == "/sign-in?error=rate_limited"

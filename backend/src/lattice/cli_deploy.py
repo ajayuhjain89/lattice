@@ -41,6 +41,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from lattice.build import build_info
 from lattice.config import (
     ConfigurationError,
+    Environment,
     load_migration_settings,
     load_provider_settings,
     load_settings,
@@ -58,6 +59,7 @@ from lattice.db.migrate import (
 )
 from lattice.db.restore import Manifest, verify_restore, write_manifest
 from lattice.log import scrub_text
+from lattice.vault.keys import Keyring, KeyringError, misplaced_keys_problem
 
 PROCESSES = ("api", "worker", "migrate")
 
@@ -121,15 +123,27 @@ def check_config(args: argparse.Namespace) -> int:
         settings = load_settings()
         load_provider_settings()
         env = settings.env
+        try:
+            Keyring.from_environment(os.environ)
+        except KeyringError as exc:
+            raise ConfigurationError(str(exc)) from None
     elif process == "worker":
         worker = load_worker_settings()
         load_provider_settings()
         env = worker.env
     else:
         load_migration_settings()
+        production = os.environ.get("LATTICE_ENV") == Environment.PRODUCTION.value
+        if (problem := misplaced_keys_problem("migrate", production, os.environ)) is not None:
+            raise ConfigurationError(problem)
         print("OK: migrate configuration is valid")
         return 0
     if (problem := owner_credential_problem(env, os.environ)) is not None:
+        raise ConfigurationError(problem)
+    production = env is Environment.PRODUCTION
+    if process == "worker" and (
+        problem := misplaced_keys_problem("worker", production, os.environ)
+    ):
         raise ConfigurationError(problem)
     print(f"OK: {process} configuration is valid (LATTICE_ENV={env.value})")
     return 0

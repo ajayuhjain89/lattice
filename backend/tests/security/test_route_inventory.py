@@ -49,6 +49,16 @@ MEMBER = {
 }
 ADMIN = {
     ("GET", "/v1/admin/providers"),
+    ("POST", "/v1/admin/providers"),
+    ("POST", "/v1/admin/providers/changes/preview"),
+    ("POST", "/v1/admin/providers/changes"),
+    ("POST", "/v1/admin/providers/step-ups"),
+    ("GET", "/v1/admin/providers/step-ups/{step_up_id}"),
+    ("POST", "/v1/admin/providers/step-ups/{step_up_id}/apply"),
+    ("PUT", "/v1/admin/providers/{provider_id}/endpoint"),
+    ("PUT", "/v1/admin/providers/{provider_id}/credential"),
+    ("POST", "/v1/admin/providers/{provider_id}/credential/revoke"),
+    ("POST", "/v1/admin/providers/{provider_id}/test"),
     ("GET", "/v1/admin/sources"),
     ("GET", "/v1/admin/sources/{source_id}/failures"),
     ("POST", "/v1/admin/sources/{source_id}/sync"),
@@ -63,6 +73,56 @@ ADMIN = {
     ("POST", "/v1/admin/access/members/{membership_id}/grants"),
     ("POST", "/v1/admin/access/grants/{grant_id}/revoke"),
     ("GET", "/v1/admin/audit-events"),
+    # Phase 12 (P12.1): the setup record and the organization's name.
+    ("GET", "/v1/admin/setup"),
+    ("PATCH", "/v1/admin/organization"),
+    # Phase 12 (P12.2): members added by hand, the administrator capability, reinstatement.
+    ("GET", "/v1/admin/access/identity-requirement"),
+    ("POST", "/v1/admin/access/members"),
+    ("POST", "/v1/admin/access/members/{membership_id}/administrator/preview"),
+    ("POST", "/v1/admin/access/members/{membership_id}/administrator"),
+    ("POST", "/v1/admin/access/members/{membership_id}/reinstate/preview"),
+    ("POST", "/v1/admin/access/members/{membership_id}/reinstate"),
+    # Phase 12 (P12.3): accounts and their external-reference mappings.
+    ("GET", "/v1/admin/access/accounts"),
+    ("POST", "/v1/admin/access/accounts"),
+    ("GET", "/v1/admin/access/accounts/{account_id}"),
+    ("PATCH", "/v1/admin/access/accounts/{account_id}"),
+    ("POST", "/v1/admin/access/accounts/{account_id}/archive"),
+    ("POST", "/v1/admin/access/accounts/{account_id}/reactivate"),
+    ("GET", "/v1/admin/access/account-references/unmapped"),
+    ("POST", "/v1/admin/access/account-references/preview"),
+    ("POST", "/v1/admin/access/account-references"),
+    ("POST", "/v1/admin/access/account-references/remap"),
+    ("POST", "/v1/admin/access/account-references/unmap"),
+    # Phase 12 (P12.4): identity administration (OIDC connection, SCIM tokens).
+    ("GET", "/v1/admin/identity"),
+    ("POST", "/v1/admin/identity/oidc"),
+    ("PATCH", "/v1/admin/identity/oidc/{connection_id}"),
+    ("PUT", "/v1/admin/identity/oidc/{connection_id}/client-secret"),
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/client-secret/remove"),
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/status/preview"),
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/status"),
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/identity/preview"),
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/identity"),
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/check"),
+    ("POST", "/v1/admin/identity/oidc/test-sign-in"),
+    ("GET", "/v1/admin/identity/oidc/test-sign-in/{test_id}"),
+    ("POST", "/v1/admin/identity/scim/tokens"),
+    ("POST", "/v1/admin/identity/scim/tokens/{token_id}/rotate"),
+    ("POST", "/v1/admin/identity/scim/tokens/{token_id}/revoke/preview"),
+    ("POST", "/v1/admin/identity/scim/tokens/{token_id}/revoke"),
+    # Phase 12 (P12.6): customer-operable export sources and their imports.
+    ("POST", "/v1/admin/sources"),
+    ("GET", "/v1/admin/sources/{source_id}"),
+    ("PATCH", "/v1/admin/sources/{source_id}"),
+    ("POST", "/v1/admin/sources/{source_id}/changes/preview"),
+    ("POST", "/v1/admin/sources/{source_id}/pause"),
+    ("POST", "/v1/admin/sources/{source_id}/resume"),
+    ("GET", "/v1/admin/sources/{source_id}/disconnect-preview"),
+    ("POST", "/v1/admin/sources/{source_id}/disconnect"),
+    ("POST", "/v1/admin/sources/{source_id}/imports"),
+    ("POST", "/v1/admin/sources/{source_id}/check"),
 }
 SCIM = {
     ("GET", "/scim/v2/ServiceProviderConfig"),
@@ -74,6 +134,11 @@ SCIM = {
     ("PUT", "/scim/v2/Users/{resource_id}"),
     ("PATCH", "/scim/v2/Users/{resource_id}"),
     ("DELETE", "/scim/v2/Users/{resource_id}"),
+}
+_REFERENCE = {
+    "source_id": str(uuid.uuid4()),
+    "ref_kind": "ticketing_organization",
+    "external_ref": "360001001",
 }
 # Valid bodies, so that a refusal is about authority, never about the request's shape.
 BODIES: dict[tuple[str, str], Any] = {
@@ -90,6 +155,159 @@ BODIES: dict[tuple[str, str], Any] = {
         "reason": "Probe",
     },
     ("POST", "/v1/admin/access/grants/{grant_id}/revoke"): {"reason": "Probe"},
+    ("PATCH", "/v1/admin/organization"): {
+        "name": "Probe",
+        "version": "2026-10-02T00:00:00Z",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/members"): {
+        "email": "probe@halden.example",
+        "name": "Probe",
+        "identifier": "probe",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/members/{membership_id}/administrator/preview"): {
+        "administrator": True
+    },
+    ("POST", "/v1/admin/access/members/{membership_id}/administrator"): {
+        "administrator": True,
+        "version": "2026-10-02T00:00:00Z",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/members/{membership_id}/reinstate/preview"): None,
+    ("POST", "/v1/admin/access/members/{membership_id}/reinstate"): {
+        "version": "2026-10-02T00:00:00Z",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/accounts"): {"key": "probe", "name": "Probe", "reason": "Probe"},
+    ("PATCH", "/v1/admin/access/accounts/{account_id}"): {
+        "version": "2026-10-02T00:00:00Z",
+        "name": "Probe",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/accounts/{account_id}/archive"): {
+        "version": "2026-10-02T00:00:00Z",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/accounts/{account_id}/reactivate"): {
+        "version": "2026-10-02T00:00:00Z",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/account-references/preview"): {
+        **_REFERENCE,
+        "account_id": None,
+    },
+    ("POST", "/v1/admin/access/account-references"): {
+        **_REFERENCE,
+        "account_id": str(uuid.uuid4()),
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/account-references/remap"): {
+        **_REFERENCE,
+        "current_account_id": str(uuid.uuid4()),
+        "account_id": str(uuid.uuid4()),
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/access/account-references/unmap"): {
+        **_REFERENCE,
+        "current_account_id": str(uuid.uuid4()),
+        "reason": "Probe",
+    },
+}
+_VERSIONED = {"version": "2026-10-02T00:00:00Z", "reason": "Probe"}
+BODIES |= {
+    ("POST", "/v1/admin/identity/oidc"): {
+        "issuer": "https://idp.probe.example",
+        "client_id": "probe",
+        "reason": "Probe",
+    },
+    ("PATCH", "/v1/admin/identity/oidc/{connection_id}"): {"client_id": "probe", **_VERSIONED},
+    ("PUT", "/v1/admin/identity/oidc/{connection_id}/client-secret"): {
+        "client_secret": "probe-secret-value",
+        **_VERSIONED,
+    },
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/client-secret/remove"): _VERSIONED,
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/status/preview"): {"enabled": False},
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/status"): {"enabled": False, **_VERSIONED},
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/identity/preview"): {
+        "subject_claim": "email"
+    },
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/identity"): {
+        "issuer": "https://idp.probe.example",
+        "subject_claim": "sub",
+        "proof_id": str(uuid.uuid4()),
+        "confirmation": "https://idp.probe.example",
+        **_VERSIONED,
+    },
+    ("POST", "/v1/admin/identity/oidc/{connection_id}/check"): None,
+    ("POST", "/v1/admin/identity/oidc/test-sign-in"): {},
+    ("POST", "/v1/admin/identity/scim/tokens"): {"reason": "Probe"},
+    ("POST", "/v1/admin/identity/scim/tokens/{token_id}/rotate"): {"reason": "Probe"},
+    ("POST", "/v1/admin/identity/scim/tokens/{token_id}/revoke/preview"): None,
+    ("POST", "/v1/admin/identity/scim/tokens/{token_id}/revoke"): {"reason": "Probe"},
+}
+_CHANGE = {"kind": "settings", "default_query_sensitivity": "restricted"}
+BODIES |= {
+    ("POST", "/v1/admin/providers"): {
+        "provider": "fake",
+        "model": "fake-probe",
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/providers/changes/preview"): {"change": _CHANGE},
+    ("POST", "/v1/admin/providers/changes"): {
+        "change": _CHANGE,
+        "policy_version": 0,
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/providers/step-ups"): {
+        "change": _CHANGE,
+        "policy_version": 0,
+        "reason": "Probe",
+        "confirmation": "Probe",
+    },
+    ("POST", "/v1/admin/providers/step-ups/{step_up_id}/apply"): None,
+    ("PUT", "/v1/admin/providers/{provider_id}/endpoint"): {
+        "target_id": str(uuid.uuid4()),
+        "policy_version": 0,
+        "reason": "Probe",
+    },
+    ("PUT", "/v1/admin/providers/{provider_id}/credential"): {
+        "api_key": "probe-api-key-value-0000",
+        "data_use": "paid",
+        "expected_credential_id": None,
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/providers/{provider_id}/credential/revoke"): {
+        "expected_credential_id": str(uuid.uuid4()),
+        "reason": "Probe",
+    },
+    ("POST", "/v1/admin/providers/{provider_id}/test"): None,
+}
+_SOURCE_VERSIONED = {"version": 1, "reason": "Probe"}
+BODIES |= {
+    ("POST", "/v1/admin/sources"): {
+        "connector_type": "document_repository",
+        "key": "probe-docs",
+        "name": "Probe",
+        "default_sensitivity": "internal",
+        "authority": "working",
+        "account_scoped": False,
+        "reason": "Probe",
+    },
+    ("PATCH", "/v1/admin/sources/{source_id}"): {"name": "Probe", **_SOURCE_VERSIONED},
+    ("POST", "/v1/admin/sources/{source_id}/changes/preview"): {
+        "name": "Probe",
+        **_SOURCE_VERSIONED,
+    },
+    ("POST", "/v1/admin/sources/{source_id}/pause"): _SOURCE_VERSIONED,
+    ("POST", "/v1/admin/sources/{source_id}/resume"): _SOURCE_VERSIONED,
+    ("POST", "/v1/admin/sources/{source_id}/disconnect"): {
+        "confirm_key": "probe",
+        **_SOURCE_VERSIONED,
+    },
+    # The upload's body is the file itself; an empty one is refused after authority.
+    ("POST", "/v1/admin/sources/{source_id}/imports"): None,
+    ("POST", "/v1/admin/sources/{source_id}/check"): None,
 }
 QUERIES = {("GET", "/v1/admin/access/documents"): "?q=onboarding"}
 
@@ -117,7 +335,20 @@ def _url(path: str, ids: dict[str, str]) -> str:
 
 
 def _random_ids() -> dict[str, str]:
-    names = ("evidence_id", "trace_id", "source_id", "membership_id", "document_id", "grant_id")
+    names = (
+        "evidence_id",
+        "trace_id",
+        "source_id",
+        "membership_id",
+        "document_id",
+        "grant_id",
+        "account_id",
+        "connection_id",
+        "token_id",
+        "test_id",
+        "provider_id",
+        "step_up_id",
+    )
     return {name: str(uuid.uuid4()) for name in names} | {"resource_id": str(uuid.uuid4())}
 
 
@@ -190,6 +421,7 @@ async def worlds(owner_db: Database, app_client: AppFactory) -> Worlds:
         "UPDATE memberships SET is_admin = true WHERE id = :m", m=veridian.members["victor"]
     )
     await halden.document("checklist", "Onboarding checklist", ["Five steps to onboard."])
+    await halden.account("acme", "Acme Corp")
     await add_grant(
         owner_db, halden.id, halden.documents["checklist"], "membership", halden.members["maya"]
     )
@@ -197,9 +429,67 @@ async def worlds(owner_db: Database, app_client: AppFactory) -> Worlds:
         grant: uuid.UUID = (await s.execute(text("SELECT id FROM document_grants"))).scalar_one()
     connection = await create_oidc_connection(owner_db, halden.id)
     await create_provisioned_member(owner_db, halden.id, connection, "pat@halden.example", "x")
+    from ..factories import create_scim_token
+
+    await create_scim_token(owner_db, halden.id, connection)
+    async with owner_db.tenant_transaction(halden.id) as s:
+        token_id: uuid.UUID = (await s.execute(text("SELECT id FROM scim_tokens"))).scalar_one()
+        # A test sign-in of Lena's (P12.4), still pending.
+        test_id: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO oidc_login_attempts (organization_id, connection_id, "
+                    "state_hash, binding_hash, nonce, code_verifier, expires_at, purpose, "
+                    "membership_id) VALUES (:o, :c, sha256('s'::bytea), sha256('b'::bytea), "
+                    "repeat('n', 43), repeat('v', 43), now() + interval '10 minutes', 'test', "
+                    ":m) RETURNING id"
+                ),
+                {"o": halden.id, "c": connection, "m": halden.members["lena"]},
+            )
+        ).scalar_one()
     async with owner_db.tenant_transaction(halden.id) as s:
         resource: uuid.UUID = (
             await s.execute(text("SELECT id FROM directory_identities"))
+        ).scalar_one()
+        # A generation provider and a pending egress step-up of Lena's (P12.5).
+        provider: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO model_providers (organization_id, purpose, provider, model, "
+                    "deployment, retention_mode, training_opt_out, enabled) VALUES (:o, "
+                    "'generation', 'gemini', 'gemini-3.5-flash-lite', 'external_api', 'none', "
+                    "true, false) RETURNING id"
+                ),
+                {"o": halden.id},
+            )
+        ).scalar_one()
+        lena_user: uuid.UUID = (
+            await s.execute(
+                text("SELECT user_id FROM memberships WHERE id = :m"), {"m": halden.members["lena"]}
+            )
+        ).scalar_one()
+        session: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO sessions (token_hash, user_id, organization_id, expires_at) "
+                    "VALUES (sha256('probe'::bytea), :u, :o, now() + interval '1 hour') "
+                    "RETURNING id"
+                ),
+                {"u": lena_user, "o": halden.id},
+            )
+        ).scalar_one()
+        step_up: uuid.UUID = (
+            await s.execute(
+                text(
+                    "INSERT INTO oidc_login_attempts (organization_id, connection_id, "
+                    "state_hash, binding_hash, nonce, code_verifier, expires_at, purpose, "
+                    "membership_id, session_id, change, reason, policy_version) VALUES (:o, :c, "
+                    "sha256('s2'::bytea), sha256('b2'::bytea), repeat('n', 43), repeat('v', 43), "
+                    "now() + interval '10 minutes', 'step_up', :m, :s, "
+                    "'{\"kind\": \"settings\"}', 'Probe', 0) RETURNING id"
+                ),
+                {"o": halden.id, "c": connection, "m": halden.members["lena"], "s": session},
+            )
         ).scalar_one()
     # A trace of Maya's.
     async with app_client() as c:
@@ -214,6 +504,12 @@ async def worlds(owner_db: Database, app_client: AppFactory) -> Worlds:
         "document_id": str(halden.documents["checklist"]),
         "grant_id": str(grant),
         "resource_id": str(resource),
+        "account_id": str(halden.accounts["acme"]),
+        "connection_id": str(connection),
+        "token_id": str(token_id),
+        "test_id": str(test_id),
+        "provider_id": str(provider),
+        "step_up_id": str(step_up),
     }
     return Worlds(halden, veridian, ids)
 
@@ -246,12 +542,24 @@ async def test_another_organizations_identifiers_are_unknown(
                 text(
                     "SELECT (SELECT count(*) FROM document_grants), (SELECT clearance FROM "
                     "memberships WHERE id = :m), (SELECT count(*) FROM jobs), "
-                    "(SELECT count(*) FROM audit_events WHERE action LIKE 'access.%')"
+                    "(SELECT count(*) FROM audit_events WHERE action LIKE 'access.%' "
+                    "OR action LIKE 'account.%' OR action LIKE 'sso.%' "
+                    "OR action LIKE 'scim.%' OR action LIKE 'provider.%' "
+                    "OR action LIKE 'credential.%' OR action LIKE 'egress.%' "
+                    "OR action LIKE 'source.%'), "
+                    "(SELECT count(*) FROM scim_tokens WHERE revoked_at IS NULL), "
+                    "(SELECT client_id || status FROM oidc_connections), "
+                    "(SELECT count(*) FROM provider_credentials), "
+                    "(SELECT count(*) FROM model_providers WHERE purpose = 'generation' "
+                    "AND (enabled OR approved_at IS NOT NULL OR last_test_at IS NOT NULL)), "
+                    "(SELECT count(*) FROM step_up_grants), "
+                    "(SELECT count(*) FROM source_imports), "
+                    "(SELECT string_agg(status || ':' || version, ',') FROM sources)"
                 ),
                 {"m": uuid.UUID(worlds.halden_ids["membership_id"])},
             )
         ).one()
-    assert tuple(state) == (1, "internal", 0, 0)
+    assert tuple(state) == (1, "internal", 0, 0, 1, "latticeactive", 0, 0, 0, 0, "active:1")
 
 
 @pytest.mark.parametrize(("method", "path"), sorted(ADMIN))

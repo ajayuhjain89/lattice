@@ -7,6 +7,12 @@ Boundaries, each enforced in code *and* by the database (migration 0013):
   to its organization and connection; every statement then runs bound to that
   organization under row-level security and filtered by the connection. Another
   organization's resources are unknown (404), never listed.
+* **Its own people only.** SCIM reads and changes the identities it created
+  (``managed_by = identity_provider``). A member an administrator added by hand
+  (P12.2) is managed in the product: SCIM never lists or changes them, and a ``POST``
+  with their ``externalId``, ``userName`` or e-mail is a uniqueness conflict (409) --
+  nothing is adopted silently. A removed member reinstated in the product (D-36) is
+  the same identity again: SCIM finds it by ``externalId`` as before.
 * **Owned users only.** A provisioned person is a new user owned by the organization
   (``home_organization_id``). An e-mail already used by a member of this organization is
   a uniqueness conflict (409); users of *other* organizations are invisible, so they can
@@ -23,8 +29,18 @@ Boundaries, each enforced in code *and* by the database (migration 0013):
 * **Audited.** ``access.member_changed`` (creation, status) and
   ``access.identity_changed`` (user name, e-mail, display name), actor
   ``scim:<token id>``, in the transaction of the change -- which the database requires.
+* **Refusals an administrator can act on** (P12.4): an authenticated request refused for
+  uniqueness (409: the person exists as a member added by hand, as another provisioned
+  identity, or by e-mail) or for trying to change a person's ``externalId`` (400
+  ``mutability``) records ``scim.request_refused`` -- the fixed reason, the operation and
+  the colliding member, never a value from the request -- in its own transaction, at most
+  once per token, operation, reason and member every ten minutes and 30 a token an hour.
+  Unauthenticated, malformed and rate-limited requests record nothing.
+* **Use.** Each authenticated request sets the token's ``last_used_at`` (minute
+  precision) through ``lattice_scim_token_used``.
 """
 
+import json
 import uuid
 from dataclasses import dataclass, replace
 from typing import Any, Final
@@ -61,6 +77,7 @@ _FROM = """
     JOIN memberships m ON m.organization_id = d.organization_id AND m.id = d.membership_id
     JOIN users u ON u.id = m.user_id
     WHERE d.organization_id = :o AND d.connection_id = :c
+      AND d.managed_by = 'identity_provider'
 """
 
 REASONS: Final = {
@@ -143,8 +160,50 @@ def _check_version(if_match: str | None, version: int) -> None:
         raise ScimError(412, "The resource changed since the version you sent.")
 
 
-def _conflict() -> ScimError:
-    return ScimError(409, "A user with this externalId, userName or e-mail exists.", "uniqueness")
+def _conflict(refused: str = "identity_conflict", member: uuid.UUID | None = None) -> ScimError:
+    return ScimError(
+        409,
+        "A user with this externalId, userName or e-mail exists.",
+        "uniqueness",
+        refused=refused,
+        member=None if member is None else str(member),
+    )
+
+
+_CLASH_SQL = text(
+    """
+    SELECT d.membership_id, d.managed_by FROM directory_identities d
+    WHERE d.connection_id = :c AND d.id IS DISTINCT FROM :rid
+      AND (d.external_id = :x OR lower(d.user_name) = lower(:n))
+    UNION ALL
+    SELECT m.id, coalesce(d.managed_by, 'organization') FROM users u
+    JOIN memberships m ON m.user_id = u.id
+    LEFT JOIN directory_identities d
+      ON d.organization_id = m.organization_id AND d.membership_id = m.id
+    WHERE u.email = :e AND u.id IS DISTINCT FROM :uid
+    LIMIT 1
+    """
+)
+# At most one refusal event per token, operation, reason and member every ten minutes,
+# and 30 a token an hour: a misconfigured provider cannot flood the audit trail.
+_REFUSED_SQL = text(
+    """
+    INSERT INTO audit_events (organization_id, actor, action, target, before, after, reason)
+    SELECT :o, :actor, 'scim.request_refused', CAST(:target AS jsonb), NULL,
+           CAST(:after AS jsonb), 'Provisioning request refused (SCIM)'
+    WHERE NOT EXISTS (
+      SELECT 1 FROM audit_events e
+      WHERE e.organization_id = :o AND e.actor = :actor AND e.action = 'scim.request_refused'
+        AND e.target ->> 'operation' = :operation AND e.after ->> 'reason' = :reason
+        AND coalesce(e.target ->> 'membership_id', '') = :member
+        AND e.created_at > now() - interval '10 minutes'
+    ) AND (
+      SELECT count(*) FROM audit_events e
+      WHERE e.organization_id = :o AND e.actor = :actor AND e.action = 'scim.request_refused'
+        AND e.created_at > now() - interval '1 hour'
+    ) < 30
+    """
+)
 
 
 def _unique_violation(exc: IntegrityError) -> bool:
@@ -162,6 +221,41 @@ def _unique_violation(exc: IntegrityError) -> bool:
 class Provisioning:
     def __init__(self, db: Database) -> None:
         self._db = db
+
+    async def token_used(self, caller: ScimCaller) -> None:
+        """The token authenticated a request: its ``last_used_at`` (minute precision)."""
+        async with self._db.tenant_transaction(caller.organization_id) as session:
+            await session.execute(
+                text("SELECT lattice_scim_token_used(:t)"), {"t": caller.token_id}
+            )
+
+    async def record_refusal(self, caller: ScimCaller, operation: str, error: ScimError) -> None:
+        """``scim.request_refused`` for a refusal an administrator can act on (rate-limited
+        in SQL; nothing when the limit is reached)."""
+        if error.refused is None:
+            return
+        target = {"token_id": str(caller.token_id), "operation": operation}
+        if error.member is not None:
+            target["membership_id"] = error.member
+        async with self._db.tenant_transaction(caller.organization_id) as session:
+            await session.execute(
+                _REFUSED_SQL,
+                {
+                    "o": caller.organization_id,
+                    "actor": caller.actor,
+                    "target": json.dumps(target),
+                    "after": json.dumps(
+                        {
+                            "reason": error.refused,
+                            "status": error.status,
+                            "scim_type": error.scim_type,
+                        }
+                    ),
+                    "operation": operation,
+                    "reason": error.refused,
+                    "member": error.member or "",
+                },
+            )
 
     # --- reads ------------------------------------------------------------------------
 
@@ -232,16 +326,13 @@ class Provisioning:
         user_id: uuid.UUID | None,
     ) -> None:
         """Uniqueness inside this organization only (row-level security hides every
-        other organization's users, so they can neither collide nor be revealed)."""
-        clashes: bool = (
+        other organization's users, so they can neither collide nor be revealed). A clash
+        is refused -- never adopted -- naming whom it collided with for the refusal event:
+        a member added by hand (``manual_member_conflict``) or another provisioned
+        identity (``identity_conflict``)."""
+        clash = (
             await session.execute(
-                text(
-                    "SELECT EXISTS (SELECT 1 FROM directory_identities WHERE connection_id = :c "
-                    "AND id IS DISTINCT FROM :rid AND (external_id = :x "
-                    "OR lower(user_name) = lower(:n))) "
-                    "OR EXISTS (SELECT 1 FROM users WHERE email = :e "
-                    "AND id IS DISTINCT FROM :uid)"
-                ),
+                _CLASH_SQL,
                 {
                     "c": caller.connection_id,
                     "rid": resource_id,
@@ -251,9 +342,12 @@ class Provisioning:
                     "uid": user_id,
                 },
             )
-        ).scalar_one()
-        if clashes:
-            raise _conflict()
+        ).one_or_none()
+        if clash is not None:
+            manual = clash.managed_by == "organization"
+            raise _conflict(
+                "manual_member_conflict" if manual else "identity_conflict", clash.membership_id
+            )
 
     async def create_user(self, caller: ScimCaller, resource: Any) -> StoredUser:
         state = parse_user(resource)

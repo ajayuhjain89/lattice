@@ -44,7 +44,7 @@ APP_TABLES = {
     "sessions": {"SELECT", "INSERT"},
     "departments": {"SELECT"},
     "membership_departments": {"SELECT", "INSERT", "DELETE"},
-    "accounts": {"SELECT"},
+    "accounts": {"SELECT"},  # INSERT and UPDATE are column grants (0018, below)
     "account_assignments": {"SELECT", "INSERT", "DELETE"},
     "access_groups": {"SELECT"},
     "access_group_members": {"SELECT", "INSERT", "DELETE"},
@@ -70,6 +70,20 @@ APP_TABLES = {
     # lattice_pre_auth_hit (lattice_auth).
     "ask_slots": {"SELECT", "INSERT", "DELETE"},
     "pre_auth_rate_limits": set(),
+    # Phase 12 (P12.1, 0016): ciphertext the API opens to present a credential; private
+    # outbound targets are operator-only.
+    "encrypted_secrets": {"SELECT"},
+    # 0020: read to apply the operator's registrations (C4); never written by the API.
+    "outbound_targets": {"SELECT"},
+    # Phase 12 (P12.3, 0018): mappings are read; written only by lattice_set_account_ref.
+    "account_external_refs": {"SELECT"},
+    # Phase 12 (P12.5, 0021): read for previews and step-up results; written only by the
+    # egress functions (grants) and by triggers of every writer (versions).
+    "egress_policy_versions": {"SELECT"},
+    "step_up_grants": {"SELECT"},
+    # Phase 12 (P12.6, 0022): import metadata is read for the Sources record; written only
+    # by the fenced lattice_*_import functions.
+    "source_imports": {"SELECT"},
 }
 # Column-level privileges (table-level ones above).
 COLUMN_PRIVILEGES = {
@@ -89,11 +103,68 @@ COLUMN_PRIVILEGES = {
         "version",
         "updated_at",
     },
-    ("oidc_login_attempts", "UPDATE"): {"consumed_at"},
+    # 0020: a test sign-in's outcome and the administrator's own identifier; never the
+    # proof's use (lattice_oidc_change_identity).
+    ("oidc_login_attempts", "UPDATE"): {
+        "consumed_at",
+        "outcome",
+        "observed_identifier",
+        "completed_at",
+    },
     ("rate_limit_counters", "UPDATE"): {"window_start", "count"},
     ("ask_slots", "UPDATE"): {"lease_id", "expires_at"},
-    # 0014: the session-creation check reads the connection's status only (D-25).
-    ("oidc_connections", "SELECT"): {"id", "organization_id", "status"},
+    # 0014: the session-creation check reads the connection's status only (D-25);
+    # 0016: and the setup record's sign-in facts, which sign-in writes.
+    ("oidc_connections", "SELECT"): {
+        "id",
+        "organization_id",
+        "status",
+        "last_success_at",
+        "last_failure_at",
+        # 0017: the add-member form names the identifying claim.
+        "issuer",
+        "subject_claim",
+        # 0020: the identity settings (the secret's reference, shown as a kind only).
+        "client_id",
+        "login_key",
+        "client_secret_ref",
+        "created_at",
+        "updated_at",
+        "last_failure_code",
+        "last_test_at",
+        "last_test_kind",
+        "last_test_result",
+        # 0021: the operator's step-up assurance requirement (shown, never written).
+        "step_up_acr_values",
+    },
+    # Sign-in and test facts; configuration only through the 0020 fenced functions.
+    ("oidc_connections", "UPDATE"): {
+        "last_success_at",
+        "last_failure_at",
+        "last_failure_code",
+        "last_test_at",
+        "last_test_kind",
+        "last_test_result",
+    },
+    # 0016: the provisioning setup record -- never token_hash.
+    ("scim_tokens", "SELECT"): {
+        "id",
+        "organization_id",
+        "connection_id",
+        "created_at",
+        "revoked_at",
+        # 0020: the token list (never the hash).
+        "last_used_at",
+        "hint",
+    },
+    # 0016: rename (ADR-017), audit-coupled.
+    ("organizations", "UPDATE"): {"name", "updated_at"},
+    # 0018: accounts created and edited by administrators, audit-coupled; never the key
+    # after creation, never the lifecycle (lattice_set_account_archived).
+    ("accounts", "INSERT"): {"organization_id", "key", "name", "aliases", "status"},
+    ("accounts", "UPDATE"): {"name", "aliases", "status"},
+    # 0021: a provider test's facts; the policy only through lattice_apply_egress_change.
+    ("model_providers", "UPDATE"): {"last_test_at", "last_test_result", "last_test_credential_id"},
 }
 RLS_REFUSED = r"row-level security"
 
@@ -361,7 +432,10 @@ async def test_app_cannot_write_another_organizations_access(
     ("actor", "action"),
     [
         ("operator:seed", "access.member_changed"),
-        ("member:x", "provider.configured"),
+        # 0021 admits provider and egress events from members only.
+        ("operator:x", "provider.configured"),
+        ("scim:x", "egress.levels_changed"),
+        ("member:x", "secret.rekeyed"),
         ("scim:x", "sso.connection_created"),
         ("idp:x", "access.member_changed"),
     ],
@@ -576,6 +650,136 @@ async def test_app_links_directory_identities_inside_its_organization_only(
     )
 
 
+# --- Phase 12 (P12.2, 0017): members added by hand, the capability, reinstatement --------
+
+FENCED_FUNCTIONS = {
+    "lattice_create_member(uuid,text,text,text,text,text)",
+    "lattice_set_admin(uuid,uuid,boolean)",
+    "lattice_reinstate_member(uuid,uuid)",
+}
+
+
+async def test_the_member_functions_are_narrow_definer_functions(
+    superuser_engine: AsyncEngine,
+) -> None:
+    async with superuser_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    """
+                    SELECT p.oid::regprocedure::text, pg_get_userbyid(p.proowner), p.prosecdef,
+                           p.proconfig,
+                           array(SELECT DISTINCT coalesce(r.rolname, 'PUBLIC')
+                                 FROM aclexplode(p.proacl) a
+                                 LEFT JOIN pg_roles r ON r.oid = a.grantee
+                                 WHERE a.privilege_type = 'EXECUTE' ORDER BY 1)
+                    FROM pg_proc p
+                    WHERE p.proname IN ('lattice_create_member', 'lattice_set_admin',
+                                        'lattice_reinstate_member')
+                    """
+                )
+            )
+        ).all()
+        callers = (
+            await conn.execute(
+                text(
+                    "SELECT r.rolname, p.oid::regprocedure::text FROM pg_roles r, pg_proc p "
+                    "WHERE p.proname IN ('lattice_create_member', 'lattice_set_admin', "
+                    "'lattice_reinstate_member') AND NOT r.rolsuper "
+                    "AND has_function_privilege(r.oid, p.oid, 'EXECUTE')"
+                )
+            )
+        ).all()
+    assert {r[0].replace(", ", ",") for r in rows} == FENCED_FUNCTIONS
+    for signature, owner, definer, config, executors in rows:
+        assert owner == "lattice_owner", signature
+        assert definer, signature
+        assert config == ["search_path=pg_catalog, public, pg_temp"], signature
+        assert executors == ["lattice_app", "lattice_owner"], signature
+    # Never the worker, the pre-authentication role or PUBLIC.
+    assert {role for role, _ in callers} == {"lattice_app", "lattice_owner"}
+
+
+async def test_app_inserts_only_identity_provider_identities(
+    app_db: Database, owner_db: Database, world: World
+) -> None:
+    """A person managed by the organization is created only by the fenced function."""
+    connection = await create_oidc_connection(owner_db, world.org)
+    insert = (
+        "INSERT INTO directory_identities (organization_id, connection_id, membership_id, "
+        "external_id, user_name, managed_by) VALUES (:o, :c, :m, 'x', 'x', :by)"
+    )
+    with pytest.raises(DBAPIError, match=RLS_REFUSED):
+        await _run(
+            app_db,
+            world.org,
+            insert,
+            audit_for=world.member,
+            o=world.org,
+            c=connection,
+            m=world.member,
+            by="organization",
+        )
+    assert (
+        await _run(
+            app_db,
+            world.org,
+            insert,
+            audit_for=world.member,
+            o=world.org,
+            c=connection,
+            m=world.member,
+            by="identity_provider",
+        )
+        == 1
+    )
+    # The marker is not an updatable column.
+    with pytest.raises(DBAPIError, match="permission denied"):
+        await _run(
+            app_db,
+            world.org,
+            "UPDATE directory_identities SET managed_by = 'organization'",
+            audit_for=world.member,
+        )
+
+
+async def test_app_never_removes_a_member_the_organization_manages(
+    app_db: Database, owner_db: Database, world: World
+) -> None:
+    connection = await create_oidc_connection(owner_db, world.org)
+    member = await create_provisioned_member(
+        owner_db, world.org, connection, "h@halden.example", "ext-h"
+    )
+    async with owner_db.tenant_transaction(world.org) as s:
+        await s.execute(
+            text("UPDATE directory_identities SET managed_by = 'organization'"),
+        )
+    with pytest.raises(DBAPIError, match=RLS_REFUSED):
+        await _run(
+            app_db,
+            world.org,
+            "UPDATE memberships SET status = 'removed' WHERE id = :m",
+            audit_for=member.membership_id,
+            m=member.membership_id,
+        )
+
+
+async def test_app_cannot_reinstate_a_removed_member_directly(
+    app_db: Database, world: World
+) -> None:
+    """Only ``lattice_reinstate_member`` leaves ``removed`` (and only with least access)."""
+    assert (
+        await _run(
+            app_db,
+            world.org,
+            "UPDATE memberships SET status = 'active' WHERE id = :m",
+            audit_for=world.removed,
+            m=world.removed,
+        )
+        == 0
+    )
+
+
 async def test_app_deletes_only_finished_sign_in_attempts(
     app_db: Database, owner_db: Database, world: World
 ) -> None:
@@ -597,3 +801,253 @@ async def test_app_deletes_only_finished_sign_in_attempts(
                 {"o": world.org, "c": connection, "k": key},
             )
     assert await _run(app_db, world.org, "DELETE FROM oidc_login_attempts") == 2
+    # 0020: a finished test sign-in stays (its result, its proof) until it expires.
+    async with owner_db.tenant_transaction(world.org) as s:
+        await s.execute(
+            text(
+                "INSERT INTO oidc_login_attempts (organization_id, connection_id, state_hash, "
+                "binding_hash, nonce, code_verifier, expires_at, consumed_at, purpose, "
+                "membership_id) VALUES (:o, :c, sha256('t'::bytea), sha256('b'::bytea), "
+                "repeat('n', 22), repeat('v', 43), now() + interval '5 minutes', now(), 'test', "
+                ":m)"
+            ),
+            {"o": world.org, "c": connection, "m": world.member},
+        )
+    # Neither the live sign-in attempt nor the finished, unexpired test is deletable.
+    assert await _run(app_db, world.org, "DELETE FROM oidc_login_attempts") == 0
+
+
+# --- Phase 12 (P12.4, 0020): the identity fences ---------------------------------------------
+
+IDENTITY_FUNCTIONS = {
+    "lattice_oidc_create(uuid,text,text,text,text)",
+    "lattice_oidc_set_client(uuid,uuid,timestamp with time zone,text)",
+    "lattice_oidc_set_secret(uuid,uuid,timestamp with time zone,uuid,text,bytea,bytea)",
+    "lattice_oidc_clear_secret(uuid,uuid,timestamp with time zone)",
+    "lattice_oidc_set_status(uuid,uuid,timestamp with time zone,boolean)",
+    "lattice_oidc_change_identity(uuid,uuid,timestamp with time zone,text,text,uuid)",
+    "lattice_create_scim_token(uuid,bytea,text)",
+    "lattice_rotate_scim_token(uuid,uuid,bytea,text)",
+    "lattice_revoke_scim_token(uuid,uuid)",
+    "lattice_scim_token_used(uuid)",
+}
+
+
+async def test_the_identity_functions_are_narrow_definer_functions(
+    superuser_engine: AsyncEngine,
+) -> None:
+    names = sorted({f.split("(")[0] for f in IDENTITY_FUNCTIONS})
+    async with superuser_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    """
+                    SELECT p.oid::regprocedure::text, pg_get_userbyid(p.proowner), p.prosecdef,
+                           p.proconfig,
+                           array(SELECT DISTINCT coalesce(r.rolname, 'PUBLIC')
+                                 FROM aclexplode(p.proacl) a
+                                 LEFT JOIN pg_roles r ON r.oid = a.grantee
+                                 WHERE a.privilege_type = 'EXECUTE' ORDER BY 1)
+                    FROM pg_proc p WHERE p.proname = ANY(:names)
+                    """
+                ),
+                {"names": names},
+            )
+        ).all()
+        triggers = (
+            await conn.execute(
+                text(
+                    "SELECT p.proname, p.prosecdef, has_function_privilege('lattice_app', p.oid, "
+                    "'EXECUTE') FROM pg_proc p WHERE p.proname IN "
+                    "('lattice_require_connection_audit', 'lattice_require_scim_token_audit')"
+                )
+            )
+        ).all()
+    assert {r[0].replace(", ", ",") for r in rows} == IDENTITY_FUNCTIONS
+    for signature, owner, definer, config, executors in rows:
+        assert owner == "lattice_owner", signature
+        assert definer, signature
+        assert config == ["search_path=pg_catalog, public, pg_temp"], signature
+        assert executors == ["lattice_app", "lattice_owner"], signature
+    assert sorted(tuple(t) for t in triggers) == [
+        ("lattice_require_connection_audit", False, False),
+        ("lattice_require_scim_token_audit", False, False),
+    ]
+
+
+# --- Phase 12 (P12.3, 0018): accounts and their external references -----------------------
+
+ACCOUNT_FUNCTIONS = {
+    "lattice_set_account_archived(uuid,uuid,boolean)",
+    "lattice_set_account_ref(uuid,uuid,text,text,uuid,uuid)",
+}
+
+
+async def test_the_account_functions_are_narrow_definer_functions(
+    superuser_engine: AsyncEngine,
+) -> None:
+    async with superuser_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    """
+                    SELECT p.oid::regprocedure::text, pg_get_userbyid(p.proowner), p.prosecdef,
+                           p.proconfig,
+                           array(SELECT DISTINCT coalesce(r.rolname, 'PUBLIC')
+                                 FROM aclexplode(p.proacl) a
+                                 LEFT JOIN pg_roles r ON r.oid = a.grantee
+                                 WHERE a.privilege_type = 'EXECUTE' ORDER BY 1)
+                    FROM pg_proc p
+                    WHERE p.proname IN ('lattice_set_account_archived', 'lattice_set_account_ref')
+                    """
+                )
+            )
+        ).all()
+        # The trigger functions are not callable, and run as the writer (not definers).
+        triggers = (
+            await conn.execute(
+                text(
+                    "SELECT p.proname, p.prosecdef, has_function_privilege('lattice_app', p.oid, "
+                    "'EXECUTE') FROM pg_proc p WHERE p.proname IN ('lattice_check_account_ref', "
+                    "'lattice_require_account_audit', 'lattice_require_mapping_audit')"
+                )
+            )
+        ).all()
+    assert {r[0].replace(", ", ",") for r in rows} == ACCOUNT_FUNCTIONS
+    for signature, owner, definer, config, executors in rows:
+        assert owner == "lattice_owner", signature
+        assert definer, signature
+        assert config == ["search_path=pg_catalog, public, pg_temp"], signature
+        assert executors == ["lattice_app", "lattice_owner"], signature
+    assert sorted((name, definer, callable_) for name, definer, callable_ in triggers) == [
+        ("lattice_check_account_ref", False, False),
+        ("lattice_require_account_audit", False, False),
+        ("lattice_require_mapping_audit", False, False),
+    ]
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "account.created",
+        "account.updated",
+        "account.archived",
+        "account.reactivated",
+        "account.mapping_changed",
+    ],
+)
+async def test_app_records_account_events_by_a_member_only(
+    app_db: Database, world: World, action: str
+) -> None:
+    insert = (
+        "INSERT INTO audit_events (organization_id, actor, action, target, reason) "
+        "VALUES (:o, :actor, :action, '{}', 'because')"
+    )
+    for actor in (f"scim:{uuid.uuid4()}", "operator:sync"):
+        with pytest.raises(DBAPIError, match=RLS_REFUSED):
+            await _run(app_db, world.org, insert, o=world.org, actor=actor, action=action)
+    assert (
+        await _run(
+            app_db, world.org, insert, o=world.org, actor=f"member:{world.member}", action=action
+        )
+        == 1
+    )
+
+
+# --- Phase 12 (P12.5, 0021): providers, credentials, egress, step-up grants --------------------
+
+PROVIDER_FUNCTIONS = {
+    "lattice_preview_egress_change(uuid,jsonb)",
+    "lattice_apply_egress_change(uuid,uuid,jsonb,bigint,uuid)",
+    "lattice_create_step_up_grant(uuid,uuid,uuid,timestamp with time zone,text)",
+    "lattice_create_provider(uuid,text,text,uuid,boolean)",
+    "lattice_set_provider_endpoint(uuid,uuid,bigint,uuid)",
+    "lattice_set_provider_credential(uuid,text,uuid,uuid,uuid,text,bytea,bytea,text,text)",
+    "lattice_revoke_provider_credential(uuid,text,uuid)",
+}
+PROVIDER_HELPERS = (
+    "lattice_egress_cells",
+    "lattice_egress_version",
+    "lattice_egress_write",
+    "lattice_target_endpoint",
+    "lattice_require_policy_actor",
+    "lattice_bump_egress_version",
+    "lattice_require_provider_audit",
+    "lattice_require_egress_settings_audit",
+    "lattice_require_credential_audit",
+    "lattice_require_step_up_audit",
+)
+
+
+async def test_the_provider_functions_are_narrow_definer_functions(
+    superuser_engine: AsyncEngine,
+) -> None:
+    names = sorted({f.split("(")[0] for f in PROVIDER_FUNCTIONS})
+    async with superuser_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    """
+                    SELECT p.oid::regprocedure::text, pg_get_userbyid(p.proowner), p.prosecdef,
+                           p.proconfig,
+                           array(SELECT DISTINCT coalesce(r.rolname, 'PUBLIC')
+                                 FROM aclexplode(p.proacl) a
+                                 LEFT JOIN pg_roles r ON r.oid = a.grantee
+                                 WHERE a.privilege_type = 'EXECUTE' ORDER BY 1)
+                    FROM pg_proc p WHERE p.proname = ANY(:names)
+                    """
+                ),
+                {"names": names},
+            )
+        ).all()
+        helpers = (
+            await conn.execute(
+                text(
+                    "SELECT p.proname, has_function_privilege('lattice_app', p.oid, 'EXECUTE'), "
+                    "has_function_privilege('lattice_worker', p.oid, 'EXECUTE') "
+                    "FROM pg_proc p WHERE p.proname = ANY(:names)"
+                ),
+                {"names": list(PROVIDER_HELPERS)},
+            )
+        ).all()
+    assert {r[0].replace(", ", ",") for r in rows} == PROVIDER_FUNCTIONS
+    for signature, owner, definer, config, executors in rows:
+        assert owner == "lattice_owner", signature
+        assert definer, signature
+        assert config == ["search_path=pg_catalog, public, pg_temp"], signature
+        assert executors == ["lattice_app", "lattice_owner"], signature
+    assert sorted(h[0] for h in helpers) == sorted(PROVIDER_HELPERS)
+    assert all(not app and not worker for _, app, worker in helpers)
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "provider.configured",
+        "provider.enabled",
+        "provider.disabled",
+        "provider.approval_changed",
+        "credential.set",
+        "credential.rotated",
+        "credential.revoked",
+        "egress.levels_changed",
+        "egress.step_up_completed",
+        "egress.escalation_refused",
+    ],
+)
+async def test_app_records_provider_events_by_a_member_only(
+    app_db: Database, world: World, action: str
+) -> None:
+    insert = (
+        "INSERT INTO audit_events (organization_id, actor, action, target, reason) "
+        "VALUES (:o, :actor, :action, '{}', 'because')"
+    )
+    for actor in (f"scim:{uuid.uuid4()}", "operator:cli"):
+        with pytest.raises(DBAPIError, match=RLS_REFUSED):
+            await _run(app_db, world.org, insert, o=world.org, actor=actor, action=action)
+    assert (
+        await _run(
+            app_db, world.org, insert, o=world.org, actor=f"member:{world.member}", action=action
+        )
+        == 1
+    )

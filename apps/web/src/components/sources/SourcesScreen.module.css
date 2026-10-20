@@ -5,6 +5,10 @@
   font-weight: 600;
 }
 
+.headActions {
+  margin-top: var(--space-3);
+}
+
 .note {
   max-width: var(--measure);
   color: var(--text-secondary);
@@ -29,6 +33,22 @@
 .sourceName {
   font-weight: 600;
   overflow-wrap: break-word;
+}
+
+.sourceLink {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--rule-strong);
+  text-underline-offset: 0.2em;
+}
+
+.sourceLink:hover {
+  text-decoration-color: currentcolor;
+}
+
+.nextLink {
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
 }
 
 .sourceMeta {

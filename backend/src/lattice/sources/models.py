@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -30,6 +31,12 @@ class Source(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "id"),
         UniqueConstraint("organization_id", "key"),
+        # The current import (P12.6, migration 0022): a ready import of this source.
+        ForeignKeyConstraint(
+            ["organization_id", "import_id"],
+            ["source_imports.organization_id", "source_imports.id"],
+            use_alter=True,
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_DEFAULT)
@@ -45,6 +52,12 @@ class Source(Base):
     account_scoped: Mapped[bool] = mapped_column(server_default=text("false"))
     authority: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, server_default="active")
+    # operator: the sources file (`lattice sync --sources`) owns its configuration;
+    # organization: created and configured in the product, fed by imports (P12.6).
+    managed_by: Mapped[str] = mapped_column(Text, server_default="operator")
+    # Raised by every change of an administrator-visible setting (optimistic edits).
+    version: Mapped[int] = mapped_column(BigInteger, server_default=text("1"))
+    import_id: Mapped[uuid.UUID | None]
     opaque_ref_key: Mapped[bytes] = mapped_column(
         BYTEA, server_default=text("uuid_send(gen_random_uuid()) || uuid_send(gen_random_uuid())")
     )
@@ -63,6 +76,11 @@ class SourceSyncRun(Base):
             ["organization_id", "source_id"],
             ["sources.organization_id", "sources.id"],
             ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "import_id"],
+            ["source_imports.organization_id", "source_imports.id"],
+            ondelete="SET NULL (import_id)",
         ),
         Index(
             "ix_source_sync_runs_organization_id_source_id_started_at",
@@ -94,6 +112,68 @@ class SourceSyncRun(Base):
     embedding_failures: Mapped[int] = mapped_column(server_default=text("0"))
     deletion_guard_tripped: Mapped[bool] = mapped_column(server_default=text("false"))
     error_code: Mapped[str | None] = mapped_column(Text)
+    # The import the run read (organization-managed sources, P12.6).
+    import_id: Mapped[uuid.UUID | None]
+
+
+class SourceImport(Base):
+    """An uploaded export (phase-12-plan C8; migration 0022). IDs, sizes, a digest,
+    counts, fixed codes and times only: never a path, a file name or content. Its files
+    live where the import store derives from the organization and import IDs."""
+
+    __tablename__ = "source_imports"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "id"),
+        ForeignKeyConstraint(
+            ["organization_id", "source_id"],
+            ["sources.organization_id", "sources.id"],
+            ondelete="SET NULL (source_id)",
+        ),
+        Index(
+            "uq_source_imports_one_upload_per_source",
+            "organization_id",
+            "source_id",
+            unique=True,
+            postgresql_where=text("status IN ('receiving', 'validating')"),
+        ),
+        Index(
+            "ix_source_imports_organization_id_source_id_created_at",
+            "organization_id",
+            "source_id",
+            "created_at",
+        ),
+        Index(
+            "ix_source_imports_due",
+            "status",
+            postgresql_where=text(
+                "status IN ('receiving', 'validating', 'rejected', 'superseded')"
+            ),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_DEFAULT)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE")
+    )
+    source_id: Mapped[uuid.UUID | None]
+    format: Mapped[str] = mapped_column(Text)
+    # receiving -> validating -> ready | rejected; ready -> superseded; -> deleted.
+    status: Mapped[str] = mapped_column(Text, server_default="receiving")
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    sha256: Mapped[bytes | None] = mapped_column(BYTEA)
+    entries: Mapped[int | None]
+    ignored_entries: Mapped[int | None]
+    expanded_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    rejected_code: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    received_at: Mapped[datetime | None]
+    ready_at: Mapped[datetime | None]
+    superseded_at: Mapped[datetime | None]
+    deleted_at: Mapped[datetime | None]
+    checked_at: Mapped[datetime | None]
+    check_result: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    check_error_code: Mapped[str | None] = mapped_column(Text)
 
 
 class SyncRecordFailure(Base):

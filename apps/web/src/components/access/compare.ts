@@ -20,7 +20,7 @@ export interface Item {
 }
 
 export interface ComparisonRow {
-  key: "status" | "clearance" | "account_scope" | "accounts" | "departments" | "groups";
+  key: "status" | "administrator" | "clearance" | "account_scope" | "accounts" | "departments" | "groups" | "account" | "lifecycle";
   rule: string;
   now: Item[];
   after: Item[];
@@ -54,7 +54,19 @@ export function comparisonRows(member: MemberAccess, effects: readonly AccessEff
   const m = member.member;
 
   if (of("suspended").length) rows.push({ key: "status", rule: "Status", now: [{ name: humanize(m.status) }], after: [{ name: "Suspended" }], direction: "loss" });
-  if (of("reactivated").length) rows.push({ key: "status", rule: "Status", now: [{ name: humanize(m.status) }], after: [{ name: "Active" }], direction: "gain" });
+  if (of("reactivated").length || of("reinstated").length) {
+    rows.push({ key: "status", rule: "Status", now: [{ name: humanize(m.status) }], after: [{ name: "Active" }], direction: "gain" });
+  }
+  for (const e of of("administrator")) {
+    const yes = (v: string | null | undefined) => (v === "true" ? "Administrator" : "Not an administrator");
+    rows.push({
+      key: "administrator",
+      rule: "Administrator",
+      now: [{ name: yes(e.before ?? String(m.is_admin)) }],
+      after: [{ name: yes(e.after) }],
+      direction: e.after === "true" ? "gain" : "loss",
+    });
+  }
 
   for (const e of of("clearance")) {
     const before = e.before ?? m.clearance;

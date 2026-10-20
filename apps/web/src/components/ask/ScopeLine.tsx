@@ -123,7 +123,13 @@ function AccountOptions({ form, onChange }: { form: AskForm; onChange: (f: AskFo
       <ChoiceGroup legend="Search only" help={query.data.account_scope === "all" ? "Every account is in your scope." : "Only the accounts assigned to you are listed."}>
         <div className={styles.accountList}>
           {shown.map((a) => (
-            <Radio key={a.key} name="ask-account" label={a.name} checked={form.account?.key === a.key} onChange={() => onChange({ ...form, account: { key: a.key, name: a.name } })} />
+            <Radio
+              key={a.key}
+              name="ask-account"
+              label={a.archived ? `${a.name} (archived)` : a.name}
+              checked={form.account?.key === a.key}
+              onChange={() => onChange({ ...form, account: { key: a.key, name: a.name } })}
+            />
           ))}
           {shown.length === 0 && <p className={styles.help}>No account matches.</p>}
         </div>

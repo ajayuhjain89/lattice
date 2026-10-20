@@ -1,13 +1,50 @@
-/* AI providers (design-direction §6.9): a trust boundary first, configuration second. */
+/* AI providers (design-direction §6.9; P12.5): a trust boundary first, configuration second. */
 .note {
   max-width: var(--measure);
+  margin: 0;
   color: var(--text-secondary);
 }
 
 .secondary {
+  display: block;
   color: var(--text-secondary);
   font-size: var(--type-small-size);
+  font-weight: 400;
   line-height: var(--type-small-line);
+}
+
+.when {
+  font-family: var(--font-ledger);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* What can never be sent because the outbound policy refuses it: said in words, not colour. */
+.blocked {
+  display: block;
+  font-size: var(--type-small-size);
+  font-weight: 600;
+  line-height: var(--type-small-line);
+}
+
+/* The page's AI setup state: the API's verdict and message, one line. */
+.status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+}
+
+.statusMessage {
+  max-width: var(--measure);
+  margin: 0;
 }
 
 .stack {
@@ -94,8 +131,213 @@
   font-weight: 600;
 }
 
+/* Generation providers: one ruled record each -- seven facts kept apart, no single badge. */
+.records {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.record {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.recordHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+.recordTitle {
+  margin: 0;
+  font-family: var(--font-interface);
+  font-size: var(--type-body-size);
+  font-weight: 600;
+  line-height: var(--type-body-line);
+  overflow-wrap: anywhere;
+}
+
+.recordActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  margin: 0;
+  border-top: var(--border-width) solid var(--rule-ink);
+}
+
+.facts > div {
+  display: grid;
+  align-content: start;
+  gap: var(--space-0-5);
+  padding: var(--space-3) var(--space-4) var(--space-3) 0;
+  border-bottom: var(--border-width) solid var(--rule);
+  min-width: 0;
+}
+
+.facts dt {
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.facts dd {
+  display: grid;
+  gap: var(--space-0-5);
+  justify-items: start;
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* A test's result, under its record until the page is left. */
+.testResult {
+  max-width: var(--measure);
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--rule-ink);
+}
+
+/* The persistent result of a change (a toast would only echo it). */
+.applied {
+  display: grid;
+  grid-template-columns: var(--icon-size) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+  max-width: calc(var(--measure) + var(--space-16));
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border-left: 3px solid var(--signal-healthy-mark);
+  background: var(--surface-sheet);
+}
+
+.appliedIcon {
+  padding-top: var(--space-0-5);
+  color: var(--signal-healthy-text);
+}
+
+.appliedText {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  min-width: 0;
+}
+
+.appliedDetail {
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+/* Back from the identity provider: the page's one tinted region while it is shown. */
+.stepUp {
+  display: grid;
+  gap: var(--space-3);
+  max-width: calc(var(--measure) + var(--space-16));
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--rule-ink);
+  background: var(--surface-sheet);
+}
+
+.stepUp[data-outcome="granted"] {
+  border-left-color: var(--signal-healthy-mark);
+}
+
+.stepUp p {
+  margin: 0;
+}
+
+.stepUpTitle {
+  margin: 0;
+  font-family: var(--font-interface);
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+}
+
+.stepUpTitle:focus {
+  outline: none;
+}
+
+.testActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* --- dialogs ----------------------------------------------------------------------------- */
+.form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.reading {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.readingTitle {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-interface);
+  font-size: var(--type-small-size);
+  font-weight: 600;
+  line-height: var(--type-small-line);
+}
+
+.effects {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0 0 0 var(--space-4);
+}
+
+.reviewHeading {
+  margin: 0;
+  font-family: var(--font-interface);
+  font-size: var(--type-body-size);
+  font-weight: 600;
+  line-height: var(--type-body-line);
+}
+
+.reviewHeading:focus {
+  outline: none;
+}
+
+/* The dialog's actions stay at the bottom of its scrolling body. */
+.dialogActions {
+  position: sticky;
+  bottom: calc(-1 * var(--space-4));
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-bottom: calc(-1 * var(--space-4));
+  padding-block: var(--space-3) var(--space-4);
+  border-top: var(--border-width) solid var(--rule);
+  background: var(--surface-sheet);
+}
+
 @media (width < 768px) {
   .egress {
     padding: var(--space-3);
+  }
+
+  .recordActions {
+    margin-left: 0;
+  }
+}
+
+@media (forced-colors: active) {
+  .applied,
+  .testResult,
+  .stepUp {
+    border-left-color: CanvasText;
   }
 }

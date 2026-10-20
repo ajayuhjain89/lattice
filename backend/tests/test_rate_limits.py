@@ -28,7 +28,7 @@ from lattice.ratelimit import (
     window_start,
 )
 
-from .conftest import CSRF, AppFactory
+from .conftest import CSRF, AppFactory, FreshWindow
 from .factories import create_account, create_member, create_org, login
 
 ASK = {"question": "What does the onboarding checklist say?"}
@@ -106,7 +106,7 @@ async def test_parallel_requests_never_exceed_the_limit(
 ) -> None:
     org = await create_org(owner_db, "halden")
     member = uuid.uuid4()
-    limiter = RateLimiter(app_db)
+    limiter = RateLimiter(app_db, Clock(datetime(2026, 10, 2, 12, tzinfo=UTC)))
     limit = (Limit(Bucket.ACCESS_WRITE, 5, 3600),)
 
     async def attempt() -> bool:
@@ -126,7 +126,7 @@ async def test_organizations_and_subjects_are_counted_separately(
     a = await create_org(owner_db, "halden")
     b = await create_org(owner_db, "veridian")
     subject = uuid.uuid4()  # deliberately the same ID in both organizations
-    limiter = RateLimiter(app_db)
+    limiter = RateLimiter(app_db, Clock(datetime(2026, 10, 2, 12, tzinfo=UTC)))
     limit = (Limit(Bucket.SCIM, 1, 3600),)
     await limiter.hit(a, subject, limit)
     await limiter.hit(b, subject, limit)  # another organization's counter
@@ -148,12 +148,15 @@ async def _signed_in(client: httpx.AsyncClient, email: str) -> None:
     assert (await login(client, email)).status_code == 200
 
 
-async def test_asks_are_limited_per_member(owner_db: Database, app_client: AppFactory) -> None:
+async def test_asks_are_limited_per_member(
+    owner_db: Database, app_client: AppFactory, fresh_window: FreshWindow
+) -> None:
     org = await create_org(owner_db, "halden")
     await create_member(owner_db, org, "maya@halden.example")
     await create_member(owner_db, org, "omar@halden.example")
     async with app_client(rate_limit_ask_per_minute=2) as maya:
         await _signed_in(maya, "maya@halden.example")
+        await fresh_window()
         for _ in range(2):
             assert (await maya.post("/v1/ask", json=ASK, headers=CSRF)).status_code == 200
         refused = await maya.post("/v1/ask", json=ASK, headers=CSRF)
@@ -169,23 +172,27 @@ async def test_asks_are_limited_per_member(owner_db: Database, app_client: AppFa
             assert (await again.post("/v1/ask", json=ASK, headers=CSRF)).status_code == 200
 
 
-async def test_administrators_are_not_exempt(owner_db: Database, app_client: AppFactory) -> None:
+async def test_administrators_are_not_exempt(
+    owner_db: Database, app_client: AppFactory, fresh_window: FreshWindow
+) -> None:
     org = await create_org(owner_db, "halden")
     await create_member(owner_db, org, "lena@halden.example", is_admin=True)
     async with app_client(rate_limit_ask_per_minute=1) as client:
         await _signed_in(client, "lena@halden.example")
+        await fresh_window()
         assert (await client.post("/v1/ask", json=ASK, headers=CSRF)).status_code == 200
         assert (await client.post("/v1/ask", json=ASK, headers=CSRF)).status_code == 429
 
 
 async def test_a_refused_ask_says_nothing_about_the_named_account(
-    owner_db: Database, app_client: AppFactory
+    owner_db: Database, app_client: AppFactory, fresh_window: FreshWindow
 ) -> None:
     org = await create_org(owner_db, "halden")
     await create_member(owner_db, org, "maya@halden.example")
     await create_account(owner_db, org, "kestrel")  # exists, but not in Maya's scope
     async with app_client(rate_limit_ask_per_minute=1) as client:
         await _signed_in(client, "maya@halden.example")
+        await fresh_window()
         assert (await client.post("/v1/ask", json=ASK, headers=CSRF)).status_code == 200
         bodies = []
         for account in ("kestrel", "no-such-account"):
@@ -220,7 +227,7 @@ async def test_concurrent_asks_are_limited_per_member(
 
 
 async def test_access_writes_are_limited_after_the_capability_check(
-    owner_db: Database, app_client: AppFactory
+    owner_db: Database, app_client: AppFactory, fresh_window: FreshWindow
 ) -> None:
     org = await create_org(owner_db, "halden")
     await create_member(owner_db, org, "lena@halden.example", is_admin=True)
@@ -228,6 +235,7 @@ async def test_access_writes_are_limited_after_the_capability_check(
     change = {"clearance": "confidential"}
     async with app_client(rate_limit_access_writes_per_minute=1) as client:
         await _signed_in(client, "maya@halden.example")
+        await fresh_window()
         for _ in range(3):  # non-administrators: always the capability's 403
             response = await client.post(
                 f"/v1/admin/access/members/{uuid.uuid4()}/preview", json=change, headers=CSRF
@@ -252,11 +260,12 @@ async def test_access_writes_are_limited_after_the_capability_check(
 
 
 async def test_development_sign_in_is_limited_per_client_for_any_subject(
-    owner_db: Database, app_client: AppFactory
+    owner_db: Database, app_client: AppFactory, fresh_window: FreshWindow
 ) -> None:
     org = await create_org(owner_db, "halden")
     await create_member(owner_db, org, "maya@halden.example")
     async with app_client(rate_limit_sign_in_per_minute=2) as client:
+        await fresh_window()
         assert (await login(client, "maya@halden.example")).status_code == 200
         assert (await login(client, "nobody@halden.example")).status_code == 401
         for subject in ("maya@halden.example", "nobody@halden.example"):
@@ -266,12 +275,13 @@ async def test_development_sign_in_is_limited_per_client_for_any_subject(
 
 
 async def test_the_metric_carries_the_bucket_only(
-    owner_db: Database, app_client: AppFactory
+    owner_db: Database, app_client: AppFactory, fresh_window: FreshWindow
 ) -> None:
     org = await create_org(owner_db, "halden")
     member = await create_member(owner_db, org, "maya@halden.example")
     async with app_client(rate_limit_ask_per_minute=1) as client:
         await _signed_in(client, "maya@halden.example")
+        await fresh_window()
         await client.post("/v1/ask", json=ASK, headers=CSRF)
         assert (await client.post("/v1/ask", json=ASK, headers=CSRF)).status_code == 429
     exposition = generate_latest(metrics.REGISTRY).decode()

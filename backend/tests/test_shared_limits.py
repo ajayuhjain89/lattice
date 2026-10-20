@@ -25,7 +25,7 @@ from lattice.config import Environment
 from lattice.db.engine import Database, create_engine
 from lattice.ratelimit import AskSlots, Bucket, PreAuthLimiter, RateLimited, client_identity
 
-from .conftest import APP_URL, CSRF, WORKER_URL, make_settings
+from .conftest import APP_URL, CSRF, WORKER_URL, FreshWindow, make_settings
 from .factories import Member, create_member, create_org, login
 
 ASK = {"question": "What does the onboarding checklist say?"}
@@ -198,12 +198,13 @@ async def test_an_ask_in_flight_on_one_instance_counts_on_the_other(
 
 
 async def test_an_ask_refused_by_the_minute_limit_releases_its_slot(
-    app_db: Database, halden: tuple[uuid.UUID, Member]
+    app_db: Database, halden: tuple[uuid.UUID, Member], fresh_window: FreshWindow
 ) -> None:
     org, maya = halden
     async with _two_apps(rate_limit_ask_concurrent=1, rate_limit_ask_per_minute=1) as (a, b, _):
         for client in (a, b):
             assert (await login(client, maya.email)).status_code == 200
+        await fresh_window()
         assert (await a.post("/v1/ask", json=ASK, headers=CSRF)).status_code == 200
         refused = await b.post("/v1/ask", json=ASK, headers=CSRF)
         assert refused.status_code == 429
@@ -218,10 +219,11 @@ async def test_an_ask_refused_by_the_minute_limit_releases_its_slot(
 
 
 async def test_the_pre_auth_limit_is_shared_by_processes(
-    app_db: Database, second_app_db: Database
+    app_db: Database, second_app_db: Database, fresh_window: FreshWindow
 ) -> None:
     one = PreAuthLimiter(app_db, KEY, 3)
     two = PreAuthLimiter(second_app_db, KEY, 3)
+    await fresh_window()
     await one.hit("203.0.113.7")
     await two.hit("203.0.113.7")
     await one.check("203.0.113.7")  # checking counts nothing
@@ -237,7 +239,7 @@ async def test_the_pre_auth_limit_is_shared_by_processes(
 
 
 async def test_parallel_pre_auth_hits_never_exceed_the_limit(
-    app_db: Database, second_app_db: Database
+    app_db: Database, second_app_db: Database, fresh_window: FreshWindow
 ) -> None:
     limiters = [PreAuthLimiter(db, KEY, 4) for db in (app_db, second_app_db)]
 
@@ -248,6 +250,7 @@ async def test_parallel_pre_auth_hits_never_exceed_the_limit(
             return False
         return True
 
+    await fresh_window()
     accepted = await asyncio.gather(*(one(i) for i in range(12)))
     assert sum(accepted) == 4
 
@@ -322,10 +325,13 @@ async def test_the_function_refuses_malformed_input(app_db: Database, args: str)
             await s.execute(text(f"SELECT lattice_pre_auth_hit({args})"))
 
 
-async def test_sign_in_on_either_instance_counts_once(owner_db: Database) -> None:
+async def test_sign_in_on_either_instance_counts_once(
+    owner_db: Database, fresh_window: FreshWindow
+) -> None:
     org = await create_org(owner_db, "halden")
     await create_member(owner_db, org, "maya@halden.example")
     async with _two_apps(rate_limit_sign_in_per_minute=3) as (a, b, _):
+        await fresh_window()
         assert (await login(a, "maya@halden.example")).status_code == 200
         assert (await login(b, "nobody@halden.example")).status_code == 401
         assert (await login(a, "maya@halden.example")).status_code == 200
@@ -335,11 +341,14 @@ async def test_sign_in_on_either_instance_counts_once(owner_db: Database) -> Non
             assert response.json()["error"]["code"] == "rate_limited"
 
 
-async def test_a_spoofed_forwarded_header_does_not_change_the_client(owner_db: Database) -> None:
+async def test_a_spoofed_forwarded_header_does_not_change_the_client(
+    owner_db: Database, fresh_window: FreshWindow
+) -> None:
     """No trusted proxy is configured: X-Forwarded-For is ignored, the peer counts."""
     org = await create_org(owner_db, "halden")
     await create_member(owner_db, org, "maya@halden.example")
     async with _two_apps(rate_limit_sign_in_per_minute=2) as (a, b, _):
+        await fresh_window()
         for i, client in enumerate((a, b)):
             client.headers["X-Forwarded-For"] = f"192.0.2.{i}"
             assert (await login(client, "maya@halden.example")).status_code == 200

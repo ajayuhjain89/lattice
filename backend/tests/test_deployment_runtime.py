@@ -28,7 +28,7 @@ from lattice.db.engine import Database, create_engine
 from lattice.jobs.worker import Heartbeat, Worker
 from lattice.providers.generation import FakeGenerationProvider, GenerationRequest
 
-from .conftest import APP_URL, CSRF, WORKER_URL, make_settings
+from .conftest import APP_URL, CSRF, WORKER_URL, FreshWindow, make_settings
 
 LIMIT = 2
 
@@ -56,23 +56,30 @@ async def _sign_in(client: httpx.AsyncClient, forwarded_for: str | None) -> int:
 # --- trusted forwarding hop ------------------------------------------------------------------
 
 
-async def test_without_trusted_proxies_a_spoofed_forwarded_for_is_ignored() -> None:
+async def test_without_trusted_proxies_a_spoofed_forwarded_for_is_ignored(
+    fresh_window: FreshWindow,
+) -> None:
     # A client talking to the API directly varies X-Forwarded-For on every request; the
     # limit still counts the TCP peer, so the third request is refused.
     async with _app("198.51.100.7") as client:
+        await fresh_window()
         statuses = [await _sign_in(client, f"203.0.113.{n}") for n in range(LIMIT + 1)]
     assert statuses[:LIMIT] == [401] * LIMIT  # counted (unknown subject), not refused
     assert statuses[LIMIT] == 429
 
 
-async def test_an_untrusted_peer_cannot_use_forwarded_for_even_when_proxies_are_set() -> None:
+async def test_an_untrusted_peer_cannot_use_forwarded_for_even_when_proxies_are_set(
+    fresh_window: FreshWindow,
+) -> None:
     async with _app("198.51.100.7", trusted_proxies="10.20.0.10") as client:
+        await fresh_window()
         statuses = [await _sign_in(client, f"203.0.113.{n}") for n in range(LIMIT + 1)]
     assert statuses[LIMIT] == 429
 
 
-async def test_the_trusted_ingress_reports_each_client() -> None:
+async def test_the_trusted_ingress_reports_each_client(fresh_window: FreshWindow) -> None:
     async with _app("10.20.0.10", trusted_proxies="10.20.0.0/24") as client:
+        await fresh_window()
         # Distinct clients behind the ingress: distinct keys, nobody refused.
         assert [await _sign_in(client, f"203.0.113.{n}") for n in range(LIMIT + 1)] == [401] * (
             LIMIT + 1

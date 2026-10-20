@@ -18,10 +18,14 @@ Rules:
   An unknown key fails the record (``access_unmappable:department``) -- never dropped,
   because dropping a restriction widens access.
 * account: a document names an account key, which must exist; a ticket names the
-  ticketing organization, mapped by ``account_refs``; a chat record names its channel,
-  mapped by ``channels``. On an account-scoped source an unmapped reference fails the
-  record (``access_unmappable:account``); a reference that claims an account that does
-  not exist always fails it. Never "no account", which would widen access.
+  ticketing organization and a chat record its channel, each mapped exactly by the
+  source's ``account_external_refs`` (P12.3; ``lattice.accounts.refs``). A missing
+  mapping never widens access (``access_unmappable:account``, on every source):
+  a document key that names no account; a ticket's organization (always an account
+  reference) with no mapping; a reference an administrator unmapped (*unresolved*, 0019);
+  and, on an account-scoped source, a record with no account at all. Only a chat channel
+  that was never mapped is not an account reference (``#general``): its records carry no
+  account. A mapping to an *archived* account keeps resolving.
 * source grants: department and admin-group grants by key (unknown ->
   ``access_unmappable:department`` / ``:group``); groups the connector declared
   (private channels) by external reference (undeclared -> ``access_unmappable:group``).
@@ -49,6 +53,9 @@ class OrgDirectory:
     admin_groups: dict[str, uuid.UUID]
     # External reference (e.g. a private channel ID) -> the source-synced group.
     source_groups: dict[str, uuid.UUID] = field(default_factory=dict)
+    # The synced source's account mappings: external reference -> account, or None when
+    # an administrator unmapped it (unresolved: its records fail closed).
+    account_refs: dict[str, uuid.UUID | None] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -103,9 +110,7 @@ def map_access(
         return AccessFailure("access_unmappable:department")
     department_ids = tuple(sorted({directory.departments[k] for k in department_keys}))
 
-    account = _account(
-        record, config, directory, channel_account=channel.account if channel else None
-    )
+    account = _account(record, config, directory)
     if isinstance(account, AccessFailure):
         return account
 
@@ -133,28 +138,38 @@ def map_access(
 
 
 def _account(
-    record: SourceRecord,
-    config: SourceConfig,
-    directory: OrgDirectory,
-    *,
-    channel_account: str | None,
+    record: SourceRecord, config: SourceConfig, directory: OrgDirectory
 ) -> uuid.UUID | AccessFailure | None:
     ref = record.account_ref
     if config.connector_type == "document_repository":
-        key = ref
+        if ref is None:
+            account_id = None
+        elif ref in directory.accounts:
+            return directory.accounts[ref]
+        else:
+            return AccessFailure("access_unmappable:account")
+    elif ref is None:
+        account_id = None
+    elif ref in directory.account_refs:
+        account_id = directory.account_refs[ref]
+        if account_id is None:  # unresolved: unmapped by an administrator
+            return unmapped_account(ref)
+        return account_id
     elif config.connector_type == "ticketing":
-        key = config.account_refs.get(int(ref)) if ref and ref.isdigit() else None
+        # A ticket's organization always names a customer account.
+        return unmapped_account(ref)
     else:
-        key = channel_account
-    if key is None:
-        if config.account_scoped:
-            params: dict[str, str | int] = {}
-            if ref and config.connector_type != "document_repository":
-                # The unmapped *external* reference: mapping it is the admin's task
-                # (security-model §10). Never the record's title or content.
-                params["external_account_ref"] = ref
-            return AccessFailure("access_unmappable:account", params)
-        return None
-    if key not in directory.accounts:
-        return AccessFailure("access_unmappable:account")
-    return directory.accounts[key]
+        account_id = None  # a channel never mapped is not an account reference
+    if account_id is None and config.account_scoped:
+        return unmapped_account(ref)
+    return account_id
+
+
+def unmapped_account(external_ref: str | None) -> AccessFailure:
+    """``access_unmappable:account``, carrying the unmapped *external* reference (mapping
+    it is the administrator's task; security-model §10) -- never the record's title or
+    content."""
+    params: dict[str, str | int] = {}
+    if external_ref:
+        params["external_account_ref"] = external_ref
+    return AccessFailure("access_unmappable:account", params)

@@ -14,10 +14,15 @@ import os
 import sys
 import uuid
 
-from lattice.config import load_migration_settings
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from lattice.cli_secrets import operator_keyring, read_secret_stdin
+from lattice.config import ConfigurationError, load_migration_settings
 from lattice.db.engine import Database, create_engine
 from lattice.identity import admin
 from lattice.ingestion.store import organization_id
+from lattice.orgs.outbound_targets import access_class, policy_for
+from lattice.outbound import OutboundRefused, parse_target
 
 COMMANDS = ("sso", "scim", "member", "session")
 
@@ -43,6 +48,26 @@ def _id(value: str | None) -> uuid.UUID | None:
 
 def _origin() -> str:
     return os.environ.get("LATTICE_PUBLIC_URL", "http://127.0.0.1:3000").rstrip("/")
+
+
+async def _print_outbound(s: AsyncSession, org_id: uuid.UUID, org: str, issuer: str) -> None:
+    """How the outbound policy classes the issuer (P12.4, C4): sign-in reaches a private
+    or non-standard address only as a target registered for the organization."""
+    access = access_class(await policy_for(s, org_id, "oidc"), issuer)
+    if access == "not_permitted":
+        try:
+            origin = parse_target(issuer).origin
+        except OutboundRefused:
+            origin = issuer
+        print(
+            "  outbound policy: NOT PERMITTED -- sign-in is refused until it is registered: "
+            f"lattice outbound allow --org {org} --url {origin} --purpose oidc --reason ..."
+        )
+    else:
+        shown = {"public": "public (checked at each connection)"}.get(
+            access, "operator-approved private target"
+        )
+        print(f"  outbound policy: {shown}")
 
 
 def _print_connection(org: str, found: admin.ConnectionView) -> None:
@@ -76,6 +101,7 @@ async def run(args: argparse.Namespace) -> int:
                     print(f"{args.org}: no active OIDC connection")
                 else:
                     _print_connection(args.org, found)
+                    await _print_outbound(s, org, args.org, found.issuer)
             elif args.command == "sso" and args.sso_command == "add":
                 found = await admin.add_connection(
                     s,
@@ -89,6 +115,7 @@ async def run(args: argparse.Namespace) -> int:
                     new_identity_namespace=args.new_identity_namespace,
                 )
                 _print_connection(args.org, found)
+                await _print_outbound(s, org, args.org, found.issuer)
             elif args.command == "sso" and args.sso_command == "list":
                 for c in await admin.connections(s, org):
                     print(f"{c.id}  {c.status:8}  {c.issuer}  client {c.client_id}")
@@ -107,6 +134,7 @@ async def run(args: argparse.Namespace) -> int:
                 _print_connection(args.org, found)
             elif args.command == "sso":
                 secret: object = admin._UNSET
+                value = read_secret_stdin() if args.client_secret_stdin else None
                 if args.no_client_secret:
                     secret = None
                 elif args.client_secret_ref is not None:
@@ -120,10 +148,20 @@ async def run(args: argparse.Namespace) -> int:
                     issuer=args.issuer,
                     subject_claim=args.subject_claim,
                     subjects_unchanged=args.subjects_unchanged,
+                    secret_value=value,
+                    keyring=operator_keyring() if value is not None else None,
+                    **(
+                        {"step_up_acr": None}
+                        if args.no_step_up_acr
+                        else {"step_up_acr": args.step_up_acr}
+                        if args.step_up_acr
+                        else {}
+                    ),
                     reason=reason,
                     actor=actor,
                 )
                 _print_connection(args.org, updated)
+                await _print_outbound(s, org, args.org, updated.issuer)
                 if revoked:
                     print(f"  {revoked} session(s) of this connection revoked")
             elif args.command == "scim" and args.scim_action == "create":
@@ -201,7 +239,11 @@ async def run(args: argparse.Namespace) -> int:
                 )
     except admin.OperatorRejected as exc:
         return _fail(str(exc))
-    except ValueError:
+    except ConfigurationError as exc:
+        return _fail(str(exc))
+    except ValueError as exc:
+        if getattr(args, "client_secret_stdin", False):
+            return _fail(str(exc))  # the secret is empty or too long (never its value)
         return _fail("--id / --connection-id must be an ID")
     finally:
         await db.dispose()
@@ -241,8 +283,26 @@ def add_parsers(commands: "argparse._SubParsersAction[argparse.ArgumentParser]")
     secret = update.add_mutually_exclusive_group()
     secret.add_argument("--client-secret-ref", help="env:LATTICE_OIDC_SECRET_<NAME> (rotation)")
     secret.add_argument("--no-client-secret", action="store_true", help="a public PKCE client")
+    secret.add_argument(
+        "--client-secret-stdin",
+        action="store_true",
+        help="read the new client secret from stdin and store it encrypted (never echoed)",
+    )
     update.add_argument("--issuer")
     update.add_argument("--subject-claim")
+    acr = update.add_mutually_exclusive_group()
+    acr.add_argument(
+        "--step-up-acr",
+        action="append",
+        metavar="ACR",
+        help="an acr value an administrator's egress step-up must assert (repeatable; "
+        "D-34): only what your identity provider really asserts for a strong method",
+    )
+    acr.add_argument(
+        "--no-step-up-acr",
+        action="store_true",
+        help="no assurance requirement (a fresh sign-in is still required)",
+    )
     update.add_argument(
         "--subjects-unchanged",
         action="store_true",

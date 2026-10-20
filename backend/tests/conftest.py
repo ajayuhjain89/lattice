@@ -15,7 +15,7 @@ which also proves the migration chain applies to a clean database.
 import asyncio
 import os
 import socket
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -119,6 +119,28 @@ async def clean_tables(owner_db: Database) -> None:
 
 
 AppFactory = Callable[..., AbstractAsyncContextManager[httpx.AsyncClient]]
+FreshWindow = Callable[[], Awaitable[None]]
+WINDOW_MARGIN_SECONDS = 10
+
+
+@pytest.fixture
+def fresh_window(owner_db: Database) -> FreshWindow:
+    """The per-minute limits are fixed windows that reset on the minute (the pre-auth one
+    by the database clock in ``lattice_pre_auth_hit``, the others by the API clock). A
+    test counting several requests into one window awaits this first, so it never
+    straddles a reset: if less than ``WINDOW_MARGIN_SECONDS`` remain of this minute, it
+    waits for the next to begin. The extra second covers a small API/database clock skew.
+    """
+
+    async def wait() -> None:
+        async with owner_db.unscoped_transaction() as s:
+            into: float = (
+                await s.execute(text("SELECT (extract(epoch FROM clock_timestamp()) % 60)::float8"))
+            ).scalar_one()
+        if 60 - into < WINDOW_MARGIN_SECONDS:
+            await asyncio.sleep(60 - into + 1)
+
+    return wait
 
 
 def free_metrics_address() -> str:

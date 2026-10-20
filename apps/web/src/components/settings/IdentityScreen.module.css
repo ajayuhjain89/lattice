@@ -1,0 +1,294 @@
+/* Identity (phase-12-plan §7, §10): the connection and the tokens as ruled ledgers. */
+.note {
+  max-width: var(--measure);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.secondary {
+  display: block;
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  font-weight: 400;
+  line-height: var(--type-small-line);
+}
+
+.ledger,
+.when {
+  font-family: var(--font-ledger);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* The section's state: the API's verdict and message, one line. */
+.status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+}
+
+.statusMessage {
+  max-width: var(--measure);
+  margin: 0;
+}
+
+.empty {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+/* Facts on ruled lines, wrapping where narrow; long values take a full line. */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  margin: 0;
+  border-top: var(--border-width) solid var(--rule-ink);
+}
+
+.facts > div {
+  display: grid;
+  align-content: start;
+  gap: var(--space-0-5);
+  padding: var(--space-3) var(--space-4) var(--space-3) 0;
+  border-bottom: var(--border-width) solid var(--rule);
+  min-width: 0;
+}
+
+.facts > .wide {
+  grid-column: 1 / -1;
+}
+
+.facts dt {
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.facts dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.copyable {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  max-width: 100%;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.rowActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.checkResult {
+  max-width: var(--measure);
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--rule-ink);
+}
+
+/* A test sign-in's result: the page's one tinted region while it is shown. */
+.test {
+  display: grid;
+  gap: var(--space-2);
+  max-width: calc(var(--measure) + var(--space-16));
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--rule-ink);
+  background: var(--surface-sheet);
+}
+
+.test[data-outcome="matched"] {
+  border-left-color: var(--signal-healthy-mark);
+}
+
+.testTitle {
+  margin: 0;
+  font-family: var(--font-interface);
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+}
+
+.testMessage,
+.testFacts {
+  margin: 0;
+}
+
+.testActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The persistent result of a change (a toast would only echo it). */
+.applied {
+  display: grid;
+  grid-template-columns: var(--icon-size) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+  max-width: calc(var(--measure) + var(--space-16));
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border-left: 3px solid var(--signal-healthy-mark);
+  background: var(--surface-sheet);
+}
+
+.appliedIcon {
+  padding-top: var(--space-0-5);
+  color: var(--signal-healthy-text);
+}
+
+.appliedText {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  min-width: 0;
+}
+
+.appliedDetail {
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.activity {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.subTitle {
+  margin: 0;
+  font-family: var(--font-interface);
+  font-size: var(--type-body-size);
+  font-weight: 600;
+  line-height: var(--type-body-line);
+}
+
+.ledgerList {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--border-width) solid var(--rule-ink);
+}
+
+.ledgerList li {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr);
+  gap: var(--space-1) var(--space-4);
+  padding: var(--space-2) 0;
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+/* --- dialogs ----------------------------------------------------------------------------- */
+.form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.effects {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0 0 0 var(--space-4);
+}
+
+.reviewHeading {
+  margin: 0;
+  font-family: var(--font-interface);
+  font-size: var(--type-body-size);
+  font-weight: 600;
+  line-height: var(--type-body-line);
+}
+
+.reviewHeading:focus {
+  outline: none;
+}
+
+.proof {
+  max-width: var(--measure);
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--signal-healthy-mark);
+}
+
+.reveal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-1) var(--space-2);
+}
+
+.revealLabel {
+  grid-column: 1 / -1;
+  font-weight: 600;
+}
+
+.revealValue {
+  min-width: 0;
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  border: var(--border-width) solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sheet);
+  color: var(--text-primary);
+  font-family: var(--font-ledger);
+  font-size: var(--type-meta-size);
+}
+
+/* The dialog's actions stay at the bottom of its scrolling body. */
+.dialogActions {
+  position: sticky;
+  bottom: calc(-1 * var(--space-4));
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-bottom: calc(-1 * var(--space-4));
+  padding-block: var(--space-3) var(--space-4);
+  border-top: var(--border-width) solid var(--rule);
+  background: var(--surface-sheet);
+}
+
+@media (width < 768px) {
+  .ledgerList li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reveal {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (forced-colors: active) {
+  .applied,
+  .test,
+  .proof,
+  .checkResult {
+    border-left-color: CanvasText;
+  }
+}
+
+.revealValue:focus-visible {
+  border-color: var(--rule-ink);
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}

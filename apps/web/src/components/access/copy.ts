@@ -4,7 +4,7 @@
  * are added here: private channels the administrator isn't in and documents they can't
  * read are acknowledged only as such -- never named, counted or identified.
  */
-import type { AccessEffect, AuditEvent, GroupAccess, MemberAccess } from "@/api/types";
+import type { AccessEffect, AuditEvent, GroupAccess, LifecycleBlock, MemberAccess } from "@/api/types";
 import { connectorLabel, humanize, levelLabel } from "@/lib/format";
 
 /** A sentence as parts; `strong` parts are names the UI emphasises. */
@@ -87,6 +87,12 @@ export function previewSentence(effect: AccessEffect, name: string): string {
       return `${name} will immediately lose access to everything in Lattice.`;
     case "reactivated":
       return `${name} will regain the access described on this page.`;
+    case "reinstated":
+      return `${name} will be active again on the same sign-in identity, starting from least access. Nothing they had before removal is restored.`;
+    case "administrator":
+      return effect.after === "true"
+        ? `${name} will be able to manage members, access and the organization's setup. What they can read doesn't change.`
+        : `${name} will no longer be an administrator. What they can read doesn't change.`;
     case "clearance":
       return effect.after === "confidential"
         ? `${name} will be able to read Confidential content that the other rules allow.`
@@ -119,6 +125,12 @@ export function auditPhrase(effect: AccessEffect): string {
   switch (effect.kind) {
     case "provisioned":
       return "Added to Lattice";
+    case "created":
+      return "Added by an administrator, with least access";
+    case "removed":
+      return "Removed";
+    case "reinstated":
+      return "Reinstated with least access";
     case "suspended":
       return "Suspended";
     case "reactivated":
@@ -168,6 +180,12 @@ const ACTIONS: Record<string, string> = {
   "organization.reactivated": "Organization reactivated",
   "scim.token_created": "Provisioning token created",
   "scim.token_revoked": "Provisioning token revoked",
+  "organization.updated": "Organization updated",
+  "account.created": "Account created",
+  "account.updated": "Account updated",
+  "account.archived": "Account archived",
+  "account.reactivated": "Account reactivated",
+  "account.mapping_changed": "Account reference mapping changed",
 };
 
 export function actionLabel(action: string): string {
@@ -178,6 +196,8 @@ const OPERATORS: Record<string, string> = {
   seed: "Organization manifest (seed)",
   "admin-grants": "admin-grants.yaml",
   cli: "Operator command",
+  sync: "Operator sources file (lattice sync)",
+  migration: "Database migration",
 };
 
 export function actorLabel(event: AuditEvent): string {
@@ -220,6 +240,24 @@ const GRANTING = new Set([
 /** The reasons that decide: for a readable document every reason; otherwise only those that block. */
 export function decidingReasons(reasons: readonly string[], readable: boolean): string[] {
   return readable ? [...reasons] : reasons.filter((r) => !GRANTING.has(r));
+}
+
+/** Why a lifecycle action the backend decided is unavailable, in a sentence. */
+export function lifecycleBlockSentence(block: LifecycleBlock, name: string): string {
+  switch (block) {
+    case "own_membership":
+      return "This is you. Another administrator must change your access or administrator capability.";
+    case "managed_by_identity_provider":
+      return `${name}'s name, e-mail and whether they're active come from your identity provider. Suspend or reactivate them there; access is managed here.`;
+    case "last_administrator":
+      return `${name} is the only active administrator. Make another member an administrator first.`;
+    case "identity_not_current":
+      return `${name} can't be reinstated here: their sign-in identity belongs to an identity provider connection that's no longer active. Your Lattice operator can help.`;
+    case "user_inactive":
+      return `${name} can't be reinstated here: their user account is disabled. Your Lattice operator can help.`;
+    case "email_taken":
+      return `${name} can't be reinstated: another member now uses their e-mail address.`;
+  }
 }
 
 export function reasonPhrase(code: string, name: string): string {

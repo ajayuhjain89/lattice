@@ -1,0 +1,5 @@
+[
+  {"id": "U0WADAQ001", "team_id": "T0WRENFLD1", "name": "ada.quist", "real_name": "Ada Quist", "deleted": false, "is_bot": false, "profile": {"real_name": "Ada Quist", "display_name": "ada", "email": "ada.quist@wrenfield.example", "title": "Operations Lead"}},
+  {"id": "U0WRILEY01", "team_id": "T0WRENFLD1", "name": "riley.moss", "real_name": "Riley Moss", "deleted": false, "is_bot": false, "profile": {"real_name": "Riley Moss", "display_name": "riley", "email": "riley.moss@wrenfield.example", "title": "Account Engineer"}},
+  {"id": "U0WSAMOK01", "team_id": "T0WRENFLD1", "name": "sam.okoro", "real_name": "Sam Okoro", "deleted": false, "is_bot": false, "profile": {"real_name": "Sam Okoro", "display_name": "sam", "email": "sam.okoro@wrenfield.example", "title": "Support Engineer"}}
+]

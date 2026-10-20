@@ -47,12 +47,19 @@ class ScimError(Exception):
         detail: str,
         scim_type: str | None = None,
         headers: Mapping[str, str] | None = None,
+        *,
+        refused: str | None = None,
+        member: str | None = None,
     ) -> None:
         super().__init__(detail)
         self.status = status
         self.detail = detail
         self.scim_type = scim_type
         self.headers = dict(headers or {})
+        # A refusal an administrator can act on (P12.4, ``scim.request_refused``): its
+        # fixed reason code and the member it collided with, if any. Never a value.
+        self.refused = refused
+        self.member = member
 
     def body(self) -> dict[str, Any]:
         found: dict[str, Any] = {
@@ -67,6 +74,12 @@ class ScimError(Exception):
 
 def invalid(detail: str, scim_type: str = "invalidValue") -> ScimError:
     return ScimError(400, detail, scim_type)
+
+
+def _immutable() -> ScimError:
+    """A provider trying to move a person to another identifier: refused and recorded
+    (it would be a changed-subject migration, which Lattice does not do)."""
+    return ScimError(400, "externalId cannot be changed.", "mutability", refused="immutable_id")
 
 
 NOT_FOUND = "The resource was not found."
@@ -167,7 +180,7 @@ def parse_user(resource: Any, *, current: UserState | None = None) -> UserState:
     external_id = _text(resource.get("externalId"), "externalId", required=current is None)
     if current is not None:
         if external_id is not None and external_id != current.external_id:
-            raise invalid("externalId cannot be changed.", "mutability")
+            raise _immutable()
         external_id = current.external_id
     assert external_id is not None  # noqa: S101 - required above when creating
     user_name = _text(resource.get("userName"), "userName", required=True)
@@ -215,7 +228,7 @@ def _apply_attribute(state: UserState, path: str, value: Any, op: str) -> UserSt
         return replace(state, user_name=user_name)
     if lowered == "externalid":
         if _text(value, "externalId", required=True) != state.external_id:
-            raise invalid("externalId cannot be changed.", "mutability")
+            raise _immutable()
         return state
     if lowered == "displayname":
         display = _text(value, "displayName", limit=200)

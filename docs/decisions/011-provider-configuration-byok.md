@@ -4,7 +4,10 @@ Status: Accepted (Phase 5 closure, 2026-09-28; D-15 and D-16 resolved in the fin
 Phase 5 closure, 2026-09-29). The policy core, including the D-15 trust classes, is
 implemented and tested. Organization-scoped credential storage is scheduled for the
 Phase 6 backend and the administrative UX for Phase 7 (D-16, below). Neither is built
-in Phase 5.
+in Phase 5. *Since then:* configuration and credential references in Phase 6, the
+read-only page in Phase 7, encrypted-at-rest custody amended 2026-10-06 (D-29), and the
+administrator's providers, BYOK and egress with the D-34 step-up built in Phase 12 (P12.5;
+reviewed in P12.8).
 
 ## Context
 
@@ -215,3 +218,60 @@ adapter (Phase 6). The architecture above is what they must implement.
   never on which keys happen to be present.
 - Phase 6 inherits one decision function for generation instead of inventing a second
   policy.
+
+## Amendment (2026-10-06, Phase 12 P12.0): custody of administrator-entered secrets (D-29)
+
+*Historical:* Phase 6 built the reference model (`env:`/`memory:` references; the database
+holds only a reference). Phase 7 shipped the provider page **read-only** by the product
+owner's instruction, so the "Phase 7 frontend" UX described above was not built.
+*Current:* unchanged — values come only from the deployment environment.
+*Phase 12 target (decided, not implemented):* recoverable credentials an administrator
+enters (provider API keys, OIDC client secrets) may be stored **encrypted at rest** in
+PostgreSQL — AES-256-GCM from `cryptography`, associated data binding each ciphertext to
+its organization, record, credential type and key ID, master keys only in the
+deployment's environment — as another `SecretStore` backend (`vault:<id>`); `env:`
+references stay supported. Verification-only secrets (SCIM tokens) stay hashed. The
+sentence "the database holds only a reference" becomes "the database never holds a
+credential in plaintext". Contract: phase-12-plan C3; mutation path: ADR-017. The admin
+UX this ADR assigned to Phase 7 is built in Phase 12 (P12.5).
+
+### Implemented in P12.1 (2026-10-08)
+
+The `vault:<id>` backend exists: `encrypted_secrets` (migration 0016), `lattice.vault`
+(keyring from `LATTICE_SECRET_KEYS` / `LATTICE_SECRET_ACTIVE_KEY`, AES-256-GCM sealing with
+the associated data above, `secrets rekey`). The `SecretStore` protocol gained an optional
+`sealed` argument: the caller loads the row with the binding *it* expects (its
+organization, its own record's ID, the credential kind it needs) and the store opens it
+only with keys; a store without keys refuses `vault:` (`scheme_not_allowed`). Writers in
+P12.1 are operator commands (`provider credential set --value-stdin`, `org create
+--client-secret-stdin`, `sso update --client-secret-stdin`); the administrator UX stays
+P12.5. Process access as verified on the call graph: the API opens OIDC client secrets
+(token exchange) and generation-provider keys (after the invocation rule); the worker
+presents no organization credential (its embedding provider is a deployment setting), so
+it holds no keys and has no privilege on the rows. **The database never holds a credential
+in plaintext** — and never a master key.
+
+### Implemented in P12.5 (2026-10-17)
+
+The administrator UX this ADR assigned to Phase 7 now exists (`/settings/providers`,
+`/v1/admin/providers/*`; phase-12-plan Part III P12.5). What changed in this ADR's model:
+
+- **Precedence of credentials** stays one rule: *the organization's own active credential
+  for the provider, or nothing*. A credential row is per organization (forced RLS), so no
+  organization's key — product-entered (`vault:`) or operator-recorded (`env:`) — is ever
+  another's fallback, and a deployment-wide environment key implies nothing for any
+  organization until an operator records a reference to it *for that organization*.
+  Administrators can enter keys only as `vault:` ciphertext (never an `env:` reference);
+  they can replace or revoke an operator's key for their organization.
+- **Generation needs an explicit approval** for every trust class (`approved_at`); the
+  operator's `provider configure` records it for `internal`, as configuring always meant;
+  records created in the product start unapproved and disabled.
+- **The invocation rule runs again immediately before every model call** (a fresh snapshot;
+  `policy_changed` / `outbound_blocked` / `credential_revoked`; the organization-controlled
+  endpoint's registration is read again too), and provider calls connect only through the
+  organization's outbound policy (`outbound_blocked`).
+- **Embedding** stays a deployment setting (`LATTICE_QUERY_EMBEDDING` /
+  `LATTICE_SYNC_EMBEDDING`, its key in the API/worker environment); administrators change
+  only the organization's approval of the recorded embedding provider. Per-organization
+  embedding credentials would need the worker to open organization secrets (C3.4) and a
+  re-index on change — not built (Phase 13/14 dependency).

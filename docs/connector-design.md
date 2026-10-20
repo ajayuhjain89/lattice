@@ -92,6 +92,17 @@ All three read from local directories in the slice, so the synthetic dataset can
 versioned in the repo and ingestion is fully reproducible. Their formats mirror real
 exports so that switching to API-backed readers later changes only the reader.
 
+**What they are (stated for customers, D-33, 2026-10-06).** All three are
+**export-based sources**, not live integrations: *Documents (Markdown export)* is
+Lattice's Markdown interchange format; *Tickets (JSON Lines export)* is Lattice's ticket
+interchange format shaped like a Zendesk export — not a Zendesk integration; *Slack
+workspace export* is Slack's own export format — not a live Slack integration. Phase 12
+adds no live connector (GitHub Issues is the first future candidate). Exports reach the
+connectors two ways, both read by the same unchanged connectors: **uploaded** by an
+organization's administrator on the source's record (P12.6, §3.4: an *organization-managed*
+source, fed by the import store) or read from a server folder an operator's `lattice sync`
+recorded (an *operator-managed* source, configured by the operator's `sources.yaml`).
+
 ### 3.1 `document_repository` — Markdown with front matter
 
 Mirrors a Drive/Notion export plus a sharing manifest.
@@ -138,10 +149,15 @@ also carry Zendesk's `type`, `via` and `group`; `requester`/`assignee`/`author` 
 `{name, email}`; `author_role` is `end-user` or `agent`.
 Parts: a header part (subject, status, priority, requester) + one part per comment.
 Internal (non-public) comments are included; they are internal-level content.
-`account_ref` = ticketing organization ID → mapped by the source configuration's
-`account_refs` (as built; the draft's `account_external_refs` table is not needed until
-accounts are managed in Lattice). Source is `account_scoped = true`: unmapped tickets
-are not indexed (`access_unmappable:account`, e.g. HAL-4951 in the dataset).
+`account_ref` = ticketing organization ID (canonical decimal text) → mapped **exactly** by
+the source's `account_external_refs` rows of kind `ticketing_organization` (P12.3; the
+operator's `sources.yaml` `account_refs` are written there by `lattice sync`, audited as
+`operator:sync`; administrators map, remap and unmap in Access → Accounts). A ticket's
+organization always names a customer account, so a ticket whose organization has no
+mapping — never mapped, or unmapped by an administrator — is not indexed on any source
+(`access_unmappable:account`, e.g. HAL-4951 in the dataset); an indexed one is
+quarantined. A missing mapping never widens access. The dataset's sources are also
+`account_scoped = true`, which additionally refuses tickets naming no organization.
 `display_ref` = the ticket ID. People appear by name only; emails are never copied into
 content. A ticket ID that appears twice is rejected in every occurrence.
 Capabilities: snapshot ✔, incremental ✗ (as built), acl_export ✗ (source defaults
@@ -155,9 +171,14 @@ The real Slack export layout: `channels.json`, `groups.json` (private channels, 
 - Threads (messages with replies) → one `chat_thread` record per thread root.
 - Non-threaded messages → one `chat_channel_day` record per channel per day.
 - `external_id`: `<channel_id>:<thread_ts>` or `<channel_id>:day:<date>`.
-- Account mapping by channel ID via the source configuration
-  (`channels: {C0ACCTKES01: {account: kestrel-bank}}`); channels not mapped have no
-  account. (As built: no naming rule — an explicit mapping only.)
+- Account mapping by channel ID through the source's `account_external_refs` rows of kind
+  `chat_channel` (P12.3; a `sources.yaml` `channels: {C0ACCTKES01: {account:
+  kestrel-bank}}` entry is written there by `lattice sync`); a channel that was never
+  mapped is not an account reference and its records have no account. A channel an
+  administrator *unmapped* stays known as unresolved (migration 0019): its records are
+  quarantined until it is mapped again — never indexed without the account. No naming
+  rule — an explicit mapping only, by ID. Channel *names* never appear in the mapping
+  workflow (D-18).
 - Public channels: source default sensitivity (internal).
 - Private channels: `ExternalGroup` per private channel; records get a `group` grant
   and `access_mode = grants_only` so **only channel members** can read them —
@@ -169,8 +190,9 @@ The real Slack export layout: `channels.json`, `groups.json` (private channels, 
 - As built (fixtures): folders are named by channel name; threads use `thread_ts`,
   `reply_count`, `reply_users` and `replies`; replies are stored in the day file of the
   day they were posted; bot posts use `subtype: bot_message`; a Slack Connect channel
-  includes external users from another `team_id`. Channel settings (account,
-  sensitivity) live in the source configuration (`sources.yaml` in the dataset).
+  includes external users from another `team_id`. Channel settings live in the source
+  configuration (`sources.yaml` in the dataset); since P12.3 a channel's account is
+  written into `account_external_refs`, its sensitivity stays in the configuration.
 - As built (connector): any message a reply points to is a thread root, even without
   `reply_count`, so a root never appears in both its thread and its day record; a reply
   to a missing root is `orphan_reply`; `<@U123>` becomes `@Real Name` and `&amp;`,
@@ -179,6 +201,51 @@ The real Slack export layout: `channels.json`, `groups.json` (private channels, 
   `users.json`/`channels.json`/`groups.json` makes the source unavailable: without them
   no message can be attributed and no private channel's membership is known.
 Capabilities: snapshot ✔, incremental ✗ (exports are full snapshots), acl_export ✔.
+
+### 3.4 Uploaded exports — what each source type accepts (P12.6)
+
+An administrator uploads the export **as the request body** (`POST
+/v1/admin/sources/{id}/imports`, no form, no file name sent or kept); its format is decided
+by its content (a zip's signature), never by a name or a MIME type. The archive is checked
+entry by entry and **only the files the connector reads are expanded**; everything else
+(attachments, images, `__MACOSX`, nested archives) is counted as ignored. A single wrapping
+folder (the way most tools zip a folder) is treated as the export's root.
+
+| Source type | Accepted upload | Files read (relative to the root) | Refused as `unsupported_layout` when |
+| ----------- | --------------- | ---------------------------------- | ------------------------------------ |
+| Documents (Markdown export), `document_repository` | a `.zip` | every `*.md` file, at any depth (§3.1 front matter) | no `.md` file |
+| Tickets (JSON Lines export), `ticketing` | a `.zip`, **or one `.jsonl` page** sent as is | every top-level `*.jsonl` file (§3.2 lines; a single page is stored as `export.jsonl`) | no top-level `.jsonl` file |
+| Slack workspace export, `chat_export` | a `.zip` (Slack's download, unchanged) | `users.json`, `channels.json`, `groups.json` at the root; `<channel>/<day>.json` one level down (§3.3) | `users.json` or `channels.json` missing |
+
+Native help-desk exports are **not** accepted by the Tickets type: each line must be the
+Lattice ticket interchange record of §3.2. Archive safety and limits (refusal codes,
+defaults, where they are configured) are phase-12-plan C8.3 as built (Part III, P12.6) and
+deployment.md §4. A refused upload changes nothing; an accepted one becomes the source's
+**current import** and is **checked** — the connector and the sync pipeline as a dry run
+(no writes, no provider call) — so the record can show record counts, held-back and
+invalid counts, failure codes and the exact account references that have no account,
+before any sync. A sync reads the import that was current when it was requested.
+
+**Replacing an export (verified in P12.7).** Uploading to a source that already synced
+replaces its current import only if the new upload is accepted; indexed content changes
+only when a sync runs. A sync already queued or running keeps reading the import it was
+given, and that import is kept until the job ends. The previous import is then deleted
+(nothing restores it): if the replacement is accepted but its check fails as a whole
+(`import_invalid` — e.g. a Slack export whose `users.json` cannot be read), syncing is
+refused and the administrator recovers by uploading a good export again. A minimal
+example of each format, as a customer would upload it, is in `data/synthetic/onboarding/`
+(the P12.7 onboarding fixture: [onboarding.md](onboarding.md) §6).
+
+**Two supported ways for an export to reach Lattice (reviewed in P12.8).** A
+*product-managed* source (`managed_by = organization`) takes uploads into the import store
+(above). An *operator-managed* source (`managed_by = operator`) keeps the Phase 4 workflow:
+its operator's `sources.yaml` names a server path and `lattice sync` reads it; in the
+product it can be synced, paused, resumed and disconnected but takes no upload and no
+settings edit. **Operator-registered export locations** (phase-12-plan C8.1
+`export_locations`, `lattice source location add`: a folder the operator registers and an
+administrator picks by name) are **not built** — accepted as P12.6 deviation 5 and kept as
+uncommitted future scope: uploads are D-32's customer-operable path, and large or
+automated exports already have the operator-managed path. No API takes a path.
 
 ## 4. External identifier normalization
 

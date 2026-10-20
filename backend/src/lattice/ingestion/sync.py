@@ -38,11 +38,19 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lattice import metrics
+from lattice.accounts import refs
 from lattice.connectors.contract import Connector, RecordError, SourceRecord, SourceUnavailable
 from lattice.connectors.registry import build_connector
 from lattice.db.engine import Database
 from lattice.ingestion import store
-from lattice.ingestion.access import LEVELS, AccessFailure, MappedAccess, OrgDirectory, map_access
+from lattice.ingestion.access import (
+    LEVELS,
+    AccessFailure,
+    MappedAccess,
+    OrgDirectory,
+    map_access,
+    unmapped_account,
+)
 from lattice.ingestion.canonical import CanonicalDocument, NormalizeFailure, canonicalize
 from lattice.ingestion.chunking import chunk, estimate_tokens
 from lattice.ingestion.embedding_input import embedding_input, input_hash, lexical_header
@@ -78,6 +86,8 @@ class SyncOptions:
     # False: sync an existing source with the configuration already recorded on its row
     # (the worker, ADR-013), never writing it; True: record ``config`` first (the CLI).
     record_config: bool = True
+    # The import an organization-managed source's run reads (P12.6), recorded on the run.
+    import_id: uuid.UUID | None = None
 
 
 @dataclass
@@ -107,6 +117,9 @@ class SyncResult:
     # Why the configured provider may receive nothing (egress policy), if so.
     egress_block: str | None = None
     failure_codes: Counter[str] = field(default_factory=Counter)
+    # access_unmappable:account failures by the external reference they name (an
+    # import's check reports them before the first sync; P12.6).
+    unmapped_refs: Counter[str] = field(default_factory=Counter)
 
     def run_counts(self) -> dict[str, int | bool | str | None]:
         return {
@@ -261,6 +274,8 @@ class Syncer:
             store.Failure(stage, code, external_id, location, tuple(sorted((params or {}).items())))
         )
         self.result.failure_codes[code] += 1
+        if code == "access_unmappable:account" and params and "external_account_ref" in params:
+            self.result.unmapped_refs[str(params["external_account_ref"])] += 1
         if count:
             self.result.failed += 1
 
@@ -273,16 +288,35 @@ class Syncer:
                 store.check_config(self.config, directory)
                 if self.options.dry_run or not self.options.record_config:
                     source = await store.get_source(s, self.org, self.config.key)
-                    if source is not None and source.status != "active":
+                    # A dry run writes nothing, so a paused source may be checked (P12.6).
+                    runnable = ("active", "paused") if self.options.dry_run else ("active",)
+                    if source is not None and source.status not in runnable:
                         raise store.SourceConfigurationError(
                             f"source_config:source_{source.status}"
                         )
+                    if (
+                        self.options.record_config
+                        and source is not None
+                        and source.managed_by != "operator"
+                    ):
+                        # A sources file never configures a source created in the product.
+                        raise store.SourceConfigurationError("source_config:managed_in_product")
                     if source is None and not self.options.dry_run:
                         raise store.SourceConfigurationError("source_config:source_missing")
                 else:
                     source = await store.upsert_source(s, self.org, self.config, str(self.path))
+                    # The file's account mappings, audited as operator:sync (P12.3).
+                    await refs.apply_file_mappings(
+                        s,
+                        self.org,
+                        source_id=source.id,
+                        config=self.config,
+                        accounts=directory.accounts,
+                    )
             except store.SourceConfigurationError as exc:
                 raise SyncError(exc.code) from None
+            except refs.MappingRefused as exc:
+                raise SyncError(f"source_config:{exc.code}") from None
         self.source = source
 
         if self.options.dry_run:
@@ -303,7 +337,9 @@ class Syncer:
                         source_id=str(source.id),
                         runs=interrupted,
                     )
-                self.result.run_id = await store.open_run(s, self.org, source.id, self.options.mode)
+                self.result.run_id = await store.open_run(
+                    s, self.org, source.id, self.options.mode, self.options.import_id
+                )
             try:
                 await self._run(directory)
             except (SourceUnavailable, store.SourceConfigurationError) as exc:
@@ -422,6 +458,17 @@ class Syncer:
                     if source is not None
                     else {}
                 )
+                account_refs = (
+                    await refs.load_mappings(s, self.org, source.id, self.config.connector_type)
+                    if source is not None
+                    else {}
+                )
+                if self.options.record_config:
+                    # What the real run would record first: the file's mappings.
+                    account_refs |= {
+                        ref: directory.accounts[key]
+                        for ref, key in refs.file_mappings(self.config).items()
+                    }
             else:
                 assert source is not None  # noqa: S101
                 source_groups, regrouped = await store.sync_groups(
@@ -429,7 +476,10 @@ class Syncer:
                 )
                 self.result.memberships_regrouped += regrouped
                 existing = await store.existing_documents(s, self.org, source.id)
-        directory = replace(directory, source_groups=source_groups)
+                account_refs = await refs.load_mappings(
+                    s, self.org, source.id, self.config.connector_type
+                )
+        directory = replace(directory, source_groups=source_groups, account_refs=account_refs)
 
         seen: set[str] = set()
         unidentified = 0
@@ -506,6 +556,16 @@ class Syncer:
             self._quarantine_prior(prior, quarantine)
             return None
         access = map_access(record, self.config, directory)
+        if (
+            isinstance(access, MappedAccess)
+            and access.account_id is None
+            and record.account_ref is not None
+            and prior is not None
+            and prior.account_id is not None
+        ):
+            # The record still names the reference that gave it an account: a mapping
+            # that disappeared never leaves it readable with less restriction.
+            access = unmapped_account(record.account_ref)
         if isinstance(access, AccessFailure):
             self._fail("map_access", access.code, external_id=ext, params=access.params)
             self._quarantine_prior(prior, quarantine)

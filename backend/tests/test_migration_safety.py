@@ -9,6 +9,7 @@ check-deployment`` detects schema and privilege drift and a fence left behind.
 import asyncio
 import json
 import re
+import uuid
 from collections.abc import AsyncIterator
 
 import pytest
@@ -155,7 +156,9 @@ async def test_migrate_refuses_while_an_application_session_is_open(
 
 async def test_migrate_applies_pending_revisions_and_verifies(quiet_database: None) -> None:
     head = migration_headers()[SCHEMA_REVISION]
-    assert head.reversible is False  # the head cannot be downgraded safely in production
+    # Each revision declares its reversibility (0024 is; 0022 further down is not, so a
+    # downgrade past it is refused: test_migrate_refuses_to_downgrade_an_irreversible_revision).
+    assert isinstance(head.reversible, bool)
     below = f"{int(SCHEMA_REVISION) - 1:04d}"
     await asyncio.to_thread(command.downgrade, alembic_config(), below)
     try:
@@ -448,3 +451,52 @@ def test_a_downgrade_check_changes_nothing(
 def test_the_snapshot_resource_ships_with_the_package() -> None:
     path = BACKEND_DIR / "src" / "lattice" / "db" / "privilege_snapshot.json"
     assert json.loads(path.read_text()) == committed_snapshot()
+
+
+async def test_secret_keys_are_compared_by_id(owner_db: Database, quiet_database: None) -> None:
+    """P12.1 (C3.3): key IDs in use must be configured; material is never read."""
+    from pydantic import SecretStr
+
+    from lattice.db.deployment import run_checks
+    from lattice.vault.keys import Keyring
+    from lattice.vault.records import store_secret
+
+    from .factories import create_org
+
+    assert (await _checks())["secret keys"] == (True, "no encrypted credential stored")
+    org = await create_org(owner_db, "halden")
+    key = "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE="
+    keyring = Keyring.from_environment(
+        {"LATTICE_SECRET_KEYS": f"k1:{key}", "LATTICE_SECRET_ACTIVE_KEY": "k1"}
+    )
+    async with owner_db.tenant_transaction(org) as s:
+        await store_secret(
+            s,
+            keyring,
+            organization_id=org,
+            owner_kind="provider_api_key",
+            owner_id=uuid.uuid4(),
+            value=SecretStr("sk-test-value"),
+        )
+    await owner_db.engine.dispose()
+
+    async def run(environ: dict[str, str]) -> tuple[bool, str]:
+        engine = _engine(OWNER_URL)
+        try:
+            async with engine.connect() as conn:
+                found = {c.name: (c.ok, c.detail) for c in await run_checks(conn, Plan(), environ)}
+        finally:
+            await engine.dispose()
+        return found["secret keys"]
+
+    assert await run({"LATTICE_SECRET_KEYS": f"k1:{key}"}) == (
+        True,
+        "key ID(s) in use: k1; all configured",
+    )
+    ok, problem = await run({"LATTICE_SECRET_KEYS": f"k2:{key}"})
+    assert ok is False
+    assert "k1" in problem
+    assert key not in problem
+    ok, note = await run({})
+    assert ok is True
+    assert "not compared" in note

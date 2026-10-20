@@ -139,12 +139,14 @@ async def test_audit_events_are_append_only(owner_db: Database, app_db: Database
     with pytest.raises(DBAPIError, match="permission denied"):
         async with app_db.tenant_transaction(org) as s:
             await s.execute(text("UPDATE audit_events SET reason = 'rewritten'"))
+    # P12.5 (ADR-017): the API records egress events for administrators (member actors),
+    # never as an operator -- and an event alone changes nothing (writes are fenced).
     with pytest.raises(DBAPIError, match="row-level security"):
         async with app_db.tenant_transaction(org) as s:
             await s.execute(
                 text(
                     "INSERT INTO audit_events (organization_id, actor, action, target, reason) "
-                    "VALUES (:o, 'member:x', 'egress.levels_changed', '{}', 'forged')"
+                    "VALUES (:o, 'operator:x', 'egress.levels_changed', '{}', 'forged')"
                 ),
                 {"o": org},
             )

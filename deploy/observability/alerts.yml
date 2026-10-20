@@ -157,6 +157,15 @@ groups:
         annotations:
           summary: Failed sign-ins, SCIM authentication failures or pre-auth refusals above baseline.
           runbook: docs/runbook.md#1014-authentication-failures
+      - alert: LatticeEgressEscalation
+        # D-34 (P12.5): an administrator raised what may leave Lattice, confirmed by a fresh
+        # identity-provider sign-in. Expected and rare; every one deserves a second look
+        # (a compromised administrator account passes the step-up, phase-12-plan C6.4).
+        expr: sum(increase(lattice_egress_escalations_total{outcome="committed"}[10m])) > 0
+        labels: {severity: ticket, team: security}
+        annotations:
+          summary: An administrator raised what may leave Lattice (egress escalation committed).
+          runbook: docs/runbook.md#1017-egress-escalation
       - alert: LatticeRateLimitPressure
         # Baseline: the limit drills refuse 10 requests in one minute, once; refusals that
         # last half an hour mean a client is stuck or the limit is wrong for real use.

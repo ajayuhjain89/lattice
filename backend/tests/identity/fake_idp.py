@@ -9,9 +9,11 @@ overridden to build defective tokens."""
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import secrets
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -21,6 +23,32 @@ import jwt
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from jwt.algorithms import ECAlgorithm, RSAAlgorithm
+
+from lattice.identity.oidc import OidcClient
+from lattice.outbound import IpAddress
+
+# Test hosts (idp.halden.example ...) resolve here: a globally routable address, so the
+# outbound policy treats the in-process provider as a public one (C4). Tests that need a
+# private or refused address pass their own resolver.
+PUBLIC_ADDRESS: IpAddress = ipaddress.ip_address("93.184.215.14")
+
+
+async def public_resolver(host: str, port: int) -> list[IpAddress]:
+    return [PUBLIC_ADDRESS]
+
+
+def resolving_to(address: str) -> Callable[[str, int], Any]:
+    async def resolver(host: str, port: int) -> list[IpAddress]:
+        return [ipaddress.ip_address(address)]
+
+    return resolver
+
+
+def oidc_client(handler: Callable[[httpx.Request], httpx.Response], **kwargs: Any) -> OidcClient:
+    """An OIDC client whose network is ``handler``, after the outbound policy's decision
+    (shape, and resolution through ``resolver`` -- public by default)."""
+    kwargs.setdefault("resolver", public_resolver)
+    return OidcClient(timeout_seconds=5, transport=httpx.MockTransport(handler), **kwargs)
 
 
 def _b64(data: bytes) -> str:
@@ -102,14 +130,7 @@ class FakeIdp:
         if self.token_status != 200:
             return httpx.Response(self.token_status, json={"error": "invalid_grant"})
         form = {k: v[0] for k, v in parse_qs(request.content.decode()).items()}
-        grant = self.grants.pop(form.get("code", ""), None)
-        if grant is None or form.get("grant_type") != "authorization_code":
-            return httpx.Response(400, json={"error": "invalid_grant"})
-        verifier = form.get("code_verifier", "")
-        if _b64(hashlib.sha256(verifier.encode()).digest()) != grant.challenge:
-            return httpx.Response(400, json={"error": "invalid_grant"})
-        if form.get("redirect_uri") != grant.redirect_uri:
-            return httpx.Response(400, json={"error": "invalid_grant"})
+        # The client authenticates first (RFC 6749 §3.2.1), then the code is checked.
         if self.client_secret is None:
             if form.get("client_id") != self.client_id:
                 return httpx.Response(401, json={"error": "invalid_client"})
@@ -120,6 +141,14 @@ class FakeIdp:
             )
             if request.headers.get("authorization") != expected:
                 return httpx.Response(401, json={"error": "invalid_client"})
+        grant = self.grants.pop(form.get("code", ""), None)
+        if grant is None or form.get("grant_type") != "authorization_code":
+            return httpx.Response(400, json={"error": "invalid_grant"})
+        verifier = form.get("code_verifier", "")
+        if _b64(hashlib.sha256(verifier.encode()).digest()) != grant.challenge:
+            return httpx.Response(400, json={"error": "invalid_grant"})
+        if form.get("redirect_uri") != grant.redirect_uri:
+            return httpx.Response(400, json={"error": "invalid_grant"})
         return httpx.Response(
             200,
             json={"access_token": "at", "token_type": "Bearer", "id_token": self._id_token(grant)},

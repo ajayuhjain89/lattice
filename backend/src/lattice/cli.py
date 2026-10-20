@@ -40,6 +40,14 @@
         each change needs --reason and is recorded in audit_events).
     lattice sso|scim|member|session ..., lattice org suspend|reactivate --org SLUG
         Identity and incident controls (lattice.cli_identity; audited).
+    lattice org create --slug S --name N --issuer URL --client-id ID ... --reason R
+        Create an organization's trust root: organization, settings, OIDC connection and
+        first administrator, in one audited transaction (lattice.cli_org; D-28).
+    lattice outbound allow|revoke|list --org SLUG ...
+        Private outbound targets registered for one organization and purpose (C4).
+    lattice secrets new-key --id ID | rekey --reason R [--org SLUG]
+        Master keys for encrypted credentials: a new key entry; re-encrypt under the
+        active key (lattice.cli_secrets; C3.3).
     lattice worker [--once]
         The background worker: runs the syncs administrators request from the web app,
         as lattice_worker (LATTICE_WORKER_DATABASE_URL).
@@ -72,8 +80,10 @@ from lattice import (
     cli_answer,
     cli_deploy,
     cli_identity,
+    cli_org,
     cli_providers,
     cli_retrieval,
+    cli_secrets,
     cli_worker,
     smoke,
 )
@@ -291,7 +301,8 @@ async def _disconnect(args: argparse.Namespace) -> int:
         f"{args.org}/{args.source}: disconnected and purged -- documents {report.documents}, "
         f"chunks {report.chunks} (vectors {report.vectors}), source grants "
         f"{report.source_grants}, admin grants {report.admin_grants}, synced groups "
-        f"{report.groups}, sync runs {report.sync_runs}"
+        f"{report.groups}, sync runs {report.sync_runs}, account mappings "
+        f"{report.account_mappings}"
     )
     return 0
 
@@ -367,6 +378,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     cli_answer.add_parsers(commands, cli_retrieval.add_parsers(commands))
     cli_providers.add_parsers(commands)
     cli_identity.add_parsers(commands)
+    cli_org.add_parsers(commands)
+    cli_secrets.add_parsers(commands)
     cli_worker.add_parser(commands)
     smoke.add_parser(commands)
     cli_deploy.add_parsers(commands)
@@ -399,8 +412,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             return asyncio.run(cli_retrieval.eval_retrieval(args))
         if args.command == "models":
             return cli_providers.models(args)
+        if args.command == "org" and args.org_command == "create":
+            return asyncio.run(cli_org.create(args))
         if args.command == "org" and args.org_command in ("suspend", "reactivate"):
             return asyncio.run(cli_identity.run(args))
+        if args.command == "outbound":
+            return asyncio.run(cli_org.outbound(args))
+        if args.command == "secrets" and args.secrets_command == "new-key":
+            return cli_secrets.new_key(args)
+        if args.command == "secrets":
+            return asyncio.run(cli_secrets.rekey(args))
         if args.command in ("provider", "org"):
             return asyncio.run(cli_providers.provider(args))
         if args.command == "worker":

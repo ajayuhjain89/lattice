@@ -12,6 +12,8 @@ export class ApiError extends Error {
   readonly requestId: string | null;
   /** The envelope's detail issue codes (fixed identifiers, never submitted values). */
   readonly issues: readonly string[];
+  /** The fields those issues are about (request field names, never submitted values). */
+  readonly fields: readonly string[];
   /** Seconds from `Retry-After` (429 and 503), when the server sent it. */
   readonly retryAfter: number | null;
 
@@ -22,6 +24,7 @@ export class ApiError extends Error {
     message: string;
     requestId: string | null;
     issues?: readonly string[];
+    fields?: readonly string[];
     retryAfter?: number | null;
   }) {
     super(init.message);
@@ -31,6 +34,7 @@ export class ApiError extends Error {
     this.code = init.code;
     this.requestId = init.requestId;
     this.issues = init.issues ?? [];
+    this.fields = init.fields ?? [];
     this.retryAfter = init.retryAfter ?? null;
   }
 
@@ -83,6 +87,7 @@ export function fromResponse(response: Response, body: unknown): ApiError {
       message: body.error.message,
       requestId: body.error.request_id ?? response.headers.get("x-request-id"),
       issues: (body.error.details ?? []).map((d) => d.issue),
+      fields: (body.error.details ?? []).map((d) => d.field),
       retryAfter,
     });
   }

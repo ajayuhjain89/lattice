@@ -260,7 +260,36 @@ def both(statuses: dict[str, int], code: int) -> bool:
 
 def connection() -> tuple[str, str]:
     """The organization's active connection to the verification provider, created or
-    reset to the canonical client (ID, login key)."""
+    reset to the canonical client (ID, login key). The provider is a private address on
+    the stack's network: since P12.4 sign-in reaches it only as a target the operator
+    registered for this organization (idempotent)."""
+    ops(
+        "outbound",
+        "allow",
+        "--org",
+        ORG,
+        "--url",
+        "https://idp:9443",
+        "--purpose",
+        "oidc",
+        "--reason",
+        "Verification identity provider",
+    )
+    # Its discovery document names the browser-facing authorization endpoint (the host's
+    # port mapping); every discovery endpoint must pass the same policy (P12.4), so the
+    # operator registers that origin too. Lattice never connects to it.
+    ops(
+        "outbound",
+        "allow",
+        "--org",
+        ORG,
+        "--url",
+        "https://localhost:9443",
+        "--purpose",
+        "oidc",
+        "--reason",
+        "Verification identity provider (browser-facing authorization endpoint)",
+    )
     shown = ops("sso", "show", "--org", ORG)
     if "no active OIDC connection" in shown:
         listing = ops("sso", "list", "--org", ORG)
@@ -340,6 +369,111 @@ def roll_api(secret: str) -> float:
 
 
 # --- the cases ---------------------------------------------------------------------------
+
+
+def step_up_cases(token: str, key: str) -> None:
+    eve, eve_email, _ = provision(token, "eve")
+    ops("member", "admin", "--org", ORG, "--email", eve_email, "--grant", "--reason", "drill")
+    admin = Browser()
+    case("step-up: administrator signed in", admin.sign_in(key, eve) == "/ask")
+    api = f"{BASE}/api/v1/admin/providers"
+    created = admin.client.post(
+        api,
+        json={
+            "provider": "gemini",
+            "model": "gemini-3.5-flash-lite",
+            "training_opt_out": True,
+            "reason": "step-up drill",
+        },
+        headers=CSRF,
+    )
+    # A re-run on the same database finds the record an earlier run left (disabled and
+    # unapproved, as every run ends): 409 provider_exists, then the settings as they are.
+    if created.status_code == 409 and "provider_exists" in created.text:
+        created = admin.client.get(api)
+    settings = created.json()
+    provider = next(p for p in settings["providers"] if p["provider"] == "gemini")
+
+    def lower(document: dict[str, object]) -> int:
+        """A change that is not an escalation: it applies at once, no step-up."""
+        version = admin.client.get(api).json()["egress"]["version"]
+        return admin.client.post(
+            f"{api}/changes",
+            json={"change": document, "policy_version": version, "reason": "step-up drill"},
+            headers=CSRF,
+        ).status_code
+
+    # Created disabled and unapproved; enabling an unapproved record lets nothing out.
+    enable = {"kind": "provider", "provider_id": provider["id"], "enabled": True}
+    case("step-up: enabling an unapproved provider needs none", lower(enable) == 200)
+    settings = admin.client.get(api).json()
+    change = {"kind": "provider", "provider_id": provider["id"], "approval": "internal"}
+    direct = admin.client.post(
+        f"{api}/changes",
+        json={"change": change, "policy_version": settings["egress"]["version"], "reason": "x"},
+        headers=CSRF,
+    )
+    case(
+        "step-up: escalation refused without one",
+        direct.status_code == 422 and "step_up_required" in direct.text,
+    )
+
+    def attempt(offsets: dict[str, int]) -> tuple[str, str, str]:
+        """(step-up ID, its outcome, where it started and finished)."""
+        idp_state({CLIENT_ID: [SECRET]}, offsets)
+        version = admin.client.get(api).json()["egress"]["version"]
+        started, where_start = served(
+            lambda: admin.client.post(
+                f"{api}/step-ups",
+                json={
+                    "change": change,
+                    "policy_version": version,
+                    "reason": "step-up drill",
+                    "confirmation": settings["confirmation"],
+                },
+                headers=CSRF,
+            ),
+            "/v1/admin/providers/step-ups",
+        )
+        assert started.status_code == 201, started.status_code
+        body = started.json()
+        query = dict(p.split("=", 1) for p in body["authorization_url"].split("?", 1)[1].split("&"))
+        assert (query["prompt"], query["max_age"]) == ("login", "0")
+        approve = admin.client.get(f"{body['authorization_url']}&persona={eve}")
+        callback = approve.headers["location"].removeprefix(BASE)
+        back, where_back = served(lambda: admin.get(callback), CALLBACK_ROUTE)
+        assert back.headers["location"] == f"/settings/providers?step_up={body['step_up_id']}"
+        outcome = admin.client.get(f"{api}/step-ups/{body['step_up_id']}").json()["outcome"]
+        return body["step_up_id"], outcome, f"{','.join(where_start)}->{','.join(where_back)}"
+
+    _, stale, _ = attempt({"auth_time": -400})
+    case("step-up: stale auth_time refused", stale == "not_fresh", stale)
+    step_up_id, fresh, where = attempt({})
+    case("step-up: fresh re-authentication granted", fresh == "granted", where)
+    applied = admin.client.post(f"{api}/step-ups/{step_up_id}/apply", headers=CSRF)
+    cells = {
+        (c["provider_id"], c["level"]): c["permitted"] for c in applied.json().get("lattice", [])
+    }
+    case(
+        "step-up: the exact change committed once",
+        applied.status_code == 200 and cells.get((provider["id"], "internal")) is True,
+    )
+    again = admin.client.post(f"{api}/step-ups/{step_up_id}/apply", headers=CSRF)
+    case("step-up: a used grant is refused", again.status_code == 409)
+    # A policy change after the grant (here a lowering, applied at once) voids it.
+    withdraw = {"kind": "provider", "provider_id": provider["id"], "approval": None}
+    case("step-up: withdrawing an approval needs none", lower(withdraw) == 200)
+    voided_id, regranted, _ = attempt({})
+    disable = {"kind": "provider", "provider_id": provider["id"], "enabled": False}
+    lowered = lower(disable)
+    voided = admin.client.post(f"{api}/step-ups/{voided_id}/apply", headers=CSRF)
+    case(
+        "step-up: a policy change voids an unused grant",
+        regranted == "granted" and lowered == 200 and voided.status_code == 409,
+        f"{regranted} {lowered} {voided.status_code}",
+    )
+    case("step-up: no new session", admin.session is not None and both(admin.me_everywhere(), 200))
+    idp_state({CLIENT_ID: [SECRET]})
 
 
 def main() -> int:
@@ -555,6 +689,11 @@ def main() -> int:
         set(skew) == {"api1", "api2"} and all(abs(v) < 2 for v in skew.values()),
         json.dumps({k: round(v, 3) for k, v in skew.items()}),
     )
+
+    # 14. Egress step-up (P12.5, D-34): raising what may leave Lattice needs a fresh
+    # re-authentication at this private provider, verified through the outbound policy,
+    # on either instance, bound to the session and the exact change. No model is called.
+    step_up_cases(second, key)  # the first SCIM token was revoked in section 7
 
     failed = [name for name, ok, _ in RESULTS if not ok]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} passed in {time.monotonic() - t0:.0f} s")

@@ -170,7 +170,7 @@ function EditFields({ member, directory, draft, onChange }: { member: MemberAcce
       <Checklist
         legend="Assigned accounts"
         help={draft.account_scope === "all" ? "Assignments are kept, but don't matter while the scope is all accounts." : undefined}
-        items={directory.accounts.map((a) => ({ id: a.id, label: a.name }))}
+        items={directory.accounts.map((a) => ({ id: a.id, label: a.archived ? `${a.name} (archived)` : a.name }))}
         checked={draft.accounts}
         onToggle={(v) => toggle("accounts", v)}
         emptyText="No accounts exist yet."
@@ -389,7 +389,7 @@ function ReviewChange({
   );
 }
 
-function Preview({ member, preview }: { member: MemberAccess; preview: AccessPreview }) {
+export function Preview({ member, preview }: { member: MemberAccess; preview: AccessPreview }) {
   const rows = comparisonRows(member, preview.effects);
   const name = member.member.name;
   return (
@@ -419,7 +419,7 @@ function Preview({ member, preview }: { member: MemberAccess; preview: AccessPre
 }
 
 /** Now → After, one rule per row; a changed row carries its direction in a margin bar and in words. */
-function Comparison({ rows }: { rows: ComparisonRow[] }) {
+export function Comparison({ rows }: { rows: ComparisonRow[] }) {
   return (
     <table className={styles.compare}>
       <caption className="visually-hidden">Now and after this change, rule by rule</caption>

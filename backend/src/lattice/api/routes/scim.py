@@ -84,7 +84,13 @@ async def _caller(request: Request, operation: str) -> ScimCaller:
         "organization_id": str(caller.organization_id),
         "scim_token_id": str(caller.token_id),
     }
+    await _provisioning(request).token_used(caller)
     return caller
+
+
+async def _refused(request: Request, caller: ScimCaller, operation: str, error: ScimError) -> None:
+    """Record an actionable refusal (``scim.request_refused``), then answer it."""
+    await _provisioning(request).record_refusal(caller, operation, error)
 
 
 async def _body(request: Request) -> Any:
@@ -170,7 +176,11 @@ async def get_user(resource_id: str, request: Request) -> JSONResponse:
 @router.post("/Users")
 async def create_user(request: Request) -> JSONResponse:
     caller = await _caller(request, "create")
-    user = await _provisioning(request).create_user(caller, await _body(request))
+    try:
+        user = await _provisioning(request).create_user(caller, await _body(request))
+    except ScimError as error:
+        await _refused(request, caller, "create", error)
+        raise
     _count("create", 201)
     return _user_response(request, user, 201)
 
@@ -178,9 +188,13 @@ async def create_user(request: Request) -> JSONResponse:
 @router.put("/Users/{resource_id}")
 async def replace_user(resource_id: str, request: Request) -> JSONResponse:
     caller = await _caller(request, "replace")
-    user = await _provisioning(request).replace_user(
-        caller, resource_id, await _body(request), request.headers.get("if-match")
-    )
+    try:
+        user = await _provisioning(request).replace_user(
+            caller, resource_id, await _body(request), request.headers.get("if-match")
+        )
+    except ScimError as error:
+        await _refused(request, caller, "replace", error)
+        raise
     _count("replace", 200)
     return _user_response(request, user)
 
@@ -188,9 +202,13 @@ async def replace_user(resource_id: str, request: Request) -> JSONResponse:
 @router.patch("/Users/{resource_id}")
 async def patch_user(resource_id: str, request: Request) -> JSONResponse:
     caller = await _caller(request, "patch")
-    user = await _provisioning(request).patch_user(
-        caller, resource_id, await _body(request), request.headers.get("if-match")
-    )
+    try:
+        user = await _provisioning(request).patch_user(
+            caller, resource_id, await _body(request), request.headers.get("if-match")
+        )
+    except ScimError as error:
+        await _refused(request, caller, "patch", error)
+        raise
     _count("patch", 200)
     return _user_response(request, user)
 

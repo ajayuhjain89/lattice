@@ -262,6 +262,20 @@ Shared non-primitive pieces: `components/record` (the record grammar), `componen
    sync (word + icon + time; the age of the last full sync only when it adds information),
    permissions as a sentence, documents, failed records (inline expansion by opaque
    reference), *Sync now* (busy but focusable, progress announced from the listing).
+   **P12.6:** *Add source* under the headline (a dialog: export format as radios, name and
+   key, defaults, reason); each name opens the source's record; the last cell is the
+   server's next action — *Sync now* where a sync can run (with *Map account references*
+   under it when the server says so), otherwise a link to where the step happens.
+   **Source record** (`/sources/{id}`): name with its type glyph, key · export format ·
+   who manages it, status facts; one *next step* band (margin bar, a sentence, one control);
+   an actions row (Sync now / Retry sync, Check export again, Edit settings, Pause/Resume,
+   Disconnect) with "Managing this source gives you no access to its content."; then
+   ruled sections — *Export* (what to upload beside the upload: native file input, real
+   bytes-sent progress, then an honest "validating" with no number), *Check* (counts as
+   margin-barred figures, failure codes, references without an account linking to Access),
+   *Sync*, *Settings*. Dialogs reuse the Now → After table and reason field; a widening
+   settings change needs an explicit acknowledgement; disconnect lists what is deleted and
+   kept and asks for the key typed.
 8. **Activity chronology.** Your questions grouped by day on a ruled rail: time, status
    word, the question (opens its re-authorized trace), *Ask again*. Organization runs
    (administrators) are their own page under one boundary band.
@@ -275,10 +289,17 @@ Shared non-primitive pieces: `components/record` (the record grammar), `componen
     *Apply change* in a sticky action row. Every write leaves a persistent result line.
 11. **Audit ledger.** "Entries can't be edited or deleted", days under ink rules, each
     entry time · action and subject · the change · actor and quoted reason; keyset paging.
-12. **Egress lattice** (AI providers). A hatched read-only band naming the audited
-    commands, the policy line, levels × providers (filled may be sent, hatched not sent,
-    each cell named and explained on focus), the levels that never leave Lattice, the
-    provider ledger.
+12. **Egress lattice** (AI providers; editable since P12.5). The API's AI status line, a
+    hatched band stating the rule (raising needs a fresh sign-in, lowering applies at once),
+    the policy as ruled facts with *Change policy*, levels × providers drawn from the
+    server's reading (filled may be sent, hatched not sent, each cell named and explained on
+    focus), the levels that never leave Lattice, one ruled record per generation provider
+    (a status line in words — *Sends nothing above Internal*, never a green "connected" —
+    and configuration, approval, trust boundary, API key and latest test kept apart; *Test*
+    and an actions menu), the deployment's embedding ledger. Changes reuse the access Now →
+    After table; an escalation adds a boundary callout, the organization's name typed and
+    *Continue to sign in again*; the return from the identity provider is the page's one
+    tinted region until applied or dismissed. Keys go into empty masked fields only.
 13. **States: four families** (`StateBlock`). *Quiet* (nothing to show), *Boundary* (not
     available — identical for nonexistent and unreadable), *Fault* (the API's fixed
     message, its request reference, *Try again*), *Wait* (a limit, in time-signal ochre;

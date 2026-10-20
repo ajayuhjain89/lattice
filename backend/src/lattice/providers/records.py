@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lattice.outbound import OutboundPolicy
 from lattice.providers.egress import OrgEgress, ProviderRecord
 
 
@@ -24,7 +25,12 @@ async def org_egress(session: AsyncSession, org: uuid.UUID) -> OrgEgress:
     ).one_or_none()
     if row is None:
         return OrgEgress()
-    return OrgEgress(str(row[0]), str(row[1]), str(row[2]), None if row[3] is None else str(row[3]))
+    return OrgEgress(
+        None if row[0] is None else str(row[0]),
+        str(row[1]),
+        str(row[2]),
+        None if row[3] is None else str(row[3]),
+    )
 
 
 async def embedding_records(
@@ -62,6 +68,11 @@ class GenerationConfig:
     record: ProviderRecord
     endpoint: str | None
     enabled: bool
+    # The ``model_providers`` row (P12.5: call-time re-checks compare it).
+    id: uuid.UUID | None = None
+    # The organization's outbound policy for generation (C4), set by the invocation rule
+    # before it builds the provider: the adapter connects only through it.
+    outbound: OutboundPolicy | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,7 +93,7 @@ async def generation_config(session: AsyncSession, org: uuid.UUID) -> Generation
         await session.execute(
             text(
                 "SELECT provider, model, deployment, approved_for_level, training_opt_out, "
-                "approved_at IS NOT NULL, endpoint, enabled FROM model_providers "
+                "approved_at IS NOT NULL, endpoint, enabled, id FROM model_providers "
                 "WHERE organization_id = :o AND purpose = 'generation' "
                 "ORDER BY enabled DESC, updated_at DESC, provider, model LIMIT 1"
             ),
@@ -91,11 +102,12 @@ async def generation_config(session: AsyncSession, org: uuid.UUID) -> Generation
     ).one_or_none()
     if row is None:
         return None
-    p, m, d, a, t, x, endpoint, enabled = row
+    p, m, d, a, t, x, endpoint, enabled, record_id = row
     return GenerationConfig(
         ProviderRecord(str(p), str(m), str(d), str(a), bool(t), bool(x)),
         None if endpoint is None else str(endpoint),
         bool(enabled),
+        record_id,
     )
 
 

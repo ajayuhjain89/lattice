@@ -43,13 +43,22 @@ x-api-environment: &api-environment
   LATTICE_TRUSTED_PROXIES: 172.31.250.10
   # Keys the shared pre-authentication counters (P11.4): the same on every api instance.
   LATTICE_CLIENT_KEY_SECRET: ${LATTICE_CLIENT_KEY_SECRET:?run make prod-env}
+  # Master keys for encrypted organization credentials (P12.1, C3.3): the API and the
+  # operator only -- never the worker or the migration job.
+  LATTICE_SECRET_KEYS: ${LATTICE_SECRET_KEYS:-}
+  LATTICE_SECRET_ACTIVE_KEY: ${LATTICE_SECRET_ACTIVE_KEY:-}
   # Two API processes share the database: a small pool each (docs/deployment.md §8).
   LATTICE_DB_POOL_SIZE: "3"
+  # Uploaded exports (P12.6): the `imports` volume, shared read-write with the worker.
+  LATTICE_IMPORTS_ROOT: /srv/lattice/imports
 
 x-api: &api
   <<: *backend
   environment:
     <<: *api-environment
+  volumes:
+    # Uploads are received, validated and published here (deployment.md §4); never served.
+    - imports:/srv/lattice/imports
   # uvicorn waits up to 150 s for in-flight requests (an Ask) after SIGTERM.
   stop_grace_period: 160s
   depends_on:
@@ -167,6 +176,9 @@ services:
       LATTICE_ENV: ${LATTICE_STACK_ENV:-production}
       LATTICE_MIGRATION_DATABASE_URL: postgresql+asyncpg://lattice_owner:${LATTICE_OWNER_PASSWORD:?run make prod-env}@postgres:5432/lattice
       LATTICE_PUBLIC_URL: https://localhost:8443
+      # `org create --client-secret-stdin`, `secrets rekey` (the same keys as the API).
+      LATTICE_SECRET_KEYS: ${LATTICE_SECRET_KEYS:-}
+      LATTICE_SECRET_ACTIVE_KEY: ${LATTICE_SECRET_ACTIVE_KEY:-}
     volumes:
       - ./data:/srv/lattice/data:ro
 
@@ -184,9 +196,14 @@ services:
       LATTICE_SYNC_EMBEDDING: none
       LATTICE_METRICS_ADDRESS: 0.0.0.0:9465
       LATTICE_WORKER_HEARTBEAT_FILE: /tmp/lattice-worker-heartbeat
+      # Organization-managed sources sync from their current import (P12.6); the worker
+      # also deletes expired and superseded imports there.
+      LATTICE_IMPORTS_ROOT: /srv/lattice/imports
     volumes:
-      # The worker syncs only the export path the operator's last `lattice sync` recorded.
+      # Operator-managed sources: the worker syncs only the export path the operator's
+      # last `lattice sync` recorded.
       - ./data:/srv/lattice/data:ro
+      - imports:/srv/lattice/imports
     # SIGTERM: finish the current job, then exit. A job still running when the grace
     # ends is killed and recovered by its lease (LATTICE_WORKER_LEASE_SECONDS).
     stop_grace_period: 120s
@@ -262,6 +279,8 @@ networks:
         - subnet: 172.31.250.0/24
 
 volumes:
+  # Uploaded exports (P12.6): API instances and the worker only, never Caddy or web.
+  imports:
   pgdata:
   pgarchive:
   pgbackups:

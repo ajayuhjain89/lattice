@@ -43,6 +43,11 @@ LABEL org.opencontainers.image.title="lattice-backend" \
 RUN groupadd --system --gid 10001 lattice \
  && useradd --system --uid 10001 --gid lattice --no-create-home \
       --home-dir /nonexistent --shell /usr/sbin/nologin lattice
+# The import area (P12.6, docs/deployment.md §4): the mount point of the volume shared by
+# the API instances and the worker. A fresh named volume takes this owner and mode.
+RUN mkdir -p /srv/lattice/imports \
+ && chown 10001:10001 /srv/lattice/imports \
+ && chmod 0750 /srv/lattice/imports
 COPY --from=build /opt/lattice/venv /opt/lattice/venv
 WORKDIR /opt/lattice/app
 COPY backend/alembic.ini ./alembic.ini

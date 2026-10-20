@@ -15,6 +15,7 @@ started; production runs uvicorn with ``--no-proxy-headers`` so the server adds 
 implicit trust of its own (its default trusts 127.0.0.1).
 """
 
+import asyncio
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -28,7 +29,20 @@ from lattice import metrics
 from lattice.answering.service import AskDependencies
 from lattice.api.handlers import register_exception_handlers
 from lattice.api.middleware import BodyLimitMiddleware, CsrfMiddleware, RequestContextMiddleware
-from lattice.api.routes import access, activity, admin, ask, auth, health, me, scim, sources
+from lattice.api.routes import (
+    access,
+    accounts,
+    activity,
+    admin,
+    ask,
+    auth,
+    health,
+    identity,
+    me,
+    scim,
+    setup,
+    sources,
+)
 from lattice.build import report_startup
 from lattice.config import (
     ConfigurationError,
@@ -43,12 +57,16 @@ from lattice.db.role_check import verify_runtime_role
 from lattice.identity.dev_provider import DevIdentityProvider
 from lattice.identity.oidc import OidcClient, OidcSignIn
 from lattice.identity.sessions import SessionPolicy, SessionService
+from lattice.imports.store import FilesystemImportStore
 from lattice.log import configure_logging
 from lattice.providers.factory import build_embedding_provider
 from lattice.providers.generation_factory import DefaultGenerationFactory
 from lattice.providers.secrets import EnvironmentSecretStore
+from lattice.providers.tester import ProviderTester
 from lattice.provisioning.service import Provisioning
 from lattice.ratelimit import ApiLimits
+from lattice.vault.keys import Keyring, KeyringError
+from lattice.vault.startup import verify_secret_keys
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -56,6 +74,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if (problem := owner_credential_problem(settings.env, os.environ)) is not None:
         raise ConfigurationError(problem)
     production = settings.env is Environment.PRODUCTION
+    # Master keys for vault: credentials (C3.3): from the deployment environment only.
+    try:
+        keyring = Keyring.from_environment(os.environ)
+    except KeyringError as exc:
+        raise ConfigurationError(str(exc)) from None
+    secret_store = EnvironmentSecretStore(keyring=keyring)
     configure_logging(
         level=settings.log_level,
         include_exception_text=settings.env is Environment.DEVELOPMENT,
@@ -74,6 +98,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await verify_runtime_role(db.engine, forbid_content_writes=True)
+        await verify_secret_keys(db, keyring, production=production)
         report_startup("api", logging.getLogger("lattice.api"))
         server = metrics.serve(settings.metrics_address) if settings.metrics_address else None
         try:
@@ -96,11 +121,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.db = db
     app.state.limits = ApiLimits.from_settings(db, settings)
     app.state.provisioning = Provisioning(db)
+    # Seals administrator-entered credentials (P12.4); opened by the secret store.
+    app.state.keyring = keyring
     app.state.oidc = OidcSignIn(
         db,
-        OidcClient(timeout_seconds=settings.oidc_http_timeout_seconds, require_https=production),
+        OidcClient(timeout_seconds=settings.oidc_http_timeout_seconds),
         web_origin=settings.web_origin,
+        secrets=secret_store,
     )
+    # Export uploads (P12.6): the import area, its limits, and a per-process bound on
+    # uploads received at once (each streams to disk, then validates).
+    app.state.import_store = (
+        None
+        if settings.imports_root is None
+        else FilesystemImportStore(
+            root=settings.imports_root, max_upload_bytes=settings.import_max_upload_bytes
+        )
+    )
+    app.state.import_limits = settings.import_limits()
+    app.state.import_uploads = asyncio.Semaphore(settings.import_concurrent_uploads)
+    # Administrator provider tests (P12.5): no organization content, through the outbound
+    # policy (tests replace its transport).
+    app.state.provider_tester = ProviderTester()
     app.state.session_service = SessionService(
         db,
         SessionPolicy(
@@ -121,7 +163,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         generation=DefaultGenerationFactory(
             settings.env, fake_delay_seconds=settings.fake_generation_delay_seconds
         ),
-        secrets=EnvironmentSecretStore(),
+        secrets=secret_store,
         generation_enabled=settings.generation_enabled,
         generation_deadline_seconds=settings.generation_deadline_seconds,
     )
@@ -131,9 +173,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(me.router)
     app.include_router(ask.router)
     app.include_router(admin.router)
+    app.include_router(setup.router)
     app.include_router(sources.router)
     app.include_router(activity.router)
     app.include_router(access.router)
+    app.include_router(accounts.router)
+    app.include_router(identity.router)
     scim.register(app)
     if settings.dev_auth_active:
         app.state.dev_identity_provider = DevIdentityProvider(settings, db)
@@ -142,7 +187,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app, settings)
     # add_middleware wraps: the last added is outermost.
     app.add_middleware(CsrfMiddleware)
-    app.add_middleware(BodyLimitMiddleware, max_bytes=settings.max_request_bytes)
+    app.add_middleware(
+        BodyLimitMiddleware,
+        max_bytes=settings.max_request_bytes,
+        upload_max_bytes=settings.import_max_upload_bytes,
+    )
     app.add_middleware(RequestContextMiddleware, production=production)
     if settings.trusted_proxies:
         # Outermost: every other layer sees the client the trusted ingress reported.

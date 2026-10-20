@@ -136,8 +136,8 @@ the application (§4), whatever command starts it.
 | TLS | HTTPS only at the public origin, HTTP redirected; HSTS is sent by the applications in production. The origin equals `LATTICE_PUBLIC_URL` exactly (scheme, host, port) | Caddy's internal CA (`tls internal`), on `https://localhost:8443` (and `https://caddy:8443` inside the network for `lattice smoke`); `http://localhost:8080` redirects (308) keeping the port. **Not** equivalent to a public certificate: browsers warn, nothing trusts it |
 | OIDC callback origin | `LATTICE_PUBLIC_URL` + `/api/v1/auth/oidc/<login key>/callback` must reach the API unchanged (path and query) | `LATTICE_PUBLIC_URL=https://localhost:8443` |
 | Client address | The ingress is the **only** trusted forwarding boundary. It discards any client-supplied `X-Forwarded-For`/`-Proto` (or appends to them) and states the peer it accepted. The API accepts forwarding headers only from `LATTICE_TRUSTED_PROXIES` (IP addresses or CIDR networks; never `*`), applied inside the application by uvicorn's `ProxyHeadersMiddleware`, which takes the right-most address not belonging to a trusted hop; from any other peer the TCP address is the client. Where a platform edge stands in front of the routing layer, the routing layer derives the client from that edge's documented header and is itself the only peer the API trusts (Appendix A) | Caddy has a fixed address (172.31.250.10) on the private network; `LATTICE_TRUSTED_PROXIES=172.31.250.10`. Caddy has no `trusted_proxies`, so it replaces client-supplied forwarding headers with the connection it accepted |
-| Timeouts | Upstream response timeout to the API **≥ 150 s** (an Ask may spend `LATTICE_GENERATION_DEADLINE_SECONDS`, default 120 s, in generation plus retrieval). Connect timeout ≤ 5 s | `response_header_timeout 180s`, `dial_timeout 5s`; request header/body read 10 s / 30 s; web upstream 30 s |
-| Body size | The API's own cap, `LATTICE_MAX_REQUEST_BYTES` (64 KiB, 413 `request_too_large`), is authoritative. The ingress may only stop larger uploads, above that cap and ≤ 10 MiB, so it never answers first for a body the API would accept. No route needs more than 64 KiB | `request_body max_size 1MB`: bodies between 64 KiB and 1 MB get the API's typed 413 |
+| Timeouts | Upstream response timeout to the API **≥ 150 s** (an Ask may spend `LATTICE_GENERATION_DEADLINE_SECONDS`, default 120 s, in generation plus retrieval). Connect timeout ≤ 5 s. **P12.6:** the export upload route (below) needs a request-body read time and a response time of at least `LATTICE_IMPORT_UPLOAD_TIMEOUT_SECONDS` (600 s): the API answers once the upload is received **and** validated | `response_header_timeout 180s`, `dial_timeout 5s`; request header/body read 10 s / 30 s; web upstream 30 s. Upload route: `request_body read_timeout 600s` and its own `reverse_proxy` with `response_header_timeout 600s` (the shared `(api_pool)` snippet) |
+| Body size | The API's own cap, `LATTICE_MAX_REQUEST_BYTES` (64 KiB, 413 `request_too_large`), is authoritative. The ingress may only stop larger uploads, above that cap and ≤ 10 MiB, so it never answers first for a body the API would accept. No other route needs more than 64 KiB. **P12.6 — one exception:** `POST /api/v1/admin/sources/<uuid>/imports` (an export, streamed as the request body) has the API's own cap `LATTICE_IMPORT_MAX_UPLOAD_BYTES` (default 100 MiB, 413 `request_too_large`); the ingress limit for that route alone must be slightly **above** it and the body must be streamed, never buffered by the ingress. Raising the API's cap means raising the ingress limit with it | `@import_upload` (POST + that exact path) → `request_body max_size 101MiB`; every other request (`not` that matcher) → `request_body max_size 1MB`: bodies between 64 KiB and 1 MB get the API's typed 413. Caddy streams request bodies to the upstream; `test_deployment_files.py` pins that the large limit applies to that route only |
 | Health routing | The ingress (or platform) probes each api instance at `/v1/health/ready` on the instance port, not through the public route. Liveness `/v1/health/live`. The public `https://<origin>/api/v1/health/ready` is for the external availability probe | as stated; container health checks per process (§10) |
 | Maintenance | During a migrating release (§9.2) the ingress answers `/api/*` with 503 and `Retry-After` | **P11.2:** while `deploy/maintenance/api` exists (mounted read-only at `/srv/maintenance`), `/api/*` answers 503, `Retry-After: 30`, the API's `default-src 'none'` CSP and the API's error envelope (`service_unavailable`); web pages keep serving |
 | Ingress failures (**P11.7**) | When the ingress itself cannot answer `/api/*` — no instance passes readiness (the database is down), the chosen instance died mid-request, no response header within the timeout — the client gets what the API answers when it is unavailable: 503 `service_unavailable`, `Retry-After`, the API's error envelope; never the ingress's own empty error page | `handle_errors 502 503 504` for `/api/*` (matched on the original path): 503, `Retry-After: 5`, `default-src 'none'`, the envelope. A request that was in flight on a killed instance is **not** replayed (an Ask is not idempotent at the transport level); the client may retry |
@@ -175,10 +175,14 @@ secret). Only settings that exist today are listed unless marked *target*.
 | `LATTICE_PROVIDER_SECRET_<NAME>` | secret | one per organization provider credential; referenced as `env:…` |
 | `LATTICE_GEMINI_API_KEY` / `GEMINI_API_KEY` / `LATTICE_OPENAI_API_KEY` | secret | legacy process-wide keys for query embedding only; avoid in production |
 | `LATTICE_MODEL_DIR`, `LATTICE_LOCAL_EMBEDDING_MODEL`, `LATTICE_LOCAL_EMBEDDING_THREADS` | config | only with `local` embeddings; the model directory is a read-only volume filled by `lattice models fetch` |
+| `LATTICE_SECRET_KEYS` / `LATTICE_SECRET_ACTIVE_KEY` | secret | **P12.1:** master keys for encrypted credentials (`id:<base64 32 bytes>`, comma-separated; the active ID). Optional until a `vault:` credential exists; then the API refuses to start in production without every key ID in use. Identical on every api instance; never on the worker or the migration job (runbook §9.1) |
 | `LATTICE_CLIENT_KEY_SECRET` | secret | **P11.4, required in production:** ≥ 32 bytes (`openssl rand -hex 32`), identical on every api instance; HMAC key for the shared pre-authentication counters (§12). Rotation resets those counters only. Outside production a fixed development key is used |
 | `LATTICE_BUILD_REVISION` / `LATTICE_BUILD_VERSION` | deployment | baked into the image at build (P11.1); never set by hand |
 | `LATTICE_TRUSTED_PROXIES` | deployment | **P11.1:** the ingress addresses or networks (comma-separated IPs/CIDRs; `*` refused); unset = trust no forwarding header. Run uvicorn with `--no-proxy-headers` (the image does) |
 | `LATTICE_FAKE_GENERATION_DELAY_SECONDS` | config | test double only: refused (must be 0) in production; the verification overlay uses it for the long-Ask proof |
+| `LATTICE_IMPORTS_ROOT` | deployment | **P12.6:** absolute path of the import area (§14), the same volume on every api instance and the worker; unset = uploads answer 503 `storage_unavailable` and organization-managed sources cannot sync. Reference stack: `/srv/lattice/imports` |
+| `LATTICE_IMPORT_MAX_UPLOAD_BYTES` / `_MAX_EXPANDED_BYTES` / `_MAX_ENTRIES` / `_MAX_FILE_BYTES` / `_ORGANIZATION_QUOTA_BYTES` | config | **P12.6** defaults for the 8 GB reference machine: 100 MiB / 512 MiB / 20,000 / 32 MiB / 2 GiB (bounds checked at start). Raise for larger hosts; the upload cap also needs the ingress limit (§4) |
+| `LATTICE_IMPORT_UPLOAD_TIMEOUT_SECONDS` / `LATTICE_IMPORT_CONCURRENT_UPLOADS` | config | **P12.6:** 600 (receive + validate; the ingress body and response timeouts follow it) / 2 per api process |
 
 ### 5.2 worker (`WorkerSettings`)
 
@@ -193,13 +197,15 @@ secret). Only settings that exist today are listed unless marked *target*.
 | `LATTICE_TRACE_RETENTION_DAYS` | config | **P11.4:** 90 (minimum 90; the database floor, §13) |
 | `LATTICE_METRICS_ADDRESS` | deployment | `0.0.0.0:9465` private, **required in production** (P11.6); scraped as job `lattice-worker`; carries the heartbeat gauge `lattice smoke` reads |
 | provider keys / `LATTICE_PROVIDER_SECRET_*`, model settings | secret / config | as the api, only for the embedding provider the worker uses |
+| `LATTICE_IMPORTS_ROOT` | deployment | **P12.6:** the api's import area (same volume, read-write: the worker reads imports and deletes expired ones); unset = organization-managed sources' syncs and checks fail `import_unavailable` |
 
 ### 5.3 migrate and operator commands (`MigrationSettings`)
 
 | Variable | Class | Rule |
 | -------- | ----- | ---- |
 | `LATTICE_MIGRATION_DATABASE_URL` | secret | `lattice_owner` credential; available **only** to the migration job and operators, never to api, worker or web. **Enforced (P11.2):** a production api or worker refuses to start when `LATTICE_MIGRATION_DATABASE_URL`, `LATTICE_OWNER_PASSWORD` or `POSTGRES_PASSWORD` is in its environment (`lattice.config.owner_credential_problem`; names only, never values); `lattice migrate` refuses a credential that does not own the schema, a superuser and a BYPASSRLS role |
-| `LATTICE_PUBLIC_URL` | deployment | printed by `lattice sso …` for redirect and SCIM URLs |
+| `LATTICE_PUBLIC_URL` | deployment | printed by `lattice sso …` / `lattice org create` for redirect and SCIM URLs |
+| `LATTICE_SECRET_KEYS` / `LATTICE_SECRET_ACTIVE_KEY` | secret | **operators only, P12.1:** the API's keys, for `org create --client-secret-stdin`, `provider credential set --value-stdin`, `sso update --client-secret-stdin` and `secrets rekey`. **Never for the migration job** (`check-config migrate` refuses them in production) |
 | `LATTICE_ENV` | config | `production` for commands that load the full settings |
 
 ### 5.4 web
@@ -240,8 +246,10 @@ secret**: session tokens are random and stored as SHA-256 hashes.
 | `lattice_worker` password | platform/DB administrator | worker | as above | worker restart | no (verifier only) |
 | Platform admin DB credential | platform owner | bootstrap, restore, logical export | per platform policy | — | no |
 | `LATTICE_OIDC_SECRET_<NAME>` (OIDC client secret) | organization's IdP administrator + operator | api (token exchange) | IdP-driven (runbook §9): same reference with a new value — the provider keeps both secrets during the switch, rolling api restart, then the old one is removed at the provider; or a new reference — the variable into every api instance first (rolling restart), then `lattice sso update --client-secret-ref` (P11.3), then the old variable removed. No session impact | yes, for a new value | no: the database holds only the reference `env:…` |
-| SCIM bearer tokens | operator (`lattice scim token create`) | the organization's IdP | create new → switch the IdP → `lattice scim token revoke` | no | hash only (SHA-256) |
-| `LATTICE_PROVIDER_SECRET_<NAME>` (BYOK) | organization administrator via operator | api, worker | add new variable → rolling restart → `lattice provider credential set` (revokes the old reference) → remove old variable | yes, to add a variable | no: reference only |
+| SCIM bearer tokens | organization administrator (Settings → Identity, P12.4) or operator (`lattice scim token create`) | the organization's IdP | *Rotate* (replacement now, old refused at once), or for no interruption: create a second → switch the IdP → revoke the old | no | hash only (SHA-256) + last four characters |
+| `LATTICE_PROVIDER_SECRET_<NAME>` (BYOK, operator-managed) | organization administrator via operator (or the administrator enters a key in the product instead: `vault:`, P12.5) — a deployment variable is recorded for one organization at a time and never becomes another's fallback | api (generation; the worker presents no organization credential — its embedding provider is a deployment setting, P12.1 call-graph check) | add new variable → rolling restart → `lattice provider credential set` (revokes the old reference) → remove old variable | yes, to add a variable | no: reference only |
+| Master keys `LATTICE_SECRET_KEYS` (P12.1) | operator | api, operators (never worker, migrate, web) | add new key + make it active + rolling restart → `lattice secrets rekey` → remove old key (keep it offline while old backups matter); runbook §9.1 | yes | **no** — and must be backed up separately: a restore without the key cannot open stored credentials |
+| Encrypted credentials (`vault:<id>`, P12.1) | operators (`org create`, `sso update --client-secret-stdin`, `provider credential set --value-stdin`); administrators set and replace OIDC client secrets in Settings → Identity (P12.4) and provider API keys in Settings → AI providers (P12.5: sealed in the API, the previous ciphertext destroyed; administrators can never name an `env:` variable) | api (OIDC token exchange, generation) | a new value is sealed into a new row; the old ciphertext is destroyed (NULL); revocation destroys it | no | ciphertext only (AES-256-GCM, bound to organization, secret row, owner record, credential type and key ID) |
 | `LATTICE_CLIENT_KEY_SECRET` (P11.4) | operator | api | replace + rolling restart (resets pre-auth counters; during the roll the two key versions count separately, so a client may get up to twice the limit for a minute) | yes | no: the database holds only HMAC outputs |
 | Session tokens | — (generated) | browsers | rotated at every sign-in | no | hash only |
 | OIDC login state (state, nonce, PKCE verifier) | — (generated) | api | ten-minute single-use attempts | no | yes, transiently (`oidc_login_attempts`, deleted by retention, §11) |
@@ -251,8 +259,10 @@ secret**: session tokens are random and stored as SHA-256 hashes.
 Rules (current code): a credential never raises a sensitivity, trust class or approval
 (D-15, D-16); references are restricted to the `LATTICE_OIDC_SECRET_*` and
 `LATTICE_PROVIDER_SECRET_*` namespaces (plus three legacy provider names), so a stored
-reference cannot name a database URL; values never appear in API responses, logs, traces,
-prompts, errors or audit events.
+reference cannot name a database URL, or to `vault:<id>` (P12.1), which opens only for the
+record, organization and credential type it was sealed for; values never appear in API
+responses, logs, traces, prompts, errors or audit events. The database never holds a
+credential in plaintext and never holds a master key.
 
 ## 7. Database roles and bootstrap
 
@@ -487,7 +497,7 @@ tables, never content.
 
 | Class | Data | Rule (deleted when) | Database floor | Deletes it |
 | ----- | ---- | ------------------- | -------------- | ---------- |
-| Durable security record | `audit_events` | never by retention (append-only, UPDATE refused by trigger); removed only with its organization (Phase 12) | no DELETE privilege for any runtime role | nobody |
+| Durable security record | `audit_events` | never by retention (append-only, UPDATE refused by trigger); removed only with its organization (executable purge: Phase 15, D-37A) | no DELETE privilege for any runtime role | nobody |
 | Identity and configuration tombstones | `directory_identities`, removed memberships, `scim_tokens`, `oidc_connections`, `provider_credentials` history | kept for the organization's life (D-20 terminal removal relies on them) | no privilege | nobody |
 | User history (content-bearing) | `query_traces` | created more than `LATTICE_TRACE_RETENTION_DAYS` ago (worker setting, default **90**, minimum 90) | **90 days**: a shorter retention needs a migration and a product decision (per-organization retention is Phase 12) | worker |
 | Operational history | `jobs` (finished) | finished more than 30 days ago | 30 days | worker |
@@ -497,6 +507,7 @@ tables, never content.
 | | `rate_limit_counters` | window started more than 2 days ago (longest window: 1 day) | the same | worker |
 | | `pre_auth_rate_limits` | window started more than 2 days ago | the same, inside `lattice_pre_auth_retention` (owner `lattice_auth`, `EXECUTE` for `lattice_worker` only) | worker |
 | | `ask_slots` | lease expired more than 1 hour ago | the same | worker |
+| Uploaded exports (**P12.6**) | `source_imports` rows and their files | **rejected** imports at once; **superseded** imports as soon as no queued or running job reads them; uploads abandoned for **1 hour**; imports of a disconnected source. Rows stay (status `deleted`, IDs and counts only); files are removed. Also: files with no row, older than 1 hour (an interrupted write) | `lattice_expire_imports` (owner function, `EXECUTE` for `lattice_worker` only) decides; the worker never deletes a row | worker, every **60 s** (`import_retention`) |
 | Logs | stdout JSON | platform log retention; **duration to decide with the platform** (no content in logs, SEC-8) | — | platform |
 
 Safety: each batch is its own transaction, deletes by key and re-checks eligibility, so a
@@ -513,8 +524,9 @@ counted and logged and does not stop the others. Metrics per task:
 | ------ | --------- | ---- |
 | Source exports | worker (read-only), operator `lattice sync` (writes the configuration that names the path) | Required while connectors read local exports (all three today). The worker syncs only the path the operator's last `lattice sync` recorded (ADR-013), so operator and worker must see the **same path**. Reference stack: `./data` mounted read-only at `/srv/lattice/data` in `worker` and `ops`. Staging handling: P11.2 |
 | Model cache | api and worker, only with `local` embeddings | read-only, filled and verified by `lattice models fetch` |
+| Imports (**P12.6**) | every api instance (read-write: uploads are received, validated and published here) and the worker (read-write: reads imports, deletes expired ones); **never** web or the ingress | One shared filesystem at `LATTICE_IMPORTS_ROOT`. Layout `<root>/<organization uuid>/<import uuid>/{archive.partial, archive, staging/, tree/}` — locations derived from generated UUIDs only; directories 0750, files 0640, owned by the service user (uid 10001; the backend image creates `/srv/lattice/imports` with that owner so a fresh named volume inherits it), nothing executable or served. Size it for the per-organization quota (default 2 GiB) times the organizations, plus the 256 MiB free-space reserve the API keeps (`storage_full` below it). Back it up only if re-uploading exports is not acceptable: imports are inputs, the database holds what was synced. Reference stack: named volume `imports` mounted at `/srv/lattice/imports` in `api1`, `api2` and `worker`. A managed platform needs a volume shared by the api instances and the worker (Appendix A's "export volume" row applies) |
 
-## 15. Local reference stack (P11.1–P11.7)
+## 15. Local reference stack (P11.1–P11.7, P12.7)
 
 `compose.production.yaml` (Compose project `lattice-reference`, separate from the
 development `compose.yaml`) runs the production topology on one machine: PostgreSQL,
@@ -547,9 +559,10 @@ administrative role and extension allow-list. The `bootstrap` job then runs
 | `IDP=1` (P11.3) | adds `deploy/compose.idp.yaml`: the verification OIDC provider (`deploy/verification/idp.py`, run from the backend image with the script mounted; HTTPS from a throwaway CA made by `deploy/verification/make-certs.sh` into the git-ignored `deploy/.verification/`), the API instances trusting that CA alone (`SSL_CERT_FILE`) and holding the connection's secret reference, and each API instance's metrics listener published on 127.0.0.1 (19464, 19465) so the verification browser can see which instance served a step. The stack itself stays in production mode. Not a production configuration |
 | `make prod-limits VERIFY=1 IDP=1` (P11.4) | shared in-flight and pre-authentication limits across both API instances, retention in the worker, worker killed and stopped mid-job (`deploy/verification/limits_check.py`; needs `FAKE_DELAY` ≥ 10 and `make prod-seed VERIFY=1 IDP=1`; sets Halden's generation provider to the fake model) |
 | `make prod-identity IDP=1` | the identity verification of plan §15.3 (`deploy/verification/identity_check.py`, on the host): seeds Halden (an explicit test-mode operator run), connects it to the verification provider, provisions run-unique personas over SCIM through the ingress, and checks sign-in across both instances, replay, ID-token time boundaries, logout, operator suspension/reinstatement, SCIM deactivation/removal and token rotation, provider outage, SSO disable/enable, client-ID update and both secret rotations, and the clock-skew gauge (runbook §8) |
-| `make prod-authz VERIFY=1 IDP=1` (P11.7) | the deployed authorization suite of plan §15.2 (`deploy/verification/authz_check.py`): the route sweep read from the API's own routers (anonymous 401, SCIM without a token 401, one identical 403 for a member on every administrator route, another organization's real identifiers answering exactly like random ones with nothing changed), administrator ≠ content on traces, an Access suspension ending the session on both instances, `check-deployment`, a requested sync per organization, and the `eval retrieval` / `eval answer` security gates as an operator job inside the stack. Grants Veridian's most privileged persona the administrator capability for the sweep (audited) and takes it back |
+| `make prod-authz VERIFY=1 IDP=1` (P11.7; expanded P12.8) | the deployed authorization suite of plan §15.2 (`deploy/verification/authz_check.py`): the route sweep read from **every** API router module (since P12.8 identical to the in-process inventory, `backend/tests/security/test_route_inventory.py`: setup, members and administrators, accounts and references, OIDC and SCIM administration, providers and BYOK, egress, D-34 step-ups, sources, imports and lifecycle) — anonymous 401, SCIM without a token 401, one identical 403 for a member on every administrator route, another organization's real identifier of **every** kind (path and body) answering exactly like a random one with nothing changed (the run fails if any kind has no real identifier); CSRF refused on every state-changing route; no read returns a stored BYOK key, a deployment secret, a SCIM token or a private key; administrator ≠ content on traces; an Access suspension, a suspended administrator and a suspended organization ending sessions on both instances; `check-deployment`, a requested sync per organization, and the `eval retrieval` / `eval answer` security gates as an operator job inside the stack. Needs a `make prod-identity` on the same database within a day (its D-34 drill leaves the step-up identifier the sweep uses). Grants Veridian's most privileged persona the administrator capability for the sweep (audited) and takes it back |
 | `make prod-drills VERIFY=1 IDP=1` (P11.7) | the failure drills of plan §18 (`deploy/verification/drills_check.py`; `FAKE_DELAY=20`): an API instance killed and one stopped during an Ask, the database stopped and started, the generation provider unreachable (a `local` record on a loopback port where nothing listens), the dead process's Ask slot freed at lease expiry |
 | `make prod-perf VERIFY=1 IDP=1` (P11.7) | performance sanity through the ingress (`deploy/verification/perf_check.py`, `FAKE_DELAY=0`): p50/p95 of `/api/v1/me`, `/api/v1/sources` and an Ask with the fake model — a local regression signal, not a capacity figure |
+| `make prod-onboard IDP=1` (**P12.7**) | organization onboarding end to end in **production mode** (no `VERIFY`: OIDC only, no seed, no fake model): `deploy/verification/onboard_check.py` creates two run-unique organizations with `lattice org create` (secret on stdin, private issuer registered) and takes them from first sign-in to a member's first Ask through the ingress — setup record at each step, SCIM, members, accounts, providers and the D-34 step-up (no model is called), the three export types uploaded on the dedicated route, the worker's checks and syncs from the exact import, fail-closed mapping, denied Asks, two tenants, ingress and upload limits (the API instances rolled onto `deploy/verification/compose.small-imports.yaml` — the smallest limits the settings accept, verification only — and back), import replacement while a sync is queued, pause/resume/disconnect, operator sources, logs; then the same journey in the real web app (Playwright project `onboarding-stack`, `apps/web/e2e/onboarding-stack.spec.ts`; `UI=0` skips it). [onboarding.md](onboarding.md) |
 
 It runs the production defaults (`LATTICE_ENV=production`, `LATTICE_QUERY_EMBEDDING=none`,
 no development sign-in). It is a verification environment, not a deployment recipe, and
@@ -743,3 +756,75 @@ P11.2.
   [App Platform 30 s default timeout](https://docs.digitalocean.com/support/my-php-app-is-timing-out-and-throwing-5xx-errors/),
   [App spec](https://docs.digitalocean.com/products/app-platform/reference/app-spec/),
   [community: 100 s hard limit](https://www.digitalocean.com/community/questions/app-platform-request-timeout).
+
+
+## P12.5 upgrade notes (migration 0021)
+
+- **Generation needs an explicit approval.** 0021 records an approval (`approved_at =
+  created_at`, at the level already recorded) for every existing generation record, so
+  nothing changes on upgrade. From now on a record an administrator creates in the product
+  starts disabled and unapproved; `lattice provider configure` keeps approving for
+  `internal`.
+- **Provider calls apply the outbound policy.** An organization-controlled generation
+  server (an Ollama endpoint outside the deployment) is reachable only as a target the
+  operator registered for the organization and purpose `generation`: before deploying, run
+  `lattice outbound allow --org <slug> --url <https://host:port> --purpose generation
+  --reason "…"` for each such endpoint. A loopback
+  (`local`) Ollama is the operator's and needs no registration. Gemini needs nothing (a
+  public https endpoint; the guard checks its addresses at connect time). No new
+  environment variable.
+- **Egress escalations in the product need OIDC.** Raising an organization's AI egress in
+  Settings → AI providers needs a fresh sign-in at its identity provider (D-34); an
+  organization without an OIDC connection raises through the operator commands. An
+  operator may require a sign-in assurance for the step-up per connection: `lattice sso
+  update --org <slug> --step-up-acr <acr value> --reason "…"` — only values the identity
+  provider really asserts for a strong method (otherwise every raise is refused).
+- **Alerting:** `LatticeEgressEscalation` (ticket, security) fires once per committed
+  escalation (runbook §10.17).
+
+## P12.6 upgrade notes (migration 0022)
+
+- **Migration 0022** adds `sources.managed_by` (every existing source becomes `operator`),
+  `sources.version`, `sources.import_id`, the `source_imports` table, `jobs.kind`
+  `import_check` and `jobs.import_id`, and `source_sync_runs.import_id`; no row is
+  rewritten. Declared irreversible (the downgrade drops every import). Operator-managed
+  sources keep working unchanged (`lattice sync`, the worker reading the recorded path).
+- **The import area.** Before deploying, give every api instance and the worker one shared
+  read-write volume and set `LATTICE_IMPORTS_ROOT` on both (§5.1, §14); the image's
+  `/srv/lattice/imports` is owned by uid 10001. Without it, administrators can create
+  sources but uploads answer 503 `storage_unavailable`.
+- **The ingress.** Add the route-specific body limit and timeouts for `POST
+  /api/v1/admin/sources/<uuid>/imports` (§4) — and only for it. A platform that cannot
+  set a per-route body limit must keep the 1 MB limit everywhere else by other means.
+- **New metrics:** `lattice_imports_total{outcome}` and `lattice_import_duration_seconds`.
+
+
+## P12.7 upgrade notes (migration 0023)
+
+- **Migration 0023** replaces one function, `lattice_require_access_audit` (0013's deferred
+  access-audit trigger): a `DELETE` of a grant whose document, or of a group membership
+  whose group, no longer exists in the transaction — the cascade of a source's purge — no
+  longer needs a per-member event. Without it the product's *Disconnect* failed for every
+  source with group or department grants (Slack private channels, documents with
+  `grants:`) and left the source `deleting`. Reversible (the downgrade restores 0013's body);
+  no table, row, privilege or snapshot change. A source left `deleting` by the earlier
+  build is finished by `lattice source disconnect --org <slug> --source <key>` (verified on
+  the reference stack).
+- **Metrics:** `lattice_imports_total{outcome="rejected"}` now also counts uploads refused
+  before they were registered (log event `sources.import_refused`).
+
+
+## P12.8 upgrade notes (migration 0024)
+
+- **Migration 0024** replaces the same function again, `lattice_require_access_audit`:
+  0023's purge exemption now applies only to a row of the organization the session is
+  bound to. The deferred trigger reads documents and groups through row-level security as
+  bound *at commit*, so under 0023 an API-role session that rebound `app.org_id` before
+  commit could have deleted an administrator grant or an administrator group's member
+  without its `access.*` event (found by the P12.8 review; the application never rebinds
+  within a transaction). Reversible (the downgrade restores 0023's body); no table, row,
+  privilege or snapshot change; `SCHEMA_REVISION` 0024, so the API and worker of this
+  build refuse to start against 0023 (deploy with `lattice migrate`, stop-the-world as
+  always).
+- **Setup record:** new reason `sources·attention·import_invalid` (a source's current
+  export failed its check, so no sync can run); `facts.invalid_import_sources`.

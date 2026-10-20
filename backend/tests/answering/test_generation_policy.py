@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 from pydantic import SecretStr
+from sqlalchemy import text
 
 from lattice.answering.models import AskRequest
 from lattice.answering.service import AskDependencies, answer_question
@@ -26,6 +27,8 @@ from lattice.providers import configuration
 from lattice.providers.generation_factory import Declaration
 from lattice.providers.records import CredentialRef, GenerationConfig
 from lattice.providers.secrets import EnvironmentSecretStore
+from lattice.vault.keys import Keyring
+from lattice.vault.sealing import SealedSecret
 
 from ..retrieval.world import FAKE, NOW, Org, new_org
 from .helpers import ACTOR, Harness, configure_generation, run, set_credential
@@ -375,6 +378,12 @@ async def test_organization_controlled_needs_the_class_allowed_and_an_explicit_a
             }
         ]
     )
+    # The operator's configuration approves for internal explicitly (P12.5); without an
+    # explicit approval -- withdrawn here -- a generation record receives nothing.
+    async with org.owner.tenant_transaction(org.id) as s:
+        await s.execute(
+            text("UPDATE model_providers SET approved_at = NULL WHERE purpose = 'generation'")
+        )
     first = await run(app_db, org, "tom", QUESTION, harness)
     assert first.trace["egress"]["decision_reason"] == "provider_unapproved"
     await configure_generation(
@@ -418,6 +427,41 @@ async def test_another_organizations_configuration_is_never_used(
     assert harness.builds == 0
 
 
+async def test_an_operators_environment_key_serves_only_the_organization_it_was_recorded_for(
+    app_db: Database, owner_db: Database, org: Org
+) -> None:
+    """P12.0 compatibility and tenant isolation (ADR-011, P12.5): an operator-recorded
+    ``env:`` reference still serves its organization; the same deployment key is nothing
+    to another organization configured for the same provider (no fallback)."""
+    environ = {"LATTICE_PROVIDER_SECRET_HALDEN_GEMINI": KEY}
+    await _gemini(org, data_origin="synthetic")
+    await set_credential(
+        org, "gemini", "env:LATTICE_PROVIDER_SECRET_HALDEN_GEMINI", data_use="paid"
+    )
+    other = await new_org(owner_db, "veridian")
+    await other.member("tom")
+    await other.document("internal", "Onboarding checklist", [INTERNAL])
+    await _gemini(other, data_origin="synthetic")
+    valid = {
+        "claims": [],
+        "conflicts": [],
+        "unknowns": [],
+        "clarifying_question": "",
+        "status": "insufficient_evidence",
+    }
+    harness = Harness(outputs=[valid])
+    served = await run(app_db, org, "tom", QUESTION, harness, environ=environ)
+    assert served.trace["egress"]["decision_reason"] is None
+    assert [s.get_secret_value() for s in harness.secrets_seen] == [KEY]
+    assert len(harness.requests) == 1
+
+    refused = Harness(outputs=[valid])
+    outcome = await run(app_db, other, "tom", QUESTION, refused, environ=environ)
+    assert outcome.trace["egress"]["decision_reason"] == "credential_unavailable"
+    assert refused.builds == 0
+    assert refused.secrets_seen == []
+
+
 class _CountingStore(EnvironmentSecretStore):
     """Records every resolution attempt, successful or not."""
 
@@ -425,9 +469,9 @@ class _CountingStore(EnvironmentSecretStore):
         super().__init__(environ={}, memory=memory)
         self.resolved: list[str] = []
 
-    def resolve(self, reference: str) -> SecretStr:
+    def resolve(self, reference: str, sealed: SealedSecret | None = None) -> SecretStr:
         self.resolved.append(reference)
-        return super().resolve(reference)
+        return super().resolve(reference, sealed)
 
 
 @pytest.mark.parametrize(
@@ -496,3 +540,140 @@ async def test_classifications_are_answered_for_readable_documents_only(
         for hidden in (org.documents["confidential"], org.documents["restricted"], uuid.uuid4()):
             with pytest.raises(AuthorizationInvariantViolation):
                 await readable_document_classifications(s, ctx, [org.documents["internal"], hidden])
+
+
+# --- P12.1: an encrypted (vault:) credential ------------------------------------------------
+
+_MASTER = "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE="
+_OTHER_MASTER = "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI="
+
+
+def _keyring(material: str = _MASTER) -> Keyring:
+    return Keyring.from_environment(
+        {"LATTICE_SECRET_KEYS": f"k1:{material}", "LATTICE_SECRET_ACTIVE_KEY": "k1"}
+    )
+
+
+async def _vault_credential(org: Org) -> str:
+    async with org.owner.tenant_transaction(org.id) as s:
+        await configuration.set_credential(
+            s,
+            org.id,
+            provider="gemini",
+            value=SecretStr(KEY),
+            keyring=_keyring(),
+            data_use="paid",
+            reason="test setup",
+            actor=ACTOR,
+        )
+        reference: str = (
+            await s.execute(
+                text("SELECT secret_ref FROM provider_credentials WHERE status = 'active'")
+            )
+        ).scalar_one()
+    return reference
+
+
+def _empty_answer() -> dict[str, Any]:
+    return {
+        "claims": [],
+        "conflicts": [],
+        "unknowns": [],
+        "clarifying_question": "",
+        "status": "insufficient_evidence",
+    }
+
+
+async def test_an_encrypted_credential_is_decrypted_by_the_api_at_call_time(
+    app_db: Database, org: Org, caplog: pytest.LogCaptureFixture
+) -> None:
+    await _gemini(org, data_origin="synthetic")
+    reference = await _vault_credential(org)
+    assert reference.startswith("vault:")
+    harness = Harness(outputs=[_empty_answer()])
+    store = EnvironmentSecretStore(environ={}, keyring=_keyring())
+    with caplog.at_level(logging.DEBUG):
+        outcome = await answer_question(
+            app_db,
+            organization_id=org.id,
+            membership_id=org.members["tom"],
+            request=AskRequest(question=QUESTION),
+            deps=AskDependencies(embedding=FAKE, generation=harness, secrets=store),
+            now=NOW,
+        )
+    assert [s.get_secret_value() for s in harness.secrets_seen] == [KEY]
+    everywhere = (
+        _sent(harness) + outcome.answer.model_dump_json() + str(outcome.trace) + caplog.text
+    )
+    assert KEY not in everywhere
+    assert reference not in everywhere
+
+
+@pytest.mark.parametrize("fault", ["no_keys", "wrong_key", "destroyed"])
+async def test_an_encrypted_credential_that_cannot_be_opened_is_evidence_only(
+    app_db: Database, org: Org, fault: str
+) -> None:
+    await _gemini(org, data_origin="synthetic")
+    await _vault_credential(org)
+    store = EnvironmentSecretStore(
+        environ={},
+        keyring=None
+        if fault == "no_keys"
+        else _keyring(_OTHER_MASTER if fault == "wrong_key" else _MASTER),
+    )
+    if fault == "destroyed":
+        async with org.owner.tenant_transaction(org.id) as s:
+            await s.execute(
+                text(
+                    "UPDATE encrypted_secrets SET nonce = NULL, ciphertext = NULL, hint = NULL, "
+                    "destroyed_at = now()"
+                )
+            )
+    harness = Harness(outputs=[_empty_answer()])
+    outcome = await answer_question(
+        app_db,
+        organization_id=org.id,
+        membership_id=org.members["tom"],
+        request=AskRequest(question=QUESTION),
+        deps=AskDependencies(embedding=FAKE, generation=harness, secrets=store),
+        now=NOW,
+    )
+    assert outcome.trace["egress"]["decision_reason"] == "credential_unavailable"
+    assert harness.builds == 0
+
+
+async def test_rotating_and_revoking_an_encrypted_credential_destroys_its_ciphertext(
+    org: Org,
+) -> None:
+    await _gemini(org, data_origin="synthetic")
+    first = await _vault_credential(org)
+    second = await _vault_credential(org)  # rotation
+    assert first != second
+    async with org.owner.tenant_transaction(org.id) as s:
+        await configuration.revoke_credential(
+            s, org.id, provider="gemini", reason="test", actor=ACTOR
+        )
+        rows = (
+            await s.execute(
+                text(
+                    "SELECT destroyed_at IS NOT NULL AS gone, ciphertext IS NULL AS empty "
+                    "FROM encrypted_secrets"
+                )
+            )
+        ).all()
+        events = (
+            await s.execute(
+                text(
+                    "SELECT action, before, after FROM audit_events "
+                    "WHERE action LIKE 'credential.%' ORDER BY created_at"
+                )
+            )
+        ).all()
+    assert [tuple(r) for r in rows] == [(True, True), (True, True)]
+    assert [e.action for e in events] == [
+        "credential.set",
+        "credential.rotated",
+        "credential.revoked",
+    ]
+    assert events[0].after["scheme"] == "vault"
+    assert KEY not in str(events)

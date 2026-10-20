@@ -91,6 +91,7 @@ GENERATION_OUTCOMES: Final = frozenset(
         "timeout",
         "deadline_exceeded",
         "network",
+        "outbound_blocked",
         "unauthorized",
         "rate_limited",
         "quota_exhausted",
@@ -120,6 +121,10 @@ GENERATION_DECISIONS: Final = frozenset(
         "provider_data_use",
         "policy_unrecognised",
         "question_classification",
+        # P12.5: the outbound policy refused the endpoint; the call-time re-check refused.
+        "outbound_blocked",
+        "policy_changed",
+        "credential_revoked",
     }
 )
 REJECTION_CODES: Final = frozenset(
@@ -168,10 +173,56 @@ SSO_OUTCOMES: Final = frozenset(
         "unknown_connection",
         "invalid_state",
         "provider_error",
+        "invalid_configuration",
+        "outbound_blocked",
+        "credentials_rejected",
         "token_invalid",
         "not_provisioned",
         "inactive",
         "rate_limited",
+        "test_completed",
+        "step_up_completed",
+    }
+)
+# P12.5: egress escalation commits and refusals, step-up results, provider tests.
+EGRESS_ESCALATION_OUTCOMES: Final = frozenset(
+    {
+        "committed",
+        "step_up_required",
+        "grant_invalid",
+        "grant_consumed",
+        "grant_expired",
+        "grant_mismatch",
+        "session_ended",
+        "policy_changed",
+    }
+)
+STEP_UP_OUTCOMES: Final = frozenset(
+    {
+        "granted",
+        "not_fresh",
+        "session_mismatch",
+        "assurance_insufficient",
+        "step_up_invalid",
+        "mismatched",
+        "not_provisioned",
+        "sign_in_failed",
+        "token_invalid",
+        "provider_unavailable",
+        "invalid_configuration",
+        "outbound_blocked",
+        "credentials_rejected",
+    }
+)
+PROVIDER_TEST_RESULTS: Final = frozenset(
+    {
+        "valid",
+        "invalid_credential",
+        "configuration_invalid",
+        "provider_unavailable",
+        "outbound_blocked",
+        "credential_missing",
+        "unsupported",
     }
 )
 SCIM_OPERATIONS_SET: Final = frozenset(
@@ -182,7 +233,7 @@ SYNC_STATUSES: Final = frozenset({"succeeded", "partial", "failed", "aborted"})
 SYNC_STAGES: Final = frozenset(
     {"read", "parse", "validate", "normalize", "map_access", "chunk", "embed", "persist"}
 )
-JOB_KINDS: Final = frozenset({"source_sync"})
+JOB_KINDS: Final = frozenset({"source_sync", "import_check"})
 JOB_OUTCOMES: Final = frozenset({"succeeded", "failed", "retry", "abandoned"})
 # Phase 11 (P11.6): membership lifecycle by actor (provisioning bursts, threat T23) and
 # session revocations by cause.
@@ -199,6 +250,29 @@ REVOCATION_REASONS: Final = frozenset(
         "operator_revoke",
         "organization_suspended",
     }
+)
+# Phase 12 (P12.6): import outcomes and refusal codes (lattice.imports.limits).
+IMPORT_OUTCOMES: Final = frozenset({"accepted", "rejected"})
+IMPORT_CODES: Final = frozenset(
+    {
+        "archive_invalid",
+        "too_large",
+        "too_many_entries",
+        "ratio_exceeded",
+        "unsafe_path",
+        "link_refused",
+        "duplicate_name",
+        "unsupported_layout",
+        "upload_incomplete",
+        "upload_timeout",
+        "storage_full",
+        "upload_abandoned",
+        "upload_failed",
+    }
+)
+# Phase 12 (P12.1): recoverable credentials that could not be opened (C3.5).
+SECRET_FAILURE_CODES: Final = frozenset(
+    {"missing", "destroyed", "key_unavailable", "decrypt_failed"}
 )
 
 
@@ -227,6 +301,10 @@ def member_changed(before: str | None, after: str, actor_kind: str) -> None:
 def sessions_revoked(reason: str, count: int) -> None:
     if count > 0:
         SESSIONS_REVOKED.labels(reason=bounded(reason, REVOCATION_REASONS)).inc(count)
+
+
+def secret_decrypt_failed(code: str) -> None:
+    SECRET_DECRYPT_FAILURES.labels(code=bounded(code, SECRET_FAILURE_CODES)).inc()
 
 
 def outcome_of(code: str | None) -> str:
@@ -375,6 +453,18 @@ JOBS = Counter(
     ["kind", "outcome"],
     registry=REGISTRY,
 )
+IMPORTS = Counter(
+    "lattice_imports_total",
+    "Export uploads by outcome and refusal code (none when accepted).",
+    ["outcome", "code"],
+    registry=REGISTRY,
+)
+IMPORT_DURATION = Histogram(
+    "lattice_import_duration_seconds",
+    "Time from registering an upload to its acceptance or refusal.",
+    buckets=_LONG,
+    registry=REGISTRY,
+)
 JOB_DURATION = Histogram(
     "lattice_job_duration_seconds",
     "Background job duration by kind.",
@@ -428,6 +518,12 @@ SESSIONS_REVOKED = Counter(
     ["reason"],
     registry=REGISTRY,
 )
+SECRET_DECRYPT_FAILURES = Counter(
+    "lattice_secret_decrypt_failures_total",
+    "Recoverable credentials (vault: references) that could not be opened, by fixed code.",
+    ["code"],
+    registry=REGISTRY,
+)
 JOBS_OLDEST_WAITING = Gauge(
     "lattice_jobs_oldest_waiting_seconds",
     "Age of the oldest queued, due job (0 when none; worker view).",
@@ -452,6 +548,25 @@ WAL_ARCHIVE_LAST_SUCCESS = Gauge(
 CLOCK_SKEW = Gauge(
     "lattice_clock_skew_seconds",
     "This process's clock minus the database's clock (API readiness checks, worker polls).",
+    registry=REGISTRY,
+)
+EGRESS_ESCALATIONS = Counter(
+    "lattice_egress_escalations_total",
+    "Attempts to commit an AI egress escalation (D-34) by fixed outcome: committed with a "
+    "fresh step-up grant, or refused.",
+    ["outcome"],
+    registry=REGISTRY,
+)
+STEP_UPS = Counter(
+    "lattice_step_ups_total",
+    "Egress step-up re-authentications (D-34) by fixed outcome.",
+    ["outcome"],
+    registry=REGISTRY,
+)
+PROVIDER_TESTS = Counter(
+    "lattice_provider_tests_total",
+    "Administrator provider tests (no organization content) by provider and fixed result.",
+    ["provider", "result"],
     registry=REGISTRY,
 )
 BUILD_INFO = Gauge(

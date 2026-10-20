@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits prod-authz prod-drills prod-perf prod-backup alerts-test privilege-snapshot
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits prod-authz prod-drills prod-perf prod-onboard prod-backup alerts-test privilege-snapshot
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -168,7 +168,11 @@ prod-env: ## Generate deploy/.env.reference: random local-only passwords and dri
 	  VERIFY_OIDC_CLIENT_SECRET_NEXT VERIFY_IDP_ADMIN_TOKEN; do \
 	  grep -q "^$$name=" $(REFERENCE_ENV) || { echo "$$name=$$(openssl rand -hex 24)" >> $(REFERENCE_ENV); \
 	    echo "added $$name to $(REFERENCE_ENV)"; }; \
-	done
+	done; \
+	grep -q "^LATTICE_SECRET_KEYS=" $(REFERENCE_ENV) || { \
+	  echo "LATTICE_SECRET_KEYS=reference-1:$$(openssl rand -base64 32)" >> $(REFERENCE_ENV); \
+	  echo "LATTICE_SECRET_ACTIVE_KEY=reference-1" >> $(REFERENCE_ENV); \
+	  echo "added LATTICE_SECRET_KEYS and LATTICE_SECRET_ACTIVE_KEY to $(REFERENCE_ENV)"; }
 
 prod-build: ## Build lattice-backend:local and lattice-web:local, labelled with the git revision
 	docker build -f backend/Dockerfile --build-arg LATTICE_BUILD_REVISION=$(REVISION) -t lattice-backend:local .
@@ -237,8 +241,10 @@ prod-limits: ## Shared-limit, retention and worker drills (needs VERIFY=1 IDP=1,
 	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
 	  ../deploy/verification/limits_check.py
 
-# The deployed authorization suite (plan §15.2, P11.7) and the failure drills (§18):
-# `make prod-up VERIFY=1 IDP=1 FAKE_DELAY=20 && make prod-seed VERIFY=1 IDP=1` first.
+# The deployed authorization suite (plan §15.2, P11.7; every route family since P12.8) and
+# the failure drills (§18): `make prod-up VERIFY=1 IDP=1 FAKE_DELAY=20 && make prod-seed
+# VERIFY=1 IDP=1` first; prod-authz also needs a `make prod-identity` on the same database
+# within the last day (the real step-up identifier its cross-organization sweep uses).
 prod-authz: ## Deployed authorization suite: route sweep, revocation, roles, eval security gates
 	@[ -n "$(VERIFY)" ] && [ -n "$(IDP)" ] || { echo "prod-authz needs VERIFY=1 IDP=1"; exit 2; }
 	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
@@ -255,6 +261,19 @@ prod-perf: ## Performance sanity through the ingress (needs VERIFY=1 IDP=1, FAKE
 	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
 	  ../deploy/verification/perf_check.py
 
+# End-to-end organization onboarding (P12.7; phase-12-plan §20) against the stack in
+# production mode -- `make prod-up IDP=1` first, without VERIFY (OIDC sign-in only, no seed,
+# no fake model). Each run onboards new run-unique organizations (`lattice org create`)
+# through the product: first the API journey (deploy/verification/onboard_check.py), then
+# the same journey in the real web app through Caddy (Playwright project `onboarding-stack`;
+# UI=0 skips it). It rolls the API instances once onto, and back off, a small-limits overlay.
+prod-onboard: ## End-to-end onboarding drill, org create → first Ask, API + browser (needs `make prod-up IDP=1`)
+	@[ -n "$(IDP)" ] && [ -z "$(VERIFY)" ] || { echo "prod-onboard needs IDP=1 without VERIFY=1 (production sign-in)"; exit 2; }
+	cd backend && LATTICE_COMPOSE="$(PROD_COMPOSE)" uv run --extra local python \
+	  ../deploy/verification/onboard_check.py
+	$(if $(filter 0,$(UI)),@echo "UI=0: browser journey skipped",cd apps/web && \
+	  LATTICE_ONBOARD_STACK=1 LATTICE_COMPOSE="$(PROD_COMPOSE)" pnpm exec playwright test --workers=1)
+
 # Backups (P11.5): restore and verification with deploy/backup.sh restore <id> [...].
 prod-backup: ## Base backup of the reference database + row-count manifest (deploy/backup.sh)
 	deploy/backup.sh backup
@@ -265,5 +284,10 @@ prod-ps: ## Show the reference stack's containers and health
 prod-down: prod-env ## Stop the reference stack (volumes kept)
 	$(PROD_COMPOSE) down --remove-orphans
 
+# Only ever the reference stack: COMPOSE_PROJECT_NAME would override compose.production.yaml's
+# `name: lattice-reference` and point `down -v` at another project (e.g. the development
+# `lattice`), so any other value is refused.
 prod-destroy: prod-env ## DELETE the reference stack and its volumes
+	@[ -z "$$COMPOSE_PROJECT_NAME" ] || [ "$$COMPOSE_PROJECT_NAME" = lattice-reference ] || \
+	  { echo "prod-destroy refused: COMPOSE_PROJECT_NAME=$$COMPOSE_PROJECT_NAME is not the reference stack"; exit 2; }
 	$(PROD_COMPOSE) down -v

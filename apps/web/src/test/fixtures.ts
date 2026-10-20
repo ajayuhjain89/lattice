@@ -768,55 +768,206 @@ export const TRACE_ADMIN: S["AdminTrace"] = {
 
 // --- providers ------------------------------------------------------------------------------
 
-export const PROVIDERS: S["ProvidersResponse"] = {
-  egress: {
-    external_egress_level: "internal",
-    organization_controlled_level: null,
-    default_query_sensitivity: "internal",
-    data_origin: "synthetic",
-  },
-  providers: [
-    {
-      purpose: "generation",
-      provider: "ollama",
-      model: "qwen3.5:4b",
-      deployment: "local",
-      approved_for_level: "confidential",
-      explicitly_approved: true,
-      enabled: true,
-      endpoint_configured: false,
-      retention_mode: "none",
-      training_opt_out: true,
-      credential: { state: "none", source: null, resolvable: false, data_use: null },
-    },
-    {
-      purpose: "generation",
-      provider: "gemini",
-      model: "gemini-3.5-flash-lite",
-      deployment: "external_api",
-      approved_for_level: "internal",
-      explicitly_approved: true,
-      enabled: false,
-      endpoint_configured: false,
-      retention_mode: "provider_default",
-      training_opt_out: false,
-      credential: { state: "active", source: "env", resolvable: false, data_use: "unpaid" },
-    },
-    {
-      purpose: "embedding",
-      provider: "local",
-      model: "mxbai-embed-large-v1",
-      deployment: "local",
-      approved_for_level: "restricted",
-      explicitly_approved: true,
-      enabled: true,
-      endpoint_configured: false,
-      retention_mode: "none",
-      training_opt_out: true,
-      credential: { state: "none", source: null, resolvable: false, data_use: null },
-    },
-  ],
+type ProviderFixture = Omit<S["ProviderOut"], "allowed_up_to" | "blocked_by">;
+const LEVEL_ORDER = ["internal", "confidential", "restricted"] as const;
+type FixtureLevel = (typeof LEVEL_ORDER)[number];
+
+/**
+ * Test data only: the server's reading of a fixture's lattice (backend
+ * providers/lattice.py), so fixtures stay consistent. The page never computes a cell.
+ */
+function reading(egress: S["EgressSettingsOut"], p: ProviderFixture): { level: FixtureLevel | null; reason: string } {
+  const rank = (l: string | null | undefined) => LEVEL_ORDER.indexOf(l as FixtureLevel);
+  if (p.purpose === "generation" && !p.enabled) return { level: null, reason: "provider_disabled" };
+  if (p.purpose === "generation" && !p.explicitly_approved) return { level: null, reason: "provider_unapproved" };
+  if (!["local", "organization_controlled", "external_api"].includes(p.deployment)) return { level: null, reason: "deployment_unknown" };
+  if (p.deployment === "organization_controlled" && !p.explicitly_approved) return { level: null, reason: "provider_unapproved" };
+  if (!p.training_opt_out && egress.data_origin !== "synthetic") return { level: null, reason: "provider_data_use" };
+  const ceiling = p.deployment === "local" ? "restricted" : p.deployment === "external_api" ? egress.external_egress_level : egress.organization_controlled_level;
+  if (ceiling == null) return { level: null, reason: "deployment_not_allowed" };
+  const level = LEVEL_ORDER[Math.min(rank(ceiling), rank(p.approved_for_level))]!;
+  return { level, reason: "permitted" };
+}
+
+export function providerSettings(
+  egress: S["EgressSettingsOut"],
+  records: ProviderFixture[],
+  extra: Partial<Omit<S["ProviderSettings"], "egress" | "providers" | "lattice">> = {},
+): S["ProviderSettings"] {
+  const providers = records.map((p) => {
+    const r = reading(egress, p);
+    return { ...p, allowed_up_to: r.level, blocked_by: r.level ? null : r.reason };
+  });
+  const lattice = providers.flatMap((p) =>
+    LEVEL_ORDER.map((level) => {
+      const r = reading(egress, p);
+      const permitted = r.level !== null && LEVEL_ORDER.indexOf(level) <= LEVEL_ORDER.indexOf(r.level);
+      let reason = r.level === null ? r.reason : "permitted";
+      if (r.level !== null && !permitted) {
+        const approval = LEVEL_ORDER.indexOf(p.approved_for_level as FixtureLevel);
+        reason = approval < LEVEL_ORDER.indexOf(level) && LEVEL_ORDER.indexOf(r.level) === approval ? "above_approval" : "above_ceiling";
+      }
+      return { provider_id: p.id, level, permitted, reason };
+    }),
+  );
+  return {
+    egress,
+    providers,
+    lattice,
+    targets: [],
+    supported: [
+      { provider: "gemini", trust_class: "external_api", requires_credential: true, models: ["gemini-3.5-flash-lite"], needs_target: false },
+      { provider: "ollama", trust_class: "organization_controlled", requires_credential: false, models: [], needs_target: true },
+    ],
+    step_up: { available: true, reason: "available", assurance_required: null, max_age_seconds: 300 },
+    confirmation: "Halden Logistics",
+    status: { state: "complete", reason: "generation_ready", message: "A generation provider is enabled and allowed for the level the organization's questions default to." },
+    ...extra,
+  };
+}
+
+export const PROVIDER_ID = {
+  ollama: "9a000000-0000-4000-8000-000000000001",
+  gemini: "9a000000-0000-4000-8000-000000000002",
+  mxbai: "9a000000-0000-4000-8000-000000000003",
+} as const;
+
+const NO_CREDENTIAL: S["CredentialOut"] = { state: "none", id: null, source: null, managed_by: null, resolvable: false, data_use: null, hint: null, set_at: null };
+
+export const PROVIDER_OLLAMA: ProviderFixture = {
+  id: PROVIDER_ID.ollama,
+  purpose: "generation",
+  provider: "ollama",
+  model: "qwen3.5:4b",
+  deployment: "local",
+  approved_for_level: "confidential",
+  explicitly_approved: true,
+  enabled: true,
+  endpoint_configured: true,
+  retention_mode: "none",
+  training_opt_out: true,
+  credential: NO_CREDENTIAL,
+  managed_by: "organization",
+  destination: { kind: "deployment_local", origin: "http://127.0.0.1:11434", access: "deployment_local" },
+  requires_credential: false,
+  last_test: { at: "2026-10-16T09:12:00Z", result: "valid", current: true },
 };
+
+export const PROVIDER_GEMINI: ProviderFixture = {
+  id: PROVIDER_ID.gemini,
+  purpose: "generation",
+  provider: "gemini",
+  model: "gemini-3.5-flash-lite",
+  deployment: "external_api",
+  approved_for_level: "internal",
+  explicitly_approved: true,
+  enabled: false,
+  endpoint_configured: false,
+  retention_mode: "unpaid_product_improvement",
+  training_opt_out: false,
+  credential: { state: "active", id: "c1000000-0000-4000-8000-000000000001", source: "env", managed_by: "operator", resolvable: false, data_use: "unpaid", hint: null, set_at: "2026-10-01T08:00:00Z" },
+  managed_by: "organization",
+  destination: { kind: "vendor_api", origin: "https://generativelanguage.googleapis.com", access: "public" },
+  requires_credential: true,
+  last_test: null,
+};
+
+export const PROVIDER_MXBAI: ProviderFixture = {
+  id: PROVIDER_ID.mxbai,
+  purpose: "embedding",
+  provider: "local",
+  model: "mxbai-embed-large-v1",
+  deployment: "local",
+  approved_for_level: "restricted",
+  explicitly_approved: true,
+  enabled: true,
+  endpoint_configured: false,
+  retention_mode: "none",
+  training_opt_out: true,
+  credential: NO_CREDENTIAL,
+  managed_by: "deployment",
+  destination: { kind: "deployment_local", origin: null, access: "deployment_local" },
+  requires_credential: false,
+  last_test: null,
+};
+
+export const EGRESS_DEFAULT: S["EgressSettingsOut"] = {
+  external_egress_level: "internal",
+  organization_controlled_level: null,
+  default_query_sensitivity: "internal",
+  data_origin: "synthetic",
+  version: 7,
+};
+
+export const PROVIDERS: S["ProviderSettings"] = providerSettings(EGRESS_DEFAULT, [PROVIDER_OLLAMA, PROVIDER_GEMINI, PROVIDER_MXBAI]);
+
+/** A fresh organization: nothing recorded, evidence only. */
+export const PROVIDERS_EMPTY: S["ProviderSettings"] = providerSettings({ ...EGRESS_DEFAULT, version: 0 }, [], {
+  status: { state: "optional", reason: "evidence_only", message: "No generation provider is enabled: answers show their evidence without a written answer." },
+});
+
+/** Gemini configured in the product: a key entered here, disabled and unapproved. */
+export const PROVIDER_GEMINI_NEW: ProviderFixture = {
+  ...PROVIDER_GEMINI,
+  explicitly_approved: false,
+  enabled: false,
+  training_opt_out: true,
+  retention_mode: "abuse_monitoring_limited",
+  credential: { state: "active", id: "c1000000-0000-4000-8000-000000000002", source: "vault", managed_by: "organization", resolvable: true, data_use: "paid", hint: "WXYZ", set_at: "2026-10-17T08:00:00Z" },
+  last_test: { at: "2026-10-17T08:01:00Z", result: "valid", current: true },
+};
+
+export const PROVIDERS_GEMINI_NEW: S["ProviderSettings"] = providerSettings(EGRESS_DEFAULT, [PROVIDER_GEMINI_NEW], {
+  status: { state: "optional", reason: "not_enabled", message: "A generation provider is configured but not enabled: answers show their evidence without a written answer." },
+});
+
+export const PREVIEW_APPROVE_GEMINI: S["ChangePreview"] = {
+  policy_version: 7,
+  escalation: true,
+  newly_allowed: [
+    { provider_id: PROVIDER_ID.gemini, provider: "gemini", model: "gemini-3.5-flash-lite", purpose: "generation", trust_class: "external_api", destination: "https://generativelanguage.googleapis.com", level: "internal", before: false, after: true },
+  ],
+  no_longer_allowed: [],
+  default_query_sensitivity: { before: "internal", after: "internal" },
+  remaining: ["authorization_first", "question_floor:internal", "organization_controlled_not_allowed", "never_sent:confidential", "never_sent:restricted", "credentials_never_widen"],
+  affected_provider_ids: [PROVIDER_ID.gemini],
+};
+
+export const PREVIEW_LOWER_EXTERNAL: S["ChangePreview"] = {
+  policy_version: 7,
+  escalation: false,
+  newly_allowed: [],
+  no_longer_allowed: [],
+  default_query_sensitivity: { before: "internal", after: "internal" },
+  remaining: ["authorization_first", "question_floor:internal", "external_not_allowed", "organization_controlled_not_allowed", "never_sent:confidential", "never_sent:restricted", "credentials_never_widen"],
+  affected_provider_ids: [],
+};
+
+export const STEP_UP_GRANTED: S["StepUpOut"] = {
+  id: "5e000000-0000-4000-8000-000000000001",
+  outcome: "granted",
+  created_at: "2026-10-17T09:00:00Z",
+  change: { kind: "provider", provider_id: PROVIDER_ID.gemini, approval: "internal" },
+  reason: "Security review 42 approved Gemini for internal data",
+  policy_version: 7,
+  current_version: 7,
+  grant: { id: "6e000000-0000-4000-8000-000000000001", expires_at: "2026-10-17T09:05:30Z", auth_time: "2026-10-17T09:00:30Z", assurance: null, consumed: false },
+  preview: PREVIEW_APPROVE_GEMINI,
+};
+
+export const STEP_UP_NOT_FRESH: S["StepUpOut"] = { ...STEP_UP_GRANTED, outcome: "not_fresh", grant: null, preview: null };
+
+/** Every trust class and approval the egress lattice must draw, eight providers wide. */
+export const PROVIDERS_MANY: S["ProviderSettings"] = providerSettings({ ...EGRESS_DEFAULT, external_egress_level: "internal", organization_controlled_level: "confidential" }, [
+  PROVIDER_OLLAMA,
+  PROVIDER_GEMINI,
+  PROVIDER_MXBAI,
+  { ...PROVIDER_OLLAMA, id: "9a000000-0000-4000-8000-000000000004", provider: "vllm-private", model: "llama-4-scout-17b-instruct", deployment: "organization_controlled", enabled: false, destination: { kind: "registered_target", origin: "https://llm.halden.internal:8443", access: "operator_approved" } },
+  { ...PROVIDER_OLLAMA, id: "9a000000-0000-4000-8000-000000000005", provider: "vllm-staging", model: "qwen3-32b", deployment: "organization_controlled", approved_for_level: "restricted", explicitly_approved: false, enabled: false, destination: { kind: "registered_target", origin: "https://staging.halden.internal", access: "not_permitted" } },
+  { ...PROVIDER_GEMINI, id: "9a000000-0000-4000-8000-000000000006", provider: "anthropic", model: "claude-sonnet-5-5", enabled: false, training_opt_out: true, retention_mode: "zero", credential: { ...PROVIDER_GEMINI.credential, resolvable: true, data_use: "paid" } },
+  { ...PROVIDER_GEMINI, id: "9a000000-0000-4000-8000-000000000007", provider: "legacy-gateway", model: "unknown-model", deployment: "private", enabled: false, training_opt_out: true },
+  { ...PROVIDER_MXBAI, id: "9a000000-0000-4000-8000-000000000008", provider: "voyage", model: "voyage-3-large", deployment: "external_api", approved_for_level: "internal", destination: { kind: "vendor_api", origin: null, access: "public" } },
+]);
 
 export const NOT_FOUND = {
   error: { code: "not_found", message: "Not found.", request_id: "req-404-fixture" },
@@ -872,6 +1023,11 @@ export const SOURCES_ADMIN: S["AdminSourcesResponse"] = {
     {
       id: SOURCE.drive,
       key: "drive",
+      managed_by: "operator",
+      version: 1,
+      import_status: null,
+      rejected_upload_code: null,
+      next_action: "wait",
       name: "Halden Drive",
       connector_type: "document_repository",
       status: "active",
@@ -909,6 +1065,11 @@ export const SOURCES_ADMIN: S["AdminSourcesResponse"] = {
     {
       id: SOURCE.support,
       key: "support",
+      managed_by: "operator",
+      version: 1,
+      import_status: null,
+      rejected_upload_code: null,
+      next_action: "map_references",
       name: "Halden Support (Zendesk)",
       connector_type: "ticketing",
       status: "active",
@@ -935,6 +1096,11 @@ export const SOURCES_ADMIN: S["AdminSourcesResponse"] = {
     {
       id: SOURCE.slack,
       key: "slack",
+      managed_by: "operator",
+      version: 1,
+      import_status: null,
+      rejected_upload_code: null,
+      next_action: "start_sync",
       name: "Halden Slack",
       connector_type: "chat_export",
       status: "active",
@@ -972,6 +1138,7 @@ export const SOURCE_FAILED: S["AdminSourceOut"] = {
   key: "wiki",
   name: "Halden Wiki",
   documents: 37,
+  next_action: "retry_sync",
   last_synced_at: "2026-09-29T06:00:09Z",
   last_succeeded_at: "2026-09-12T06:00:04Z",
   acl_synced_at: "2026-09-12T06:00:04Z",
@@ -1002,6 +1169,217 @@ export const SOURCE_FAILED: S["AdminSourceOut"] = {
 
 /** "Now" for tests that read ages and day headings (the fixtures' week). */
 export const FIXTURE_NOW = "2026-09-29T10:00:00Z";
+
+// --- export sources operated in the product (Phase 12, P12.6) ---------------------------------
+
+export const ORG_SOURCE = {
+  escalations: "5d2c1b0a-6666-4e3f-9a8b-7c6d5e4f3a06",
+  handbook: "5d2c1b0a-7777-4e3f-9a8b-7c6d5e4f3a07",
+};
+
+const UPLOAD_LIMITS: S["UploadLimits"] = {
+  available: true,
+  formats: ["zip", "jsonl"],
+  max_upload_bytes: 100 * 1024 * 1024,
+  max_expanded_bytes: 512 * 1024 * 1024,
+  max_file_bytes: 32 * 1024 * 1024,
+  max_entries: 20_000,
+};
+
+/** A ready export of tickets whose check found two references, one still without an account. */
+export const IMPORT_ESCALATIONS: S["ImportOut"] = {
+  id: "8a1b2c3d-6666-4e5f-8a9b-0c1d2e3f4a06",
+  status: "ready",
+  format: "zip",
+  current: true,
+  size_bytes: 1_843_200,
+  sha256: "9f2c4e6a8b0d1f3e5a7c9e1b3d5f7a9c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f",
+  entries: 3,
+  ignored_entries: 1,
+  expanded_bytes: 7_340_032,
+  rejected_code: null,
+  created_at: "2026-09-29T09:20:00Z",
+  received_at: "2026-09-29T09:20:04Z",
+  ready_at: "2026-09-29T09:20:05Z",
+  superseded_at: null,
+  check: {
+    checked_at: "2026-09-29T09:20:09Z",
+    error_code: null,
+    records_seen: 42,
+    would_create: 39,
+    would_update: 0,
+    would_update_access: 0,
+    unchanged: 0,
+    invalid_records: 1,
+    would_quarantine: 2,
+    would_delete: 0,
+    deletion_guard: null,
+    failure_codes: [
+      { code: "access_unmappable:account", count: 2 },
+      { code: "malformed_json", count: 1 },
+    ],
+    unresolved_references: [
+      { external_ref: "360009913", records: 2, state: "unmapped" },
+      { external_ref: "360001002", records: 5, state: "mapped" },
+    ],
+    unresolved_total: 2,
+  },
+};
+
+/** An organization-managed ticketing source with a checked export, never synced. */
+export const SOURCE_RECORD_ESCALATIONS: S["SourceDetail"] = {
+  id: ORG_SOURCE.escalations,
+  key: "escalations",
+  connector_type: "ticketing",
+  managed_by: "organization",
+  status: "active",
+  version: 3,
+  settings: {
+    name: "Halden Escalations",
+    default_sensitivity: "internal",
+    default_departments: [{ key: "support", name: "Support" }],
+    authority: "working",
+    account_scoped: true,
+    channel_sensitivities: {},
+  },
+  documents: 0,
+  created_at: "2026-09-29T09:15:00Z",
+  last_synced_at: null,
+  last_succeeded_at: null,
+  current_import: IMPORT_ESCALATIONS,
+  latest_upload: null,
+  job: null,
+  next_action: "map_references",
+  can_sync: true,
+  sync_blocked_by: null,
+  upload: UPLOAD_LIMITS,
+};
+
+/** A Markdown documents source just added: no export yet. */
+export const SOURCE_RECORD_NEW: S["SourceDetail"] = {
+  id: ORG_SOURCE.handbook,
+  key: "handbook",
+  connector_type: "document_repository",
+  managed_by: "organization",
+  status: "active",
+  version: 1,
+  settings: {
+    name: "Halden Handbook",
+    default_sensitivity: "internal",
+    default_departments: [],
+    authority: "working",
+    account_scoped: false,
+    channel_sensitivities: {},
+  },
+  documents: 0,
+  created_at: "2026-09-29T09:40:00Z",
+  last_synced_at: null,
+  last_succeeded_at: null,
+  current_import: null,
+  latest_upload: null,
+  job: null,
+  next_action: "upload_import",
+  can_sync: false,
+  sync_blocked_by: "import_required",
+  upload: { ...UPLOAD_LIMITS, formats: ["zip"] },
+};
+
+/** The operator-managed Drive source's record (Phase 4 workflow: `lattice sync`). */
+export const SOURCE_RECORD_DRIVE: S["SourceDetail"] = {
+  id: SOURCE.drive,
+  key: "drive",
+  connector_type: "document_repository",
+  managed_by: "operator",
+  status: "active",
+  version: 1,
+  settings: {
+    name: "Halden Drive",
+    default_sensitivity: "internal",
+    default_departments: [],
+    authority: "working",
+    account_scoped: false,
+    channel_sensitivities: {},
+  },
+  documents: 58,
+  created_at: "2026-09-01T08:00:00Z",
+  last_synced_at: "2026-09-28T07:12:40Z",
+  last_succeeded_at: "2026-09-28T07:12:40Z",
+  current_import: null,
+  latest_upload: null,
+  job: null,
+  next_action: "none",
+  can_sync: true,
+  sync_blocked_by: null,
+  upload: { ...UPLOAD_LIMITS, formats: ["zip"] },
+};
+
+/** The register's rows for the two organization-managed sources. */
+export const SOURCES_ADMIN_ORG: S["AdminSourceOut"][] = [
+  {
+    ...SOURCES_ADMIN.sources[1]!,
+    id: ORG_SOURCE.escalations,
+    key: "escalations",
+    name: "Halden Escalations",
+    managed_by: "organization",
+    version: 3,
+    import_status: "ready",
+    next_action: "map_references",
+    documents: 0,
+    last_synced_at: null,
+    last_succeeded_at: null,
+    acl_synced_at: null,
+    last_run: null,
+    failure_codes: [],
+    job: null,
+  },
+  {
+    ...SOURCES_ADMIN.sources[0]!,
+    id: ORG_SOURCE.handbook,
+    key: "handbook",
+    name: "Halden Handbook",
+    managed_by: "organization",
+    version: 1,
+    import_status: null,
+    next_action: "upload_import",
+    documents: 0,
+    last_synced_at: null,
+    last_succeeded_at: null,
+    acl_synced_at: null,
+    last_run: null,
+    failure_codes: [],
+    job: null,
+  },
+];
+
+export const UPLOAD_ACCEPTED: S["UploadResult"] = {
+  import: { ...IMPORT_ESCALATIONS, id: "8a1b2c3d-7777-4e5f-8a9b-0c1d2e3f4a07", check: null, entries: 12, ignored_entries: 2 },
+  check_queued: true,
+};
+
+export const UPLOAD_REFUSED_LAYOUT = {
+  error: {
+    code: "validation_failed",
+    message: "The upload was refused: The archive does not have the structure this source type reads.",
+    request_id: "req-upload-fixture",
+    details: [{ field: "import", issue: "unsupported_layout" }],
+  },
+} as const;
+
+export const DISCONNECT_PREVIEW_ESCALATIONS: S["DisconnectPreview"] = {
+  documents: 39,
+  chunks: 117,
+  account_mappings: 1,
+  imports: 1,
+  queued_jobs: 0,
+  sync_running: false,
+  operator_managed: false,
+};
+
+export const SOURCE_PREVIEW_WIDENS: S["SourceChangePreview"] = {
+  changes: [{ field: "default_sensitivity", before: "confidential", after: "internal", effect: "widens" }],
+  widens: true,
+  takes_effect: "next_sync",
+};
 
 // --- activity (Phase 8) --------------------------------------------------------------------
 
@@ -1064,8 +1442,8 @@ export const ACTIVITY_ADMIN: S["OperationalActivityResponse"] = {
 export const ACCOUNTS_MAYA: S["MemberAccounts"] = {
   account_scope: "assigned",
   accounts: [
-    { key: "acme-corp", name: "Acme Corp" },
-    { key: "northpeak-logistics", name: "Northpeak Logistics" },
+    { key: "acme-corp", name: "Acme Corp", archived: false },
+    { key: "northpeak-logistics", name: "Northpeak Logistics", archived: false },
   ],
 };
 
@@ -1133,9 +1511,9 @@ export const MEMBERS_PAGE: S["MembersPage"] = {
 
 export const DIRECTORY: S["Directory"] = {
   accounts: [
-    { id: ID.acme, key: "acme-corp", name: "Acme Corp", status: "active" },
-    { id: ID.kestrel, key: "kestrel-bank", name: "Kestrel Bank", status: "active" },
-    { id: ID.northpeak, key: "northpeak-logistics", name: "Northpeak Logistics", status: "active" },
+    { id: ID.acme, key: "acme-corp", name: "Acme Corp", status: "active", archived: false },
+    { id: ID.kestrel, key: "kestrel-bank", name: "Kestrel Bank", status: "active", archived: false },
+    { id: ID.northpeak, key: "northpeak-logistics", name: "Northpeak Logistics", status: "active", archived: false },
   ],
   departments: [
     { id: ID.leadership, key: "leadership", name: "Leadership" },
@@ -1153,8 +1531,23 @@ const HANDBOOK: S["DocumentRef"] = {
   classification: "internal",
 };
 
+const OPEN = { available: true, blocked_by: null } as const;
+const blocked = (reason: S["LifecycleAction"]["blocked_by"]): S["LifecycleAction"] => ({ available: false, blocked_by: reason });
+
+/** A member the organization manages (added by hand, or seeded): suspendable here. */
+export const LIFECYCLE_ACTIVE: S["MemberLifecycle"] = {
+  sign_in_identifier: "00u8maya-okafor",
+  identity_managed_by: "organization",
+  suspend: OPEN,
+  reactivate: null,
+  reinstate: null,
+  grant_administrator: OPEN,
+  revoke_administrator: null,
+};
+
 export const MEMBER_MAYA: S["MemberAccess"] = {
   member: MEMBERS_PAGE.items[2]!,
+  lifecycle: LIFECYCLE_ACTIVE,
   version: "2026-09-29T08:00:00.123456Z",
   is_self: false,
   accounts: [
@@ -1205,6 +1598,15 @@ export const MEMBER_PAT_MANAGED: S["MemberAccess"] = {
     departments: [],
     managed_by: "identity_provider",
   },
+  lifecycle: {
+    sign_in_identifier: "pat.rivera@halden.example",
+    identity_managed_by: "identity_provider",
+    suspend: blocked("managed_by_identity_provider"),
+    reactivate: null,
+    reinstate: null,
+    grant_administrator: OPEN,
+    revoke_administrator: null,
+  },
   version: "2026-10-02T09:00:00Z",
   is_self: false,
   accounts: [],
@@ -1217,6 +1619,15 @@ export const MEMBER_PAT_MANAGED: S["MemberAccess"] = {
 
 export const MEMBER_LENA_SELF: S["MemberAccess"] = {
   member: MEMBERS_PAGE.items[1]!,
+  lifecycle: {
+    sign_in_identifier: "00u1lena-brandt",
+    identity_managed_by: "organization",
+    suspend: blocked("own_membership"),
+    reactivate: null,
+    reinstate: null,
+    grant_administrator: null,
+    revoke_administrator: blocked("own_membership"),
+  },
   version: "2026-09-29T08:00:00Z",
   is_self: true,
   accounts: [],
@@ -1225,6 +1636,120 @@ export const MEMBER_LENA_SELF: S["MemberAccess"] = {
   has_hidden_groups: false,
   grants: [],
   has_other_grants: false,
+};
+
+// --- members and administrators (Phase 12, P12.2) -----------------------------------------
+
+export const IDENTITY_REQUIREMENT: S["IdentityRequirement"] = {
+  available: true,
+  subject_claim: "sub",
+  issuer: "https://halden.okta.example",
+};
+
+export const IDENTITY_REQUIREMENT_EMAIL: S["IdentityRequirement"] = { ...IDENTITY_REQUIREMENT, subject_claim: "email" };
+
+export const IDENTITY_NOT_CONNECTED: S["IdentityRequirement"] = { available: false, subject_claim: null, issuer: null };
+
+/** Someone an administrator has just added: least access, managed by the organization. */
+export const MEMBER_NEW: S["MemberAccess"] = {
+  member: {
+    id: "a1000000-0000-4000-8000-0000000000bb",
+    name: "Sam Achebe",
+    email: "sam.achebe@halden.example",
+    role_label: null,
+    status: "active",
+    is_admin: false,
+    clearance: "internal",
+    account_scope: "assigned",
+    assigned_accounts: 0,
+    departments: [],
+    managed_by: null,
+  },
+  lifecycle: { ...LIFECYCLE_ACTIVE, sign_in_identifier: "00u9sam-achebe" },
+  version: "2026-10-09T09:00:00Z",
+  is_self: false,
+  accounts: [],
+  departments: [],
+  groups: [],
+  has_hidden_groups: false,
+  grants: [],
+  has_other_grants: false,
+};
+
+/** Grace is an administrator (not the viewer); the capability can be revoked. */
+export const MEMBER_GRACE_ADMIN: S["MemberAccess"] = {
+  ...MEMBER_NEW,
+  member: { ...MEMBERS_PAGE.items[0]!, is_admin: true },
+  lifecycle: { ...LIFECYCLE_ACTIVE, sign_in_identifier: "00u3grace", grant_administrator: null, revoke_administrator: OPEN },
+};
+
+/** Removed by the identity provider; reinstating starts again from least access. */
+export const MEMBER_RAE_REMOVED: S["MemberAccess"] = {
+  ...MEMBER_NEW,
+  member: {
+    ...MEMBER_NEW.member,
+    id: "a1000000-0000-4000-8000-0000000000cc",
+    name: "Rae Lindqvist",
+    email: "rae.lindqvist@halden.example",
+    status: "removed",
+    clearance: "confidential",
+    account_scope: "all",
+    managed_by: "identity_provider",
+  },
+  lifecycle: {
+    sign_in_identifier: "00u4rae",
+    identity_managed_by: "identity_provider",
+    suspend: null,
+    reactivate: null,
+    reinstate: OPEN,
+    grant_administrator: null,
+    revoke_administrator: null,
+  },
+  departments: [SALES],
+};
+
+export const MEMBER_RAE_REINSTATED: S["MemberAccess"] = {
+  ...MEMBER_RAE_REMOVED,
+  member: { ...MEMBER_RAE_REMOVED.member, status: "active", clearance: "internal", account_scope: "assigned" },
+  lifecycle: { ...MEMBER_RAE_REMOVED.lifecycle, reinstate: null, suspend: blocked("managed_by_identity_provider"), grant_administrator: OPEN },
+  departments: [],
+};
+
+export const PREVIEW_REINSTATE: S["AccessPreview"] = {
+  effects: [
+    { kind: "reinstated", before: null, after: null, subject: null },
+    { kind: "administrator", before: "true", after: "false", subject: null },
+    { kind: "clearance", before: "confidential", after: "internal", subject: null },
+    { kind: "account_scope", before: "all", after: "assigned", subject: null },
+    { kind: "department_removed", before: null, after: null, subject: { id: ID.sales, name: "Sales" } },
+  ],
+  documents_gained: 3,
+  documents_lost: 0,
+};
+
+/** The audit entry of a member added by hand: least access, and the binding itself. */
+export const AUDIT_MEMBER_ADDED: S["AuditPage"] = {
+  items: [
+    {
+      id: "a0d10000-0000-4000-8000-000000000009",
+      created_at: "2026-10-09T09:00:00Z",
+      action: "access.member_changed",
+      actor: { kind: "member", name: "Lena Brandt", operator: null },
+      reason: "Joined the support team",
+      member: { id: "a1000000-0000-4000-8000-0000000000bb", name: "Sam Achebe" },
+      document: null,
+      effects: [
+        { kind: "created", before: null, after: "active", subject: null },
+        { kind: "clearance", before: null, after: "internal", subject: null },
+        { kind: "account_scope", before: null, after: "assigned", subject: null },
+      ],
+      details: [
+        { field: "sign_in_identifier", before: null, after: "00u9sam-achebe" },
+        { field: "email", before: null, after: "sam.achebe@halden.example" },
+      ],
+    },
+  ],
+  next_before: null,
 };
 
 export const PREVIEW_ADD_KESTREL: S["AccessPreview"] = {
@@ -1339,18 +1864,6 @@ export const MEMBER_WIDE: S["MemberAccess"] = {
   departments: [SALES, { id: ID.leadership, name: "Leadership" }],
 };
 
-/** Every trust class and approval the egress lattice must draw, eight providers wide. */
-export const PROVIDERS_MANY: S["ProvidersResponse"] = {
-  egress: { ...PROVIDERS.egress, external_egress_level: "internal", organization_controlled_level: "confidential" },
-  providers: [
-    ...PROVIDERS.providers,
-    { ...PROVIDERS.providers[0]!, provider: "vllm-private", model: "llama-4-scout-17b-instruct", deployment: "organization_controlled", approved_for_level: "confidential", explicitly_approved: true, endpoint_configured: true },
-    { ...PROVIDERS.providers[0]!, provider: "vllm-staging", model: "qwen3-32b", deployment: "organization_controlled", approved_for_level: "restricted", explicitly_approved: false, enabled: true },
-    { ...PROVIDERS.providers[1]!, provider: "anthropic", model: "claude-sonnet-5-5", enabled: true, training_opt_out: true, retention_mode: "zero", credential: { state: "active", source: "env", resolvable: true, data_use: "paid" } },
-    { ...PROVIDERS.providers[1]!, provider: "legacy-gateway", model: "unknown-model", deployment: "private", enabled: true, training_opt_out: true },
-    { ...PROVIDERS.providers[2]!, provider: "voyage", model: "voyage-3-large", deployment: "external_api", approved_for_level: "internal", credential: { state: "active", source: "env", resolvable: true, data_use: "paid" } },
-  ],
-};
 
 /** A long audit log, paged by its cursor. */
 export function auditPages(before: string | null, total = 60, size = 25): S["AuditPage"] {
@@ -1373,4 +1886,299 @@ export const PREVIEW_MIXED: S["AccessPreview"] = {
   ],
   documents_gained: 7,
   documents_lost: 3,
+};
+
+// --- organization setup (Phase 12, P12.1) -------------------------------------------------
+
+const SETUP_ORGANIZATION: S["SetupOrganization"] = {
+  slug: "halden",
+  name: "Halden",
+  status: "active",
+  data_origin: "synthetic",
+  version: "2026-10-08T09:00:00.000000Z",
+};
+
+/** A freshly created organization: the operator's trust root, nothing else yet (as the API
+ * derives it at P12.8: every item needing a person links to the page that owns it). */
+export const SETUP_FRESH: S["SetupStatus"] = {
+  organization: SETUP_ORGANIZATION,
+  categories: [
+    { key: "organization", state: "attention", reason: "single_administrator", message: "One active administrator. If they leave, only your Lattice operator can appoint another; make a second member an administrator on the Access page to avoid that.", facts: { active_administrators: 1 }, action: { kind: "link", href: "/access", label: "Choose a second administrator" } },
+    { key: "identity", state: "required", reason: "not_verified", message: "The identity provider is connected but no sign-in through it has succeeded yet. A test sign-in on the Identity page verifies it.", facts: { connection: "active", last_success_at: null, last_failure_at: null }, action: { kind: "link", href: "/settings/identity", label: "Test sign-in" } },
+    { key: "members", state: "required", reason: "only_administrators", message: "Only administrators are members so far. Add members on the Access page with the exact identifier your identity provider sends for them, or let the identity provider provision them (SCIM).", facts: { active_members: 1, active_administrators: 1, manual_members_available: true }, action: { kind: "link", href: "/access", label: "Add a member" } },
+    { key: "provisioning", state: "optional", reason: "not_configured", message: "Automatic provisioning (SCIM) is not set up. It is optional; create a provisioning token on the Identity page to use it.", facts: { live_tokens: 0, provisioned_members: 0, refused_recently: 0 }, action: { kind: "link", href: "/settings/identity", label: "Open Identity" } },
+    { key: "ai_policy", state: "optional", reason: "evidence_only", message: "No generation provider is enabled: answers show their evidence without a written answer.", facts: { provider: null, model: null, default_question_sensitivity: "internal" }, action: { kind: "link", href: "/settings/providers", label: "Open AI providers" } },
+    { key: "sources", state: "required", reason: "no_sources", message: "No source is connected yet.", facts: { connected_sources: 0, synced_sources: 0, failed_sources: 0, syncing_sources: 0, awaiting_import_sources: 0, invalid_import_sources: 0 }, action: { kind: "link", href: "/sources", label: "Open Sources" } },
+    { key: "accounts", state: "optional", reason: "not_needed", message: "No source maps records to accounts, so no account mapping is needed.", facts: { account_sources: 0, unmapped_references: 0, references_awaiting_sync: 0 }, action: null },
+    { key: "first_answer", state: "blocked", reason: "sources_required", message: "The first question can be asked once a source has synced.", facts: { answered: false, evidence_returned: false }, action: null },
+  ],
+};
+
+/** An organization in use, with two items that need attention. */
+export const SETUP_IN_USE: S["SetupStatus"] = {
+  organization: SETUP_ORGANIZATION,
+  categories: [
+    { key: "organization", state: "complete", reason: "active", message: "The organization is active and has more than one administrator.", facts: { active_administrators: 2 }, action: null },
+    { key: "identity", state: "complete", reason: "verified", message: "Sign-in through the identity provider works.", facts: { connection: "active", last_success_at: "2026-10-08T08:41:07Z", last_failure_at: null }, action: { kind: "link", href: "/settings/identity", label: "Review identity" } },
+    { key: "members", state: "complete", reason: "members_active", message: "Members other than administrators are active.", facts: { active_members: 14, active_administrators: 2 }, action: { kind: "link", href: "/access", label: "Review access" } },
+    { key: "provisioning", state: "complete", reason: "in_use", message: "The identity provider provisions members.", facts: { live_tokens: 1, provisioned_members: 12, refused_recently: 0 }, action: { kind: "link", href: "/settings/identity", label: "Open Identity" } },
+    { key: "ai_policy", state: "attention", reason: "credential_failed", message: "The generation provider's credential is missing or cannot be used: answers fall back to evidence only.", facts: { provider: "gemini", model: "gemini-3.5-flash-lite", default_question_sensitivity: "internal" }, action: { kind: "link", href: "/settings/providers", label: "Open AI providers" } },
+    { key: "sources", state: "complete", reason: "synced", message: "At least one source has synced.", facts: { connected_sources: 3, synced_sources: 3, failed_sources: 0, syncing_sources: 0, awaiting_import_sources: 0, invalid_import_sources: 0 }, action: { kind: "link", href: "/sources", label: "Open Sources" } },
+    { key: "accounts", state: "attention", reason: "unmapped_references", message: "Records reference accounts that are not mapped, and are not indexed until they are.", facts: { account_sources: 1, unmapped_references: 2, references_awaiting_sync: 0 }, action: { kind: "link", href: "/access/accounts/references", label: "Map references" } },
+    { key: "first_answer", state: "complete", reason: "answered", message: "Members have received answers.", facts: { answered: true, evidence_returned: true }, action: null },
+  ],
+};
+
+// --- accounts and external-reference mappings (Phase 12, P12.3) ---------------------------------
+
+export const ACCOUNT_IDS = {
+  acme: ID.acme,
+  kestrel: ID.kestrel,
+  orbital: "ac000000-0000-4000-8000-000000000008",
+  fernhill: "ac000000-0000-4000-8000-000000000009",
+};
+
+const SUPPORT_REF: S["SourceRef"] = { id: SOURCE.support, name: "Halden Support (Zendesk)", connector_type: "ticketing" };
+const SLACK_REF: S["SourceRef"] = { id: SOURCE.slack, name: "Halden Slack", connector_type: "chat_export" };
+
+export const ACCOUNT_ACME: S["AccountDetail"] = {
+  id: ACCOUNT_IDS.acme,
+  key: "acme-corp",
+  name: "Acme Corp",
+  aliases: ["Acme", "ACME Corp"],
+  status: "active",
+  lifecycle: "active",
+  archived_at: null,
+  references: 3,
+  assigned_members: 2,
+  version: "2026-10-12T09:00:00.000000Z",
+  created_at: "2026-09-27T08:00:00Z",
+  mappings: [
+    { source: SLACK_REF, ref_kind: "chat_channel", external_ref: "C0EXTACME01", created_at: "2026-09-27T08:00:00Z", updated_at: "2026-09-27T08:00:00Z" },
+    { source: SLACK_REF, ref_kind: "chat_channel", external_ref: "G0ACCTACME1", created_at: "2026-09-27T08:00:00Z", updated_at: "2026-09-27T08:00:00Z" },
+    { source: SUPPORT_REF, ref_kind: "ticketing_organization", external_ref: "360001001", created_at: "2026-09-27T08:00:00Z", updated_at: "2026-09-27T08:00:00Z" },
+  ],
+};
+
+export const ACCOUNT_ORBITAL_ARCHIVED: S["AccountDetail"] = {
+  id: ACCOUNT_IDS.orbital,
+  key: "orbital-freight",
+  name: "Orbital Freight",
+  aliases: ["Orbital"],
+  status: "prospect",
+  lifecycle: "archived",
+  archived_at: "2026-10-10T12:00:00Z",
+  references: 1,
+  assigned_members: 0,
+  version: "2026-10-10T12:00:00.000000Z",
+  created_at: "2026-09-27T08:00:00Z",
+  mappings: [
+    { source: SUPPORT_REF, ref_kind: "ticketing_organization", external_ref: "360001008", created_at: "2026-09-27T08:00:00Z", updated_at: "2026-09-27T08:00:00Z" },
+  ],
+};
+
+export const ACCOUNT_FERNHILL: S["AccountDetail"] = {
+  id: ACCOUNT_IDS.fernhill,
+  key: "fernhill-studios",
+  name: "Fernhill Studios",
+  aliases: [],
+  status: "active",
+  lifecycle: "active",
+  archived_at: null,
+  references: 0,
+  assigned_members: 0,
+  version: "2026-10-12T10:00:00.000000Z",
+  created_at: "2026-10-12T10:00:00Z",
+  mappings: [],
+};
+
+const summary = ({ version: _v, created_at: _c, mappings: _m, ...rest }: S["AccountDetail"]): S["AccountSummary"] => rest;
+
+export const ACCOUNTS_PAGE: S["AccountsPage"] = {
+  items: [
+    summary(ACCOUNT_ACME),
+    summary({
+      ...ACCOUNT_ACME,
+      id: ACCOUNT_IDS.kestrel,
+      key: "kestrel-bank",
+      name: "Kestrel Bank",
+      aliases: ["Kestrel"],
+      references: 2,
+      assigned_members: 1,
+    }),
+    summary(ACCOUNT_ORBITAL_ARCHIVED),
+  ],
+  next_after: null,
+};
+
+export const UNMAPPED: S["UnmappedReferences"] = {
+  items: [
+    {
+      source: SUPPORT_REF,
+      ref_kind: "ticketing_organization",
+      external_ref: "360009913",
+      records_waiting: 1,
+      seen_at: "2026-10-12T08:30:00Z",
+      state: "unmapped",
+      account: null,
+    },
+  ],
+};
+
+export const PREVIEW_MAP_FERNHILL: S["MappingPreview"] = {
+  operation: "map",
+  source: SUPPORT_REF,
+  ref_kind: "ticketing_organization",
+  external_ref: "360009913",
+  account_scoped: true,
+  now: null,
+  after: { id: ACCOUNT_IDS.fernhill, key: "fernhill-studios", name: "Fernhill Studios", lifecycle: "active" },
+  effect: "indexed",
+  records_waiting: 1,
+  takes_effect: "next_sync",
+};
+
+export const PREVIEW_REMAP_ACME_KESTREL: S["MappingPreview"] = {
+  operation: "remap",
+  source: SUPPORT_REF,
+  ref_kind: "ticketing_organization",
+  external_ref: "360001001",
+  account_scoped: true,
+  now: { id: ACCOUNT_IDS.acme, key: "acme-corp", name: "Acme Corp", lifecycle: "active" },
+  after: { id: ACCOUNT_IDS.kestrel, key: "kestrel-bank", name: "Kestrel Bank", lifecycle: "active" },
+  effect: "moved",
+  records_waiting: 0,
+  takes_effect: "next_sync",
+};
+
+export const PREVIEW_UNMAP_CHANNEL: S["MappingPreview"] = {
+  operation: "unmap",
+  source: SLACK_REF,
+  ref_kind: "chat_channel",
+  external_ref: "C0EXTACME01",
+  account_scoped: false,
+  now: { id: ACCOUNT_IDS.acme, key: "acme-corp", name: "Acme Corp", lifecycle: "active" },
+  after: null,
+  effect: "quarantined",
+  records_waiting: 0,
+  takes_effect: "next_sync",
+};
+
+// --- identity administration (Phase 12, P12.4) ---------------------------------------------------
+
+export const CONNECTION_ID = "6f1c2a40-5d8e-4b9a-9c3e-1a2b3c4d5e6f";
+export const TOKEN_IDS = { live: "7a2d3b51-6e9f-4cab-8d4f-2b3c4d5e6f70", revoked: "8b3e4c62-7fa0-4dbc-9e50-3c4d5e6f7081" };
+
+export const OIDC_CONNECTION: S["OidcConnectionOut"] = {
+  id: CONNECTION_ID,
+  status: "active",
+  issuer: "https://login.halden.example",
+  client_id: "lattice-halden",
+  subject_claim: "sub",
+  client_secret: { state: "encrypted", set_at: "2026-10-09T10:15:00Z" },
+  issuer_access: "public",
+  sign_in_url: "https://lattice.halden.example/sso/halden-login-key-0123456789",
+  redirect_uri: "https://lattice.halden.example/api/v1/auth/oidc/halden-login-key-0123456789/callback",
+  last_success_at: "2026-10-12T08:41:07Z",
+  last_failure: null,
+  last_test: { kind: "sign_in", result: "matched", at: "2026-10-12T08:41:07Z" },
+  members_bound: 14,
+  live_sessions: 6,
+  version: "2026-10-12T08:00:00.123456Z",
+};
+
+export const SCIM_LIVE_TOKEN: S["ScimTokenOut"] = {
+  id: TOKEN_IDS.live,
+  hint: "Qx7f",
+  created_at: "2026-10-09T10:20:00Z",
+  revoked_at: null,
+  last_used_at: "2026-10-12T09:03:00Z",
+  current_connection: true,
+};
+
+export const SCIM_REVOKED_TOKEN: S["ScimTokenOut"] = {
+  id: TOKEN_IDS.revoked,
+  hint: null,
+  created_at: "2026-10-01T09:00:00Z",
+  revoked_at: "2026-10-09T10:21:00Z",
+  last_used_at: "2026-10-09T10:00:00Z",
+  current_connection: true,
+};
+
+export const IDENTITY_VERIFIED: S["IdentitySettings"] = {
+  oidc: OIDC_CONNECTION,
+  can_add_connection: false,
+  sign_in_status: { state: "complete", reason: "verified", message: "Sign-in through the identity provider works." },
+  scim: {
+    base_url: "https://lattice.halden.example/api/scim/v2",
+    identifying_claim: "sub",
+    tokens: [SCIM_LIVE_TOKEN, SCIM_REVOKED_TOKEN],
+    provisioned_members: 12,
+    refused_recently: 0,
+    status: { state: "complete", reason: "in_use", message: "The identity provider provisions members." },
+  },
+};
+
+/** An organization whose connection a private, unapproved issuer blocks. */
+export const IDENTITY_BLOCKED: S["IdentitySettings"] = {
+  ...IDENTITY_VERIFIED,
+  oidc: { ...OIDC_CONNECTION, issuer: "https://idp.corp.example:9443", issuer_access: "not_permitted", last_success_at: null, last_test: { kind: "check", result: "outbound_blocked", at: "2026-10-12T09:00:00Z" } },
+  sign_in_status: {
+    state: "blocked",
+    reason: "outbound_blocked",
+    message: "Lattice's outbound policy refuses the identity provider's address. A private or self-hosted provider must be approved for this organization by your Lattice operator.",
+  },
+  scim: { ...IDENTITY_VERIFIED.scim, tokens: [], provisioned_members: 0, status: { state: "optional", reason: "not_configured", message: "Automatic provisioning (SCIM) is not set up. It is optional; create a provisioning token on the Identity page to use it." } },
+};
+
+export const IDENTITY_DISABLED: S["IdentitySettings"] = {
+  ...IDENTITY_VERIFIED,
+  oidc: { ...OIDC_CONNECTION, status: "disabled", live_sessions: 0 },
+  sign_in_status: {
+    state: "attention",
+    reason: "connection_disabled",
+    message: "The identity provider connection is disabled: nobody can sign in through it. It can be re-enabled on the Identity page.",
+  },
+};
+
+export const IDENTITY_NONE: S["IdentitySettings"] = {
+  oidc: null,
+  can_add_connection: true,
+  sign_in_status: { state: "required", reason: "no_connection", message: "No identity provider is connected, so nobody can sign in. Connect one on the Identity page." },
+  scim: {
+    base_url: "https://lattice.halden.example/api/scim/v2",
+    identifying_claim: null,
+    tokens: [],
+    provisioned_members: 0,
+    refused_recently: 0,
+    status: { state: "optional", reason: "not_configured", message: "Automatic provisioning (SCIM) is not set up. It is optional; create a provisioning token on the Identity page to use it." },
+  },
+};
+
+export const REVEALED_TOKEN: S["RevealedScimToken"] = {
+  token: { ...SCIM_LIVE_TOKEN, id: "9c4f5d73-80b1-4ecd-8f61-4d5e6f708192", hint: "Zk9w", last_used_at: null, created_at: "2026-10-13T10:00:00Z" },
+  revealed_token: "lsc_EXAMPLE-not-a-real-token-only-for-tests-Zk9w",
+};
+
+export const PROVISIONING_ACTIVITY: S["AuditPage"] = {
+  items: [
+    {
+      id: "a1b2c3d4-0000-4000-8000-000000000001",
+      created_at: "2026-10-12T09:03:00Z",
+      action: "scim.request_refused",
+      actor: { kind: "identity_provider", name: null, operator: null },
+      reason: "Provisioning request refused (SCIM)",
+      member: { id: ID.maya, name: "Maya Okafor" },
+      document: null,
+      effects: [],
+      details: [
+        { field: "operation", before: null, after: "create" },
+        { field: "token_id", before: null, after: TOKEN_IDS.live },
+        { field: "reason", before: null, after: "manual_member_conflict" },
+        { field: "scim_type", before: null, after: "uniqueness" },
+        { field: "status", before: null, after: "409" },
+      ],
+    },
+  ],
+  next_before: null,
 };

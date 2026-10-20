@@ -48,3 +48,19 @@ async def readable_document_classifications(
         )
         raise AuthorizationInvariantViolation()
     return {d: loaded[d].sensitivity for d in wanted}
+
+
+async def current_readable_classifications(
+    session: AsyncSession, ctx: AuthorizationContext, document_ids: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, str] | None:
+    """The classifications of documents read again later in a request -- the call-time
+    egress re-check before a model call (P12.5) -- or None when any of them is no longer
+    readable by the asker (deleted, quarantined, access withdrawn meanwhile). That is an
+    expected race, not an invariant violation: the caller simply sends nothing."""
+    wanted = frozenset(document_ids)
+    if not wanted:
+        return {}
+    loaded = await load_document_access(session, ctx.organization_id, wanted)
+    if any((doc := loaded.get(d)) is None or not readable(ctx, doc) for d in wanted):
+        return None
+    return {d: loaded[d].sensitivity for d in wanted}

@@ -164,7 +164,7 @@ test("the review shows Now → After for every rule the server says changes, wit
 test("your own access can't be changed, and nothing offers to", async ({ page }) => {
   const log = await mockApi(page, { me: ME_LENA, member: { [ID.lena]: MEMBER_LENA_SELF } });
   await page.goto(`/access/members/${ID.lena}`);
-  await expect(page.getByTestId("no-change-note")).toHaveText("This is you. Another administrator must change your access.");
+  await expect(page.getByTestId("no-change-note")).toHaveText("This is you. Another administrator must change your access or administrator capability.");
   await expect(page.locator("main").getByRole("button", { name: /Change access|Suspend|Grant a document|Revoke/ })).toHaveCount(0);
   expect(log.changes).toEqual([]);
 });

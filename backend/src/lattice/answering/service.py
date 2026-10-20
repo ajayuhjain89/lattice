@@ -35,7 +35,7 @@ from typing import Any, Final
 from lattice import metrics
 from lattice.answering import assemble
 from lattice.answering.models import ANSWER_SCHEMA, Answer, AskRequest, Claim, EvidenceItem
-from lattice.answering.policy import GenerationAccess, resolve_generation
+from lattice.answering.policy import GenerationAccess, recheck_generation, resolve_generation
 from lattice.answering.prompt import (
     MAX_OUTPUT_TOKENS,
     PROMPT_VERSION,
@@ -91,6 +91,9 @@ POLICY_REASONS: Final = frozenset(
         "provider_data_use",
         "policy_unrecognised",
         "question_classification",
+        "outbound_blocked",
+        # P12.5: the call-time re-check found the policy changed since the request began.
+        "policy_changed",
     }
 )
 
@@ -119,6 +122,8 @@ class _Calls:
     output_tokens: int = 0
     timings_ms: list[float] = field(default_factory=list)
     regenerated: bool = False
+    # Why a regeneration was not sent (the call-time re-check refused it), if it was not.
+    recheck: str | None = None
 
 
 @dataclass(frozen=True)
@@ -338,28 +343,49 @@ async def answer_question(
         status, reason = "evidence_only", "egress_policy"
     else:
         prompt = build_prompt(normalize(request.question), fits, nonce=nonce)
+        prompt_documents = {e.document_id for e in prompt.by_handle.values()}
         generation_started = time.perf_counter()
         deadline = generation_started + deps.generation_deadline_seconds
-        first = await _generate(access, prompt, calls, None, deadline)
-        validation = first if first is not None and first.schema_ok else None
-        if first is not None and (not first.schema_ok or first.rejections):
-            calls.regenerated = True
-            feedback = (
-                [r.feedback() for r in first.rejections]
-                if first.schema_ok
-                else ["the output did not match the JSON schema"]
-            )
-            second = await _generate(access, prompt, calls, feedback, deadline)
-            if second is not None and second.schema_ok:
-                validation = second
-        timings["generation"] = round((time.perf_counter() - generation_started) * 1000, 1)
-        timings["generation_calls"] = calls.timings_ms
-        if validation is None and calls.error is not None and calls.schema_failures == 0:
-            status, reason = "failed", "provider_unavailable"
+        # Immediately before each call, the policy again (P12.5): a provider disabled,
+        # unapproved or moved, a ceiling lowered or a credential revoked since the request
+        # began stops the call; nothing in this prompt leaves Lattice.
+        recheck = await recheck_generation(
+            db, ctx, access, retrieval.question_sensitivity, prompt_documents
+        )
+        if recheck is not None:
+            access = replace(access, provider=None, reason=recheck)
+            prompt = None
+            status = "evidence_only"
+            reason = "egress_policy" if recheck in POLICY_REASONS else "generation_unavailable"
         else:
-            status, reason = assemble.decide_status(validation)
-            if status == "ambiguous" and validation is not None:
-                clarification = assemble.clarification_for(question=validation.clarifying_question)
+            first = await _generate(access, prompt, calls, None, deadline)
+            validation = first if first is not None and first.schema_ok else None
+            if first is not None and (not first.schema_ok or first.rejections):
+                regenerate = await recheck_generation(
+                    db, ctx, access, retrieval.question_sensitivity, prompt_documents
+                )
+                if regenerate is None:
+                    calls.regenerated = True
+                    feedback = (
+                        [r.feedback() for r in first.rejections]
+                        if first.schema_ok
+                        else ["the output did not match the JSON schema"]
+                    )
+                    second = await _generate(access, prompt, calls, feedback, deadline)
+                    if second is not None and second.schema_ok:
+                        validation = second
+                else:
+                    calls.recheck = regenerate
+            timings["generation"] = round((time.perf_counter() - generation_started) * 1000, 1)
+            timings["generation_calls"] = calls.timings_ms
+            if validation is None and calls.error is not None and calls.schema_failures == 0:
+                status, reason = "failed", "provider_unavailable"
+            else:
+                status, reason = assemble.decide_status(validation)
+                if status == "ambiguous" and validation is not None:
+                    clarification = assemble.clarification_for(
+                        question=validation.clarifying_question
+                    )
 
     used_ids = {e.chunk_id for e in prompt.by_handle.values()} if prompt else set()
     items = assemble.evidence_items(
@@ -446,6 +472,9 @@ async def answer_question(
             "decision_reason": access.reason,
             "question_sensitivity": retrieval.question_sensitivity,
             "excluded_by_egress_policy": len(excluded),
+            # P12.5: a regeneration the call-time re-check refused (the first call's
+            # refusal is ``decision_reason``).
+            "recheck_refused": calls.recheck,
             "excluded_by_prompt_budget": len(permitted) - len(fits),
             "below_relevance_floor": len(evidence) - len(candidates),
             "prompt_version": PROMPT_VERSION if prompt else None,

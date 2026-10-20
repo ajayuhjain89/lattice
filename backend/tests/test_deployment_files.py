@@ -40,6 +40,15 @@ def test_the_owner_credential_reaches_only_the_migration_job_and_operators() -> 
         assert "PLATFORM_ADMIN_PASSWORD" not in _environment(services[name]), name
 
 
+def test_master_keys_reach_only_the_api_and_operators() -> None:
+    """P12.1 (C3.4): only the processes that present organization credentials hold the
+    master keys -- never the worker, the migration job, the web or the database."""
+    services = _services()
+    keys = {"LATTICE_SECRET_KEYS", "LATTICE_SECRET_ACTIVE_KEY"}
+    holders = {name for name, s in services.items() if _environment(s) & keys}
+    assert holders == {"api1", "api2", "ops"}
+
+
 def test_the_platform_administrator_is_used_only_by_the_bootstrap() -> None:
     services = _services()
     holders = {
@@ -84,6 +93,48 @@ def test_the_ingress_has_a_maintenance_switch_for_the_api_only() -> None:
     assert '"code":"service_unavailable"' in api_block
     assert "respond" in api_block
     assert "/srv/maintenance:ro" in COMPOSE.read_text()
+
+
+def test_uploaded_exports_reach_only_the_api_and_the_worker() -> None:
+    """P12.6 (deployment.md §4): the import area is one named volume, mounted read-write
+    by the API instances (they receive and publish uploads) and the worker (it reads
+    imports and deletes expired ones) -- never the web servers or the ingress, which
+    would serve it."""
+    services = _services()
+    holders = {
+        name
+        for name, service in services.items()
+        if any(str(v).startswith("imports:") for v in service.get("volumes") or [])
+    }
+    assert holders == {"api1", "api2", "worker"}
+    for name in holders:
+        assert "imports:/srv/lattice/imports" in services[name]["volumes"], name
+        assert services[name]["environment"]["LATTICE_IMPORTS_ROOT"] == "/srv/lattice/imports"
+    loaded: dict[str, Any] = yaml.safe_load(COMPOSE.read_text())
+    assert "imports" in loaded["volumes"]
+    dockerfile = (ROOT / "backend" / "Dockerfile").read_text()
+    assert "mkdir -p /srv/lattice/imports" in dockerfile
+    assert "chown 10001:10001 /srv/lattice/imports" in dockerfile
+
+
+def test_only_the_upload_route_accepts_a_large_body_at_the_ingress() -> None:
+    """P12.6: the ordinary 1 MB edge limit is unchanged for every request but the
+    export upload, which has its own size cap and body deadline (never a global raise)."""
+    caddyfile = (ROOT / "deploy" / "caddy" / "Caddyfile").read_text()
+    route = "^/api/v1/admin/sources/[0-9a-fA-F-]{36}/imports$"
+    upload = caddyfile[caddyfile.index("request_body @import_upload {") :]
+    upload = upload[: upload.index("}")]
+    assert "max_size 101MiB" in upload
+    assert "read_timeout 600s" in upload
+    ordinary = caddyfile[caddyfile.index("@ordinary_body {") :]
+    ordinary = ordinary[: ordinary.index("request_body @ordinary_body")]
+    assert "not {" in ordinary
+    assert route in ordinary
+    assert "request_body @ordinary_body {\n\t\tmax_size 1MB\n\t}" in caddyfile
+    # No unmatched request_body anywhere (it would apply to every request as well).
+    assert caddyfile.count("request_body {") == 0
+    assert caddyfile.count("request_body @") == 2
+    assert "read_body 30s" in caddyfile
 
 
 def test_images_are_published_only_from_main_tags_or_dispatch() -> None:

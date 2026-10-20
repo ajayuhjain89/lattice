@@ -25,14 +25,17 @@ A provider may receive content only when all of these hold (ADR-011):
    provider cannot claim ``local`` or ``organization_controlled`` to escape a stricter
    rule);
 3. the organization **allows the class**, with a ceiling (``class_ceiling``):
-   ``external_api`` up to ``org_settings.external_egress_level``;
+   ``external_api`` up to ``org_settings.external_egress_level`` (NULL since P12.5: the
+   organization does not allow external APIs at all);
    ``organization_controlled`` only up to ``org_settings.organization_controlled_level``,
    which is unset (class not allowed) until an administrator sets it; ``local`` is not
    capped by an organization setting -- nothing leaves the deployment -- only by the
    provider's own approval;
 4. the provider is **approved**: ``model_providers.approved_for_level`` (default
    ``internal``). An ``organization_controlled`` record has no default approval: it
-   needs an explicit administrator approval (``approved_at``) before anything is sent;
+   needs an explicit administrator approval (``approved_at``) before anything is sent.
+   Neither has a generation record (P12.5, ``answering.policy``): every class needs its
+   explicit approval for generation; embedding records keep the default;
 5. its **data use** is acceptable for the organization's data: a provider that may use
    submitted content (``training_opt_out = false``, e.g. an unpaid Gemini API key,
    ADR-010) is limited to ``synthetic`` organizations;
@@ -115,7 +118,8 @@ def data_use_acceptable(*, training_opt_out: bool, data_origin: str) -> bool:
 class OrgEgress:
     """``org_settings`` (or its defaults)."""
 
-    external_egress_level: str = DEFAULT_LEVEL
+    # None (P12.5): the organization does not allow external APIs.
+    external_egress_level: str | None = DEFAULT_LEVEL
     default_query_sensitivity: str = DEFAULT_LEVEL
     data_origin: str = DEFAULT_DATA_ORIGIN
     # D-15: None = the organization has not allowed organization_controlled inference.

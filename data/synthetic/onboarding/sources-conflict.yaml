@@ -1,0 +1,10 @@
+# Names the key of the Documents source the onboarding administrator creates in the
+# product (`handbook`). `lattice sync` must refuse it (source_config:managed_in_product)
+# and change nothing: a sources file never takes over a product-managed source.
+sources:
+  - key: handbook
+    connector_type: document_repository
+    name: Taken over by a sources file
+    path: documents
+    default_sensitivity: confidential
+    authority: working

@@ -60,7 +60,7 @@ describe("MemberScreen", () => {
   it("offers no change to your own access", async () => {
     mockFetch({ [`GET /v1/admin/access/members/${ID.lena}`]: [200, MEMBER_LENA_SELF] });
     renderInWorkspace(<MemberScreen id={ID.lena} />, { me: ME_LENA });
-    expect(await screen.findByText("This is you. Another administrator must change your access.")).toBeInTheDocument();
+    expect(await screen.findByText("This is you. Another administrator must change your access or administrator capability.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Change access" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Suspend" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Grant a document" })).toBeNull();
@@ -136,7 +136,11 @@ describe("MemberScreen", () => {
   });
 
   it("explains a suspended member, offers reactivation, and keeps the rules", async () => {
-    const suspended = { ...MEMBER_MAYA, member: { ...MEMBER_MAYA.member, status: "suspended" as const } };
+    const suspended = {
+      ...MEMBER_MAYA,
+      member: { ...MEMBER_MAYA.member, status: "suspended" as const },
+      lifecycle: { ...MEMBER_MAYA.lifecycle, suspend: null, reactivate: { available: true, blocked_by: null } },
+    };
     mockFetch({
       [`GET ${MAYA}`]: [200, suspended],
       [`POST ${MAYA}/preview`]: [200, { effects: [{ kind: "reactivated" }], documents_gained: 2, documents_lost: 0 }],

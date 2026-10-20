@@ -13,7 +13,7 @@ from sqlalchemy import and_, func, not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lattice.access.directory import DOCUMENTS, AccessSnapshot
-from lattice.access.models import AccessEffect, MemberChange, NamedRef
+from lattice.access.models import AccessEffect, EffectKind, MemberChange, NamedRef
 from lattice.authz import AuthorizationContext, proposed_context, readable_documents_predicate
 
 
@@ -31,13 +31,27 @@ def apply_change(snapshot: AccessSnapshot, change: MemberChange) -> AccessSnapsh
     )
 
 
+def _status_kind(before: str, after: str) -> EffectKind:
+    if after == "suspended":
+        return "suspended"
+    if after == "removed":
+        return "removed"
+    # Back to active: from removed it is a reinstatement, otherwise a reactivation.
+    return "reinstated" if before == "removed" else "reactivated"
+
+
 def effects(
-    before: AccessSnapshot | None, after: AccessSnapshot, names: dict[uuid.UUID, str]
+    before: AccessSnapshot | None,
+    after: AccessSnapshot,
+    names: dict[uuid.UUID, str],
+    *,
+    created: bool = False,
 ) -> list[AccessEffect]:
-    """``before`` is ``None`` for a membership that did not exist (provisioned)."""
+    """``before`` is ``None`` for a membership that did not exist: provisioned by the
+    identity provider (or the operator), or ``created`` by an administrator by hand."""
     found: list[AccessEffect] = []
     if before is None:
-        found.append(AccessEffect(kind="provisioned", after=after.status))
+        found.append(AccessEffect(kind="created" if created else "provisioned", after=after.status))
         found.append(AccessEffect(kind="clearance", after=after.clearance))
         found.append(AccessEffect(kind="account_scope", after=after.account_scope))
         before = AccessSnapshot(
@@ -50,9 +64,7 @@ def effects(
             is_admin=False,
         )
     if before.status != after.status:
-        found.append(
-            AccessEffect(kind="suspended" if after.status == "suspended" else "reactivated")
-        )
+        found.append(AccessEffect(kind=_status_kind(before.status, after.status)))
     if before.is_admin != after.is_admin:
         found.append(
             AccessEffect(

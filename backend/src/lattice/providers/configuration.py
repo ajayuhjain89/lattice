@@ -6,21 +6,27 @@ The minimum Phase 6 backend for BYOK, below the Phase 7 settings UI:
       → provider configuration   (model_providers: purpose, provider, model, endpoint,
                                    enabled, approval)
       → deployment trust class    (recorded; must equal what the implementation declares)
-      → secret reference          (provider_credentials: env:NAME, never the value)
+      → secret reference          (provider_credentials: env:NAME, or vault:<id> for a
+                                   value encrypted at rest; never the value itself)
       → invocation                (only through the invocation rule, per request)
 
 Writes are administrative actions: each needs a stated reason and is recorded in the
 append-only ``audit_events`` table with before/after state (never a secret value or
-a secret reference's target). Today they are run by operators through the CLI
-(``lattice provider ...``, ``lattice org egress``) as ``lattice_owner``; the Phase 7 UI
-will call the same functions behind an administrator capability.
+a secret reference's target). These are the **operator's** writers, run through the CLI
+(``lattice provider ...``, ``lattice org egress``) as ``lattice_owner``; administrators
+change the same tables through the product and the 0021 fenced functions
+(``lattice.providers.admin``), where raising egress needs a fresh step-up (D-34).
 
 * configuring a provider records it approved for ``internal`` only (the default of
-  security-model §6) and, for generation, makes it the one enabled configuration;
+  security-model §6) and, for generation, makes it the one enabled configuration; a new
+  generation record is **explicitly** approved for ``internal`` by the operator's
+  configuration (``approved_at``: generation needs an explicit approval since P12.5;
+  records an administrator creates in the product start unapproved and disabled);
 * approval, enablement, credentials and the organization's ceilings each change only
   what they name -- none of them can change a trust class;
 * rotating a credential revokes the active reference and records a new one; revoking
-  leaves none. Either takes effect on the next request (nothing is cached);
+  leaves none; an encrypted (``vault:``) value is destroyed with its credential. Either
+  takes effect on the next request (nothing is cached);
 * disabling keeps the record and its history; a disabled provider receives nothing.
 
 ``provider_overview`` is the masked read model: whether a credential is configured and
@@ -32,12 +38,15 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lattice.providers.egress import DEPLOYMENTS, LEVELS_ORDER, trust_class
 from lattice.providers.ollama_generation import validate_endpoint
 from lattice.providers.secrets import SecretStore, SecretUnavailable, parse_reference
+from lattice.vault.keys import Keyring
+from lattice.vault.records import destroy_secret, load_sealed, store_secret
 
 Purpose = Literal["embedding", "generation"]
 
@@ -150,8 +159,9 @@ async def configure_provider(
     await session.execute(
         text(
             "INSERT INTO model_providers (organization_id, purpose, provider, model, deployment, "
-            "endpoint, retention_mode, training_opt_out, enabled) VALUES (:o, :u, :p, :m, :d, "
-            ":e, :r, :t, true) ON CONFLICT (organization_id, purpose, provider, model) DO UPDATE "
+            "endpoint, retention_mode, training_opt_out, enabled, approved_at) VALUES (:o, :u, "
+            ":p, :m, :d, :e, :r, :t, true, CASE WHEN :u = 'generation' THEN now() END) "
+            "ON CONFLICT (organization_id, purpose, provider, model) DO UPDATE "
             "SET endpoint = EXCLUDED.endpoint, retention_mode = EXCLUDED.retention_mode, "
             "training_opt_out = EXCLUDED.training_opt_out, enabled = true, updated_at = now()"
         ),
@@ -279,26 +289,22 @@ async def _credential_state(
     return None if row is None else dict(row)
 
 
-async def set_credential(
-    session: AsyncSession,
-    org: uuid.UUID,
-    *,
-    provider: str,
-    secret_ref: str,
-    data_use: Literal["unpaid", "paid"] | None,
-    reason: str,
-    actor: str,
-) -> None:
-    """Record a new credential reference for the organization's ``provider``, revoking
-    the active one (rotation / replacement). The value is never read here."""
-    try:
-        parse_reference(secret_ref)
-    except SecretUnavailable:
-        raise ConfigurationRejected(
-            "the reference must be env:LATTICE_PROVIDER_SECRET_<NAME> (or a documented "
-            "provider variable)"
-        ) from None
-    before = await _credential_state(session, org, provider)
+async def _active_reference(session: AsyncSession, org: uuid.UUID, provider: str) -> str | None:
+    ref: str | None = (
+        await session.execute(
+            text(
+                "SELECT secret_ref FROM provider_credentials WHERE organization_id = :o "
+                "AND provider = :p AND status = 'active'"
+            ),
+            {"o": org, "p": provider},
+        )
+    ).scalar_one_or_none()
+    return ref
+
+
+async def _revoke_active(session: AsyncSession, org: uuid.UUID, provider: str) -> None:
+    """Revoke the active credential; a vault: one has its ciphertext destroyed (C3.3)."""
+    await destroy_secret(session, org, await _active_reference(session, org, provider))
     await session.execute(
         text(
             "UPDATE provider_credentials SET status = 'revoked', revoked_at = now() "
@@ -306,12 +312,63 @@ async def set_credential(
         ),
         {"o": org, "p": provider},
     )
+
+
+async def set_credential(
+    session: AsyncSession,
+    org: uuid.UUID,
+    *,
+    provider: str,
+    secret_ref: str | None = None,
+    value: SecretStr | None = None,
+    keyring: Keyring | None = None,
+    data_use: Literal["unpaid", "paid"] | None,
+    reason: str,
+    actor: str,
+) -> None:
+    """Record a new credential for the organization's ``provider``, revoking the active
+    one (rotation / replacement). Either a reference (``secret_ref``; the value is never
+    read here) or a ``value`` sealed into ``encrypted_secrets`` with ``keyring`` and
+    referenced as ``vault:<id>`` -- the value itself is never stored, logged or
+    audited."""
+    if (secret_ref is None) == (value is None):
+        raise ConfigurationRejected("give either a secret reference or a value")
+    if secret_ref is not None:
+        try:
+            scheme, _ = parse_reference(secret_ref)
+        except SecretUnavailable:
+            scheme = ""
+        if scheme not in ("env", "memory"):
+            raise ConfigurationRejected(
+                "the reference must be env:LATTICE_PROVIDER_SECRET_<NAME> (or a documented "
+                "provider variable)"
+            )
+    elif keyring is None or keyring.active is None:
+        raise ConfigurationRejected(
+            "storing a credential value needs LATTICE_SECRET_KEYS and LATTICE_SECRET_ACTIVE_KEY"
+        )
+    before = await _credential_state(session, org, provider)
+    await _revoke_active(session, org, provider)
+    credential_id = uuid.uuid4()
+    if value is not None:
+        assert keyring is not None  # noqa: S101 - checked above
+        try:
+            secret_ref = await store_secret(
+                session,
+                keyring,
+                organization_id=org,
+                owner_kind="provider_api_key",
+                owner_id=credential_id,
+                value=value,
+            )
+        except ValueError as exc:  # empty or too long; the message never holds the value
+            raise ConfigurationRejected(str(exc)) from None
     await session.execute(
         text(
-            "INSERT INTO provider_credentials (organization_id, provider, secret_ref, data_use) "
-            "VALUES (:o, :p, :r, :d)"
+            "INSERT INTO provider_credentials (id, organization_id, provider, secret_ref, "
+            "data_use) VALUES (:id, :o, :p, :r, :d)"
         ),
-        {"o": org, "p": provider, "r": secret_ref, "d": data_use},
+        {"id": credential_id, "o": org, "p": provider, "r": secret_ref, "d": data_use},
     )
     await _audit(
         session,
@@ -331,13 +388,7 @@ async def revoke_credential(
     before = await _credential_state(session, org, provider)
     if before is None:
         return False
-    await session.execute(
-        text(
-            "UPDATE provider_credentials SET status = 'revoked', revoked_at = now() "
-            "WHERE organization_id = :o AND provider = :p AND status = 'active'"
-        ),
-        {"o": org, "p": provider},
-    )
+    await _revoke_active(session, org, provider)
     await _audit(
         session,
         org,
@@ -384,12 +435,13 @@ async def set_egress_levels(
 ) -> dict[str, Any]:
     """Change the organization's ceilings (security-model §6). ``None`` for
     ``organization_controlled_level`` means the class is not allowed; ``"unset"`` leaves
-    it unchanged."""
+    it unchanged. ``external_level``: a level, ``"none"`` (external APIs are not allowed,
+    P12.5) or None (unchanged)."""
     changes: dict[str, str | None] = {}
     if external_level is not None:
-        if external_level not in LEVELS_ORDER:
+        if external_level != "none" and external_level not in LEVELS_ORDER:
             raise ConfigurationRejected("unknown level")
-        changes["external_egress_level"] = external_level
+        changes["external_egress_level"] = None if external_level == "none" else external_level
     if organization_controlled_level != "unset":
         if organization_controlled_level is not None and (
             organization_controlled_level not in LEVELS_ORDER
@@ -465,13 +517,24 @@ async def provider_overview(
         for r in (
             await session.execute(
                 text(
-                    "SELECT provider, secret_ref, data_use FROM provider_credentials "
+                    "SELECT id, provider, secret_ref, data_use FROM provider_credentials "
                     "WHERE organization_id = :o AND status = 'active'"
                 ),
                 {"o": org},
             )
         ).mappings()
     }
+    resolvable: dict[str, bool] = {}
+    for provider, active in credentials.items():
+        reference = str(active["secret_ref"])
+        sealed = await load_sealed(
+            session,
+            reference,
+            organization_id=org,
+            owner_kind="provider_api_key",
+            owner_id=active["id"],
+        )
+        resolvable[provider] = secrets.available(reference, sealed)
     out: list[ProviderView] = []
     for r in rows:
         credential = credentials.get(str(r["provider"]))
@@ -493,7 +556,7 @@ async def provider_overview(
                     else CredentialState(
                         "active",
                         str(credential["secret_ref"]).partition(":")[0],
-                        secrets.available(str(credential["secret_ref"])),
+                        resolvable[str(r["provider"])],
                         credential["data_use"],
                     )
                 ),

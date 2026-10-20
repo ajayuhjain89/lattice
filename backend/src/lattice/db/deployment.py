@@ -19,11 +19,17 @@ read; only catalogs and the schema revision.
   snapshot generated from a freshly migrated database and committed with the code
   (``privilege_snapshot.json``): any drift -- a hand-made GRANT, a dropped policy, a
   disabled trigger -- fails;
+* **secret keys** (P12.1, C3.3) -- every key ID used by live encrypted credentials is
+  listed in ``LATTICE_SECRET_KEYS`` (IDs compared, key material never read). Where this
+  command runs without the keys (the migration job), the IDs in use are reported and not
+  compared: the API refuses to start without them;
 * **connection budget** -- ``max_connections`` minus reserved slots covers the planned
   processes plus a headroom of 10 (deployment.md §8).
 """
 
 import json
+import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib import resources
 from typing import Any, Final
@@ -45,6 +51,7 @@ from lattice.db.migrate import (
 )
 from lattice.db.role_check import RLS_EXEMPT_TABLES
 from lattice.db.schema import SCHEMA_REVISION, current_revision
+from lattice.vault.keys import configured_key_ids
 
 LATTICE_ROLES: Final = ("lattice_owner", "lattice_app", "lattice_worker", "lattice_auth")
 SNAPSHOT_RESOURCE: Final = "privilege_snapshot.json"
@@ -266,7 +273,38 @@ def _role_problems(rows: list[Any]) -> list[str]:
     return problems
 
 
-async def run_checks(conn: AsyncConnection, plan: Plan) -> list[Check]:
+async def _secret_keys(conn: AsyncConnection, environ: Mapping[str, str]) -> tuple[list[str], str]:
+    exists: bool = (
+        await conn.execute(text("SELECT to_regprocedure('lattice_secret_key_ids()') IS NOT NULL"))
+    ).scalar_one()
+    stored = (
+        sorted(
+            str(r[0])
+            for r in await conn.execute(text("SELECT key_id FROM lattice_secret_key_ids()"))
+        )
+        if exists
+        else []
+    )
+    if not stored:
+        return [], "no encrypted credential stored"
+    configured = configured_key_ids(environ)
+    if configured is None:
+        return [], (
+            f"key ID(s) in use: {', '.join(stored)}; not compared (LATTICE_SECRET_KEYS is not "
+            "in this environment; the API refuses to start without them)"
+        )
+    missing = [key for key in stored if key not in configured]
+    if missing:
+        return [
+            f"encrypted credentials use key ID(s) {', '.join(missing)} that "
+            "LATTICE_SECRET_KEYS does not list"
+        ], ""
+    return [], f"key ID(s) in use: {', '.join(stored)}; all configured"
+
+
+async def run_checks(
+    conn: AsyncConnection, plan: Plan, environ: Mapping[str, str] | None = None
+) -> list[Check]:
     checks: list[Check] = []
 
     def add(name: str, problems: list[str], ok_detail: str) -> None:
@@ -328,6 +366,9 @@ async def run_checks(conn: AsyncConnection, plan: Plan) -> list[Check]:
         [f"{len(differences)} difference(s), first: {differences[0]}"] if differences else [],
         "matches the committed snapshot",
     )
+
+    key_problems, key_detail = await _secret_keys(conn, os.environ if environ is None else environ)
+    add("secret keys", key_problems, key_detail)
 
     budget = (await conn.execute(_BUDGET_SQL)).one()
     usable = budget.max - budget.reserved

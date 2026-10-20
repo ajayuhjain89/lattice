@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from lattice.db.engine import Database
 
-from ..conftest import AppFactory
+from ..conftest import AppFactory, FreshWindow
 from ..factories import create_member, create_oidc_connection, create_scim_token, login
 from .conftest import World, patch, user
 
@@ -119,9 +119,10 @@ async def test_scim_needs_no_csrf_header_but_cross_site_requests_are_refused(
 
 
 async def test_repeated_authentication_failures_are_refused_before_the_token_is_checked(
-    app_client: AppFactory, world: World
+    app_client: AppFactory, world: World, fresh_window: FreshWindow
 ) -> None:
     async with app_client(rate_limit_sign_in_per_minute=2) as client:
+        await fresh_window()
         for _ in range(2):
             bad = await client.get(f"{BASE}/Users", headers={"Authorization": "Bearer x"})
             assert bad.status_code == 401
@@ -133,8 +134,11 @@ async def test_repeated_authentication_failures_are_refused_before_the_token_is_
         assert int(limited.headers["retry-after"]) >= 1
 
 
-async def test_each_token_has_its_own_request_limit(app_client: AppFactory, world: World) -> None:
+async def test_each_token_has_its_own_request_limit(
+    app_client: AppFactory, world: World, fresh_window: FreshWindow
+) -> None:
     async with app_client(rate_limit_scim_per_minute=2) as client:
+        await fresh_window()
         for _ in range(2):
             assert (await client.get(f"{BASE}/Users", headers=world.halden.auth)).status_code == 200
         refused = await client.get(f"{BASE}/Users", headers=world.halden.auth)

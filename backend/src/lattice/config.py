@@ -24,6 +24,8 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from lattice.imports.limits import ImportLimits
+
 ENV_PREFIX = "LATTICE_"
 _ASYNC_POSTGRES_SCHEME = "postgresql+asyncpg://"
 
@@ -167,6 +169,27 @@ class Settings(BaseSettings):
     # same, so the counts are still shared).
     client_key_secret: SecretStr | None = None
 
+    # --- Imports (Phase 12, P12.6; phase-12-plan C8; deployment.md §4) ----------------------
+    # The import area: a directory shared read-write by every API instance and the worker
+    # (deletion only), nothing else. Unset = uploads are refused (`storage_unavailable`).
+    imports_root: Path | None = None
+    # The upload route's own limits (the ordinary 64 KiB body cap is unchanged). Defaults
+    # suit the 8 GB reference machine (lattice.imports.limits); raise them for larger hosts.
+    import_max_upload_bytes: int = Field(default=100 * 1024 * 1024, ge=1024 * 1024, le=2 * 1024**3)
+    import_max_expanded_bytes: int = Field(
+        default=512 * 1024 * 1024, ge=1024 * 1024, le=8 * 1024**3
+    )
+    import_max_entries: int = Field(default=20_000, ge=1, le=200_000)
+    import_max_file_bytes: int = Field(default=32 * 1024 * 1024, ge=64 * 1024, le=8 * 1024**3)
+    import_organization_quota_bytes: int = Field(
+        default=2 * 1024**3, ge=2 * 1024 * 1024, le=1024**4
+    )
+    # The whole upload (body and validation) must finish within this; the ingress's body
+    # timeout for the route is set to match (deploy/caddy/Caddyfile).
+    import_upload_timeout_seconds: float = Field(default=600.0, ge=10.0, le=3600.0)
+    # Uploads one API process accepts at a time (each streams to disk, then validates).
+    import_concurrent_uploads: int = Field(default=2, ge=1, le=16)
+
     # --- OIDC sign-in (Phase 10; ADR-015) ----------------------------------------------------
     # The origin users reach Lattice at (the web app), e.g. https://lattice.example.com.
     # OIDC redirect URIs are built from it: <public_url>/api/v1/auth/oidc/<key>/callback.
@@ -176,6 +199,22 @@ class Settings(BaseSettings):
     oidc_http_timeout_seconds: float = Field(default=5.0, ge=0.5, le=30.0)
 
     _check_url = field_validator("database_url")(_require_asyncpg_url)
+
+    @field_validator("imports_root")
+    @classmethod
+    def _check_imports_root(cls, value: Path | None) -> Path | None:
+        if value is not None and not value.is_absolute():
+            raise ValueError("must be an absolute path")
+        return value
+
+    def import_limits(self) -> ImportLimits:
+        return ImportLimits(
+            max_upload_bytes=self.import_max_upload_bytes,
+            max_expanded_bytes=self.import_max_expanded_bytes,
+            max_entries=self.import_max_entries,
+            max_file_bytes=self.import_max_file_bytes,
+            organization_quota_bytes=self.import_organization_quota_bytes,
+        )
 
     @field_validator("public_url")
     @classmethod
@@ -317,8 +356,18 @@ class WorkerSettings(BaseSettings):
     db_statement_timeout_ms: int = Field(default=300_000, ge=1_000, le=3_600_000)
     db_connect_timeout_seconds: float = Field(default=5.0, ge=0.5, le=60.0)
     metrics_address: str | None = None
+    # The import area the API writes (P12.6): the worker reads an import's tree by its ID
+    # and removes expired imports. Unset = organization-managed sources cannot sync.
+    imports_root: Path | None = None
 
     _check_url = field_validator("worker_database_url")(_require_asyncpg_url)
+
+    @field_validator("imports_root")
+    @classmethod
+    def _check_imports_root(cls, value: Path | None) -> Path | None:
+        if value is not None and not value.is_absolute():
+            raise ValueError("must be an absolute path")
+        return value
 
     @field_validator("metrics_address")
     @classmethod

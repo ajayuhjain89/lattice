@@ -64,6 +64,17 @@ Ingestion is an operator tool. It connects as `lattice_owner` and writes **throu
 row-level security, one organization bound per transaction, exactly like the seed. The
 runtime role (`lattice_app`) has SELECT only on the ingestion tables.
 
+**Organization-managed sources (P12.6).** The same pipeline runs from the worker for a
+source created in the product: its configuration comes from the `sources` row (no
+`sources.yaml`, no path), and the connector reads the tree of the job's import through the
+import store (`lattice.imports`; the import that was current when the sync was requested,
+recorded on the run as `import_id`). An `import_check` job runs the pipeline with
+`dry_run` — every step up to persistence, no write, no provider call — and records its
+counts, codes and unresolved references on the import (connector-design §3.4). Everything
+in this document (idempotency, versioning, the deletion guard, fail-closed access mapping,
+quarantine) applies unchanged; `lattice sync` refuses such a source
+(`source_config:managed_in_product`).
+
 ## 2. Idempotency and determinism
 
 - Idempotency key: `(organization_id, source_id, external_id)`.
@@ -206,13 +217,30 @@ every record and persona (`tests/ingestion/test_ingested_access.py`).
 | Unknown department key (restriction or grant) | Record fails: `access_unmappable:department` — never dropped |
 | Unknown admin-group key in a grant | Record fails: `access_unmappable:group` |
 | Group reference the connector did not declare | Record fails: `access_unmappable:group` |
-| Account key that does not exist (document, channel) | Record fails: `access_unmappable:account` — never "no account" |
-| `account_scoped` source and account reference unmapped | Record fails: `access_unmappable:account` (not indexed as unscoped); the failure carries only the external reference to map |
+| Account key that does not exist (document front matter) | Record fails: `access_unmappable:account` — never "no account" |
+| Ticketing organization / channel reference | Mapped **exactly** by the source's `account_external_refs` (P12.3), read once per sync; a mapping to an *archived* account keeps resolving |
+| Ticket naming a ticketing organization with no mapping — on **any** source | Record fails: `access_unmappable:account` (never indexed without an account); the failure carries only the external reference to map |
+| Reference an administrator unmapped (*unresolved*, migration 0019) — on **any** source | Record fails: `access_unmappable:account`; its indexed document is quarantined until the reference is mapped again |
+| Record that still names the reference which gave its indexed document an account, now resolving to none | Record fails: `access_unmappable:account` (defence in depth: a missing mapping never lowers a document's restriction) |
+| `account_scoped` source and a record with no account (no reference, or a channel never mapped) | Record fails: `access_unmappable:account` |
+| Chat channel never mapped, on a source that is not account-scoped (`#general`) | Indexed without an account: the channel is not an account reference |
 | Private channel with no mappable members | Indexed `grants_only` with an empty group: readable by nobody until members map |
 | Existing document whose record now fails | Quarantined (§5) |
 
 Source configuration problems (a configured account or department key that does not
-exist) refuse the whole sync before anything is written (`source_config:*`).
+exist; a sources file mapping a *new* reference to an archived account,
+`source_config:account_archived`) refuse the whole sync before anything is written
+(`source_config:*`).
+
+**Mapping changes (P12.3)** apply at the next sync, deterministically, through these same
+rules — nothing already indexed is rewritten when an administrator maps, remaps or
+unmaps: a newly mapped reference's waiting records are indexed; a remapped reference's
+documents get the new account (an access update); an unmapped reference stays known as
+*unresolved* (`account_external_refs.account_id` NULL, migration 0019) and its documents
+are **quarantined** — on every source, account-scoped or not — keeping their account,
+version and content; new records naming it are not indexed. **A missing account mapping
+never widens access.** Mapping the reference again restores them at the next sync.
+Repeating a sync with the same mappings and export changes nothing.
 
 ## 7. Embedding
 

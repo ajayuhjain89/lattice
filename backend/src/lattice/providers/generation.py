@@ -53,7 +53,7 @@ class GenerationResult:
 
 class GenerationError(Exception):
     """The provider produced no usable output. ``code`` is one of
-    ``generation_failed:{timeout, network, unauthorized, rate_limited,
+    ``generation_failed:{timeout, network, outbound_blocked, unauthorized, rate_limited,
     quota_exhausted, not_found, provider_error, refused, truncated,
     malformed_response}``; the message is the code, never a response body."""
 

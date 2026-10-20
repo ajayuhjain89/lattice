@@ -14,6 +14,7 @@ from datetime import datetime
 from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     PrimaryKeyConstraint,
     Text,
     UniqueConstraint,
@@ -22,6 +23,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY, CITEXT
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql.elements import conv
 
 from lattice.db.base import Base
 
@@ -118,7 +120,56 @@ class Account(Base):
     key: Mapped[str] = mapped_column(CITEXT)
     name: Mapped[str] = mapped_column(Text)
     aliases: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}")
+    # Business label (active | churned | prospect): display only, no effect anywhere.
     status: Mapped[str] = mapped_column(Text, server_default="active")
+    # The setup lifecycle (P12.3, migration 0018): archived accounts keep their documents,
+    # assignments and mappings and refuse new mappings. Never deleted by the product.
+    archived_at: Mapped[datetime | None]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class AccountExternalRef(Base):
+    """A source-provided reference mapped to one canonical account (phase-12-plan C10;
+    migration 0018). Unique per organization, source, kind and value; written by the
+    fenced ``lattice_set_account_ref`` (the API) or by operators (``lattice sync``). An
+    unmap leaves the row with no account (unresolved, 0019)."""
+
+    __tablename__ = "account_external_refs"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "source_id",
+            "ref_kind",
+            "external_ref",
+            name=conv("uq_account_external_refs_reference"),
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "source_id"],
+            ["sources.organization_id", "sources.id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "account_id"],
+            ["accounts.organization_id", "accounts.id"],
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_account_external_refs_organization_id_account_id", "organization_id", "account_id"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_DEFAULT)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE")
+    )
+    source_id: Mapped[uuid.UUID]
+    # ticketing_organization | chat_channel: the connector's own reference kind.
+    ref_kind: Mapped[str] = mapped_column(Text)
+    external_ref: Mapped[str] = mapped_column(Text)
+    # NULL: unresolved -- unmapped by an administrator; its records fail closed (0019).
+    account_id: Mapped[uuid.UUID | None]
+    created_by: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
@@ -154,8 +205,9 @@ class OrgSettings(Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
     )
-    # internal | confidential | restricted; raising it is an explicit admin action.
-    external_egress_level: Mapped[str] = mapped_column(Text, server_default="internal")
+    # internal | confidential | restricted; raising it is an explicit admin action. NULL
+    # (0021): external APIs are not allowed at all.
+    external_egress_level: Mapped[str | None] = mapped_column(Text, server_default="internal")
     # D-13: the trusted minimum sensitivity of a question; a caller can only raise it.
     default_query_sensitivity: Mapped[str] = mapped_column(Text, server_default="internal")
     # customer | synthetic: only synthetic content may reach a provider that may use

@@ -48,14 +48,14 @@ async def test_accounts_are_the_ones_the_member_may_know(
     await sign_in(client, org, "maya")
     assert (await client.get("/v1/accounts")).json() == {
         "account_scope": "assigned",
-        "accounts": [{"key": "acme", "name": "Acme Corp"}],
+        "accounts": [{"key": "acme", "name": "Acme Corp", "archived": False}],
     }
     await sign_in(client, org, "tom")
     assert (await client.get("/v1/accounts")).json() == {
         "account_scope": "all",
         "accounts": [
-            {"key": "acme", "name": "Acme Corp"},
-            {"key": "kestrel", "name": "Kestrel Bank"},
+            {"key": "acme", "name": "Acme Corp", "archived": False},
+            {"key": "kestrel", "name": "Kestrel Bank", "archived": False},
         ],
     }
 

@@ -5,7 +5,7 @@ amendments (§21). P11.0 approved (4990064). P11.1 approved (b07ac8d). D-22 amen
 2026-10-05 (§21.1): zero paid infrastructure — Phase 11 closes on full local
 production-shaped verification; real external staging validation is deferred and gates
 Phase 15 (v1 GA). P11.2–P11.7 authorized to run in sequence without a review stop per
-checkpoint. P11.2 delivered as ae03445 + test fix fd0d1bc (§25.3). P11.3 delivered as 1c68ed5 (§25.4). P11.4 delivered as 9a50e27 (§25.5). P11.5 delivered as 0b7fe76 (§25.6). P11.6 delivered as f6025fe (§25.7). P11.7 delivered (§25.8); acceptance checklist §26.1 — Phase 11 closed on local verification only.** Branch `phase/11-production-operations` from `main` 27da421.
+checkpoint. P11.2 delivered as ae03445 + test fix fd0d1bc (§25.3). P11.3 delivered as 1c68ed5 (§25.4). P11.4 delivered as 9a50e27 (§25.5). P11.5 delivered as 0b7fe76 (§25.6). P11.6 delivered as f6025fe (§25.7). P11.7 delivered (§25.8); acceptance checklist §26.1 — Phase 11 closed on local verification only. Merged to `main` --no-ff as 143392f (2026-10-06), merge CI green.** Branch `phase/11-production-operations` from `main` 27da421.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 11. Phase 12
 owns customer-facing onboarding (organization, SSO, SCIM, sources/integrations,
@@ -616,7 +616,7 @@ observability platform, service decomposition.
 | D-22 | **Verification environment:** the production-shaped local reference stack (two API instances) is the primary repeatable environment; **plus one real cloud staging deployment before P11.7 closes**, not necessarily kept online | Provider chosen in P11.0 by comparing a small number of low-cost options against: web, API, worker, migration job, managed PostgreSQL (16 + pgvector), TLS/custom origin, OIDC callback, secrets, backups/PITR, logs/metrics access, deployment/rollback, cost (incl. avoiding recurring cost). Contract stays provider-independent; no application coupling |
 | D-23 | **Schema guard:** keep the exact-match guard; accept a short unavailable interval for releases with migrations | Stop-the-world order and migration pre-flight (§6.3); no expand/contract machinery unless proven necessary for correctness |
 | D-24 | **Shared limits:** PostgreSQL leases for in-flight Asks; **the pre-auth limit is shared too** (PostgreSQL, keyed hash, trusted ingress address only); no Redis; defaults unchanged | §10; documentation lists every limit as shared / connection-local / process-local, with no process-local security limit left |
-| D-25 | **SSO disable revokes the sessions it issued**; the connection lifecycle is completed (re-enable, in-place update, secret-reference rotation, guarded replacement) | §9.2; backend/operator only, no Phase 12 UI |
+| D-25 | **SSO disable revokes the sessions it issued**; the connection lifecycle is completed (re-enable, in-place update, secret-reference rotation, guarded replacement) | §9.2; backend/operator only in Phase 11. *Superseded 2026-10-06:* the approved Phase 12 plan adds the administrator UX (phase-12-plan C5, P12.4) |
 | D-26 | **Organization purge deferred to Phase 12**; Phase 11 adds audited `org suspend/reactivate` and replaces unaudited owner SQL in incident procedures with audited commands | §9.3 |
 | D-27 | **One gated image path:** `main` and `v*` tags (and manual dispatch) publish to GHCR from the same CI run after the existing jobs pass; digests immutable; revision/version visible at runtime internally; no images on development pushes; no duplicate test runs | §7 |
 

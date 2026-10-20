@@ -28,6 +28,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 from urllib.parse import urlsplit
 
+from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +38,8 @@ from lattice.access.audit import MEMBER_CHANGED, record_event
 from lattice.access.directory import access_snapshot
 from lattice.identity.sessions import CONNECTION_LOCK_SQL
 from lattice.provisioning.tokens import hash_token, new_token
+from lattice.vault.keys import Keyring
+from lattice.vault.records import destroy_secret, store_secret
 
 
 class OperatorRejected(Exception):
@@ -292,23 +295,31 @@ async def update_connection(
     issuer: str | None = None,
     subject_claim: str | None = None,
     subjects_unchanged: bool = False,
+    secret_value: SecretStr | None = None,
+    keyring: Keyring | None = None,
+    step_up_acr: object = _UNSET,
     reason: str,
     actor: str,
 ) -> tuple[ConnectionView, int]:
     """Change a connection in place (D-25). ``secret_ref``: a new ``env:`` reference, or
-    None for a public (PKCE-only) client. The client ID and the secret reference change
+    None for a public (PKCE-only) client; ``secret_value`` (with ``keyring``): a new
+    client secret sealed for this connection (``vault:``, P12.1). A replaced ``vault:``
+    secret is destroyed. The client ID and the secret reference change
     nothing for sessions. The issuer and the identifying claim define whose subjects the
     directory identities hold: changing either is allowed only with
     ``subjects_unchanged`` (the operator asserts every person keeps the same subject
     value, e.g. an issuer URL rename) and revokes the connection's sessions. A provider
-    whose subjects differ needs an identity mapping (Phase 12), not this."""
+    whose subjects differ needs an identity mapping (Phase 12), not this.
+    ``step_up_acr`` (P12.5, D-34): the ``acr`` values an administrator's egress step-up
+    must assert (a list), or None for none -- an operator decision, never the
+    administrators' (lowering it would weaken their own step-up)."""
     wanted = "active" if connection_id is None else None
     found = await _pick(session, org, connection_id, status=wanted)
     current = (
         await session.execute(
             text(
-                "SELECT issuer, client_id, client_secret_ref, subject_claim "
-                "FROM oidc_connections WHERE id = :c"
+                "SELECT issuer, client_id, client_secret_ref, subject_claim, "
+                "step_up_acr_values FROM oidc_connections WHERE id = :c"
             ),
             {"c": found.id},
         )
@@ -316,18 +327,47 @@ async def update_connection(
     changes: dict[str, Any] = {}
     if client_id is not None and client_id != current.client_id:
         changes["client_id"] = client_id
-    if secret_ref is not _UNSET and secret_ref != current.client_secret_ref:
+    if secret_value is not None:
+        if secret_ref is not _UNSET:
+            raise OperatorRejected("give a secret reference or a secret value, not both")
+        if keyring is None or keyring.active is None:
+            raise OperatorRejected(
+                "--client-secret-stdin needs LATTICE_SECRET_KEYS and LATTICE_SECRET_ACTIVE_KEY"
+            )
+        await destroy_secret(session, org, current.client_secret_ref)
+        try:
+            changes["client_secret_ref"] = await store_secret(
+                session,
+                keyring,
+                organization_id=org,
+                owner_kind="oidc_client_secret",
+                owner_id=found.id,
+                value=secret_value,
+            )
+        except ValueError as exc:  # empty or too long; never the value
+            raise OperatorRejected(str(exc)) from None
+    elif secret_ref is not _UNSET and secret_ref != current.client_secret_ref:
         if secret_ref is not None and not (
             isinstance(secret_ref, str) and secret_ref.startswith("env:LATTICE_OIDC_SECRET_")
         ):
             raise OperatorRejected(
                 "the client secret must be a reference env:LATTICE_OIDC_SECRET_<NAME>"
             )
+        await destroy_secret(session, org, current.client_secret_ref)
         changes["client_secret_ref"] = secret_ref
     if issuer is not None and issuer != current.issuer:
         changes["issuer"] = _check_issuer(issuer)
     if subject_claim is not None and subject_claim != current.subject_claim:
         changes["subject_claim"] = subject_claim
+    if step_up_acr is not _UNSET:
+        values = None if step_up_acr is None else list(step_up_acr)  # type: ignore[call-overload]
+        if values is not None and (
+            not 1 <= len(values) <= 10
+            or not all(isinstance(v, str) and 1 <= len(v.strip()) <= 200 for v in values)
+        ):
+            raise OperatorRejected("--step-up-acr takes 1-10 acr values")
+        if values != (list(current.step_up_acr_values) if current.step_up_acr_values else None):
+            changes["step_up_acr_values"] = values
     if not changes:
         raise OperatorRejected("nothing to change")
     identity_shape = bool({"issuer", "subject_claim"} & set(changes))
@@ -355,17 +395,23 @@ async def update_connection(
     metrics.sessions_revoked("sso_identity_changed", revoked)
 
     def shown(values: Any) -> dict[str, Any]:
+        reference = values["client_secret_ref"]
         return {
             "issuer": values["issuer"],
             "client_id": values["client_id"],
             "subject_claim": values["subject_claim"],
-            "client_secret": "reference" if values["client_secret_ref"] else "none",
+            "step_up_acr": values["step_up_acr_values"],
+            "client_secret": "none"
+            if not reference
+            else "encrypted"
+            if str(reference).startswith("vault:")
+            else "reference",
         }
 
     before = shown(current._mapping)
     after = shown({**current._mapping, **changes})
     if "client_secret_ref" in changes and before["client_secret"] == after["client_secret"]:
-        after["client_secret"] = "reference (rotated)"  # noqa: S105 - a label, not a secret
+        after["client_secret"] = f"{after['client_secret']} (rotated)"
     if identity_shape:
         after["sessions_revoked"] = revoked
     await record_event(

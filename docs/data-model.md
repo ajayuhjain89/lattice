@@ -22,7 +22,14 @@ the `jobs` table, the `lattice_worker` role's grants and policies, and an
 **Phase 9** added the API role's fenced access writes (0012). **Phase 10** (migration
 0013, ADR-015) added `oidc_connections`, `oidc_login_attempts`, `directory_identities`,
 `scim_tokens`, `rate_limit_counters`, `users.home_organization_id` and
-`audit_events.txid` with the access-audit triggers (§2, §7).
+`audit_events.txid` with the access-audit triggers (§2, §7). **Phase 12 P12.1**
+(migration 0016) added `encrypted_secrets`, `outbound_targets`, the sign-in facts
+`oidc_connections.last_success_at`/`last_failure_at`, `vault:` secret references, the
+organization-name check and the first setup fence (rename, audit-coupled) (§2, §7).
+**Phase 12 P12.5** (migration 0021) added `egress_policy_versions`, `step_up_grants`, the
+step-up columns of `oidc_login_attempts`, `oidc_connections.step_up_acr_values`, the
+provider test facts on `model_providers`, a nullable `org_settings.external_egress_level`
+and the provider/egress fences (§2, §7).
 Related: `authorization-model.md`, `ingestion-design.md`, `retrieval-design.md`.
 
 Conventions:
@@ -82,7 +89,11 @@ Core typed domain objects (Pydantic, not tables) are listed in §9.
 
 RLS-protected despite being the tenant root (Phase 1 change): the runtime role sees
 only the bound organization's own row, so tenants cannot be enumerated. Operator tools
-(`lattice_owner`) may provision organizations.
+(`lattice_owner`) may provision organizations (`lattice org create`, P12.1). Since 0016
+`name` is 1–200 characters without control characters (CHECK), and the runtime role may
+update `name` (and `updated_at`) of its own **active** organization only — a deferred
+trigger refuses the commit unless the same transaction recorded `organization.updated`
+for it (ADR-017).
 
 ### users
 
@@ -122,10 +133,19 @@ Tenant tables, forced RLS (migration 0013; ADR-015).
 
 | Table | Fields | Notes |
 | ----- | ------ | ----- |
-| `oidc_connections` | `id, organization_id, login_key, issuer, client_id, client_secret_ref, subject_claim, status (active/disabled)`, timestamps | One active per organization. `login_key` opaque (22–64 URL-safe characters, globally unique): the sign-in URL names it, never the organization. `client_secret_ref` only `env:LATTICE_OIDC_SECRET_<NAME>`. Operator-written (`lattice sso add/disable/enable/update`, audited); the API reads the configuration only through `lattice_oidc_connection(login_key)` (owned by `lattice_auth`), and since 0014 may read `id, organization_id, status` of its own organization's connections (the session-creation check, D-25) |
-| `oidc_login_attempts` | `id, organization_id, connection_id, state_hash, binding_hash, nonce, code_verifier, return_to, created_at, expires_at, consumed_at` | One authorization-code flow: SHA-256 of `state` and of the browser-binding cookie, ten minutes, consumed once (`consumed_at`). The API inserts, consumes and deletes finished ones (restrictive policy: only consumed or expired) |
-| `directory_identities` | `id, organization_id, connection_id, membership_id, external_id, user_name, given_name, family_name, version`, timestamps | The provider's person: UQ `(connection_id, external_id)` (the OIDC claim value), UQ `(organization_id, membership_id)`, UQ `(connection_id, lower(user_name))`. Written by SCIM as the API role (no DELETE; `external_id` and `membership_id` not updatable). Its `id` is the SCIM resource ID. A membership with a directory identity is *provisioned*: its lifecycle belongs to the provider |
-| `scim_tokens` | `id, organization_id, connection_id, token_hash, created_at, revoked_at` | SHA-256 of `lsc_…` tokens; operator-written; resolved through `lattice_resolve_scim_token(hash)` only while the token, its connection and its organization are active |
+| `oidc_connections` | `id, organization_id, login_key, issuer, client_id, client_secret_ref, subject_claim, status (active/disabled)`, timestamps | One active per organization. `login_key` opaque (22–64 URL-safe characters, globally unique): the sign-in URL names it, never the organization. `client_secret_ref` is `env:LATTICE_OIDC_SECRET_<NAME>` or (0016) `vault:<uuid>` — an `encrypted_secrets` row sealed for this connection. `last_success_at` / `last_failure_at` (0016): the setup record's sign-in facts, written by the API (at most once a minute; a failure only on the provider's side or of the client secret). Written by operators (`lattice org create`, `lattice sso add/disable/enable/update`, audited) and, since 0020 (P12.4), by administrators only through the fenced `lattice_oidc_*` functions (audit-coupled to `sso.connection_*`); sign-in resolves a login key through `lattice_oidc_connection(login_key)` (owned by `lattice_auth`). 0020 adds `last_failure_code` (`provider_unavailable`, `invalid_configuration`, `outbound_blocked`, `credentials_rejected`) and the last administrator test (`last_test_at`, `last_test_kind` check/sign_in, `last_test_result`), written by the API as facts; the API may read every column of its organization's connections (the secret's reference is shown only as a kind) |
+| `oidc_login_attempts` | `id, organization_id, connection_id, state_hash, binding_hash, nonce, code_verifier, return_to, created_at, expires_at, consumed_at`; 0020: `purpose` (`sign_in` / `test`), `membership_id`, `proposed_issuer`, `proposed_subject_claim`, `outcome`, `observed_identifier`, `completed_at`, `proof_used_at` | One authorization-code flow: SHA-256 of `state` and of the browser-binding cookie, ten minutes, consumed once (`consumed_at`). A `test` attempt (P12.4) is an administrator's test sign-in: bound to their membership (FK), no session; its outcome and their own identifier stay until it expires, and a matched test of proposed values is the single-use proof `lattice_oidc_change_identity` consumes (`proof_used_at`, written only by that function). The API inserts, consumes, records outcomes and deletes finished sign-in attempts or expired ones (restrictive policy) |
+| `directory_identities` | `id, organization_id, connection_id, membership_id, external_id, user_name, given_name, family_name, version, managed_by`, timestamps | The provider's person: UQ `(connection_id, external_id)` (the OIDC claim value), UQ `(organization_id, membership_id)`, UQ `(connection_id, lower(user_name))`. Written by SCIM as the API role (no DELETE; `external_id`, `membership_id` and `managed_by` not updatable). Its `id` is the SCIM resource ID. `managed_by` (0017, P12.2): `identity_provider` — SCIM created them and owns their lifecycle (D-20; the only value the API role may insert directly) — or `organization` — an administrator added them by hand (`lattice_create_member`) or the operator's `org create` made them the first administrator; they are suspended and reactivated in Access and never removed by the API. SCIM reads and changes only `identity_provider` identities (an `organization` identity's identifier and user name still count for SCIM's uniqueness: 409). Backfilled from the audit trail when 0017 ran |
+| `scim_tokens` | `id, organization_id, connection_id, token_hash, created_at, revoked_at`; 0020: `last_used_at` (minute precision), `hint` (the token's last four characters) | SHA-256 of `lsc_…` tokens (verification-only: never decryptable); written by operators and, since 0020, by administrators through `lattice_create_scim_token` / `_rotate_` / `_revoke_` (audit-coupled to `scim.token_*`); `last_used_at` by the SCIM path (`lattice_scim_token_used`); resolved through `lattice_resolve_scim_token(hash)` only while the token, its connection and its organization are active. The API may read every column but `token_hash` |
+
+### encrypted_secrets, outbound_targets (Phase 12 P12.1, migration 0016)
+
+Tenant tables, forced RLS.
+
+| Table | Fields | Notes |
+| ----- | ------ | ----- |
+| `encrypted_secrets` | `id, organization_id, owner_kind (oidc_client_secret / provider_api_key), owner_id, key_id, nonce, ciphertext, hint, created_at, destroyed_at` | AES-256-GCM ciphertext of a recoverable credential (phase-12-plan C3), referenced as `vault:<id>` by its owner record (an OIDC connection, a provider credential). Associated data binds it to organization, secret ID, owner kind, owner ID and key ID; the plaintext and the master keys are never stored. 96-bit nonce per encryption; `nonce` and `ciphertext` are NULL once destroyed (rotation, revocation; CHECK). One live secret per owner (partial unique index). `hint`: the last four characters of a long provider key only. The API may read rows of its organization (it presents the credential); operators write; the worker and the web have no privilege. `lattice_secret_key_ids()` (owner `lattice_auth`) returns the distinct key IDs of live rows across organizations — IDs only — for the API's start-up check and `check-deployment` |
+| `outbound_targets` | `id, organization_id, purpose (oidc / generation), scheme (https / http), host, port, created_at, revoked_at` | A private endpoint an operator registered for one organization and purpose (C4; `lattice outbound allow`, audited). Exact origin only (no range, no wildcard); revoked, never deleted; one live registration per (organization, purpose, origin). No runtime role has any privilege (administrators cannot register targets) |
 
 ### rate_limit_counters (Phase 10)
 
@@ -169,6 +189,26 @@ connection). The runtime role may insert sessions and update only `last_seen_at`
 | role_label       | text    | DBG    | "Account Manager", "Support"… Display only; policy never reads it |
 | authz_updated_at | timestamptz | AUTHZ | Bumped on any access-affecting change; recorded in traces   |
 
+**Members and administrators in the product (P12.2, migration 0017; ADR-017).** The API
+role still has no column privilege on `is_admin` and cannot move a membership out of
+`removed`. Three fenced `SECURITY DEFINER` functions (owned by `lattice_owner`, search
+path pinned, `EXECUTE` for `lattice_app` only, bound to `lattice_current_org_id()`, each
+re-checking that the acting membership is an active administrator there) make the
+transitions; refusals are SQLSTATE `LA001` with a fixed reason:
+`lattice_create_member` (an owned user, a least-access membership written by the
+function, the directory identity on the active connection, `managed_by = organization`;
+identifier NFC-normalised, trimmed, case kept, unique on the connection; e-mail unique
+among the organization's people), `lattice_set_admin` (another member, not removed; under
+the organization's administrator-set advisory lock, never leaving zero active
+administrators) and `lattice_reinstate_member` (a removed member, on their original
+identity on the active connection, reset to least access, never an administrator). The
+0013 audit triggers fire at commit as `lattice_app`, so each function's writes need the
+`access.member_changed` event the API writes in the same transaction. A deferred
+constraint trigger (`trg_memberships_administrator_set`) re-checks every API-role write
+that takes an active administrator out of the set and refuses zero, unless the
+transaction's event for that member is by one of the organization's SCIM tokens (the
+identity provider may remove the last administrator; C18).
+
 ### departments, membership_departments
 
 `departments(id, organization_id, key, name)`;
@@ -187,15 +227,49 @@ dimension and a core query dimension ("What did we promise Acme?").
 | key             | citext   |       | `acme-corp`; UQ per org                              |
 | name            | text     | ACCT  | Used for query account-mention detection             |
 | aliases         | text[]   | ACCT  | "Acme", "ACME Corp"; used for mention detection      |
-| status          | enum     |       | `active`, `churned`, `prospect`                      |
+| status          | enum     |       | `active`, `churned`, `prospect`: a business label with no effect anywhere |
+| archived_at     | timestamptz |    | P12.3 setup lifecycle: NULL = active; set = archived (kept, refuses new mappings) |
+
+Checks for every writer (0018): key `^[a-z0-9][a-z0-9-]{0,62}$` (immutable for the API),
+name 1–200 characters trimmed without control characters, at most 20 distinct aliases
+(case-insensitively) of 1–100 characters. Accounts are never deleted by the product:
+documents (no ON DELETE action), assignments and mappings (`ON DELETE RESTRICT`)
+reference them.
+
+**Lifecycle (P12.3).** Archiving is an administration state, not content deletion and not
+authorization revocation: documents keep their account, assignments stay, traces stay
+valid, existing mappings keep resolving at sync (dropping them would quarantine the
+account's records). An archived
+account refuses new mappings and is read-only to the API role until reactivated, which
+keeps the same row (no duplicate identity). The Ask account picker labels it *archived*.
 
 `account_assignments(organization_id, membership_id, account_id, assigned_at)` —
 which accounts an `assigned`-scope member can see.
 
-`account_external_refs(organization_id, account_id, source_id, external_ref)` — maps
-e.g. a ticketing "organization id" or a Slack channel to an account. UQ
-(organization_id, source_id, external_ref). Unmapped references on account-scoped
-sources **fail closed** (see `ingestion-design.md` §6).
+`account_external_refs` (P12.3, migration 0018; phase-12-plan C10):
+
+| field           | Type        | Notes |
+| --------------- | ----------- | ----- |
+| id              | uuid PK     | |
+| organization_id | uuid        | ISO; forced RLS `tenant_isolation` |
+| source_id       | uuid        | FK `(organization_id, source_id)` → sources **ON DELETE CASCADE** |
+| ref_kind        | text        | `ticketing_organization` (ticketing sources) · `chat_channel` (chat_export sources); must fit the source's connector (check trigger) |
+| external_ref    | text        | exactly as the connector reports it: trimmed, NFC, case kept, 1–256, no control characters; a ticketing organization ID in canonical decimal |
+| account_id      | uuid NULL   | FK `(organization_id, account_id)` → accounts **ON DELETE RESTRICT**. NULL = **unresolved** (0019): an administrator unmapped it; its records fail closed at sync until it is mapped again. Only an unmap sets NULL (an INSERT must name an account, for every writer) |
+| created_by      | text        | `member:<id>`, `operator:sync`, `operator:migration` |
+| created_at, updated_at | timestamptz | `updated_at` moves on a remap or unmap (the setup record's `sync_required`) |
+
+UQ `(organization_id, source_id, ref_kind, external_ref)`: one reference → at most one
+account; one account → many references, across sources. Index `(organization_id,
+account_id)`. A BEFORE trigger (`lattice_check_account_ref`, every writer) refuses a kind
+that does not fit the connector, a source being deleted, a change of the reference's
+identity columns, and a new or changed mapping to an archived account (read under a
+share lock that serialises with archiving). Ingestion reads the source's mappings at
+sync (`lattice.accounts.refs.load_mappings`); a missing mapping **fails closed** and never
+widens access — an unmapped ticketing organization or an unresolved reference on any
+source, any unmapped reference on an account-scoped source (`ingestion-design.md` §6). Migration 0018 moved
+`sources.config.account_refs` and `channels.*.account` here; channel *sensitivity* stays
+in `sources.config.channels`.
 
 Account visibility (A-3, revised): account existence can itself be sensitive, so a
 member sees only accounts inside their account scope (`all` → every account;
@@ -234,27 +308,58 @@ re-embedding (they don't — access is joined at query time).
 
 ### sources
 
-**As built (Phase 4).** One row per configured source, upserted by `lattice sync` from
-the organization's `sources.yaml` (Lattice-side configuration, `lattice.sources.config`).
+**As built (Phase 4; P12.6).** One row per configured source: *operator-managed* rows are
+upserted by `lattice sync` from the organization's `sources.yaml` (Lattice-side
+configuration, `lattice.sources.config`); *organization-managed* rows are created and
+edited by administrators in the product through fenced functions (migration 0022,
+ADR-017) and fed by uploaded imports.
 
 | Field               | Type    | Req     | Notes                                                        |
 | ------------------- | ------- | ------- | ------------------------------------------------------------ |
 | id                  | uuid PK | CITE    | UQ (organization_id, id) — composite FK target                |
 | organization_id     | uuid    | ISO     |                                                              |
 | key                 | citext  | VER     | Stable operator key (`drive`, `support`, `slack`), UQ per organization, slug format |
-| connector_type      | enum    |         | `document_repository`, `ticketing`, `chat_export`. A sync refuses a changed type (`source_config:connector_type_changed`) |
+| connector_type      | enum    |         | `document_repository`, `ticketing`, `chat_export`. Immutable (0022 trigger, every writer: `source_identity_immutable`, also for `key` and the organization); a sources file naming another type is refused (`source_config:connector_type_changed`) |
 | name                | text    | CITE    | "Halden Drive"                                               |
-| config              | jsonb   |         | The validated configuration: export path, default departments (by key), ticketing organization → account key, channel settings. Never secrets |
+| config              | jsonb   |         | The validated configuration: export path (operator-managed only — a CHECK forbids a `path` in an organization-managed source's configuration), default departments (by key), channel settings. Account mappings live in `account_external_refs` (P12.3). Never secrets |
 | default_sensitivity | enum    | AUTHZ   | **Required** (`internal` or `confidential`). Applied when a record carries no sensitivity |
 | account_scoped      | bool    | ACCT    | If true, every record must map to an account or it is not indexed |
 | authority           | enum    | AUTH-R  | Default authority for records: `system_of_record`, `working`, `conversational` |
-| status              | enum    | DEL     | `active`, `paused`, `deleting` (a `deleting` source refuses syncs) |
+| status              | enum    | DEL     | `active`, `paused`, `deleting`. **Paused** (P12.6, `lattice_set_source_paused`): requested syncs are refused and a queued one fails when claimed; its documents stay searchable; checks and uploads still work. A `deleting` source refuses everything until purged |
+| managed_by          | text    |         | P12.6: `operator` (the sources file; every source before 0022) or `organization` (the product). The product edits only the latter's settings; `lattice sync` refuses the latter (`source_config:managed_in_product`) |
+| version             | bigint  | VER     | P12.6: raised by a trigger on every administrator-visible setting change (never by sync timestamps); product edits are optimistic (409 `source_changed`) |
+| import_id           | uuid?   |         | P12.6: the **current import** (organization-managed sources), composite FK to `source_imports`; a trigger requires a *ready* import of this very source (`import_not_attachable`) |
 | opaque_ref_key      | bytea   | DBG     | 32 random bytes keying the opaque references of its failures (security-model §10). Never displayed |
 | last_synced_at, last_succeeded_at, acl_synced_at | timestamptz? | DBG, FRESH | Last run; last fully successful run; last run that applied the source's access state |
 
 Default departments are kept in `config` by key and validated against the organization
 on every sync (`source_config:unknown_department`), rather than as a `uuid[]` column
 that could not carry foreign keys.
+
+### source_imports (Phase 12 P12.6, migration 0022)
+
+An export uploaded to an organization-managed source: IDs, sizes, a digest, counts, fixed
+codes and times — never a path, a file name or content. Storage locations are derived from
+the organization and import UUIDs by the import store (`lattice.imports`;
+deployment.md §4).
+
+| Field | Type | Notes |
+| ----- | ---- | ----- |
+| id, organization_id | uuid | UQ (organization_id, id); server-generated |
+| source_id | uuid? | composite FK to `sources`, `ON DELETE SET NULL (source_id)`: after a purge an import keeps no source and can never be attached again |
+| format | text | `zip` \| `jsonl` (Tickets only) |
+| status | text | `receiving → validating → ready \| rejected`; `ready → superseded`; `→ deleted` |
+| size_bytes, sha256, entries, ignored_entries, expanded_bytes | | of the received upload; `entries` = files the connector reads, `ignored_entries` = everything else |
+| rejected_code | text? | a fixed code (C8.3 as built), set exactly for `rejected` (and kept when deleted) |
+| created_by | text | `member:<uuid>` (CHECK) |
+| created_at, received_at, ready_at, superseded_at, deleted_at | timestamptz | |
+| checked_at, check_result, check_error_code | | the latest **check** (the dry-run pipeline, written by `lattice_record_import_check`): counts, failure codes with counts, the exact unresolved account references with record counts — validated key by key, no free text |
+
+Forced RLS with the tenant policy; `lattice_app` and `lattice_worker` have `SELECT` only.
+One `receiving`/`validating` row per source at a time (an upload older than an hour is
+abandoned). Rejected imports, superseded imports no queued or running job reads, abandoned
+uploads and imports without a source are marked deleted by the worker's import retention,
+which then removes their files.
 
 ### source_sync_runs
 
@@ -266,7 +371,8 @@ chunks_policy_excluded, embedding_failures`), `deletion_guard_tripped`, `error_c
 (CHECK: a code such as `deletion_guard:mass_deletion`, never free text). There is no
 `error_summary` column. `incremental` mode is not built (no connector supports
 checkpoints yet). A run is `partial` when any record failed, any embedding failed or
-the deletion guard tripped; `succeeded` only when nothing did. Req: **DBG**, **DEL**.
+the deletion guard tripped; `succeeded` only when nothing did. P12.6: `import_id` (composite
+FK, `SET NULL`) records the import an organization-managed source's run read. Req: **DBG**, **DEL**.
 
 ### sync_record_failures
 
@@ -290,7 +396,8 @@ only.
 | Field | Type | Notes |
 | ----- | ---- | ----- |
 | id, organization_id | uuid | UQ (organization_id, id) |
-| kind | text | CHECK `source_sync` |
+| kind | text | CHECK `source_sync` \| `import_check` (P12.6: the dry run of an import; writes nothing, calls no provider, allowed on a paused source) |
+| import_id | uuid? | P12.6: the import the job reads, set when requested (a sync reads the import that was current then); a definer trigger requires it to belong to the job's source, and an organization-managed source's sync to name its current import |
 | source_id | uuid | composite FK to `sources`, CASCADE |
 | mode | text | CHECK `full` \| `acl_only` (the web app requests `full`) |
 | requested_by | uuid | composite FK to `memberships` (the administrator), CASCADE |
@@ -494,6 +601,11 @@ Design (Phase 0):
 
 ### org_settings
 
+**P12.5 (migration 0021):** `external_egress_level` may be NULL — the organization does
+not allow external APIs (an organization without a row keeps the default `internal`).
+Written by the API only through `lattice_apply_egress_change` (ADR-017); every write by
+any role raises `egress_policy_versions.version`.
+
 **As built (Phase 4):** `organization_id PK, external_egress_level` (default
 `internal`), timestamps. No row means the defaults.
 
@@ -520,11 +632,16 @@ There is deliberately no setting that lets admins read other members' content (D
 Organization-owned provider credentials **by reference only** (D-16, ADR-011):
 `id, organization_id, provider, secret_ref, data_use (unpaid|paid|NULL), status
 (active|revoked), created_at, revoked_at`. `secret_ref` must match
-`^(env|memory):[A-Za-z0-9_.-]{1,96}$` (CHECK); the code accepts only
-`env:LATTICE_PROVIDER_SECRET_<NAME>` and the documented legacy provider variables
-(`lattice.providers.secrets`). At most one active credential per organization and
+`^(env|memory):[A-Za-z0-9_.-]{1,96}$` or (0016) `^vault:<uuid>$` (CHECK); the code
+accepts only `env:LATTICE_PROVIDER_SECRET_<NAME>`, the documented legacy provider
+variables and `vault:` references to a ciphertext sealed for that credential
+(`lattice.providers.secrets`, `lattice provider credential set --value-stdin`); rotating or
+revoking a `vault:` credential destroys its ciphertext. At most one active credential per organization and
 provider (partial unique index); rotation revokes and inserts, history is kept. Forced
 RLS; the runtime role may SELECT only (to resolve the reference at invocation).
+Since P12.5 administrators set, replace and revoke credentials through
+`lattice_set_provider_credential` / `lattice_revoke_provider_credential` — always
+`vault:` (sealed by the API), the previous ciphertext destroyed whoever set it.
 
 ### audit_events (Phase 6, migration 0008; access events Phase 9, migration 0012; enforced by the database Phase 10, migration 0013)
 
@@ -535,7 +652,8 @@ Never a secret, a secret reference or document content.
 
 | Action | Written by | Target | before / after |
 | ------ | ---------- | ------ | -------------- |
-| `provider.*`, `credential.*`, `egress.levels_changed` | operator CLI (Phase 6) | provider / purpose | the changed settings |
+| `provider.*`, `credential.*`, `egress.levels_changed` | operator CLI (Phase 6); API (`member:<id>`, P12.5) | provider / purpose (API: `provider_id`, `affected_provider_ids`, `grant_id`) | the changed settings; API events add `escalation` and, for an escalation, `step_up` (grant, `auth_time`, assurance) |
+| `egress.step_up_completed`, `egress.escalation_refused` (P12.5) | API (`member:<id>`) | `grant_id`, `step_up_id` / the change's kind and provider | the change document, its digest, the policy version, `auth_time` / the refusal code |
 | `access.member_changed` | API (`member:<id>`), seed (`operator:seed`) | `membership_id` | access snapshots: status, administrator flag, clearance, account scope, assigned account IDs, department IDs, administrator-defined group IDs (before NULL = provisioned) |
 | `access.grant_created`, `access.grant_revoked` | API, `apply-admin-grants` (`operator:admin-grants`) | `membership_id`, `document_id`, `grant_id`, `source_id`, `reference` (the document's opaque `rec_…`) | `{origin, principal_type}` |
 | `access.member_changed` (Phase 10) | SCIM (`scim:<token id>`: provisioning, suspension, reactivation, removal), `lattice member admin` (`operator:<user>`: the administrator capability) | `membership_id` | access snapshots, as above |
@@ -555,9 +673,38 @@ Deferred constraint triggers on `memberships`, `account_assignments`,
 `membership_departments`, `access_group_members`, `document_grants` and
 `directory_identities` refuse to commit an INSERT, UPDATE or DELETE by `lattice_app`
 unless an `access.*` event of the same transaction names the same `membership_id`
-(`lattice_require_access_audit`). Operator and worker writes are not affected.
+(`lattice_require_access_audit`). Operator and worker writes are not affected. The one
+exemption is a source purge's cascade (0023): the DELETE of a grant whose document, or of
+a group membership whose group, no longer exists — only for a row of the organization the
+session is bound to (0024: the parents are read through row-level security at commit). The
+purge's members who lose a synced group are still audited one by one (their
+`memberships` rows are touched, which keeps the requirement).
+
+### egress_policy_versions, step_up_grants (Phase 12 P12.5, migration 0021)
+
+Tenant tables, forced RLS; the API role reads both, writes neither directly.
+
+| Table | Fields | Notes |
+| ----- | ------ | ----- |
+| `egress_policy_versions` | `organization_id PK, version bigint (≥ 0), changed_at` | Raised by a definer trigger on every write to `org_settings` and to the policy columns of `model_providers` (`purpose, provider, model, deployment, approved_for_level, approved_at, enabled, endpoint, retention_mode, training_opt_out`) by any role. No row = version 0. Previews and grants name the version they were computed on |
+| `step_up_grants` | `id, organization_id, membership_id, session_id, attempt_id (UQ), change jsonb, change_digest (SHA-256), reason, policy_version, auth_time, acr, created_at, expires_at, consumed_at` | D-34: created only by `lattice_create_step_up_grant` after a fresh IdP authentication; `expires_at` ≤ `auth_time` + 5 min and ≤ `created_at` + 5 min (CHECK); consumed once by `lattice_apply_egress_change`. FKs to the membership and the session (cascade). `acr` only when the operator required one |
+
+`oidc_login_attempts` gained `session_id` (FK, cascade), `change`, `reason`,
+`policy_version` and the purpose `step_up` (all four required for it, absent for the
+others; CHECK), and the step-up outcomes (`granted`, `not_fresh`, `session_mismatch`,
+`assurance_insufficient`, `step_up_invalid`). `oidc_connections.step_up_acr_values text[]`
+(NULL = no assurance requirement; operator-written, `lattice sso update --step-up-acr`).
 
 ### model_providers
+
+**P12.5 (migration 0021):** `last_test_at, last_test_result (valid | invalid_credential |
+configuration_invalid | provider_unavailable | outbound_blocked | credential_missing |
+unsupported), last_test_credential_id` — the latest administrator test, a fact (column
+grant; not policy, not audited). Generation records need `approved_at` (explicit
+approval) to receive anything; existing ones were backfilled `approved_at = created_at`
+(they were approved for `internal` by their configuration). The API writes records only
+through `lattice_create_provider`, `lattice_set_provider_endpoint` and
+`lattice_apply_egress_change`.
 
 **As built (Phase 4):** `id, organization_id, purpose, provider, model, deployment,
 approved_for_level (default internal), retention_mode, training_opt_out`, timestamps;

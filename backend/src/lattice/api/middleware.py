@@ -17,7 +17,10 @@ RequestContextMiddleware
 BodyLimitMiddleware
     Refuses a request body larger than ``LATTICE_MAX_REQUEST_BYTES`` with 413
     ``request_too_large`` -- by its declared Content-Length before anything is read,
-    and by counting when the body is streamed without one.
+    and by counting when the body is streamed without one. Exactly one route has its own
+    limit (P12.6, phase-12-plan C8.4): ``POST /v1/admin/sources/{id}/imports``, the
+    streamed export upload, capped at ``LATTICE_IMPORT_MAX_UPLOAD_BYTES`` the same two
+    ways; every other route keeps the ordinary cap.
 
 CsrfMiddleware (docs/authorization-model.md §2)
     Every state-changing request (anything but GET/HEAD/OPTIONS) must carry
@@ -31,6 +34,7 @@ CsrfMiddleware (docs/authorization-model.md §2)
 """
 
 import logging
+import re
 import time
 import uuid
 from collections.abc import MutableMapping
@@ -154,17 +158,37 @@ def _route_template(scope: Scope) -> str:
     return template if isinstance(template, str) else "unmatched"
 
 
+# The streamed upload route (lattice.api.routes.sources); nothing else gets a larger body.
+UPLOAD_ROUTE = re.compile(
+    r"^/v1/admin/sources/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{12}/imports$"
+)
+
+
 class BodyLimitMiddleware:
-    def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
+    def __init__(
+        self, app: ASGIApp, *, max_bytes: int, upload_max_bytes: int | None = None
+    ) -> None:
         self.app = app
         self.max_bytes = max_bytes
+        self.upload_max_bytes = upload_max_bytes
+
+    def _limit(self, scope: Scope) -> int:
+        if (
+            self.upload_max_bytes is not None
+            and scope.get("method") == "POST"
+            and UPLOAD_ROUTE.fullmatch(str(scope.get("path", "")))
+        ):
+            return self.upload_max_bytes
+        return self.max_bytes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        limit = self._limit(scope)
         declared = _get_header(scope, b"content-length")
-        if declared is not None and (not declared.isdigit() or int(declared) > self.max_bytes):
+        if declared is not None and (not declared.isdigit() or int(declared) > limit):
             await self._refuse(scope, receive, send)
             return
 
@@ -181,7 +205,7 @@ class BodyLimitMiddleware:
             message = await receive()
             if message["type"] == "http.request":
                 received += len(message.get("body", b""))
-                if received > self.max_bytes and not started:
+                if received > limit and not started:
                     refused = True
                     await self._refuse(scope, receive, send)
                     return {"type": "http.disconnect"}

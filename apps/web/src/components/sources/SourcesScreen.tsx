@@ -1,12 +1,13 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Clock, Hourglass, RefreshCw, ShieldAlert } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, Clock, Hourglass, Plus, RefreshCw, ShieldAlert } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { isApiError } from "@/api/errors";
 import { useAdminSources, useRequestSync, useSourceFailures, useSources } from "@/api/queries";
 import type { AdminSource, MemberSource, SyncFailure, SyncJob } from "@/api/types";
-import { Button } from "@/components/primitives/Button";
+import { Button, ButtonLink } from "@/components/primitives/Button";
 import { DataTable, type Column } from "@/components/primitives/DataTable";
 import { SOURCE_GLYPHS } from "@/components/primitives/glyphs";
 import { Icon } from "@/components/primitives/icons";
@@ -19,6 +20,8 @@ import { ErrorState } from "@/components/states/ErrorState";
 import { ageLabel, connectorLabel, formatCount, formatDay, formatDayTime, formatTime, humanize, levelLabel } from "@/lib/format";
 import { useNow } from "@/lib/use-now";
 
+import { AddSourceDialog } from "./SourceDialogs";
+import { nextStep } from "./source-copy";
 import styles from "./SourcesScreen.module.css";
 import { failedCounts, isOld, jobActive, readRun, registerSummary, requestMessage, requestState, sourceFailed, sourceKind, type SyncRequest } from "./sync-model";
 
@@ -28,12 +31,13 @@ import { failedCounts, isOld, jobActive, readRun, registerSummary, requestMessag
  * their access. Administrators: GET /v1/admin/sources -- every source with aggregate
  * totals, the last run, failure codes and the requested sync, polled while one is queued
  * or running; failed records open inline, by opaque reference unless the administrator
- * can read the document.
+ * can read the document. P12.6: administrators add export sources here, each row opens
+ * its record (/sources/{id}), and the row's last cell is the server's next action.
  */
 export function SourcesScreen() {
   const { isAdmin, me } = useWorkspace();
   return (
-    <OpsPage aria-labelledby="page-title">
+    <OpsPage>
       {isAdmin ? <AdminRegister organization={me.organization.name} /> : <MemberRegister />}
     </OpsPage>
   );
@@ -95,6 +99,7 @@ function MemberRegister() {
 function AdminRegister({ organization }: { organization: string }) {
   const query = useAdminSources(true);
   const now = useNow();
+  const [adding, setAdding] = useState(false);
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const announce = useSyncAnnouncer(query.data?.sources);
   const forbidden = query.isError && isApiError(query.error) && query.error.isForbidden;
@@ -113,7 +118,13 @@ function AdminRegister({ organization }: { organization: string }) {
       header: "Source",
       primary: true,
       cell: (s) => (
-        <SourceName name={s.name} connector={s.connector_type} sourceKey={s.key} inactive={s.status !== "active" ? humanize(s.status) : null} />
+        <SourceName
+          name={s.name}
+          connector={s.connector_type}
+          sourceKey={s.key}
+          href={`/sources/${s.id}`}
+          inactive={s.status !== "active" ? humanize(s.status) : null}
+        />
       ),
     },
     {
@@ -133,7 +144,7 @@ function AdminRegister({ organization }: { organization: string }) {
     { key: "access", header: "Permissions", cell: (s) => <AccessReading s={s} now={now} /> },
     { key: "documents", header: "Documents", align: "end", mono: true, short: true, width: "7rem", cell: (s) => s.documents.toLocaleString("en-GB") },
     { key: "records", header: "Failed records", short: true, cell: (s) => <RecordsReading s={s} open={open.has(s.id)} onToggle={() => toggle(s.id)} /> },
-    { key: "action", header: "Sync", hideHeader: true, cell: (s) => <SyncControl s={s} announce={announce} /> },
+    { key: "action", header: "Next", cell: (s) => <NextCell s={s} announce={announce} /> },
   ];
 
   return (
@@ -147,6 +158,13 @@ function AdminRegister({ organization }: { organization: string }) {
             {registerSummary(sources, now)}
           </p>
         )}
+        {!forbidden && (
+          <p className={styles.headActions}>
+            <Button variant="primary" icon={<Icon as={Plus} />} onClick={() => setAdding(true)}>
+              Add source
+            </Button>
+          </p>
+        )}
       </OpsHead>
       {forbidden ? (
         <StateBlock family="boundary" label="Administrators only" heading="You no longer have administrator access">
@@ -157,8 +175,8 @@ function AdminRegister({ organization }: { organization: string }) {
       ) : query.data && sources.length === 0 ? (
         <StateBlock family="quiet" heading="No sources are connected">
           <p>
-            An operator connects a source with the <code>lattice sync</code> command. Once it has synced, it appears here and can be
-            synced again from this page.
+            Add a source for a Markdown documents export, a tickets export in the Lattice JSON Lines format, or a Slack workspace export, then upload the
+            export on its page. An operator can also connect a source from a server folder with the <code>lattice sync</code> command.
           </p>
         </StateBlock>
       ) : (
@@ -182,20 +200,39 @@ function AdminRegister({ organization }: { organization: string }) {
       <span className="visually-hidden" role="status" aria-live="polite" data-testid="sync-announcer">
         {announce.message}
       </span>
+      <AddSourceDialog open={adding} onOpenChange={setAdding} />
     </>
   );
 }
 
 /* --- cells ----------------------------------------------------------------------------- */
 
-function SourceName({ name, connector, sourceKey, inactive = null }: { name: string; connector: string; sourceKey?: string; inactive?: string | null }) {
+function SourceName({
+  name,
+  connector,
+  sourceKey,
+  href,
+  inactive = null,
+}: {
+  name: string;
+  connector: string;
+  sourceKey?: string;
+  href?: string;
+  inactive?: string | null;
+}) {
   const Glyph = SOURCE_GLYPHS[sourceKind(connector)];
   return (
     <span className={styles.source}>
       <span className={styles.glyph}>
         <Glyph size={16} aria-hidden="true" focusable="false" />
       </span>
-      <span className={styles.sourceName}>{name}</span>
+      {href ? (
+        <Link href={href} className={[styles.sourceName, styles.sourceLink].join(" ")}>
+          {name}
+        </Link>
+      ) : (
+        <span className={styles.sourceName}>{name}</span>
+      )}
       <span className={styles.sourceMeta}>
         {sourceKey && <span className={styles.key}>{sourceKey}</span>}
         {sourceKey && <span aria-hidden="true">·</span>}
@@ -327,6 +364,34 @@ function RecordsReading({ s, open, onToggle }: { s: AdminSource; open: boolean; 
 }
 
 /**
+ * The row's next action, as the server decided it (P12.6). Sync now stays where a sync can
+ * be requested; where the next step is elsewhere (an export to upload, references to map,
+ * a paused source) the cell links to the place that does it -- never a dead control.
+ */
+function NextCell({ s, announce }: { s: AdminSource; announce: SyncAnnouncer }) {
+  const step = nextStep(s.next_action);
+  const needsExport = s.managed_by === "organization" && s.import_status !== "ready";
+  if (s.status === "active" && !needsExport) {
+    return (
+      <span className={styles.control}>
+        <SyncControl s={s} announce={announce} />
+        {s.next_action === "map_references" && (
+          <Link href="/access/accounts/references" className={styles.nextLink}>
+            {step?.label}
+          </Link>
+        )}
+      </span>
+    );
+  }
+  if (!step || s.next_action === "wait") return <JobLine id={`sync-state-${s.id}`} job={s.job} inactive={null} />;
+  return (
+    <ButtonLink size="sm" href={`/sources/${s.id}`} iconEnd={<Icon as={ArrowRight} />} aria-label={`${step.label}: ${s.name}`}>
+      {step.label}
+    </ButtonLink>
+  );
+}
+
+/**
  * Sync now: the real request (POST /v1/admin/sources/{id}/sync). While a sync is queued or
  * running the control stays focusable but inert, and the state is written beside it; the
  * outcome is announced to assistive tech and kept in the register (the toast only echoes).
@@ -385,7 +450,7 @@ function JobLine({ id, job, inactive }: { id: string; job: SyncJob | null; inact
     return (
       <span id={id} className={styles.job}>
         <Icon as={Hourglass} size={14} />
-        Queued <span className={styles.when}>since {formatTime(job.created_at)}</span>
+        {job.kind === "import_check" ? "Check queued" : "Queued"} <span className={styles.when}>since {formatTime(job.created_at)}</span>
       </span>
     );
   }
@@ -393,14 +458,15 @@ function JobLine({ id, job, inactive }: { id: string; job: SyncJob | null; inact
     return (
       <span id={id} className={styles.job}>
         <Icon as={RefreshCw} size={14} />
-        Syncing <span className={styles.when}>since {formatTime(job.started_at ?? job.created_at)}</span>
+        {job.kind === "import_check" ? "Checking the export" : "Syncing"} <span className={styles.when}>since {formatTime(job.started_at ?? job.created_at)}</span>
       </span>
     );
   }
   if (job?.status === "failed") {
     return (
       <span id={id} className={styles.jobFailed}>
-        Requested sync failed{job.error_code ? " · " : ""}
+        {job.kind === "import_check" ? "Requested check failed" : "Requested sync failed"}
+        {job.error_code ? " · " : ""}
         {job.error_code && (
           <span className={styles.code}>
             <Code value={job.error_code} />
@@ -434,7 +500,7 @@ function FailureDetail({ s }: { s: AdminSource }) {
   );
 }
 
-function FailureRecords({ source }: { source: AdminSource }) {
+export function FailureRecords({ source }: { source: AdminSource }) {
   const query = useSourceFailures(source.id);
   if (query.isError) {
     return <ErrorState error={query.error} title="Couldn't load failed records" onRetry={() => query.refetch()} retrying={query.isFetching} headingLevel="h3" />;
@@ -486,7 +552,7 @@ function Params({ f }: { f: SyncFailure }) {
 }
 
 /** A fixed code that may wrap only after its ":" separators, never inside a word. */
-function Code({ value }: { value: string }) {
+export function Code({ value }: { value: string }) {
   const parts = value.split(":");
   return (
     <>

@@ -1,5 +1,6 @@
 "use client";
 
+import { UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useDeferredValue, useState } from "react";
 
@@ -9,6 +10,7 @@ import type { MemberSummary } from "@/api/types";
 import { Button } from "@/components/primitives/Button";
 import { DataTable, type Column } from "@/components/primitives/DataTable";
 import { Field, SearchInput } from "@/components/primitives/Field";
+import { Icon } from "@/components/primitives/icons";
 import { LevelMeter } from "@/components/primitives/LevelMeter";
 import { StateBlock } from "@/components/primitives/StateBlock";
 import { AdminGate, OpsHead, OpsPage } from "@/components/ops/OpsPage";
@@ -18,16 +20,19 @@ import { ErrorState } from "@/components/states/ErrorState";
 import styles from "./Access.module.css";
 import { AccessViews } from "./AccessViews";
 import { accountsSummary, managedByIdentityProvider, MemberStatus } from "./MemberFacts";
+import { AddMemberDialog } from "./MemberLifecycle";
 
 /**
  * Access (design-direction §6.8): the members of the organization, found by name or
  * e-mail (GET /v1/admin/access/members?q= -- the API searches; nothing is filtered or
  * enumerated here), each with the broad facts of their access. A member's own page
- * explains why, and is where changes are previewed, given a reason and audited.
+ * explains why, and is where changes are previewed, given a reason and audited. *Add
+ * member* binds a person to the exact identifier the identity provider sends (P12.2).
  */
 export function AccessScreen() {
   const { isAdmin, me } = useWorkspace();
   const [filter, setFilter] = useState("");
+  const [adding, setAdding] = useState(false);
   const q = useDeferredValue(filter.trim());
   const query = useAccessMembers(q, isAdmin);
   const forbidden = query.isError && isApiError(query.error) && query.error.isForbidden;
@@ -86,7 +91,12 @@ export function AccessScreen() {
               <SearchInput {...control} value={filter} onValueChange={setFilter} maxLength={100} placeholder="Name or e-mail" clearLabel="Clear member search" />
             )}
           </Field>
-          {/* Results are announced as they arrive; with none, the state below says so on screen. */}
+          <Button icon={<Icon as={UserPlus} />} onClick={() => setAdding(true)} className={styles.addMember}>
+            Add member
+          </Button>
+        </div>
+        {/* Results are announced as they arrive; with none, the state below says so on screen. */}
+        <div className={styles.shownRow}>
           <p className={members.length ? styles.shown : "visually-hidden"} role="status">
             {!query.data
               ? ""
@@ -97,6 +107,7 @@ export function AccessScreen() {
                 : `${members.length.toLocaleString("en-GB")}${query.hasNextPage ? "+" : ""} ${members.length === 1 ? "member" : "members"} shown`}
           </p>
         </div>
+        <AddMemberDialog open={adding} onOpenChange={setAdding} />
         {query.isError ? (
           <ErrorState error={query.error} title="Couldn't load members" onRetry={() => query.refetch()} retrying={query.isFetching} />
         ) : (
@@ -110,7 +121,7 @@ export function AccessScreen() {
             stackBelow="768"
             empty={
               <StateBlock family="quiet" heading={q ? `No member matches “${q}”` : "No members yet"} headingLevel="h2" compact>
-                <p>{q ? "Try part of a name or an e-mail address." : "Members appear here once they're provisioned or invited."}</p>
+                <p>{q ? "Try part of a name or an e-mail address." : "Members appear here once your identity provider provisions them or an administrator adds them."}</p>
               </StateBlock>
             }
             footer={

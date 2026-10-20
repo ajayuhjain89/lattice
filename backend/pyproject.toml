@@ -6,6 +6,8 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.20.0",
     "asyncpg>=0.31.0",
+    # AES-256-GCM for recoverable credentials (P12.1, C3.2); already locked via pyjwt[crypto].
+    "cryptography>=50.0.2",
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
     "prometheus-client>=0.26.0",

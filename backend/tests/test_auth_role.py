@@ -37,6 +37,10 @@ COUNTER_FUNCTIONS = {
     "lattice_pre_auth_retention": "lattice_worker",
 }
 COUNTER_TABLE = "pre_auth_rate_limits"
+# P12.1 (0016): the key IDs of live ciphertext, for the API's start-up check and
+# check-deployment -- key_id and destroyed_at only, never material.
+KEY_ID_FUNCTION = "lattice_secret_key_ids"
+KEY_ID_TABLE = "encrypted_secrets"
 # Exactly what the lookup functions read, and nothing else.
 READABLE_TABLES = {
     "organizations",
@@ -103,7 +107,7 @@ async def test_owns_exactly_the_lookup_functions(superuser_engine: AsyncEngine) 
         """,
     )
     assert {(kind, name) for kind, name in owned} == {
-        ("function", f) for f in (*LOOKUP_FUNCTIONS, *COUNTER_FUNCTIONS)
+        ("function", f) for f in (*LOOKUP_FUNCTIONS, *COUNTER_FUNCTIONS, KEY_ID_FUNCTION)
     }
 
 
@@ -161,7 +165,23 @@ async def test_table_privileges_are_exactly_select_on_the_lookup_tables(
                 else:
                     expected = privilege == "SELECT" and table in READABLE_TABLES
                 assert held is expected, f"{table}: {privilege}"
-            if table not in READABLE_TABLES and table != COUNTER_TABLE:
+            if table == KEY_ID_TABLE:
+                columns = {
+                    str(r[0])
+                    for r in (
+                        await conn.execute(
+                            text(
+                                "SELECT column_name FROM information_schema.columns "
+                                "WHERE table_schema = 'public' AND table_name = :t AND "
+                                "has_column_privilege('lattice_auth', 'public.' || :t, "
+                                "column_name, 'SELECT')"
+                            ),
+                            {"t": table},
+                        )
+                    ).all()
+                }
+                assert columns == {"key_id", "destroyed_at"}
+            elif table not in READABLE_TABLES and table != COUNTER_TABLE:
                 any_column: object = (
                     await conn.execute(
                         text("SELECT has_any_column_privilege('lattice_auth', :t, 'SELECT')"),
@@ -178,7 +198,7 @@ async def test_only_select_policies_target_lattice_auth(superuser_engine: AsyncE
     )
     assert {(t, p, c) for t, p, c in policies} == {
         (t, "auth_lookup", "SELECT") for t in READABLE_TABLES
-    } | {(COUNTER_TABLE, "auth_counters", "ALL")}
+    } | {(COUNTER_TABLE, "auth_counters", "ALL"), (KEY_ID_TABLE, "auth_key_ids", "SELECT")}
 
 
 async def test_counter_functions_are_narrow_definer_functions(

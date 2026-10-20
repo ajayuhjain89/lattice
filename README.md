@@ -10,7 +10,33 @@ information they are authorized to see.
 v2](docs/design-system.md) is canonical. Phase 11 (Production Deployment, Identity
 Operations & Reliability) was verified on a local production-shaped stack only: real
 external staging validation is deferred and gates v1 GA ([plan](docs/phase-11-plan.md)
-§21.1). Phase 12 (customer onboarding) has not started.** What runs today: a FastAPI
+§21.1). Phase 11 is merged (143392f). Phase 12 (Organization Setup, Identity
+Configuration & Integrations) is in progress: P12.1 foundations are built (encrypted
+credentials, the outbound-target policy, `lattice org create`, the backend-owned setup
+record and the Organization page) and P12.2 members and administrators (members added by
+hand on their exact identity-provider identifier, the administrator capability with a
+last-administrator rule that holds under concurrency, least-access reinstatement) and
+P12.3 accounts and their external-reference mappings (create, edit, archive and
+reactivate accounts; map, remap and unmap exact ticketing-organization and channel IDs
+with a preview and a reason, applied at the next sync; unmapped references — a missing
+mapping never widens who can read a record) and P12.4 identity administration (Settings →
+Identity: the OIDC connection — test sign-in, check, client secret sealed in the vault,
+client ID, issuer or claim with the administrator's own matched test sign-in,
+disable/enable — and SCIM tokens shown once, rotated, revoked; every OIDC request through
+the outbound policy) and P12.5 providers, BYOK and egress with the D-34 step-up; P12.6
+customer-operable export sources (Sources → *Add source*, a record per source, exports
+uploaded with real progress into a filesystem import store with strict archive checks and
+their own ingress limit, a deterministic check before any sync, pause/resume and
+disconnect, the existing worker syncing from the import) and P12.7 end-to-end onboarding
+(an organization from `lattice org create` to a member's first Ask, proved on the local
+reference stack in production mode by `make prod-onboard` — API and browser — and in the
+backend suite; [docs/onboarding.md](docs/onboarding.md)) and P12.8 closure (a security
+review that bounded the purge's audit exemption to the session's organization — migration
+0024 — the deployed authorization sweep extended to every Phase 12 route family, a
+product-consistency and accessibility review, and the deferred-capability register in
+[phase-12-plan](docs/phase-12-plan.md) Part III) are delivered locally and await review. The three source types are **export-based**
+(Markdown documents, Lattice ticket JSON Lines, Slack workspace export) — not live
+integrations.** What runs today: a FastAPI
 backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced
 row-level security for organization isolation, server-side revocable sessions with a development-only persona
 login, CSRF protection, a typed error contract, redacting structured logs, a seed tool
@@ -276,7 +302,7 @@ read it. Every other status has its own presentation. A claim citing evidence ab
 from the response is not rendered. The evidence inspector (docked at ≥1280 px, a drawer
 below, a bottom sheet on phones) reads `GET /v1/evidence/{id}` each time it opens; a 404
 — nonexistent or unreadable — has one presentation. Traces are fetched fresh and never
-filled in from the Ask page's memory. AI provider settings are read-only: configuration
+filled in from the Ask page's memory. AI provider settings are editable by administrators since P12.5 (raising egress needs a fresh identity-provider sign-in); before that, configuration
 is changed with the audited CLI. `/` is a static public landing page (no API call; a
 labelled synthetic example) and `/sign-in` is the organization's identity provider, or
 the persona picker where development sign-in is on. Details: [design
@@ -324,7 +350,9 @@ needs `make migrate` (0012).
 
 Production sign-in is OIDC (authorization code with PKCE) against the organization's
 own identity provider; development keeps the persona sign-in. An operator connects the
-provider and issues a SCIM token (`lattice sso add`, `lattice scim token create`; each
+provider when the organization is created, and its administrators manage it afterwards
+in Settings → Identity (P12.4); SCIM tokens are issued there or by an operator
+(`lattice sso add`, `lattice scim token create`; each
 audited, the token shown once); the identity provider then provisions, updates,
 deactivates and removes members over SCIM (`<public URL>/api/scim/v2`). A person signs
 in only if the ID token's identifying claim matches a member that *this*
@@ -332,12 +360,30 @@ organization's provider provisioned — never by e-mail, never into another
 organization. New members get the least access the policy models; administrators
 grant the rest on the Access page, where such members are marked as managed by the
 identity provider (it alone suspends or reactivates them). `lattice member admin`
-gives an organization its first administrator. Asks, access changes, SCIM and sign-in
+gives an organization its first administrator; since P12.2 administrators add members
+by hand (bound to the exact identifier the provider sends), choose other administrators
+and reinstate removed members with least access on the Access page. Asks, access changes, SCIM and sign-in
 are rate limited (429 with `Retry-After`; no role is exempt). Setup and incident
 procedures: [runbook §2 and §9](docs/runbook.md); decisions: D-1, D-19, D-20 and
 [ADR-015](docs/decisions/015-oidc-sign-in-and-scim-provisioning.md). A database created
 before Phase 10 needs `make migrate` (0013); `make audit` checks the locked dependencies
 for known vulnerabilities.
+
+## How an organization is created (Phase 12, P12.1)
+
+An operator creates the tenant's trust root with one audited command, `lattice org
+create` (organization, safe settings, OIDC connection, and the first administrator bound
+to their exact identity-provider identifier — never by e-mail); the first administrator's
+first sign-in verifies the connection. Administrators then read the organization's setup
+record on the **Organization** page (`/settings`, `GET /v1/admin/setup`): every state is
+derived by the backend from live data. OIDC client secrets and provider keys may be stored
+encrypted at rest (AES-256-GCM, master keys only in the deployment environment;
+`lattice secrets rekey`), and private endpoints are reachable only when an operator
+registers them (`lattice outbound allow`). Procedures: [runbook §9 and
+§9.1](docs/runbook.md); contracts: [phase-12-plan](docs/phase-12-plan.md). A database created
+before P12.1 needs `make migrate` (0016); P12.2 adds 0017 and P12.3 0018 (account
+mappings move from `sources.config` into `account_external_refs`). Customer accounts and
+their references are administered under **Access → Accounts**.
 
 ## How deployment works (Phase 11)
 

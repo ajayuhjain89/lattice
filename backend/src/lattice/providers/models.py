@@ -9,7 +9,7 @@ invocation time after the egress policy has allowed the call.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, Text, UniqueConstraint, func, text
+from sqlalchemy import BigInteger, ForeignKey, Index, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from lattice.db.base import Base
@@ -49,6 +49,24 @@ class ModelProvider(Base):
     enabled: Mapped[bool] = mapped_column(server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    # 0021: the latest administrator test (facts, not audited) and the credential it used.
+    last_test_at: Mapped[datetime | None]
+    last_test_result: Mapped[str | None] = mapped_column(Text)
+    last_test_credential_id: Mapped[uuid.UUID | None]
+
+
+class EgressPolicyVersion(Base):
+    """A counter per organization raised by every write to its egress policy
+    (``org_settings``, the policy columns of ``model_providers``) by any writer (0021): a
+    preview and a step-up grant are bound to the exact policy they were computed on."""
+
+    __tablename__ = "egress_policy_versions"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
+    )
+    version: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
+    changed_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
 class ProviderCredential(Base):

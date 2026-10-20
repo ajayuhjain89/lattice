@@ -15,6 +15,8 @@ without any model involvement. Its public contract:
 * ``assert_all_readable`` -- the pre-generation tripwire (E4).
 * ``readable_document_classifications`` -- the classification of readable evidence
   documents, for the AI egress decision (Phase 6; aborts on anything unreadable).
+* ``current_readable_classifications`` -- the same, read again immediately before a
+  model call (P12.5): None when a document stopped being readable meanwhile.
 * ``summarize_context`` -- counts-only summary of a context for query traces.
 * ``resolve_member_context`` / ``proposed_context`` -- another member's context, as it
   is or as a proposed change would make it, for access review (Phase 9). Never a
@@ -28,7 +30,10 @@ ingestion and access management); the boundary test rejects their use anywhere e
 """
 
 from lattice.authz.access import load_document_access
-from lattice.authz.classification import readable_document_classifications
+from lattice.authz.classification import (
+    current_readable_classifications,
+    readable_document_classifications,
+)
 from lattice.authz.context import AuthorizationContext
 from lattice.authz.explain import (
     AccessExplanation,
@@ -70,6 +75,7 @@ __all__ = [
     "OwnAccessExplanation",
     "account_visible",
     "assert_all_readable",
+    "current_readable_classifications",
     "explain",
     "explain_for_reviewer",
     "explain_own_access",

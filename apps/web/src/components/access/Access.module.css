@@ -65,6 +65,48 @@
   color: var(--text-muted);
 }
 
+/* Accounts (P12.3): search and the lifecycle filter side by side, wrapping on phones. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
+}
+
+.find > .filters {
+  flex: 0 1 40rem;
+}
+
+.filters > :first-child {
+  flex: 1 1 18rem;
+}
+
+.filters > :last-child {
+  flex: 0 1 10rem;
+}
+
+.shownRowSplit {
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.sideLink {
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+/* Add member sits at the end of the find row, aligned with the search control. */
+.addMember {
+  margin-bottom: calc(var(--type-caption-line) + var(--space-1));
+}
+
+.shownRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .who {
   display: grid;
   gap: var(--space-0-5);
@@ -508,6 +550,48 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* --- members and administrators (P12.2) ------------------------------------------------- */
+
+/* The trust model in plain words, above the add-member fields and the reinstatement review. */
+.trust {
+  display: grid;
+  gap: var(--space-2);
+  max-width: var(--measure);
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-secondary);
+}
+
+.trust strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* A claim name or an identifier: exact characters matter, so the ledger face. */
+.claim,
+.identifierInput,
+.signIn code {
+  font-family: var(--font-ledger);
+  font-variant-ligatures: none;
+  overflow-wrap: anywhere;
+}
+
+.contentUnchanged {
+  max-width: var(--measure);
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--rule);
+  color: var(--text-secondary);
+}
+
+.contentUnchanged strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.signIn {
+  overflow-wrap: anywhere;
+}
+
 /* --- loading ------------------------------------------------------------------------- */
 
 /* --- narrow layouts ------------------------------------------------------------------- */
@@ -608,10 +692,20 @@
 }
 
 @media (forced-colors: active) {
+  .trust,
+  .contentUnchanged,
   .compareRule,
   .compareRow,
   .applied,
   .verdict {
     border-left-color: CanvasText;
   }
+}
+
+/* --- accounts (P12.3) ------------------------------------------------------------------- */
+.rowActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1) var(--space-2);
 }

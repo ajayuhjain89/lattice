@@ -154,8 +154,10 @@ class OrgWorld:
                 principal = self.admin_group_id(key) if kind == "group" else self.department_id(key)
                 grants.append(GrantRef(self.org_id, kind, principal))
         elif isinstance(origin, Ticket):
+            # A ticket's organization always names an account: unmapped fails closed on
+            # every source, as ingestion does (lattice.ingestion.access).
             account = source.account_refs.get(origin.organization_id)
-            if account is None and source.account_scoped:
+            if account is None:
                 return Unmapped("access_unmappable:account")
         elif isinstance(origin, ChannelInfo):
             config = source.channels.get(origin.channel.id)

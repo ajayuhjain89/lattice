@@ -1,0 +1,20 @@
+# Upload-boundary overlay for `make prod-onboard` (P12.7). LOCAL VERIFICATION ONLY, never
+# a deployment configuration: deploy/verification/onboard_check.py rolls the two API
+# instances onto it for its boundary cases, then rolls them back onto the stack's own
+# configuration (whose limits are the production defaults, unchanged).
+#
+# The smallest limits configuration accepts (lattice.config), so the cases prove the
+# streamed size checks with a few MiB instead of transferring 100 MiB: an upload over
+# 1 MiB is too_large; an organization already holding an import cannot reserve another
+# worst case inside a 2 MiB quota (storage_full). The ingress (Caddy) is not changed.
+x-small-imports: &small-imports
+  LATTICE_IMPORT_MAX_UPLOAD_BYTES: "1048576"
+  LATTICE_IMPORT_MAX_EXPANDED_BYTES: "1048576"
+  LATTICE_IMPORT_MAX_FILE_BYTES: "1048576"
+  LATTICE_IMPORT_ORGANIZATION_QUOTA_BYTES: "2097152"
+
+services:
+  api1:
+    environment: *small-imports
+  api2:
+    environment: *small-imports

@@ -1,0 +1,190 @@
+/* Organization (phase-12-plan §7, C12): the setup record as a ruled ledger, not cards. */
+.note {
+  max-width: var(--measure);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.ledger,
+.when {
+  font-family: var(--font-ledger);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* The organization: four facts on one ruled line, wrapping where narrow. */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  margin: 0;
+  border-top: var(--border-width) solid var(--rule-ink);
+}
+
+.facts > div {
+  display: grid;
+  align-content: start;
+  gap: var(--space-0-5);
+  padding: var(--space-3) var(--space-4) var(--space-3) 0;
+  border-bottom: var(--border-width) solid var(--rule);
+  min-width: 0;
+}
+
+.facts dt {
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.facts dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* The setup record: [item][state][reading][next], one ruled row per category. */
+.record {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--border-width) solid var(--rule-ink);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 11rem 9.5rem minmax(0, 1fr) minmax(0, 13rem);
+  align-items: start;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: var(--border-width) solid var(--rule);
+}
+
+.item {
+  margin: 0;
+  font-family: var(--font-interface);
+  font-size: var(--type-body-size);
+  font-weight: 600;
+  line-height: var(--type-body-line);
+}
+
+.state {
+  margin: 0;
+}
+
+.reading {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.message {
+  max-width: var(--measure);
+  margin: 0;
+}
+
+.ledgerLine {
+  margin: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-ledger);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.next {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.operator {
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+  text-align: right;
+}
+
+/* The persistent result of a rename (a toast would only echo it). */
+.applied {
+  display: grid;
+  grid-template-columns: var(--icon-size) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+  max-width: calc(var(--measure) + var(--space-16));
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border-left: 3px solid var(--signal-healthy-mark);
+  background: var(--surface-sheet);
+}
+
+.appliedIcon {
+  padding-top: var(--space-0-5);
+  color: var(--signal-healthy-text);
+}
+
+.appliedText {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  min-width: 0;
+}
+
+.appliedDetail {
+  color: var(--text-secondary);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line);
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@media (width < 1024px) {
+  .row {
+    grid-template-columns: 11rem minmax(0, 1fr);
+  }
+
+  .reading,
+  .next {
+    grid-column: 2;
+  }
+
+  .next {
+    justify-content: flex-start;
+  }
+
+  .operator {
+    text-align: left;
+  }
+}
+
+@media (width < 768px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .reading,
+  .next {
+    grid-column: 1;
+  }
+}
+
+@media (forced-colors: active) {
+  .applied {
+    border-left-color: CanvasText;
+  }
+}
