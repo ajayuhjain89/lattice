@@ -8,8 +8,12 @@ retrieval`; results in §9, real providers in §10, the rejected reranking exper
 §11, the frozen final status in §12). **Generation metrics, the optional judge and
 `lattice eval answer` are built in Phase 6** (`lattice.evals.answer`; results in §13). No
 real generation provider has been evaluated (§13). **§14 is the Phase 13 (P13.0)
-baseline at `main` 00a15d2**, with what the harness measures and does not;
-[phase-13-plan.md](phase-13-plan.md) §9 holds the Phase 13 evaluation contracts.
+baseline at `main` 00a15d2**, with what the harness measured then; **§15 is the P13.1
+evaluation foundation** (2026-10-21): the metrics added to both harnesses, the committed
+item-level baselines (`evals/baselines/`), `lattice eval baseline` / `lattice eval
+compare`, the rerank ablation and the explained aarch64/x86-64 difference of the fake
+configuration. [phase-13-plan.md](phase-13-plan.md) §9 holds the Phase 13 evaluation
+contracts.
 Related: `retrieval-design.md`, `security-model.md` §9, `product-brief.md` §8.
 
 Evaluation is built alongside the system: the retrieval harness lands in the same
@@ -183,12 +187,23 @@ Phase 3 total: 89 items; 10 same-question groups; 51 items tagged `security`.
 - `operational_metadata_leaks` — inaccessible account/source/document names, counts,
   filenames, URLs or statuses in member or admin views. **Must be 0.**
 
-**Retrieval (per category, per persona):**
-- Recall@5, @10, @20 over `relevant` (at chunk level, with document-level variant).
-- MRR of the first relevant chunk.
-- Precision@10 where `relevant` is exhaustive (lookup items).
-- Context recall: fraction of `relevant` chunks present in the *selected context*.
-- Conflict coverage: for conflict items, both sides present in selected context.
+**Retrieval (per category, per persona, per number of targets):** (what is built is
+marked; definitions as built in §7 and §15)
+- Recall@1, @5, @10, @20 over the targets at chunk/part level (**built, Phase 5**) and
+  the document-level variant over target records (**built, P13.1**).
+- MRR of the first target (**built, Phase 5**).
+- Precision@10 where the labels are exhaustive: **not computed**. No golden item has
+  reviewed exhaustive labels yet (P13.2 adds the `exhaustive` flag; phase-13-plan
+  EC-3); the report says "not computed" instead of a number.
+- nDCG@10, relevant = 2, `acceptable` = 1 (**built, P13.1; informational**: unlabelled
+  evidence is not irrelevant, so it is a lower bound and gates nothing).
+- Exact-identifier hit: the target record the question names at rank 1 (**built, P13.1**).
+- Rerank contribution: the same run with every rerank_v1 weight at 0
+  (`--no-rerank`, **built, P13.1**).
+- Context recall: fraction of the expected `relevant` evidence that reaches the
+  *prompt* (the selected context) — **built, P13.1**, in the answer harness.
+- Conflict coverage: for items whose expectation names `conflict.records`, every side in
+  the prompt — **built, P13.1**, in the answer harness.
 
 **Generation:**
 - Claim validation outcomes (deterministic): claims proposed, rejected, regenerated,
@@ -208,8 +223,16 @@ Phase 3 total: 89 items; 10 same-question groups; 51 items tagged `security`.
 - Stale-flag accuracy; egress-notice accuracy (notice present iff evidence was
   excluded by policy).
 - Injection resistance: no instruction following, no foreign citations, schema valid.
+- Abstention gate (**built, P13.1**): catch rate — expected `insufficient_evidence`
+  runs that get it before any model call — and false abstention — expected
+  `answered`/`partial` runs that get `insufficient_evidence`; both with denominators and
+  95% Wilson intervals, plus the full expected × actual status matrix.
 
-**Operational:** latency per stage (p50/p95), tokens, estimated cost per question.
+**Operational:** retrieval latency per stage, p50/p95/max from the traces (**built,
+P13.1**); prompt characters per generation call, evidence items and characters per
+prompt against the budget, withheld evidence by reason (**built, P13.1**); answer
+latency and provider-reported tokens (Phase 6). Estimated cost per question: not
+computed (no paid provider is configured; D-43).
 
 ## 6. Judges
 
@@ -240,11 +263,28 @@ Phase 3 total: 89 items; 10 same-question groups; 51 items tagged `security`.
   content above an external provider's egress level) and is uncalibrated (§6: no
   30-item human calibration exists), so its scores gate nothing. No cost estimate is
   printed (no paid provider is configured).
+- `--no-rerank` (retrieval, **built, P13.1**): the rerank ablation, every rerank_v1
+  weight 0 so evidence follows the RRF order; its configuration version is
+  `retrieval-6+rrf-only`, never the product's.
 - Output: `evals/reports/<timestamp>/report.json` + `report.md` (per-category table,
-  failures with question, persona, expected vs got, trace IDs). Reports are not
-  committed except for release baselines.
-- Regression rule: a change that lowers any retrieval metric by > 2 points on any
-  category, or any security metric above 0, must be justified in the PR.
+  failures with question, persona, expected vs got, trace IDs). Reports are never
+  committed. Each report records what makes runs comparable: corpus fingerprint,
+  golden-set version, configuration, database architecture.
+- `lattice eval baseline --report RUN --label A --out evals/baselines/... --reason ...`
+  (**built, P13.1**) writes a compact item-level baseline from a report — committed,
+  record keys and ranks only. An existing baseline is never overwritten without
+  `--replace` and a reason (the new file records the digest of the old one); a run with
+  security failures or errors cannot become one.
+- `lattice eval compare --baseline BASELINE --report RUN` (**built, P13.1**; also
+  `eval retrieval|answer --compare BASELINE`, `make eval-compare`) — per item and per
+  category with denominators; refuses runs that are not comparable (exit 2); any
+  security metric above 0 blocks (exit 1); differences under an unchanged configuration
+  version are *unexplained drift* (exit 1); under a declared version change only
+  regressions fail (exit 1). Details in §15.
+- Regression rule (made per item in P13.1, phase-13-plan EC-6): a target falling across
+  a k boundary, an item losing every target within 10, or a category R@10 drop of more
+  than 2 points must be explained in the checkpoint notes (`eval compare` lists them);
+  any security metric above 0 blocks.
 
 **Methodology as built (retrieval).** Ground truth never comes from the system under
 test: every chunk ID is mapped back to its dataset record and part anchors by the
@@ -770,8 +810,9 @@ targets). Reproduce: `make sync && make eval EMBEDDING=none`, `make eval`,
 - A equals the committed retrieval-6 report to four decimals: retrieval ranking has not
   changed since the Phase 5 closure.
 - B gives 0.5172 on CI's x86-64 runner (merge run 39416064098) for the same commit:
-  one target ranks differently across platforms. A is unaffected. Until the cause is
-  found (P13.1), B is compared per item, never as an exact number.
+  one target ranks differently across platforms. A is unaffected. *Explained in P13.1
+  (§15): pgvector's float32 distances order exactly tied fake vectors differently on
+  aarch64 and x86-64; 22 items rank differently, one target outcome differs.*
 - A, by number of targets: R@10 0.900 for the 20 single-target items, 0.437 for the 25
   items with three or more.
 - The real-semantic results of §10–12 (local 0.695, Gemini 0.726) are historical:
@@ -786,8 +827,174 @@ evidence that reached the prompt, macro over 71 answerable runs — **0.701** (A
 nothing in A (it withheld 98 semantic-only items in B). Phase 13 gap G1 explains why
 (phase-13-plan §7).
 
-Planned in §5 but **not computed by the harness**: Precision@10 on exhaustive items,
-document-level recall, context recall, conflict coverage; retrieval stage latency is in
-every trace but not summarized. `acceptable` labels are linted but unused. Phase 13 adds
-these in P13.1 (phase-13-plan §9, §11).
+Planned in §5 but not computed by the harness at P13.0: Precision@10 on exhaustive items,
+document-level recall, context recall, conflict coverage; retrieval stage latency was in
+every trace but not summarized; `acceptable` labels were linted but unused. *P13.1 (§15)
+computes all of them except Precision@10, which still needs reviewed exhaustive labels.*
 
+
+## 15. Phase 13 evaluation foundation (P13.1, 2026-10-21)
+
+No retrieval, ranking, relevance-gate, answering, provider or authorization behaviour
+changed (the only production-tree edit is the `retrieval/lexical.py` module docstring,
+corrected to the `coverage` mode as built). Measured on branch
+`phase/13-retrieval-answer-quality` (retrieval code as at 00a15d2) in isolated databases
+— Compose project `lattice-p13eval` (aarch64, port 5440) and `lattice-p13x86` (the same
+`pgvector/pgvector:0.8.1-pg16` image as `linux/amd64` under Rosetta, port 5440, run one
+at a time) — migrated, seeded and synced as CI does. The development database was not
+touched; no provider was called.
+
+### What was built
+
+| Harness | Added | Notes |
+| ------- | ----- | ----- |
+| `eval retrieval` | Document recall@1/5/10/20; nDCG@10 (informational); exact-identifier hit at rank 1; slices by number of targets (1, 2, 3+); retrieval stage latency p50/p95/max; `--no-rerank` ablation; corpus fingerprint, golden version and database architecture in every report | Precision@10 reported as *not computed* (no reviewed exhaustive labels) |
+| `eval answer` | Context recall; conflict coverage (all / potential conflict / superseded); abstention catch rate before any model call and false abstention, each with denominator and 95% Wilson interval; expected × actual status matrix; prompt characters per call, evidence items and characters per prompt against the budget; withheld evidence per chunk by reason | Fake generator: pipeline metrics only |
+| `lattice.evals.baseline` | Compact item-level baselines; `eval baseline`; `eval compare`; `--compare` on both harnesses; `make eval-compare` | Files only: no database, no provider |
+| Tests | `tests/evals/test_baseline.py` (18, no corpus); golden suites: A and B per item against the committed baselines, the B platform difference pinned, an injected regression caught, answer A per run | |
+| CI | `eval retrieval --embedding fake --compare retrieval-B-x86_64.json`; `eval retrieval --embedding none --compare retrieval-A.json` | ≈ +16 s on the M1 (both CLI steps and the new golden tests) |
+
+**Definitions.** *Document recall@k*: the share of an item's target records (a part target
+counts for its record) with any chunk in the first k. *nDCG@10*: gain 2 for the first chunk
+satisfying each target, 1 for the first chunk of each `acceptable` key that is not a target,
+ideal = all targets then all acceptable keys. *Exact-identifier hit*: items whose question
+names the display reference of one of their own target records — found by the operator
+corpus read, not by the retrieval extractor — and that record at evidence rank 1 (7 items;
+P13.0's "8 questions with identifiers" counted identifiers that name no target, such as the
+injection item's HAL-9999). *Context recall*: of an answerable run's expected `relevant`
+evidence, the share in the prompt (macro). *Catch rate*: expected `insufficient_evidence`
+runs that got it with no model call. *False abstention*: expected `answered`/`partial` runs
+that got `insufficient_evidence`.
+
+### Reproduced baseline
+
+Configuration A reproduces P13.0 and the Phase 5 retrieval-6 report exactly, on aarch64 and
+x86-64 alike (compare: IDENTICAL both ways; the corpus fingerprint `5961e8a6e13f…` is the
+same on both architectures and in the pytest corpus):
+
+| Configuration | Platform | R@1 | R@5 | R@10 | R@20 | MRR | Doc R@10 | nDCG@10 | Security |
+| ------------- | -------- | --: | --: | ---: | ---: | --: | -------: | ------: | -------- |
+| A. Exact + lexical | both | 0.316 | 0.534 | **0.668** | 0.779 | **0.641** | 0.780 | 0.571 | all 0 |
+| B. Fake (*test double*) | aarch64 | 0.238 | 0.440 | 0.512 | 0.685 | 0.515 | 0.659 | 0.447 | all 0 |
+| B. Fake (*test double*) | x86-64 | 0.238 | 0.440 | 0.517 | 0.685 | 0.515 | 0.664 | 0.449 | all 0 |
+
+B is the fake hashed bag-of-words provider: a security and plumbing gate, **never a
+semantic-quality figure** (EC-1). Real-semantic figures remain the historical §10–12 ones.
+
+A, by number of targets (items with targets): one target 20 items R@10 0.900 / doc 1.000;
+two targets 23 items 0.717 / 0.761; three or more 25 items **0.437 / 0.621** — the G2 gap is
+about half a document-collection problem (the right records found, not all their parts).
+Exact identifier: 7/7 at rank 1 in A and B. Doc R@10 / nDCG@10 by category (A; n = items
+with targets): lookup (10) 1.000 / 0.805, supersession (4) 1.000 / 0.694, inaccessible (2)
+1.000 / 0.519, cross_org (6) 0.861 / 0.604, prompt_injection (4) 0.792 / 0.535, stale (7)
+0.762 / 0.561, account_visibility (8) 0.750 / 0.470, cross_document (8) 0.667 / 0.483,
+ai_egress (6) 0.642 / 0.509, cross_source (9) 0.630 / 0.545, potential_conflicts (4)
+0.625 / 0.418.
+
+### Rerank ablation (rerank_v1 vs RRF order)
+
+| Configuration | R@1 | R@5 | R@10 | R@20 | MRR | Doc R@10 |
+| ------------- | --: | --: | ---: | ---: | --: | -------: |
+| A with rerank_v1 | 0.316 | 0.534 | 0.668 | 0.779 | 0.641 | 0.780 |
+| A, RRF order only | 0.262 | 0.520 | 0.665 | 0.770 | 0.583 | 0.774 |
+| B with rerank_v1 (aarch64) | 0.238 | 0.440 | 0.512 | 0.685 | 0.515 | 0.659 |
+| B, RRF order only (aarch64) | 0.194 | 0.423 | 0.496 | 0.690 | 0.464 | 0.655 |
+
+rerank_v1 mostly moves the first target up (MRR +0.058 in A, +0.051 in B; R@1 +0.05) and
+barely changes R@10 (+0.003 in A). Per category in A (n; R@10 rerank vs RRF): it helps
+cross_org (6; 0.861 vs 0.778) and stale (7; 0.619 vs 0.571), hurts cross_source (9; 0.630 vs
+0.685) and ai_egress (6; 0.486 vs 0.514), and leaves the other seven unchanged — all small
+slices, so the item list from `eval compare --baseline <A report> --report <A --no-rerank
+report>` (76 items differ; 38 item-level regression findings plus the two category drops) is the finding, not the percentages. The
+weights were never tuned (retrieval-design §6); any change is P13.5's, on the dev split.
+
+### Answer pipeline, configuration A (fake extractive generator; plumbing, not quality)
+
+96 runs, security all 0, status accuracy 0.771 (74/96):
+
+| Metric | Value |
+| ------ | ----- |
+| Context recall (71 answerable runs with relevant evidence) | **0.701**; all relevant evidence in the prompt 36, none 6 |
+| Abstention caught before any model call | **0/13** (95% CI 0.000–0.228); 13/13 expected-abstain runs reached the model (G1) |
+| False abstention | 0/71 (95% CI 0.000–0.051) |
+| Status matrix (expected → actual) | answered 67 → answered 67; partial 4 → answered 4; insufficient_evidence 13 → answered 13; evidence_only 4 → answered 4; ambiguous 4 → ambiguous 3, answered 1; unsupported_request 4 → unsupported_request 4 |
+| Conflict coverage (every side in the prompt) | all 10/24 (0.42, CI 0.24–0.61); potential conflict **3/16** (0.19, CI 0.07–0.43); superseded 7/8 |
+| Prompt characters per generation call (89 calls) | p50 6,166, p95 7,681, max 8,212 (≈ 1,540 tokens p50, chars ÷ 4) |
+| Evidence per prompt | items p50 12 = the item limit in 78/89 prompts; characters p50 3,411, p95 4,924 of the 24,000 budget (none above 80%) |
+| Withheld from the prompt (chunks) | prompt budget 82, egress policy 33, relevance floor 0 |
+| Latency (fake model, M1, local DB) | total p50 35 ms, p95 66 ms |
+
+New findings for later checkpoints: the **item limit, not the character budget, is the
+binding prompt constraint** (12 items use about 14% of 24,000 characters; P13.7); potential
+conflicts rarely have both sides in the prompt (3/16; G6, P13.8). P13.0's withheld counts
+(budget 56, egress 16) counted records; P13.1 counts chunks.
+
+Retrieval stage latency (A, aarch64, this M1 and local database — not a benchmark): total
+p50 24.8 ms / p95 83.1 ms; lexical 8.1 / 19.4; hydrate 8.0 / 31.1; tripwire 2.3 / 6.2;
+accounts 0.9 / 4.6; fuse_rerank 0.3 / 0.7. B adds the semantic exact scan: semantic 25.0 /
+54.8, total 46.6 / 103.0.
+
+### Configuration B across platforms: explained
+
+| Question | Finding |
+| -------- | ------- |
+| Reproduced? | Yes. The `linux/amd64` image under Rosetta (advertising AVX2 and FMA, like CI's runners) gives R@10 **0.5172** and `ranked_below_k` 26 — CI run 39416064098 exactly; aarch64 gives 0.5123 / 27. A is identical on both. |
+| Input data | Identical: the same 1,325 stored vectors (text comparison of every `embedding::text`), the same corpus fingerprint; PostgreSQL 16.12 and pgvector 0.8.1 on both; fake vectors are computed in Python on the client (SHA-256, IEEE doubles), the same for both servers. |
+| Distances | ~37% of the 1,079 cosine distances per query differ between the servers in the last bits (max 3e-8): pgvector accumulates in float32 with auto-vectorized, reassociated loops and dispatches an FMA build on x86-64, so the summation order and rounding differ from aarch64's NEON build. |
+| Ranking | The fake bag-of-words vectors produce many **exact ties** (template-shaped ticket comments share the same word counts): in the two items examined, 7 and 12 tie groups among the top 60 chunks, of which 4 and 7 were ordered by rounding noise. Exact ties should fall through to the channel's stable tie-break (`external_id`, `ordinal`, `id`), but float32 noise makes the values unequal, so rounding decides — differently per architecture. |
+| Not the cause | Database behaviour (same version, same data, same plan), Python, the stable tie-break code, tie-breaking in fusion or rerank (both deterministic over ranks). |
+| Affected items | **22** of 89 rank differently: acme-scim-commitment-01, ambiguous-beta-them, ambiguous-promise-acme-tom, conflict-kestrel-incident-duration, cross-org-refund-v2-tom, inaccessible-tern-lena, inaccessible-tern-tom, injection-summarize-hal-4877, injection-written-commitment, lookup-eu-residency, lookup-lattice-access-changes, stale-acme-idp, stale-audit-streaming-now, supersession-sla-changes-daniel, visibility-orbital-maya, visibility-orbital-tom, visibility-why-maya-kestrel-lena, xdoc-brightwater-asks, xdoc-kestrel-open-sso-tickets, xdoc-scim-october-customers, xdoc-scim-roadmap-history, xsrc-kestrel-outage-daniel. Only **one target outcome** differs: `xsrc-kestrel-outage-daniel` — `ticket:HAL-4702` at rank 12 (aarch64) vs 9 (x86-64), its chat target 15 vs 16 (cross_source R@10 0.454 vs 0.491, n = 9). Every other difference is below the targets. |
+| Consequence | Not masked with a tolerance: B has one baseline per database architecture (`retrieval-B-aarch64.json`, `retrieval-B-x86_64.json`), each compared exactly; comparing across architectures is refused unless `--cross-platform`, which lists the 22 items. A golden test pins that the two baselines differ in exactly that one target outcome. A real embedding model rarely produces exact ties, but near-ties can flip the same way: configuration C (D-38) is compared on the machine that produced its reference. |
+| Removing it | Would need a production ranking change (e.g. ordering semantic candidates by the distance rounded to ~1e-6 before the stable tie-break): out of P13.1's scope; a candidate for P13.5 with explicit approval. An x86-64 CPU without FMA would select pgvector's default build and could differ again; `eval compare` would report that as drift. |
+
+### Committed baselines
+
+| File | Configuration | Platform | Items |
+| ---- | ------------- | -------- | ----: |
+| `evals/baselines/retrieval-A.json` | exact + lexical, retrieval-6 / rerank_v1, limit 20 | independent | 89 |
+| `evals/baselines/retrieval-B-aarch64.json` | fake semantic (test double) | aarch64 | 89 |
+| `evals/baselines/retrieval-B-x86_64.json` | fake semantic (test double) | x86-64 (FMA) | 89 |
+| `evals/baselines/answer-A.json` | fake extractive generator over A | independent | 96 runs |
+
+Each holds the configuration and versions, corpus fingerprint (chunk counts,
+`chunker-1`, `embed-input-1`, SHA-256 over every chunk's record, ordinal, content and
+embedding-input hashes, `tsv` and vector digests, embedding status and model), golden
+version (SHA-256 over the items' content), the summary with denominators, and per item
+every target's first rank, every target record's first rank, the selection fate of
+missed targets, the top 10 and a digest of the whole ranking (answers: expected and
+actual status, model call, relevant targets in the prompt, cited). No question,
+evidence or answer text.
+
+### `eval compare` verdicts
+
+| Verdict | When | Exit |
+| ------- | ---- | ---: |
+| IDENTICAL | no item, target or category differs | 0 |
+| SECURITY FAILURE | any security metric of the run above 0 (checked first, whatever else) | 1 |
+| INCOMPARABLE | another kind, corpus fingerprint, golden set (unless `--allow-golden-change`), embedding identity, or database architecture for a semantic configuration (unless `--cross-platform`) | 2 |
+| UNEXPLAINED DRIFT | any difference — even a gain — with unchanged configuration versions | 1 |
+| REGRESSED | a declared version change with a regression: a target worse across a k boundary (1, 5, 10, 20), an item losing all targets within 10, a category R@10 drop > 2 points (small slices under 10 items marked), a lost identifier hit; answers: a correct status lost, a relevant target leaving the prompt, an abstention no longer caught before the model | 1 |
+| CHANGED | a declared version change without regressions | 0 |
+| PLATFORM VARIANT | `--cross-platform` and different architectures | 0 |
+
+Demonstrated: the golden suite cuts the lexical channel from 50 to 10 candidates with an
+unchanged version — compare reports UNEXPLAINED DRIFT with `target_lost@10` items — and
+with a declared version, REGRESSED (`tests/retrieval/golden/test_golden_retrieval.py::
+test_compare_catches_an_injected_regression`); the synthetic suite covers every verdict.
+
+### Limitations (P13.1)
+
+- Precision@10 stays unavailable until P13.2 adds reviewed `exhaustive` labels.
+- nDCG@10 is a lower bound (unlabelled ≠ irrelevant) and informational.
+- Every label is still engineering-authored (`authored_phase3`); no dev/held-out split
+  exists yet (P13.2, D-41): nothing here may be used to tune.
+- Every slice is small (most categories have 2–10 items with targets): category
+  percentages move in steps of 5–25 points per target.
+- B is a test double: its recall, ablation and context recall say nothing about
+  semantic quality; real-semantic numbers need configuration C (D-38), not yet built.
+- Answer metrics use the fake extractive generator: status, abstention after a model
+  call, citation and conflict behaviour of a real model are not measured (D-43).
+- Latencies are from one M1 with a local database, and the eval asks for 20 evidence
+  chunks; they are not production figures.
+- The answer harness has no B baseline: its prompt order inherits B's platform
+  dependence; the CI answer step still gates security only.

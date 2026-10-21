@@ -408,6 +408,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return asyncio.run(cli_answer.ask_command(args))
         if args.command == "eval" and args.eval_command == "answer":
             return asyncio.run(cli_answer.eval_answer(args))
+        if args.command == "eval" and args.eval_command == "compare":
+            return cli_retrieval.eval_compare(args)
+        if args.command == "eval" and args.eval_command == "baseline":
+            return cli_retrieval.eval_baseline(args)
         if args.command == "eval":
             return asyncio.run(cli_retrieval.eval_retrieval(args))
         if args.command == "models":

@@ -2,10 +2,21 @@
 
 ``chunks.tsv`` was built by ingestion: title and heading path (weight A), the display
 reference in the ``simple`` configuration (weight A), the chunk text (weight D) -- and,
-by decision D-10, never a structured account name. The query is parsed with
-``websearch_to_tsquery`` (quoted phrases, ``OR``, ``-term``) in the same text-search
-configuration, ranked with ``ts_rank_cd(tsv, query, 32)`` and served by the GIN index
-on ``tsv``. Ties are broken deterministically.
+by decision D-10, never a structured account name. The query is parsed in the same
+text-search configuration and served by the GIN index on ``tsv``; how depends on
+``RetrievalConfig.lexical_mode``:
+
+* ``coverage`` (the default since retrieval-2): any of the question's lexemes may match
+  (each quoted, OR-ed); ranked by how many distinct question lexemes the chunk contains,
+  plus ``ts_rank_cd(tsv, query, 32)``;
+* ``any_term``: the same any-lexeme match, ranked by ``ts_rank_cd`` alone;
+* ``all_terms``: ``websearch_to_tsquery`` (every term must match; the Phase 0 design).
+
+With ``lexical_identifier_phrases`` and ``lexical_account_terms`` (both on by default),
+an identifier from the question also scores as a phrase (+1), and a *visible* account
+named in the question counts as one matched term for documents of that account (D-10,
+query time) -- so that term alone also matches every chunk of the account
+(phase-13-plan G1). Ties are broken deterministically.
 
 One statement: tenant, lifecycle and authorization conditions are in its WHERE clause,
 so an unreadable chunk that matches the words better is never selected.

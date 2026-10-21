@@ -23,10 +23,12 @@ from sqlalchemy import text
 from lattice.answering.evidence import get_evidence
 from lattice.answering.models import AskRequest
 from lattice.answering.service import AskDependencies, ask
+from lattice.cli_retrieval import BASELINES
 from lattice.config import Environment
 from lattice.dataset.lint import Dataset
 from lattice.dataset.manifests import AS_OF
 from lattice.db.engine import Database
+from lattice.evals import baseline
 from lattice.evals.answer import GenerationSpec, configure, evaluate_answers
 from lattice.evals.retrieval import Corpus, Identities, select_items
 from lattice.providers.embedding import FakeEmbeddingProvider
@@ -78,6 +80,38 @@ async def test_every_golden_item_passes_the_security_gate(
     # nothing is labelled superseded without an explicit link.
     assert s["checks"]["no_unfounded_supersession"] == 1.0
     assert s["generation"]["claims_proposed"] > 0
+
+
+async def test_the_answer_pipeline_reproduces_its_committed_baseline(
+    app_db: Database,
+    owner_db: Database,
+    dataset: Dataset,
+    identities: Identities,
+    corpus: Corpus,
+) -> None:
+    """P13.1: configuration A (exact + lexical retrieval, fake extractive generator) per
+    run against ``evals/baselines/answer-A.json``: status, model call, relevant targets
+    in the prompt. Plumbing only -- and the P13.0 finding it pins: no expected-abstain run
+    is stopped before the model (G1)."""
+    report = await evaluate_answers(
+        app_db,
+        owner_db,
+        dataset,
+        identities=identities,
+        corpus=corpus,
+        spec=FAKE_SPEC,
+        factory=DefaultGenerationFactory(Environment.TEST),
+        secrets=EnvironmentSecretStore(environ={}),
+        embedding=None,
+        items=select_items(dataset),
+    )
+    reference = baseline.load(BASELINES / "answer-A.json")
+    result = baseline.compare(reference, baseline.normalize(report))
+    assert result.verdict == "identical", baseline.render(result)
+    f = report.summary["foundation"]
+    assert f["abstention"]["catch_before_model"]["count"] == 0
+    assert f["abstention"]["catch_before_model"]["n"] == 13
+    assert f["context_recall"]["macro"] == 0.7012
 
 
 def _ask_deps(harness: Harness) -> AskDependencies:

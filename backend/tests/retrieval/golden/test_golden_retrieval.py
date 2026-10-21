@@ -8,33 +8,47 @@ Security metrics must be exactly 0 for every item, with semantic retrieval on (f
 provider) and off. Recall is pinned by *regression floors* for this deterministic
 configuration (fake embeddings); they are not the product's quality target, which
 needs the real provider (docs/evaluation-plan.md, "Phase 5 results").
+
+Since P13.1 both configurations are also compared **per item** with the committed
+baselines (``evals/baselines/``, ``lattice.evals.baseline``): configuration A exactly
+(it is platform-independent), configuration B exactly against the baseline of the
+database server's architecture (pgvector's float32 distances differ between aarch64
+and x86-64; evaluation-plan §15). An injected regression must be caught.
 """
 
+import json
+from dataclasses import replace
 from typing import Any
 
 import pytest
 
+from lattice.cli_retrieval import BASELINES
 from lattice.dataset.lint import Dataset, load_dataset
 from lattice.dataset.manifests import AS_OF
 from lattice.db.engine import Database
+from lattice.evals import baseline
 from lattice.evals.retrieval import (
     Corpus,
     Identities,
     ItemResult,
+    RetrievalReport,
+    database_platform,
     evaluate_item,
+    golden_version,
     select_items,
     summarize,
 )
 from lattice.providers.embedding import FakeEmbeddingProvider
-from lattice.retrieval import DEFAULT_CONFIG
+from lattice.retrieval import DEFAULT_CONFIG, RetrievalConfig
 
 from ...ingestion.conftest import DATA, GOLDEN
 
 ITEMS = [item.id for item in select_items(load_dataset(DATA, GOLDEN))]
 
 # Measured on this corpus with this configuration (retrieval-6); a drop below fails CI.
-FLOOR_R10_FAKE = 0.49  # measured 0.512
-FLOOR_R10_LEXICAL_ONLY = 0.64  # measured 0.668
+# The per-item baselines below are the exact check; these floors are the coarse one.
+FLOOR_R10_FAKE = 0.49  # measured 0.5123 on an aarch64 database, 0.5172 on x86-64
+FLOOR_R10_LEXICAL_ONLY = 0.64  # measured 0.6679 on both
 
 
 async def _run(
@@ -43,6 +57,7 @@ async def _run(
     identities: Identities,
     corpus: Corpus,
     provider: Any,
+    config: RetrievalConfig = DEFAULT_CONFIG,
 ) -> dict[str, ItemResult]:
     results = {}
     for item in select_items(dataset):
@@ -53,7 +68,7 @@ async def _run(
             identities=identities,
             corpus=corpus,
             provider=provider,
-            config=DEFAULT_CONFIG,
+            config=config,
             now=AS_OF,
         )
     return results
@@ -314,3 +329,120 @@ def test_injection_items_retrieve_their_evidence_as_plain_data(
     # injected message asks for is never looked up).
     cite = with_semantic["injection-cite-hal-9999"]
     assert cite.counts["exact"] == 0
+
+
+# --- item-level baselines (P13.1) ------------------------------------------------------------
+
+
+def _as_report(
+    results: dict[str, ItemResult],
+    *,
+    provider: Any,
+    corpus: Corpus,
+    dataset: Dataset,
+    platform: str,
+    config: RetrievalConfig = DEFAULT_CONFIG,
+) -> dict[str, Any]:
+    return baseline.normalize(
+        RetrievalReport(
+            generated_at="test",
+            embedding_provider=None if provider is None else provider.provider,
+            embedding_model=None if provider is None else provider.model,
+            embedding_deployment=None if provider is None else provider.deployment,
+            provider_usage={},
+            config_version=config.version,
+            rerank_version=config.rerank_version,
+            corpus_embeddings=corpus.embeddings,
+            summary=summarize(list(results.values())),
+            items=list(results.values()),
+            corpus_fingerprint=corpus.fingerprint,
+            golden_version=golden_version(select_items(dataset)),
+            database_platform=platform,
+        )
+    )
+
+
+def test_configuration_a_reproduces_its_committed_baseline_exactly(
+    lexical_only: dict[str, ItemResult], corpus: Corpus, dataset: Dataset
+) -> None:
+    run = _as_report(lexical_only, provider=None, corpus=corpus, dataset=dataset, platform="any")
+    reference = baseline.load(BASELINES / "retrieval-A.json")
+    result = baseline.compare(reference, run)
+    assert result.verdict == "identical", baseline.render(result)
+    assert reference["summary"]["overall"]["recall@10"] == 0.6679
+    assert reference["summary"]["overall"]["mrr"] == 0.6405
+
+
+async def test_configuration_b_reproduces_the_baseline_of_this_database_architecture(
+    owner_db: Database, with_semantic: dict[str, ItemResult], corpus: Corpus, dataset: Dataset
+) -> None:
+    platform = await database_platform(owner_db)
+    path = BASELINES / f"retrieval-B-{platform}.json"
+    assert path.exists(), f"no configuration B baseline for a {platform} database server"
+    run = _as_report(
+        with_semantic,
+        provider=FakeEmbeddingProvider(),
+        corpus=corpus,
+        dataset=dataset,
+        platform=platform,
+    )
+    result = baseline.compare(baseline.load(path), run)
+    assert result.verdict == "identical", baseline.render(result)
+
+
+def test_configuration_b_differs_between_architectures_only_where_recorded() -> None:
+    """The two B baselines differ in ranking (exact ties ordered by float32 rounding),
+    and in exactly one target outcome; nothing else (evaluation-plan §15)."""
+    arm = baseline.load(BASELINES / "retrieval-B-aarch64.json")
+    x86 = baseline.load(BASELINES / "retrieval-B-x86_64.json")
+    result = baseline.compare(arm, x86, cross_platform=True)
+    assert result.verdict == "platform_variant"
+    outcome = [f for f in result.findings if f.kind.startswith(("target_", "document_"))]
+    assert {(f.item, f.kind) for f in outcome} == {
+        ("xsrc-kestrel-outage-daniel", "target_gained@10"),
+        ("xsrc-kestrel-outage-daniel", "target_rank_changed"),
+        ("xsrc-kestrel-outage-daniel", "document_gained@10"),
+    }, baseline.render(result)
+    assert not baseline.compare(arm, x86).findings  # refused without --cross-platform
+    assert baseline.compare(arm, x86).verdict == "incomparable"
+
+
+async def test_compare_catches_an_injected_regression(
+    app_db: Database,
+    dataset: Dataset,
+    identities: Identities,
+    corpus: Corpus,
+) -> None:
+    """A real pipeline change -- the lexical channel cut from 50 to 10 candidates --
+    under an unchanged configuration version is unexplained drift, with item-level
+    regressions; under a declared version it is a regression to explain."""
+    injected = replace(DEFAULT_CONFIG, k_lexical=10)
+    results = await _run(app_db, dataset, identities, corpus, None, injected)
+    reference = baseline.load(BASELINES / "retrieval-A.json")
+    run = _as_report(
+        results, provider=None, corpus=corpus, dataset=dataset, platform="any", config=injected
+    )
+    drift = baseline.compare(reference, run)
+    assert drift.verdict == "drift"
+    assert drift.exit_code == 1
+    kinds = {f.kind for f in drift.regressions}
+    assert "target_lost@10" in kinds, baseline.render(drift)
+    lost = {f.item for f in drift.regressions if f.kind == "target_lost@10"}
+    assert lost <= set(reference["items"])
+    declared = baseline.compare(
+        reference,
+        _as_report(
+            results,
+            provider=None,
+            corpus=corpus,
+            dataset=dataset,
+            platform="any",
+            config=replace(injected, version="retrieval-6-k-lexical-10"),
+        ),
+    )
+    assert declared.verdict == "regressed"
+    assert declared.exit_code == 1
+    assert declared.intended == ["config_version: retrieval-6 -> retrieval-6-k-lexical-10"]
+    # Reports and comparisons carry keys and ranks, never question or evidence text.
+    rendered = baseline.render(declared) + json.dumps(declared.to_json())
+    assert not any(item.question in rendered for item in select_items(dataset))

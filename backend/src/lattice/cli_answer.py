@@ -23,11 +23,20 @@ from pydantic import ValidationError
 
 from lattice.answering.models import Answer, AskRequest
 from lattice.answering.service import OFFLINE_GENERATION_DEADLINE_SECONDS, AskDependencies, ask
-from lattice.cli_retrieval import GOLDEN, REPORTS, _databases, _fail, _member
+from lattice.cli_retrieval import (
+    GOLDEN,
+    REPORTS,
+    _databases,
+    _fail,
+    _member,
+    add_compare_arguments,
+    compare_into,
+)
 from lattice.config import Environment, load_provider_settings
 from lattice.dataset.distractors import DATA
 from lattice.dataset.lint import load_dataset
 from lattice.errors import LatticeError
+from lattice.evals import baseline
 from lattice.evals.answer import (
     AnswerItemResult,
     GenerationSpec,
@@ -223,6 +232,12 @@ async def eval_answer(args: argparse.Namespace) -> int:
     )
     print(f"generation: {s['generation']}")
     print(f"security: {s['security']}")
+    f = s["foundation"]
+    print(
+        f"context recall {f['context_recall']['macro']} ({f['context_recall']['runs']} runs); "
+        f"abstention caught before the model {f['abstention']['catch_before_model']}; "
+        f"false abstention {f['abstention']['false_abstention']}"
+    )
     if s["judge"]:
         print(f"judge (uncalibrated): {s['judge']}")
     if spec.provider == "fake":
@@ -231,6 +246,8 @@ async def eval_answer(args: argparse.Namespace) -> int:
     if report.security_failures:
         print("SECURITY FAILURE: see the report", file=sys.stderr)
         return 1
+    if args.compare is not None:
+        return compare_into(baseline.normalize(report), args, out)
     return 0
 
 
@@ -270,3 +287,4 @@ def add_parsers(
     answer.add_argument("--golden", type=Path, default=GOLDEN)
     answer.add_argument("--out", type=Path, default=REPORTS)
     answer.add_argument("--quiet", action="store_true")
+    add_compare_arguments(answer, required=False)

@@ -32,7 +32,9 @@ merged (00a15d2, 2026-10-20; [phase-12-plan.md](phase-12-plan.md)).
 Grounding and Answer Quality** (§4 "Later phases") is in progress on
 `phase/13-retrieval-answer-quality` ([phase-13-plan.md](phase-13-plan.md)): P13.0
 (planning, evaluation design and a measured baseline) approved 2026-10-21 with decisions
-D-38–D-45 (§7); P13.1 (evaluation foundation) authorized. No retrieval or answering
+D-38–D-45 (§7); P13.1 (evaluation foundation: metrics, item-level baselines,
+`lattice eval compare`, the explained aarch64/x86-64 difference of the fake
+configuration) delivered 2026-10-21 and awaiting review. No retrieval or answering
 behaviour has changed.
 
 ---
@@ -1242,7 +1244,7 @@ evidence can never enter a prompt (G3); every security metric is 0.
 | Checkpoint | Scope | Status |
 | ---------- | ----- | ------ |
 | P13.0 | Current architecture, baseline, gaps, evaluation contracts, checkpoints, decisions | Approved 2026-10-21 (e9f967d + decisions commit) |
-| P13.1 | Evaluation foundation: metrics, item-level baseline and compare | Authorized 2026-10-21 |
+| P13.1 | Evaluation foundation: metrics, item-level baseline and compare | Delivered 2026-10-21, awaiting review (phase-13-plan §19; evaluation-plan §15) |
 | P13.2 | Golden set growth, dev/held-out splits, label provenance | Proposed |
 | P13.3 | Relevance gate and abstention calibration | Proposed |
 | P13.4 | Lexical candidate quality and ranking | Proposed |
@@ -1263,7 +1265,7 @@ evidence can never enter a prompt (G3); every security metric is 0.
 | — | Product-design overhaul (frontend only) | **Closed and merged** (27da421, 2026-10-03): D0–D7 complete and approved; `design-direction.md` is the historical record, `design-system.md` v2 is canonical. Inserted before Phase 11 |
 | 11 | Production Deployment, Identity Operations & Reliability | **Closed and merged (143392f, 2026-10-06): built and verified on the local reference stack (P11.0–P11.7); external staging validation deferred to the Phase 15 gate.** **Plan approved 2026-10-03** ([phase-11-plan.md](phase-11-plan.md); decisions D-22–D-27; checkpoints P11.0–P11.7). Production deployment (images, single region, migrations in CI/CD, rollback), production identity and session operations, shared limits, jobs and retention, backups/PITR with tested restore, observability and actionable alerts (including `security_invariant_violated`), production runbooks and drills |
 | 12 | Organization Setup, Identity Configuration & Integrations | **Closed and merged (00a15d2, 2026-10-20).** Plan approved and P12.0 contracts written (2026-10-06; [phase-12-plan.md](phase-12-plan.md)); P12.1–P12.7 delivered (2026-10-08 … 2026-10-19); P12.8 closure delivered (2026-10-20). Customer-facing organization onboarding, SSO and SCIM setup, source/integration and provider (BYOK) setup, zero-to-first-question. Also: **account administration** (creating accounts and mapping them to source account references, today manifest-only — from the former "Accounts workspace"), **evaluation of the next connectors** (call transcripts, CRM notes, GitHub issues, release notes) within integration setup, ~~organization deletion/purge (D-26)~~ → Phase 15 (D-37A), ~~identity-provider migration with differing subjects~~ → post-v1 (D-37B) |
-| 13 | Retrieval, Grounding and Answer Quality | **In progress: P13.0 approved 2026-10-21** ([phase-13-plan.md](phase-13-plan.md); checkpoints P13.1–P13.9; decisions D-38–D-45). Measured baseline, evaluation contracts, then relevance gate/abstention, lexical, fusion/selection, optional multi-hop expansion, context/validator, conflicts/temporal |
+| 13 | Retrieval, Grounding and Answer Quality | **In progress: P13.0 approved 2026-10-21; P13.1 (evaluation foundation) delivered 2026-10-21** ([phase-13-plan.md](phase-13-plan.md); checkpoints P13.1–P13.9; decisions D-38–D-45). Measured baseline, evaluation contracts, then relevance gate/abstention, lexical, fusion/selection, optional multi-hop expansion, context/validator, conflicts/temporal |
 | 14 | Enterprise-scale hardening | Large-scale, load and adversarial hardening |
 | 15 | GA / v1 closure | Final general-availability closure. **Release gate (D-22 amended 2026-10-05):** real external staging validation (phase-11-plan §21.1: cloud staging deployment, managed-PostgreSQL privileges, managed backup/PITR, public TLS/origin, external OIDC callback, provider-specific deploy/rollback, cloud RPO/RTO) must be completed before v1 GA / production-ready is declared. Also: executable **organization purge** with a platform deletion record (D-37A; semantics in phase-12-plan C14) |
 | — | Former rows 12 (Accounts workspace) and 13 (Next connectors), placed 2026-10-03 (phase-11-plan §27) | *Accounts workspace* meant an account timeline + scoped Ask for account managers. Scoped Ask shipped in Phase 9; account administration → Phase 12 (above); the **account timeline workspace → post-v1, intentionally deferred**: the v1 workflow (product brief §5, §8) is Ask → cited answer → evidence, which account managers already have through scoped Ask, and Phase 0 recorded the timeline as not needed for the first release — the product owner may pull it into Phases 13–15. *Next connectors* → evaluated in Phase 12's integration scope; those not needed for v1 are recorded there as post-v1 |

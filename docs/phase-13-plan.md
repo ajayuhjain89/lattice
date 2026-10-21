@@ -3,9 +3,10 @@
 Status: **P13.0 (planning, evaluation design and baseline) written 2026-10-20 on
 `phase/13-retrieval-answer-quality` from `main` 00a15d2 (e9f967d); direction approved
 by the product owner 2026-10-21 with decisions D-38–D-45 (§15) and the evaluation
-refinements of §9.1.** Nothing in this document is implemented yet beyond what §4
-describes as already built; every improvement in §11 is a proposal that still needs its
-own checkpoint approval. P13.1 (evaluation foundation) is authorized; P13.2 is not.
+refinements of §9.1.** **P13.1 (evaluation foundation) delivered 2026-10-21** (§19;
+evaluation-plan §15): measurement only, no retrieval or answering behaviour changed.
+Every improvement in §11 from P13.2 on is a proposal that still needs its own checkpoint
+approval; P13.2 is not authorized.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 13. Phase 12
 is merged (00a15d2, branch and merge CI green, images published). Phase 14 owns scale and
@@ -137,8 +138,12 @@ and answering test functions. What each requested property is measured by today:
 | Performance | **Minimal** | Answer eval reports total and generation p50/p95; retrieval stage timings exist in every trace but are **not summarized** by the retrieval harness |
 | Real answer quality | **Not measured** | No real generation provider has run (ADR-012; evaluation-plan §13) |
 
-Planned in evaluation-plan §5 but not built: Precision@10 (exhaustive items), document-
-level recall, context recall, conflict coverage. Tracked in §17.
+Planned in evaluation-plan §5 but not built at P13.0: Precision@10 (exhaustive items),
+document-level recall, context recall, conflict coverage. Tracked in §17. **P13.1 built
+all of them except Precision@10** (no reviewed exhaustive labels yet), plus nDCG@10
+(informational), identifier hit rate, the rerank ablation, abstention catch/false
+abstention, stage latency, prompt-size metrics, item-level baselines and `lattice eval
+compare` (§19).
 
 ## 6. Baseline evidence
 
@@ -163,6 +168,11 @@ synced with fake embeddings, admin grants applied (the CI sequence). Corpus: Hal
   identified; likely candidates are floating-point ordering of near-tied cosine scores
   or platform differences in the CI PostgreSQL service. Consequence: a baseline compare
   must be exact on A and per-item with explained differences on B (EC-6).
+  **Explained in P13.1** (§19, evaluation-plan §15): pgvector's float32 cosine distances
+  differ in the last bits between aarch64 and x86-64 (FMA build), and the fake vectors'
+  exact ties are then ordered by rounding instead of the stable tie-break. 22 items rank
+  differently; one target outcome differs (`xsrc-kestrel-outage-daniel`). B now has one
+  exact baseline per database architecture.
 
 Distribution of A's results (the deterministic floor):
 
@@ -213,8 +223,8 @@ databases were not retained.
 | Real-model answer quality (facts, entailment, conflicts, abstention) | No paid provider; local LLM forbidden on the reference machine (ADR-012); Gemini quota exhausted | Deterministic validator suites with scripted adversarial drafts (zero cost); optional BYOK run on synthetic data only (D-43) |
 | Real-semantic retrieval at HEAD | Needs the corpus embedded with the local model (~6 min, ~1.5 GB RSS) | One approved local run per corpus change in an isolated DB, dumped and reused (D-38) |
 | Judge accuracy | No 30-item human calibration exists (evaluation-plan §6) | Product-owner labelling (D-44); until then the judge gates nothing |
-| Precision@k, nDCG, document-level recall, conflict coverage | Not implemented; precision needs exhaustive labels | P13.1 metrics; `exhaustive` flag reviewed per item (P13.2) |
-| Retrieval stage latency distribution | Not summarized | P13.1 reads trace timings |
+| Precision@k, nDCG, document-level recall, conflict coverage | Not implemented; precision needs exhaustive labels | **P13.1 built nDCG (informational), document recall, conflict coverage**; precision waits for the `exhaustive` flag reviewed per item (P13.2) |
+| Retrieval stage latency distribution | Not summarized | **P13.1 summarizes trace timings** (evaluation-plan §15) |
 | Cost per question | No paid provider configured | Provider-reported tokens × owner-supplied prices, only for an optional BYOK run |
 
 ## 7. Quality gaps, ranked by impact
@@ -406,6 +416,10 @@ records its measurements in evaluation-plan §14+. "Re-index" means `lattice rei
 - **Security regressions to watch.** Reports must not add question or evidence text to
   logs (S10); compare output uses record keys of synthetic data only.
 - **Resources.** CPU-only, seconds per run; no provider calls.
+- **Status: delivered 2026-10-21** (§19). Acceptance: baselines committed; A reproduced
+  exactly on aarch64 and x86-64; injected regression flagged (golden and synthetic
+  tests); the B difference explained and recorded per item and per architecture; CI
+  increase ≈ 16 s measured on the M1; security 0 in every run.
 
 ### P13.2 — Golden set growth, splits and label provenance
 
@@ -629,10 +643,10 @@ The P13.0 recommendations were reviewed; these are the binding decisions.
 
 | Where | Mismatch |
 | ----- | -------- |
-| `retrieval/lexical.py` module docstring | Says the query is parsed with `websearch_to_tsquery`; the default mode is `coverage` (any lexeme) since retrieval-2 |
-| evaluation-plan §5 | Lists Precision@10, document-level recall, context recall and conflict coverage as metrics; none is computed by the harness |
+| `retrieval/lexical.py` module docstring | Says the query is parsed with `websearch_to_tsquery`; the default mode is `coverage` (any lexeme) since retrieval-2 — **fixed in P13.1** (docstring only) |
+| evaluation-plan §5 | Lists Precision@10, document-level recall, context recall and conflict coverage as metrics; none is computed by the harness — **fixed in P13.1**: §5 marks what is built; all but Precision@10 are computed |
 | `answering/service.py` relevance floor vs implementation-plan §8 correction log | The floor's "lexical match" assumed all-terms matching; with any-lexeme matching and the account term it no longer filters (G1) |
-| `tests/retrieval/golden/test_golden_retrieval.py` | Comment says fake R@10 "measured 0.512"; CI on x86 measures 0.517 (§6.1) |
+| `tests/retrieval/golden/test_golden_retrieval.py` | Comment says fake R@10 "measured 0.512"; CI on x86 measures 0.517 (§6.1) — **fixed in P13.1** (both values, and per-item baselines added) |
 
 Status lines made stale by the Phase 12 merge (implementation-plan "Current state" and
 roadmap rows 12–13, README, phase-12-plan header) are corrected in the P13.0 commit.
@@ -642,3 +656,32 @@ roadmap rows 12–13, README, phase-12-plan header) are corrected in the P13.0 c
 D-4 default generation provider (open; D-43 is evaluation only); external staging
 (Phase 15 gate); ANN index (only above the §7.6 threshold, Phase 14); timing side
 channels (T16, accepted); account timeline workspace (post-v1).
+
+## 19. P13.1 delivery record (2026-10-21)
+
+Measurement only. Production retrieval, ranking, relevance gate, answering, providers and
+authorization are unchanged; the only edit under `backend/src/lattice/retrieval/` is the
+`lexical.py` module docstring (§17). Full results: evaluation-plan §15.
+
+| Item | Result |
+| ---- | ------ |
+| Metrics added | Document recall@k; nDCG@10 (informational); exact-identifier hit; slices by number of targets; rerank ablation (`--no-rerank`); retrieval stage latency; context recall; conflict coverage; abstention catch rate and false abstention with denominators and Wilson intervals; status confusion matrix; prompt size and budget use; withheld evidence by reason. Precision@10 reported as not computed |
+| Baseline reproduced | A: R@10 0.6679, MRR 0.6405, identical per item on aarch64 and x86-64; answer A: context recall 0.701, catch 0/13, false abstention 0/71 |
+| B across platforms | Explained (float32 distance rounding + exact ties in fake vectors); 22 items rank differently, 1 target outcome; one exact baseline per architecture, `--cross-platform` lists them |
+| Committed baselines | `evals/baselines/retrieval-A.json`, `retrieval-B-aarch64.json`, `retrieval-B-x86_64.json`, `answer-A.json` |
+| Compare | `lattice eval compare` / `--compare`: refuses incomparable runs (exit 2), blocks on security (exit 1), fails unexplained drift (exit 1) and regressions under declared changes (exit 1); never overwrites a baseline silently |
+| CI | B compared with the x86-64 baseline; A compared exactly; ≈ +16 s (M1 measurement) |
+| Security | Every security metric 0 in A, B (both architectures), the ablations and answer A; baselines and compare output hold keys, ranks and codes only (a golden test checks no question text appears) |
+
+New findings recorded for later checkpoints (no behaviour changed): the prompt's 12-item
+limit binds in 78/89 prompts while evidence uses ~14% of the character budget (P13.7);
+potential-conflict coverage is 3/16 (P13.8); rerank_v1 adds MRR (+0.058 in A) but almost
+no R@10 (+0.003; P13.5); ≥3-target items reach document R@10 0.621 but part R@10 0.437 (G2).
+
+**P13.2 prerequisites.** P13.1 approved; D-41 batch-review procedure agreed (engineering
+prepares, the owner reviews held-out batches; nothing marked `owner_reviewed` before
+review); the baselines are regenerated with `eval baseline --replace --reason ...` once
+the golden set grows (golden version changes, so compare refuses old-vs-new unless
+`--allow-golden-change`); new items keep the security fields (`must_not_retrieve`,
+canaries) and the Veridian twins; a C reference (D-38) is not needed for P13.2 itself but
+is for P13.3's semantic floor.

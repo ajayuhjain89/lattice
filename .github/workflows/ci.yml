@@ -144,7 +144,19 @@ jobs:
 
       - name: Retrieval evaluation as every persona (security metrics must be 0)
         # Fake embeddings: this gates security, not quality (docs/evaluation-plan.md §9).
-        run: uv run lattice eval retrieval --embedding fake --quiet
+        # Compared per item with the configuration B baseline of this runner's database
+        # architecture: pgvector orders exactly tied fake vectors by float32 rounding,
+        # which differs between x86-64 and aarch64 (evaluation-plan §15).
+        run: >-
+          uv run lattice eval retrieval --embedding fake --quiet
+          --compare ../evals/baselines/retrieval-B-x86_64.json
+
+      - name: Configuration A (exact + lexical) reproduces its committed baseline exactly
+        # The deterministic floor (phase-13-plan EC-6): any item-level difference without a
+        # declared configuration change fails; regenerating the baseline is a reviewed commit.
+        run: >-
+          uv run lattice eval retrieval --embedding none --quiet
+          --compare ../evals/baselines/retrieval-A.json
 
       - name: Answer evaluation as every persona (fake generation; security metrics must be 0)
         # Fake providers: this gates security and plumbing, not answer quality
