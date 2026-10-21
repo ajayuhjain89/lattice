@@ -6,10 +6,10 @@ grounded, cited, aware of stale and potentially conflicting evidence, and built 
 information they are authorized to see.
 
 **Status: Phases 1–12 are implemented and merged (Phase 12: 00a15d2, 2026-10-20). Phase 13
-(Retrieval, Grounding and Answer Quality) is in planning: P13.0 — the measured baseline,
-known quality gaps, evaluation contracts and proposed checkpoints — is in
-[docs/phase-13-plan.md](docs/phase-13-plan.md) and awaits approval; no retrieval or
-answering behaviour has changed. History: Phases 1–11 and the frontend product-design overhaul (D0–D7,
+(Retrieval, Grounding and Answer Quality) is in progress: P13.0 — the measured baseline,
+known quality gaps, evaluation contracts, checkpoints and decisions D-38–D-45 — is in
+[docs/phase-13-plan.md](docs/phase-13-plan.md) and was approved 2026-10-21; no retrieval
+or answering behaviour has changed. History: Phases 1–11 and the frontend product-design overhaul (D0–D7,
 [design direction](docs/design-direction.md)) is merged; [design system
 v2](docs/design-system.md) is canonical. Phase 11 (Production Deployment, Identity
 Operations & Reliability) was verified on a local production-shaped stack only: real

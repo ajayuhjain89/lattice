@@ -28,11 +28,12 @@ budget and remains a release gate before Phase 15 may declare v1 GA
 status log. **Phase 12 — Organization Setup, Identity Configuration & Integrations** is
 merged (00a15d2, 2026-10-20; [phase-12-plan.md](phase-12-plan.md)).
 
-**Current state (2026-10-20).** Phases 1–12 are merged. **Next: Phase 13 — Retrieval,
-Grounding and Answer Quality** (§4 "Later phases") on `phase/13-retrieval-answer-quality`
-([phase-13-plan.md](phase-13-plan.md)): P13.0 (planning, evaluation design and a
-measured baseline; docs only) written and awaiting approval; decisions D-38–D-45 (§7)
-proposed. No retrieval or answering behaviour has changed.
+**Current state (2026-10-21).** Phases 1–12 are merged. **Phase 13 — Retrieval,
+Grounding and Answer Quality** (§4 "Later phases") is in progress on
+`phase/13-retrieval-answer-quality` ([phase-13-plan.md](phase-13-plan.md)): P13.0
+(planning, evaluation design and a measured baseline) approved 2026-10-21 with decisions
+D-38–D-45 (§7); P13.1 (evaluation foundation) authorized. No retrieval or answering
+behaviour has changed.
 
 ---
 
@@ -1224,7 +1225,7 @@ service; real external staging stays a Phase 15 gate.
 ### Phase 13 — Retrieval, Grounding and Answer Quality
 
 §4 "Later phases" row 13. Plan: [phase-13-plan.md](phase-13-plan.md) (P13.0, 2026-10-20,
-**awaiting approval**). Decisions D-38–D-45 (§7) proposed.
+**approved 2026-10-21**). Decisions D-38–D-45 (§7) decided.
 
 **Objective.** Measure the real quality of retrieval and grounded answers, make the
 weaknesses measurable, and improve them without moving SEC-1/SEC-3: authorization stays
@@ -1240,8 +1241,8 @@ evidence can never enter a prompt (G3); every security metric is 0.
 
 | Checkpoint | Scope | Status |
 | ---------- | ----- | ------ |
-| P13.0 | Current architecture, baseline, gaps, evaluation contracts, checkpoints, decisions | Written (docs only), awaiting approval |
-| P13.1 | Evaluation foundation: metrics, item-level baseline and compare | Proposed |
+| P13.0 | Current architecture, baseline, gaps, evaluation contracts, checkpoints, decisions | Approved 2026-10-21 (e9f967d + decisions commit) |
+| P13.1 | Evaluation foundation: metrics, item-level baseline and compare | Authorized 2026-10-21 |
 | P13.2 | Golden set growth, dev/held-out splits, label provenance | Proposed |
 | P13.3 | Relevance gate and abstention calibration | Proposed |
 | P13.4 | Lexical candidate quality and ranking | Proposed |
@@ -1262,7 +1263,7 @@ evidence can never enter a prompt (G3); every security metric is 0.
 | — | Product-design overhaul (frontend only) | **Closed and merged** (27da421, 2026-10-03): D0–D7 complete and approved; `design-direction.md` is the historical record, `design-system.md` v2 is canonical. Inserted before Phase 11 |
 | 11 | Production Deployment, Identity Operations & Reliability | **Closed and merged (143392f, 2026-10-06): built and verified on the local reference stack (P11.0–P11.7); external staging validation deferred to the Phase 15 gate.** **Plan approved 2026-10-03** ([phase-11-plan.md](phase-11-plan.md); decisions D-22–D-27; checkpoints P11.0–P11.7). Production deployment (images, single region, migrations in CI/CD, rollback), production identity and session operations, shared limits, jobs and retention, backups/PITR with tested restore, observability and actionable alerts (including `security_invariant_violated`), production runbooks and drills |
 | 12 | Organization Setup, Identity Configuration & Integrations | **Closed and merged (00a15d2, 2026-10-20).** Plan approved and P12.0 contracts written (2026-10-06; [phase-12-plan.md](phase-12-plan.md)); P12.1–P12.7 delivered (2026-10-08 … 2026-10-19); P12.8 closure delivered (2026-10-20). Customer-facing organization onboarding, SSO and SCIM setup, source/integration and provider (BYOK) setup, zero-to-first-question. Also: **account administration** (creating accounts and mapping them to source account references, today manifest-only — from the former "Accounts workspace"), **evaluation of the next connectors** (call transcripts, CRM notes, GitHub issues, release notes) within integration setup, ~~organization deletion/purge (D-26)~~ → Phase 15 (D-37A), ~~identity-provider migration with differing subjects~~ → post-v1 (D-37B) |
-| 13 | Retrieval, Grounding and Answer Quality | **P13.0 written 2026-10-20, awaiting approval** ([phase-13-plan.md](phase-13-plan.md); checkpoints P13.1–P13.9; decisions D-38–D-45). Measured baseline, evaluation contracts, then relevance gate/abstention, lexical, fusion/selection, optional multi-hop expansion, context/validator, conflicts/temporal |
+| 13 | Retrieval, Grounding and Answer Quality | **In progress: P13.0 approved 2026-10-21** ([phase-13-plan.md](phase-13-plan.md); checkpoints P13.1–P13.9; decisions D-38–D-45). Measured baseline, evaluation contracts, then relevance gate/abstention, lexical, fusion/selection, optional multi-hop expansion, context/validator, conflicts/temporal |
 | 14 | Enterprise-scale hardening | Large-scale, load and adversarial hardening |
 | 15 | GA / v1 closure | Final general-availability closure. **Release gate (D-22 amended 2026-10-05):** real external staging validation (phase-11-plan §21.1: cloud staging deployment, managed-PostgreSQL privileges, managed backup/PITR, public TLS/origin, external OIDC callback, provider-specific deploy/rollback, cloud RPO/RTO) must be completed before v1 GA / production-ready is declared. Also: executable **organization purge** with a platform deletion record (D-37A; semantics in phase-12-plan C14) |
 | — | Former rows 12 (Accounts workspace) and 13 (Next connectors), placed 2026-10-03 (phase-11-plan §27) | *Accounts workspace* meant an account timeline + scoped Ask for account managers. Scoped Ask shipped in Phase 9; account administration → Phase 12 (above); the **account timeline workspace → post-v1, intentionally deferred**: the v1 workflow (product brief §5, §8) is Ask → cited answer → evidence, which account managers already have through scoped Ask, and Phase 0 recorded the timeline as not needed for the first release — the product owner may pull it into Phases 13–15. *Next connectors* → evaluated in Phase 12's integration scope; those not needed for v1 are recorded there as post-v1 |
@@ -1357,14 +1358,14 @@ adds `make audit` (network: vulnerability databases).
 | D-35 | Setup navigation | Phase 12 | **Decided (product owner, 2026-10-06):** durable surfaces — `/settings` (setup record), `/settings/identity`, the providers page, accounts under Access, sources with record pages; no wizard; backend-owned states, no percentages (C12) | Product owner — decided |
 | D-36 | Re-hire after SCIM removal | Phase 12 | **Decided (product owner, 2026-10-06):** administrators reinstate the original membership and directory identity (never by e-mail; conflicts refused) with **least access**, `is_admin` never restored. The operator `member reinstate` keeps restoring prior access as the incident-reversal path — a deliberate, documented difference (C2.3, C18) | Product owner — decided |
 | D-37 | Organization purge (A) and IdP migration with differing subjects (B) | Phase 12 | **B decided (product owner, 2026-10-06):** post-v1, stated in the identity UI. **A decided (engineering, under delegation):** semantics fixed now, executable purge built in **Phase 15** — coherent evidence needs a platform-level deletion record (new architecture) and backup-expiry commitments; suspension is the control until then (C14) | Product owner (A delegated) |
-| D-38 | Reference real configuration for Phase 13 measurement | Phase 13 (P13.0 proposal) | **Proposed:** local `mxbai-embed-large-v1` approved `restricted` (and `internal` for the external-provider egress shape) in an isolated database, embedded once per corpus change, dumped and reused; run alone on the reference machine (phase-13-plan §15) | Product owner |
-| D-39 | Abstention trade-off of the deterministic relevance gate | Phase 13 (P13.3) | **Proposed:** catch ≥ 60% of expected-abstain items before any model call with ≤ 5% false abstention on answerable items (held-out) | Product owner |
-| D-40 | May retrieval use identifiers/terms from permitted retrieved text for one bounded second pass? | Phase 13 (P13.6) | **Proposed: yes, bounded** (one hop, top-k permitted evidence, predicate + E4 on every statement, evidence-derived text inherits its classification for egress, traced, injection-tested). Today identifiers come from the question only | Product owner |
-| D-41 | Who reviews new golden labels | Phase 13 (P13.2) | **Proposed:** the product owner reviews the held-out split before it gates; dev items are engineering-authored and labelled as such | Product owner |
-| D-42 | Phase 13 exit vs the R@10 ≥ 0.90 objective | Phase 13 | **Proposed:** 0.90 stays the product objective; Phase 13 exits on held-out improvements without category regressions > 2 points (phase-13-plan §16) | Product owner |
-| D-43 | Real-model answer evaluation in Phase 13 | Phase 13 (P13.9) | **Proposed:** only with an owner-supplied key, synthetic organizations, manual, never CI, estimated first; otherwise "not measured" | Product owner |
-| D-44 | Judge calibration | Phase 13 (P13.9) | **Proposed:** the owner labels 30 items if D-43 happens; otherwise the judge stays informational | Product owner |
-| D-45 | May Phase 13 change chunking or embedding input (forces a re-embed)? | Phase 13 | **Proposed: not by default;** re-index-only changes first; a re-embed needs measured gains and an owner decision | Product owner |
+| D-38 | Reference real configuration for Phase 13 measurement | Phase 13 (P13.0 proposal) | **Decided (product owner, 2026-10-21):** one isolated local `mxbai-embed-large-v1` embedding reference per corpus version, memory-controlled and reusable (dumped, restored). No local LLM generation (phase-13-plan §15) | Product owner — decided |
+| D-39 | Abstention trade-off of the deterministic relevance gate | Phase 13 (P13.3) | **Decided (product owner, 2026-10-21), provisional:** expected-abstain catch rate ≥ 60%, false abstention ≤ 5%; calibrated on dev data only; held-out results with denominators and uncertainty | Product owner — decided |
+| D-40 | May retrieval use identifiers/terms from permitted retrieved text for one bounded second pass? | Phase 13 (P13.6) | **Approved in principle (product owner, 2026-10-21); not implementation authorization until the P13.6 review.** One bounded deterministic second hop; every candidate authorized inside SQL; evidence-derived text inherits its sensitivity; no unapproved external egress | Product owner — decided |
+| D-41 | Who reviews new golden labels | Phase 13 (P13.2) | **Decided (product owner, 2026-10-21):** engineering prepares labels; the product owner reviews held-out items in batches before they become binding; unreviewed items are never marked `owner_reviewed` | Product owner — decided |
+| D-42 | Phase 13 exit vs the R@10 ≥ 0.90 objective | Phase 13 | **Decided (product owner, 2026-10-21):** R@10 ≥ 0.90 remains a product objective, not a mandatory Phase 13 closure score; closure needs genuine held-out improvements without hidden regressions | Product owner — decided |
+| D-43 | Real-model answer evaluation in Phase 13 | Phase 13 (P13.9) | **Decided (product owner, 2026-10-21):** no real-generation-model evaluation without a separate explicit approval and a cost estimate | Product owner — decided |
+| D-44 | Judge calibration | Phase 13 (P13.9) | **Decided (product owner, 2026-10-21):** deferred unless D-43 is approved | Product owner — decided |
+| D-45 | May Phase 13 change chunking or embedding input (forces a re-embed)? | Phase 13 | **Decided (product owner, 2026-10-21):** no chunking or embedding-input change by default; measured gains and explicit approval required before imposing re-embedding costs | Product owner — decided |
 
 ## 8. Self-review log (Phase 0)
 

@@ -1,10 +1,11 @@
 # Phase 13 — Retrieval, Grounding and Answer Quality: plan
 
 Status: **P13.0 (planning, evaluation design and baseline) written 2026-10-20 on
-`phase/13-retrieval-answer-quality` from `main` 00a15d2. Not approved.** Nothing in this
-document is implemented yet beyond what §4 describes as already built; every
-improvement in §11 is a proposal. Decisions D-38–D-45 (§15) await the product owner.
-P13.1 must not start without explicit approval.
+`phase/13-retrieval-answer-quality` from `main` 00a15d2 (e9f967d); direction approved
+by the product owner 2026-10-21 with decisions D-38–D-45 (§15) and the evaluation
+refinements of §9.1.** Nothing in this document is implemented yet beyond what §4
+describes as already built; every improvement in §11 is a proposal that still needs its
+own checkpoint approval. P13.1 (evaluation foundation) is authorized; P13.2 is not.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 13. Phase 12
 is merged (00a15d2, branch and merge CI green, images published). Phase 14 owns scale and
@@ -330,6 +331,19 @@ semantic, tripwire, fuse_rerank, hydrate, total) p50/p95 from traces; prompt ite
 characters; generation calls, provider-reported tokens. Latency figures name the machine
 and configuration; the M1 is not a production benchmark.
 
+### 9.1 Evaluation refinements (product owner, 2026-10-21)
+
+Binding on every checkpoint, in addition to EC-1–EC-9:
+
+- Category-level **and** item-level regressions stay visible in every report and compare;
+  an aggregate gain never hides an item or category that got worse.
+- Every category and status figure is reported with its denominator.
+- Percentage changes in very small slices (a few items) are not over-interpreted: the
+  item-level change is the finding, not the percentage.
+- Nothing is ever tuned against the held-out split (EC-7).
+- Every authorization or egress security violation is an unconditional blocker, in
+  every configuration and split.
+
 ## 10. Evaluation dataset
 
 **Current set** (`evals/golden/`, 89 items): 14 categories, 11 personas (86 Halden, 3
@@ -385,7 +399,7 @@ records its measurements in evaluation-plan §14+. "Re-index" means `lattice rei
   `retrieval/lexical.py` module docstring (§17); evaluation-plan §5 table states what is
   built.
 - **Non-goals.** Any retrieval or answering behaviour change; new golden items.
-- **Prerequisites.** P13.0 approved.
+- **Prerequisites.** P13.0 approved (2026-10-21).
 - **Acceptance.** Baseline committed; compare reproduces this plan's A numbers exactly
   and flags an injected regression (test); the M1/x86 B difference explained or the
   item recorded as platform-variant; CI time increase ≤ 1 minute; security 0.
@@ -579,18 +593,20 @@ order after P13.2.
 | D (BYOK) | owner's key and quota | synthetic data only; estimate before running: ~96 runs × (~2k input + ~0.5k output tokens) ≈ 200k input / 50k output tokens per full answer eval, ~2× with the judge |
 | Ollama / local LLM | — | **not used** |
 
-## 15. Decisions requiring approval
+## 15. Decisions (approved by the product owner, 2026-10-21)
 
-| ID | Question | Recommendation |
-| -- | -------- | -------------- |
-| **D-38** | Reference real configuration for Phase 13 decisions | Local mxbai, approved `restricted` (C) and `internal` (C′), in an isolated DB, embedded once per corpus/chunker change, dumped and reused; run alone. Alternative: A only, accepting that semantic-side changes (P13.3 floor, P13.5) are decided blind |
-| **D-39** | Abstention trade-off for the deterministic gate | Proposed: catch ≥ 60% of expected-abstain items before any model call, false abstention ≤ 5% of answerable items (held-out). The owner sets the numbers; a stricter gate refuses more real questions |
-| **D-40** | May retrieval use identifiers and terms from **permitted retrieved text** for one bounded second pass? (Today identifiers come from the question only, retrieval-design §2) | Yes, bounded: one hop, top-k permitted evidence only, predicate + E4 on every statement, evidence-derived text inherits its classification for egress, traced, injection-tested. Alternative: no expansion; multi-hop stays a known limitation |
-| **D-41** | Who reviews new golden labels | The product owner reviews the held-out split (~50–60 items) before its numbers gate anything; dev items are engineering-authored and labelled as such |
-| **D-42** | What Phase 13 must achieve against R@10 ≥ 0.90 | Keep 0.90 as the product objective; Phase 13 exit = §16 improvements on held-out for A and C with no category regression > 2 points. Declaring the objective met needs a real-semantic measurement (C, or D) |
-| **D-43** | Any real-model answer evaluation in Phase 13? | Only with a key the owner supplies, synthetic organizations only, manual, never CI, estimated first (§14); otherwise answer quality stays "not measured" and Phase 13 claims only deterministic properties |
-| **D-44** | Judge calibration | Owner labels 30 items (≈1–2 hours) if D-43 happens; without it the judge stays informational |
-| **D-45** | May Phase 13 change chunking or embedding input (forces a re-embed for every organization, a cost for BYOK external providers)? | Not by default: tsv/score changes (re-index only) first; a chunker or embedding-input change needs measured gains on C and an explicit owner decision with the re-embed procedure |
+The P13.0 recommendations were reviewed; these are the binding decisions.
+
+| ID | Question | Decision |
+| -- | -------- | -------- |
+| **D-38** | Reference real configuration for Phase 13 decisions | **Approved:** one isolated local `mxbai-embed-large-v1` embedding reference per corpus version (C, and C′ from the same vectors where the egress shape needs it), memory-controlled (run alone on the M1, never with the test suite), dumped and reused until the corpus, chunker or embedding input changes. **No local LLM generation.** |
+| **D-39** | Abstention trade-off for the deterministic gate | **Provisional acceptance targets:** expected-abstain catch rate ≥ 60%, false abstention ≤ 5% of answerable items. Calibrated on the **dev split only**; held-out results reported with denominators and uncertainty |
+| **D-40** | May retrieval use identifiers and terms from permitted retrieved text for one bounded second pass? | **Approved in principle, not implementation authorization:** one bounded, deterministic second-hop design, to be reviewed at P13.6 before any code. Every candidate is authorized inside SQL; evidence-derived text inherits its sensitivity; no unapproved external egress |
+| **D-41** | Who reviews new golden labels | **Engineering prepares labels; the product owner reviews held-out items in batches** before they become binding. Unreviewed items are never marked `owner_reviewed` |
+| **D-42** | What Phase 13 must achieve against R@10 ≥ 0.90 | **0.90 remains a product objective, not a mandatory Phase 13 closure score.** Closure requires genuine held-out improvements without hidden regressions |
+| **D-43** | Any real-model answer evaluation in Phase 13? | **No real-generation-model evaluation without a separate explicit approval and a cost estimate** |
+| **D-44** | Judge calibration | **Deferred** unless D-43 is approved |
+| **D-45** | May Phase 13 change chunking or embedding input? | **No by default.** Requires measured gains and explicit approval before imposing re-embedding costs |
 
 ## 16. Completion criteria (Phase 13)
 
