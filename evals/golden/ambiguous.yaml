@@ -7,6 +7,11 @@
   category: ambiguous
   persona: priya
   organization: halden
+  label_source: authored_phase3
+  split: held_out
+  owner_review: {batch: H3, status: pending}
+  classes: [ambiguous_account]
+  paraphrase_group: acme-scim-promises
   question: What did we promise Acme?
   same_question_group: promise-acme
   expected:
@@ -19,6 +24,11 @@
   category: ambiguous
   persona: tom
   organization: halden
+  label_source: authored_phase3
+  split: held_out
+  owner_review: {batch: H3, status: pending}
+  classes: [ambiguous_account]
+  paraphrase_group: acme-scim-promises
   question: What did we promise Acme?
   same_question_group: promise-acme
   expected:
@@ -31,6 +41,11 @@
   category: ambiguous
   persona: grace
   organization: halden
+  label_source: authored_phase3
+  split: held_out
+  owner_review: {batch: H1, status: pending}
+  classes: [ambiguous_account]
+  paraphrase_group: acme-renewal-date
   question: When is the Acme renewal?
   expected:
     status: ambiguous
@@ -42,6 +57,9 @@
   category: ambiguous
   persona: tom
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [ambiguous_account]
   question: What did we promise them about the beta?
   expected:
     status: ambiguous
@@ -50,3 +68,42 @@
   notes: >-
     No referent ("them", "the beta"). A clarifying question should offer the Directory
     Sync beta participants (and the answer must not guess). Choices come from Tom's scope.
+
+# --- P13.2 additions (label_source authored_phase13; provisional until owner review) ---
+# The same questions asked by Maya, for whom they are not ambiguous, are in
+# account_visibility.yaml (same_question_group).
+
+- id: ambiguous-acme-sso-priya
+  category: ambiguous
+  persona: priya
+  organization: halden
+  label_source: authored_phase13
+  split: dev
+  classes: [ambiguous_account, paraphrase]
+  same_question_group: acme-sso-question
+  paraphrase_group: acme-sso-problems
+  question: Has Acme had SSO problems with us?
+  expected:
+    status: ambiguous
+    clarification: {choices: [acme-corp, acme-health]}
+    acceptable: [ticket:HAL-4612, ticket:HAL-4815, "chat:C0CSTEAM001:1787135400.000100"]
+  notes: >-
+    "Acme" is an alias of Acme Corp (Okta NameID loop, HAL-4612) and Acme Health (a
+    question about the certificate banner, HAL-4815): both in Priya's scope.
+
+- id: ambiguous-acme-beta-tom
+  category: ambiguous
+  persona: tom
+  organization: halden
+  label_source: authored_phase13
+  split: dev
+  classes: [ambiguous_account]
+  same_question_group: acme-beta-start
+  question: When does Acme's beta start?
+  expected:
+    status: ambiguous
+    clarification: {choices: [acme-corp, acme-health]}
+    acceptable: ["doc:scim-beta-program-plan#2", "doc:acme-health-account-brief#4", "chat:C0SALES0001:day:2026-09-23", ticket:HAL-4777]
+  notes: >-
+    Acme Corp's Directory Sync beta starts 9 November; Acme Health's FHIR connector beta
+    is Q4 with onboarding booked for 14 October. Both are real answers for Tom.

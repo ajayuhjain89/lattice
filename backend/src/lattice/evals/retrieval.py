@@ -38,8 +38,14 @@ Metrics:
 * **Exact-identifier hit** (P13.1): items whose question names the display reference of
   one of their own target records (matched by the operator corpus read, not by the
   retrieval code's extractor); a hit is that record at evidence rank 1.
-* **Precision@k is not computed**: it needs reviewed exhaustive labels, which no golden
-  item has yet (phase-13-plan EC-3, P13.2). The summary says so instead of a number.
+* **Precision@10** (P13.2): only over items with ``exhaustive`` labels (phase-13-plan
+  EC-3; the lint checks each one's candidate review): the share of the first 10 evidence
+  chunks that satisfy a target or an ``acceptable`` key, with the item's ideal (the
+  labelled parts it could reach, at most 10) beside it. Never averaged with other items;
+  every other item has no precision.
+* **Splits and provenance** (P13.2): every block is also reported per split (``dev``,
+  ``held_out``; EC-7) and per label source (EC-8). Held-out results are reported, never
+  tuned against.
 * **Stage latency** (P13.1): the retrieval trace's own stage timings, p50/p95/max. They
   name the machine they ran on; the M1 is not a production benchmark.
 * **Security** (each must be 0, never averaged): chunks the oracle says the persona
@@ -405,6 +411,8 @@ class ItemResult:
     question: str
     same_question_group: str | None
     tags: list[str]
+    split: str | None = None
+    label_source: str | None = None
     error: str | None = None
     semantic_status: str | None = None
     semantic_reason: str | None = None
@@ -419,6 +427,9 @@ class ItemResult:
     # Target records whose display reference the question names; None when there are none.
     identifier_records: list[str] = field(default_factory=list)
     identifier_hit: bool | None = None
+    # Exhaustive items only: hits in the first 10 / 10, and the best reachable value.
+    precision10: float | None = None
+    precision10_ideal: float | None = None
     timings_ms: dict[str, float] = field(default_factory=dict)
     evidence: list[dict[str, Any]] = field(default_factory=list)
     counts: dict[str, int] = field(default_factory=dict)
@@ -563,6 +574,8 @@ async def evaluate_item(
         question=item.question,
         same_question_group=item.same_question_group,
         tags=list(item.tags),
+        split=item.split,
+        label_source=item.label_source,
     )
     wanted = targets(item)
     out.targets = [t.label(item.organization) for t in wanted]
@@ -684,7 +697,23 @@ async def evaluate_item(
         out.reciprocal_rank = 1 / min(firsts) if firsts else 0.0
         _document_metrics(out, wanted, result, corpus, item)
         out.ndcg10 = _ndcg(wanted, acceptable(item), result, corpus)
+    if item.exhaustive:
+        _precision(out, [*wanted, *acceptable(item)], result, corpus)
     return out
+
+
+def _precision(
+    out: ItemResult, labelled: Sequence[Target], result: RetrievalResult, corpus: Corpus
+) -> None:
+    """Precision@10 over an exhaustive item: a chunk counts when it satisfies any target
+    or acceptable key. The ideal is what the labelled chunks of the corpus allow."""
+    refs = _evidence_refs(result, corpus)[:PRIMARY_K]
+    hits = sum(1 for ref in refs if ref is not None and any(t.satisfied_by(ref) for t in labelled))
+    reachable = sum(
+        1 for ref in corpus.chunks.values() if any(t.satisfied_by(ref) for t in labelled)
+    )
+    out.precision10 = hits / PRIMARY_K
+    out.precision10_ideal = min(reachable, PRIMARY_K) / PRIMARY_K
 
 
 def _evidence_refs(result: RetrievalResult, corpus: Corpus) -> list[ChunkRef | None]:
@@ -811,6 +840,17 @@ def _recall_block(results: Sequence[ItemResult]) -> dict[str, Any]:
     return block
 
 
+def _precision_block(results: Sequence[ItemResult]) -> dict[str, Any]:
+    rated = [r for r in results if r.precision10 is not None]
+    if not rated:
+        return {"items": 0, "value": None, "ideal": None}
+    return {
+        "items": len(rated),
+        "value": round(sum(r.precision10 or 0.0 for r in rated) / len(rated), 4),
+        "ideal": round(sum(r.precision10_ideal or 0.0 for r in rated) / len(rated), 4),
+    }
+
+
 def _target_count(result: ItemResult) -> str:
     n = len(result.targets)
     return "3+" if n >= 3 else str(n)
@@ -820,10 +860,14 @@ def summarize(results: Sequence[ItemResult]) -> dict[str, Any]:
     violations = Counter(v["kind"] for r in results for v in r.violations)
     by_category: dict[str, list[ItemResult]] = defaultdict(list)
     by_persona: dict[str, list[ItemResult]] = defaultdict(list)
+    by_split: dict[str, list[ItemResult]] = defaultdict(list)
+    by_source: dict[str, list[ItemResult]] = defaultdict(list)
     groups: dict[str, list[ItemResult]] = defaultdict(list)
     for r in results:
         by_category[r.category].append(r)
         by_persona[r.persona].append(r)
+        by_split[r.split or "unassigned"].append(r)
+        by_source[r.label_source or "unknown"].append(r)
         if r.same_question_group:
             groups[r.same_question_group].append(r)
     channel_hits: Counter[str] = Counter()
@@ -863,6 +907,15 @@ def summarize(results: Sequence[ItemResult]) -> dict[str, Any]:
         "by_category": {c: _recall_block(rs) for c, rs in sorted(by_category.items())},
         "by_persona": {p: _recall_block(rs) for p, rs in sorted(by_persona.items())},
         "by_target_count": {n: _recall_block(rs) for n, rs in sorted(by_target_count.items())},
+        "by_split": {n: _recall_block(rs) for n, rs in sorted(by_split.items())},
+        "by_split_category": {
+            split: {
+                c: _recall_block([r for r in rs if r.category == c])
+                for c in sorted({r.category for r in rs})
+            }
+            for split, rs in sorted(by_split.items())
+        },
+        "by_label_source": {n: _recall_block(rs) for n, rs in sorted(by_source.items())},
         "exact_identifier": {
             "items": len(named),
             "hits_at_rank_1": sum(1 for r in named if r.identifier_hit),
@@ -871,9 +924,9 @@ def summarize(results: Sequence[ItemResult]) -> dict[str, Any]:
             ),
         },
         "precision@10": {
-            "items": 0,
-            "value": None,
-            "reason": "needs reviewed exhaustive labels; no golden item has them (P13.2)",
+            **_precision_block(results),
+            "by_split": {n: _precision_block(rs) for n, rs in sorted(by_split.items())},
+            "labels": "engineering-reviewed exhaustive labels (provisional until owner review)",
         },
         "latency_ms": {
             stage: distribution([r.timings_ms[stage] for r in results if stage in r.timings_ms])
@@ -991,6 +1044,20 @@ def _fmt(value: float | None) -> str:
     return "-" if value is None else f"{value:.3f}"
 
 
+def _precision_text(p: dict[str, Any]) -> str:
+    if not p.get("items"):
+        return "Precision@10: not computed (no item has exhaustive labels)."
+    splits = "; ".join(
+        f"{name} {_fmt(b['value'])} of ideal {_fmt(b['ideal'])} (n {b['items']})"
+        for name, b in p.get("by_split", {}).items()
+        if b["items"]
+    )
+    return (
+        f"Precision@10 over {p['items']} exhaustive items: {_fmt(p['value'])} (ideal "
+        f"{_fmt(p['ideal'])}); {splits}. Labels: {p.get('labels', '-')}."
+    )
+
+
 def render_markdown(report: RetrievalReport) -> str:
     s = report.summary
     lines = [
@@ -1051,6 +1118,10 @@ def render_markdown(report: RetrievalReport) -> str:
     lines += [row(p, b) for p, b in s["by_persona"].items()]
     lines += ["", "### By number of targets", "", *header]
     lines += [row(n, b) for n, b in s["by_target_count"].items()]
+    lines += ["", "### By split (EC-7: held_out is reported, never tuned against)", "", *header]
+    lines += [row(n, b) for n, b in s.get("by_split", {}).items()]
+    lines += ["", "### By label source (EC-8: engineering labels are provisional)", "", *header]
+    lines += [row(n, b) for n, b in s.get("by_label_source", {}).items()]
 
     def doc_row(name: str, b: dict[str, Any]) -> str:
         return (
@@ -1070,8 +1141,7 @@ def render_markdown(report: RetrievalReport) -> str:
         *(doc_row(c, b) for c, b in s["by_category"].items()),
         "",
         f"Exact identifier (target record named by the question at rank 1): "
-        f"{ident['hits_at_rank_1']}/{ident['items']}. Precision@10: not computed "
-        f"({s['precision@10']['reason']}).",
+        f"{ident['hits_at_rank_1']}/{ident['items']}. {_precision_text(s['precision@10'])}",
         "",
         "## Retrieval stage latency (ms; this machine and database, not a benchmark)",
         "",

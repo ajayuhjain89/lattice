@@ -237,6 +237,75 @@ class Clarification(_Strict):
     choices: list[str] = Field(min_length=2)
 
 
+# Label provenance (phase-13-plan EC-8): who authored an item's labels, and whether the
+# product owner has reviewed them. Engineering-authored labels are the maintainers'
+# expectations, not independently verified ground truth.
+LabelSource = Literal["authored_phase3", "authored_phase13", "owner_reviewed"]
+# EC-7: values are chosen on dev only; held_out is reported and never tuned against.
+Split = Literal["dev", "held_out"]
+# The evaluation classes of phase-13-plan §10 an item exercises (an item may exercise
+# several); the lint requires a minimum number of items per class.
+EvalClass = Literal[
+    "paraphrase",
+    "keyword_vs_natural",
+    "identifier_variant",
+    "ambiguous_account",
+    "hidden_account_collision",
+    "multi_document",
+    "multi_account_comparison",
+    "contradictory_evidence",
+    "temporal_supersession",
+    "insufficient_evidence",
+    "egress_withheld",
+    "inaccessible_strong_match",
+    "scoped_retrieval",
+    "injection_misleading",
+    "veridian_cross_tenant",
+]
+CLASS_MINIMUM = 4
+
+
+class OwnerReview(_Strict):
+    """D-41: the product owner reviews held-out items in batches. ``approved`` exists only
+    once the owner has actually approved the item's labels."""
+
+    batch: str = Field(pattern=r"^H[0-9]+$")
+    status: Literal["pending", "approved", "corrections_requested"] = "pending"
+    reviewed_on: date | None = None
+    notes: str | None = None
+
+    @model_validator(mode="after")
+    def _dated(self) -> Self:
+        if (self.status == "pending") != (self.reviewed_on is None):
+            raise ValueError("reviewed_on is set exactly when the review is not pending")
+        return self
+
+
+Candidate = Literal["relevant", "acceptable", "unrelated"]
+
+
+class ExhaustiveReview(_Strict):
+    """The documented review that makes an item's labels exhaustive (EC-3): every part the
+    persona can read inside the item's scope that contains any of ``terms`` (or, with
+    ``scope_all``, every such part at all) is a candidate and is classified; ``extra``
+    lists candidates the reviewer found without a term. The lint recomputes the
+    candidates from the corpus, so a corpus change makes a stale review fail."""
+
+    reviewed_on: date
+    reviewer: Literal["engineering", "product_owner"]
+    terms: list[str] = Field(default_factory=list)
+    scope_all: bool = False
+    candidates: dict[str, Candidate] = Field(min_length=1)
+    extra: list[str] = Field(default_factory=list)
+    notes: str = Field(min_length=10)
+
+    @model_validator(mode="after")
+    def _how(self) -> Self:
+        if bool(self.terms) == self.scope_all:
+            raise ValueError("an exhaustive review uses terms or scope_all (exactly one)")
+        return self
+
+
 class Expected(_Strict):
     status: Status
     status_reason: (
@@ -284,6 +353,29 @@ class GoldenItem(_Strict):
     # checks both), so the easiest match is something the persona may not read.
     trap_phrases: list[str] = Field(default_factory=list)
     notes: str = Field(min_length=10)
+    # Provenance and splits (P13.2; phase-13-plan EC-7, EC-8, D-41). ``split`` may be
+    # missing while an item is being authored (``lattice dataset splits --propose``); the
+    # lint requires it.
+    label_source: LabelSource
+    split: Split | None = None
+    # Items asking for the same information need (the same decisive answer facts),
+    # whatever the wording or persona. With ``same_question_group`` it decides the split
+    # unit: a group never straddles dev and held_out.
+    paraphrase_group: str | None = None
+    classes: list[EvalClass] = Field(default_factory=list)
+    # Precision@k is computed only for exhaustive items (EC-3), which need a review.
+    exhaustive: bool = False
+    exhaustive_review: ExhaustiveReview | None = None
+    owner_review: OwnerReview | None = None
+
+    @model_validator(mode="after")
+    def _provenance(self) -> Self:
+        if self.exhaustive != (self.exhaustive_review is not None):
+            raise ValueError("exhaustive items (and only they) carry an exhaustive_review")
+        approved = self.owner_review is not None and self.owner_review.status == "approved"
+        if (self.label_source == "owner_reviewed") != approved:
+            raise ValueError("label_source owner_reviewed needs an approved owner_review")
+        return self
 
     @model_validator(mode="after")
     def _one_expectation(self) -> Self:
@@ -301,3 +393,18 @@ class GoldenItem(_Strict):
             return sorted(self.expected_by_egress.items())
         assert self.expected is not None  # noqa: S101 - enforced by the validator
         return [(self.egress_config or "default", self.expected)]
+
+
+# Fields that describe an item's place in the evaluation, not its labels: changing them
+# never changes what the item expects (label digests exclude them).
+METADATA_FIELDS = frozenset(
+    {
+        "label_source",
+        "split",
+        "paraphrase_group",
+        "classes",
+        "exhaustive",
+        "exhaustive_review",
+        "owner_review",
+    }
+)

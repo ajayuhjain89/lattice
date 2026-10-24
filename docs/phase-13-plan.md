@@ -4,9 +4,12 @@ Status: **P13.0 (planning, evaluation design and baseline) written 2026-10-20 on
 `phase/13-retrieval-answer-quality` from `main` 00a15d2 (e9f967d); direction approved
 by the product owner 2026-10-21 with decisions D-38–D-45 (§15) and the evaluation
 refinements of §9.1.** **P13.1 (evaluation foundation) delivered 2026-10-21** (§19;
-evaluation-plan §15): measurement only, no retrieval or answering behaviour changed.
-Every improvement in §11 from P13.2 on is a proposal that still needs its own checkpoint
-approval; P13.2 is not authorized.
+evaluation-plan §15): measurement only, no retrieval or answering behaviour changed;
+approved 2026-10-24.** **P13.2 (golden set growth, splits and label provenance)
+delivered 2026-10-24** (§20; evaluation-plan §16): dataset and evaluation infrastructure
+only; engineering complete, the product owner's review of the held-out labels (D-41)
+pending. Every improvement in §11 from P13.3 on still needs its own checkpoint approval;
+P13.3 is not authorized.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 13. Phase 12
 is merged (00a15d2, branch and merge CI green, images published). Phase 14 owns scale and
@@ -391,6 +394,13 @@ fields: `label_source`, `split` (`dev` | `held_out`), `exhaustive`, `paraphrase_
 Split: stratified by category; same-question and paraphrase groups stay in one split;
 held-out ≈ 35%.
 
+**As built (P13.2, 2026-10-24).** 70 new items against the existing corpus (no record was
+added: every class could be expressed with the Phase 3 data), 159 in total. The fields
+above plus `classes` (the §10 class vocabulary, lint-checked against the labels),
+`exhaustive_review` (the documented candidate review) and `owner_review` (D-41 batch and
+status); `paraphrase_group` means "the same information need", not only rewording.
+Rules and procedures: evaluation-plan §3.1; results §16; delivery record §20.
+
 ## 11. Proposed checkpoints
 
 Each checkpoint is one reviewable commit series on this branch, stops for approval, and
@@ -436,6 +446,11 @@ records its measurements in evaluation-plan §14+. "Re-index" means `lattice rei
 - **Security regressions.** New restricted/confidential records carry canaries and
   `must_not_retrieve` for every persona that may not read them; Veridian twins updated.
 - **Resources.** Authoring time; re-sync seconds (A/B), ~6 min for C.
+- **Status: engineering complete 2026-10-24, owner review pending** (§20). 159 items (70
+  new, no corpus change); every §10 class has ≥ 4 new items; held-out 56/159 (35.2%),
+  group-aware; lint passes; security 0 on A, B (both architectures) and answer A; 56
+  held-out items in four review batches, none reviewed yet, so no held-out gate that
+  needs owner approval is active.
 
 ### P13.3 — Relevance gate and abstention calibration (G1, G3, G9)
 
@@ -685,3 +700,31 @@ the golden set grows (golden version changes, so compare refuses old-vs-new unle
 `--allow-golden-change`); new items keep the security fields (`must_not_retrieve`,
 canaries) and the Veridian twins; a C reference (D-38) is not needed for P13.2 itself but
 is for P13.3's semantic floor.
+
+## 20. P13.2 delivery record (2026-10-24)
+
+Dataset and evaluation infrastructure only. Production retrieval, ranking, relevance
+gate, answering, providers, ingestion, chunking and authorization are unchanged; no
+tunable was touched; no corpus record was added. Full results: evaluation-plan §16; rules
+and procedures: evaluation-plan §3.1; runbook "Grow or change the golden set", "Apply the
+product owner's review", "Reproduce configuration B on x86-64", "Configuration C".
+
+| Item | Result |
+| ---- | ------ |
+| Golden set | 159 items (89 Phase 3 + 70 new), 171 runs, 124 with targets; every §10 class has ≥ 4 new items (lint-enforced ≥ 4 per class overall) |
+| New fields | `label_source`, `split`, `paraphrase_group`, `classes`, `exhaustive` + `exhaustive_review`, `owner_review` |
+| Splits | dev 103 / held-out 56 (35.2%), 89 units, group-aware and stratified; every category and class on both sides; no unit or near-duplicate straddles; 19 target records shared across splits (reported) |
+| Provenance | authored_phase3 89, authored_phase13 70, owner_reviewed **0**. Phase 3 labels frozen at their 22fd800 digests (89/89 matched); held-out labels frozen before tuning |
+| Owner review (D-41) | Packet `docs/golden-review/` (H1 14, H2 11, H3 15, H4 16 = 56 items: 34 Phase 3, 22 new), all pending |
+| Exhaustive | 8 items (3 dev, 5 held-out), engineering-reviewed; P@10 A 0.613, B 0.550, C 0.675 (ideal 0.825) |
+| Lint | Provenance and freezes, splits, groups, near-duplicates, owner-review records, classes, exhaustive reviews, contradictory constraints, egress pairs, scope dates; 18 new mutations |
+| Baselines | A, B aarch64, B x86-64, answer A regenerated (`--replace`, reasons, P13.1 digests recorded); previous items: 0 item-level findings in each; new `retrieval-C-aarch64.json` |
+| C (D-38) | Local mxbai approved restricted, whole corpus embedded once (6 min 54 s, watchdog), snapshot dumped and restore-verified; R@10 0.702 (Phase 3 items 0.695 = Phase 5) |
+| Security | Every metric 0 in A, B (both architectures), C and answer A; a new golden test hides each new strong trap and proves the persona's evidence identical (S4) |
+
+**Decisions or blockers before P13.3.** (1) The owner review of the 56 held-out items
+(D-41): until approved, held-out results are reported but gate nothing. (2) Two findings
+need a decision (evaluation-plan §16): the Orbital name in the public beta plan vs
+`visibility-orbital-maya`, and three account-scoped Phase 3 items whose relevant evidence
+the scope excludes. (3) P13.3 itself needs explicit approval; it should calibrate on dev
+only and use the C snapshot for the semantic floor.

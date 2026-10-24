@@ -5,6 +5,11 @@
   category: stale
   persona: maya
   organization: halden
+  label_source: authored_phase3
+  split: held_out
+  owner_review: {batch: H3, status: pending}
+  classes: [temporal_supersession]
+  paraphrase_group: refund-window
   question: What's our Enterprise refund window?
   expected:
     status: answered
@@ -27,6 +32,10 @@
   category: stale
   persona: maya
   organization: halden
+  label_source: authored_phase3
+  split: held_out
+  owner_review: {batch: H3, status: pending}
+  classes: [temporal_supersession]
   question: Which identity provider does Acme Corp use with Halden?
   expected:
     status: answered
@@ -42,6 +51,10 @@
   category: stale
   persona: daniel
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [contradictory_evidence, temporal_supersession]
+  paraphrase_group: audit-streaming-status
   question: Is audit log streaming to Splunk available yet?
   expected:
     status: answered
@@ -57,6 +70,9 @@
   category: stale
   persona: maya
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [multi_document, temporal_supersession, inaccessible_strong_match]
   question: What's the latest with Northpeak Logistics?
   same_question_group: northpeak-latest
   expected:
@@ -79,6 +95,9 @@
   category: stale
   persona: grace
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [multi_document, temporal_supersession]
   question: What's the latest with Northpeak Logistics?
   same_question_group: northpeak-latest
   expected:
@@ -95,6 +114,9 @@
   category: stale
   persona: daniel
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [contradictory_evidence, temporal_supersession]
   question: According to the H2 roadmap, when does Directory Sync ship?
   expected:
     status: answered
@@ -110,6 +132,10 @@
   category: stale
   persona: maya
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [temporal_supersession]
+  paraphrase_group: acme-urgent-response-told
   question: What response time did we tell Acme for urgent issues?
   expected:
     status: answered
@@ -120,3 +146,76 @@
       - "The current policy (2026) is 30 minutes; the 2025 policy has been replaced"
     conflict: {kind: superseded, records: [doc:support-sla-policy-2026, doc:support-sla-policy-2025]}
   notes: The ticket quotes a policy that has since been superseded by metadata.
+
+# --- P13.2 additions (label_source authored_phase13; provisional until owner review) ---
+# "As of" questions narrowed by a date scope, the newest evidence on an account, and a
+# scoped variant of what Acme was told about urgent response times.
+
+- id: temporal-scim-target-mid-august-priya
+  category: stale
+  persona: priya
+  organization: halden
+  label_source: authored_phase13
+  split: dev
+  classes: [temporal_supersession, scoped_retrieval]
+  question: As of mid-August, what was the planned Directory Sync GA date?
+  scope: {until: 2026-08-20}
+  expected:
+    status: answered
+    relevant: [chat:C0SUPPORT01:1786454400.000100]
+    acceptable: ["ticket:HAL-4821#c2", "ticket:HAL-4821#c3", "ticket:HAL-4810#c2", "doc:roadmap-2026-h2#2", "doc:identity-roadmap-2026-04#3"]
+    required_facts:
+      - "October was the target (Tom in #support, 11 August), explicitly not a commitment"
+      - "The published H2 roadmap still said September (release 2026.09)"
+  notes: >-
+    The date scope keeps the later decision record out: the question asks about the past,
+    and the answer must not be "8 December".
+
+- id: temporal-acme-latest-grace
+  category: stale
+  persona: grace
+  organization: halden
+  label_source: authored_phase13
+  split: held_out
+  owner_review: {batch: H4, status: pending}
+  classes: [temporal_supersession, scoped_retrieval, egress_withheld, multi_document]
+  question: What's the latest on Acme and SCIM this week?
+  scope: {account: acme-corp}
+  expected:
+    status: answered
+    relevant: [chat:G0ACCTACME1:1790348400.000100, chat:G0ACCTACME1:1790244300.000100, "ticket:HAL-4944#c1", "ticket:HAL-4821#c6"]
+    not_used_for_answer: ["doc:acme-exec-escalation-notes#4"]
+    acceptable: [chat:C0EXTACME01:1790173800.000100, "ticket:HAL-4821#c7", "ticket:HAL-4944#c3", chat:G0ACCTACME1:1789983000.000100, "doc:acme-exec-escalation-notes#3"]
+    must_not_retrieve: [veridian/ticket:HAL-4821, veridian/doc:acme-account-plan]
+    required_facts:
+      - "23 September: Derek asked on HAL-4821 and in the shared channel whether October still holds (audit fieldwork from 16 November)"
+      - "23-24 September: Acme procurement wants the GA date in writing in the order form (HAL-4944)"
+      - "24 September: Grace told Maya to confirm only the decision-record dates; nothing contractual"
+      - "25 September: Maya plans to call Derek on Monday"
+    freshness: {stale: false, newest_evidence_on: 2026-09-25}
+  tags: [security, confidential, cross_org_same_identifier]
+  notes: >-
+    "This week" is temporal intent (recency). Scoped to Acme Corp because "Acme" alone
+    is ambiguous for Grace. The exec notes' follow-ups (letter to Priscilla by 25
+    September) are confidential and not sent under the default policy.
+
+- id: scoped-acme-urgent-2025-priya
+  category: stale
+  persona: priya
+  organization: halden
+  label_source: authored_phase13
+  split: dev
+  classes: [scoped_retrieval, temporal_supersession, paraphrase]
+  paraphrase_group: acme-urgent-response-told
+  question: What did Acme ask Support about response times in 2025, and what were they told?
+  scope: {account: acme-corp, source_types: [ticket], until: 2025-12-31}
+  expected:
+    status: answered
+    relevant: ["ticket:HAL-3187#c1", "ticket:HAL-3187#c2"]
+    acceptable: ["ticket:HAL-3187#c3"]
+    required_facts:
+      - "On 11 February 2025 Derek asked, for Acme's internal audit, what response time Halden commits to for urgent incidents"
+      - "Support answered 1 hour for P1 and 4 hours for P2 (the 2025 policy, since replaced)"
+  notes: >-
+    Account, source-type and date scope together. 2025's other Acme tickets (invoices,
+    flows, connectors) are in scope but unrelated; the SLA policies are filtered out.

@@ -305,3 +305,29 @@ def test_rates_carry_their_denominator_and_interval() -> None:
     assert proportion(0, 0)["rate"] is None
     low, high = wilson(12, 13) or (0.0, 0.0)
     assert low < 12 / 13 < high <= 1.0
+
+
+def _with_splits(report: dict[str, Any], splits: dict[str, str]) -> dict[str, Any]:
+    out = copy.deepcopy(report)
+    for item in out["items"]:
+        item["split"] = splits[item["id"]]
+    return out
+
+
+SPLITS = {"lookup-a": "dev", "lookup-b": "held_out", "stale-c": "dev"}
+
+
+def test_regressions_are_also_reported_per_split() -> None:
+    """P13.2 (EC-7): the held-out split is a slice of its own, with denominators; a held-out
+    drop is a finding even when the categories hide it."""
+    base = _with_splits(_report(), SPLITS)
+    run = _with_splits(_moved(_report(), "lookup-b", "doc:c#1", 14), SPLITS)
+    result = baseline.compare(base, run)
+    rows = {row["slice"]: row for row in result.categories}
+    assert rows["split:held_out"]["baseline"]["n"] == 1
+    assert rows["split:dev"]["run"]["n"] == 2
+    assert ("split:held_out", "split_regressed") in {(f.item, f.kind) for f in result.regressions}
+    assert not rows["split:dev"].get("regression")
+    # Runs without splits (P13.1 baselines) compare as before: no split rows.
+    plain = baseline.compare(_report(), _moved(_report(), "lookup-b", "doc:c#1", 14))
+    assert not [row for row in plain.categories if row["slice"].startswith("split:")]

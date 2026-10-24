@@ -181,6 +181,8 @@ class AnswerItemResult:
     tags: list[str]
     expected_status: str
     expected_reason: str | None
+    split: str | None = None
+    label_source: str | None = None
     status: str | None = None
     status_reason: str | None = None
     error: str | None = None
@@ -343,6 +345,8 @@ async def evaluate_item(
         tags=list(item.tags),
         expected_status=expected.status,
         expected_reason=expected.status_reason,
+        split=item.split,
+        label_source=item.label_source,
     )
     world = dataset.worlds[item.organization]
     membership = identities.memberships.get((item.organization, item.persona))
@@ -812,6 +816,17 @@ def summarize(results: Sequence[AnswerItemResult]) -> dict[str, Any]:
         "checks": {name: _rate(values) for name, values in sorted(checks.items())},
         "check_counts": {name: len(values) for name, values in sorted(checks.items())},
         "by_category": by_category,
+        # P13.2 (EC-7): every split reported with its denominators; held_out is never tuned.
+        "by_split": {
+            split: {
+                "ran": len(rs),
+                "status_accuracy": _rate([r.checks["status"] is True for r in rs]),
+                "context_recall": foundation(rs)["context_recall"],
+                "abstention": foundation(rs)["abstention"],
+            }
+            for split in sorted({r.split or "unassigned" for r in ran})
+            if (rs := [r for r in ran if (r.split or "unassigned") == split])
+        },
         "generation": {
             "items_with_model_call": len(called),
             "generation_calls": sum(int(r.validation.get("generation_calls", 0)) for r in ran),

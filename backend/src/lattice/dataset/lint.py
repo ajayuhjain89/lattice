@@ -17,7 +17,16 @@ dataset is valid). Nothing here needs a database or a model. Checks, by area:
 * golden set: schema, coverage minimums, personas, scopes, record references, and
   expectations that agree with the reference policy (relevant evidence readable by the
   persona, prohibited evidence not, egress levels, ambiguity choices, hidden accounts,
-  D-8 metadata cases, trap phrases, same-question groups).
+  D-8 metadata cases, trap phrases, same-question groups);
+* golden provenance and splits (P13.2): label sources and the label freezes (Phase 3
+  labels unchanged, held-out labels frozen; ``provenance``), every item in a split with
+  no information need straddling dev and held_out and no near-duplicate questions on
+  different sides (``splits``), owner-review records on held-out items, declared
+  evaluation classes that the labels really exercise (and a minimum per class),
+  exhaustive reviews that cover every candidate the persona can read, and no
+  contradictory or impossible constraints (evidence both wanted and prohibited, facts
+  both required and forbidden, statuses and reasons that disagree, impossible scopes,
+  egress expectations that lose evidence between configurations).
 """
 
 import itertools
@@ -30,17 +39,20 @@ from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 
+from lattice.dataset import provenance, splits
 from lattice.dataset.access import ExpectedAccess, OrgWorld, Unmapped
 from lattice.dataset.distractors import BULK_FILE, render_bulk_tickets
 from lattice.dataset.manifests import (
     AS_OF,
     CANARY,
     CATEGORY_MINIMUMS,
+    CLASS_MINIMUM,
     CONFLICT_AND_SUPERSESSION_MINIMUM,
     KEY_REF,
     AdminGrantsFile,
     CanariesFile,
     Canary,
+    EvalClass,
     Expected,
     GoldenItem,
     GroundTruth,
@@ -507,9 +519,17 @@ def _check_goldens(data: Dataset) -> None:
     if combined < CONFLICT_AND_SUPERSESSION_MINIMUM:
         data.problem(data.golden_dir, "potential conflicts + supersession below minimum")
 
+    golden_items = [item for _, item in data.goldens]
+    ambiguous_units = {
+        item.id
+        for unit in splits.units(golden_items)
+        if any(e.status == "ambiguous" for i in unit for _, e in i.expectations())
+        for item in unit
+    }
     groups: dict[str, list[GoldenItem]] = defaultdict(list)
     for path, item in data.goldens:
         _check_item(data, path, item)
+        _check_classes(data, path, item, ambiguous_units)
         if item.same_question_group:
             groups[item.same_question_group].append(item)
     for name, items in groups.items():
@@ -528,6 +548,113 @@ def _check_goldens(data: Dataset) -> None:
         }
         if len(shapes) < 2:
             data.problem(where, "expectations do not differ between personas")
+    _check_provenance_and_splits(data, golden_items)
+
+
+def _check_provenance_and_splits(data: Dataset, items: list[GoldenItem]) -> None:
+    try:
+        freeze = provenance.load_freeze(data.golden_dir)
+    except (ValueError, KeyError) as exc:
+        data.problem(data.golden_dir / provenance.FREEZE_FILE, f"unreadable: {exc}")
+        freeze = None
+    else:
+        for where, message in provenance.check(items, freeze):
+            data.problem(f"{data.golden_dir}: {where}", message)
+    for problem in splits.check(items):
+        data.problem(f"{data.golden_dir}: {problem.where}", problem.message)
+    for item in items:
+        where = f"{data.golden_dir}: {item.id}"
+        if item.split == "held_out" and item.owner_review is None:
+            data.problem(where, "held-out items carry an owner_review record (D-41)")
+    counts: Counter[str] = Counter(c for item in items for c in item.classes)
+    for name in EvalClass.__args__:  # type: ignore[attr-defined]
+        if counts[name] < CLASS_MINIMUM:
+            data.problem(
+                data.golden_dir, f"class {name}: {counts[name]} items (minimum {CLASS_MINIMUM})"
+            )
+
+
+_IDENTIFIER_LIKE = re.compile(r"[A-Za-z][A-Za-z0-9]{1,15}-[0-9]+|\bticket\s+[0-9]{3,}\b", re.I)
+_MISLEADING_TAGS = {
+    "injection_subtle",
+    "injection_obvious",
+    "foreign_citation",
+    "misleading",
+    "newer_lower_authority",
+    "exfiltration",
+}
+
+
+def supported_classes(data: Dataset, item: GoldenItem, ambiguous_units: set[str]) -> set[str]:
+    """The evaluation classes an item's labels really exercise (a declared class must be
+    one of them; ``paraphrase`` and ``keyword_vs_natural`` also need human judgment)."""
+    world = data.worlds[item.organization]
+    expectations = [e for _, e in item.expectations()]
+    statuses = {e.status for e in expectations}
+    records = splits.target_records(item)
+    accounts: set[str] = set()
+    for e in expectations:
+        accounts |= set(e.hidden_accounts)
+        for key in (*e.relevant, *e.not_used_for_answer, *e.acceptable):
+            found = data.resolve(item.organization, key)
+            if not isinstance(found, str):
+                owner = data.worlds[found[0].organization]
+                if (account := owner.account_of(found[0])) is not None:
+                    accounts.add(f"{found[0].organization}/{account}")
+    same_org_prohibited = any(
+        (match := KEY_REF.fullmatch(key)) is not None
+        and (match["org"] or item.organization) == item.organization
+        for e in expectations
+        for key in e.must_not_retrieve
+    )
+    scope = item.scope
+    out: set[str] = set()
+    if item.paraphrase_group:
+        out |= {"paraphrase", "keyword_vs_natural"}
+    if _IDENTIFIER_LIKE.search(item.question):
+        out.add("identifier_variant")
+    if "ambiguous" in statuses or item.id in ambiguous_units:
+        out.add("ambiguous_account")
+    if any(e.hidden_accounts for e in expectations):
+        out.add("hidden_account_collision")
+    if len(records) >= 3:
+        out.add("multi_document")
+    if len(accounts) >= 2:
+        out.add("multi_account_comparison")
+    if any(e.conflict.kind == "potential_conflict" for e in expectations):
+        out.add("contradictory_evidence")
+    if (
+        any(e.conflict.kind == "superseded" or e.freshness is not None for e in expectations)
+        or scope.since
+        or scope.until
+        or item.category in ("stale", "supersession")
+    ):
+        out.add("temporal_supersession")
+    if statuses & {"insufficient_evidence", "partial"}:
+        out.add("insufficient_evidence")
+    if any(e.not_used_for_answer for e in expectations):
+        out.add("egress_withheld")
+    if same_org_prohibited:
+        out.add("inaccessible_strong_match")
+    if scope.account or scope.source_types or scope.since or scope.until:
+        out.add("scoped_retrieval")
+    if item.category == "prompt_injection" or _MISLEADING_TAGS & set(item.tags):
+        out.add("injection_misleading")
+    if world.slug == "veridian":
+        out.add("veridian_cross_tenant")
+    return out
+
+
+def _check_classes(data: Dataset, path: Path, item: GoldenItem, ambiguous_units: set[str]) -> None:
+    if item.organization not in data.worlds:
+        return
+    where = f"{path.name}: {item.id}"
+    supported = supported_classes(data, item, ambiguous_units)
+    for name in item.classes:
+        if name not in supported:
+            data.problem(where, f"class {name} is not exercised by the item's labels")
+    if len(set(item.classes)) != len(item.classes):
+        data.problem(where, "classes are listed more than once")
 
 
 def _check_item(data: Dataset, path: Path, item: GoldenItem) -> None:
@@ -545,8 +672,178 @@ def _check_item(data: Dataset, path: Path, item: GoldenItem) -> None:
     for phrase in item.trap_phrases:
         if phrase.lower() not in item.question.lower():
             data.problem(where, f"trap phrase {phrase!r} is not in the question")
+    scope = item.scope
+    if scope.since and scope.until and scope.since > scope.until:
+        data.problem(where, "scope since is after until")
+    if any(d is not None and d > AS_OF.date() for d in (scope.since, scope.until)):
+        data.problem(where, "scope dates after the dataset's now")
     for config, expected in item.expectations():
         _check_expectation(data, world, where, item, config, expected)
+        _check_constraints(data, where, item, config, expected)
+    if item.expected_by_egress is not None:
+        _check_egress_pair(data, world, where, item)
+    if item.exhaustive_review is not None:
+        _check_exhaustive(data, world, where, item)
+
+
+_REASONS = {
+    "no_relevant_evidence": {"insufficient_evidence"},
+    "claims_unverified": {"insufficient_evidence"},
+    "egress_policy": {"evidence_only"},
+    "action_request": {"unsupported_request"},
+}
+
+
+def _check_constraints(
+    data: Dataset, where: str, item: GoldenItem, config: str, e: Expected
+) -> None:
+    """Contradictory or impossible label constraints (P13.2)."""
+    where = f"{where} [{config}]"
+    home = item.organization
+
+    def qualified(ref: str, *, record: bool) -> str:
+        match = KEY_REF.fullmatch(ref)
+        if match is None:
+            return ref
+        part = "" if record or match["part"] is None else f"#{match['part']}"
+        return f"{match['org'] or home}/{match['ref']}{part}"
+
+    prohibited = {qualified(k, record=False) for k in e.must_not_retrieve}
+    for label, refs in (
+        ("relevant", e.relevant),
+        ("acceptable", e.acceptable),
+        ("not_used_for_answer", e.not_used_for_answer),
+    ):
+        for ref in refs:
+            if prohibited & {qualified(ref, record=False), qualified(ref, record=True)}:
+                data.problem(where, f"{label} {ref} is also must_not_retrieve")
+    for ref in e.relevant:
+        if ref in e.not_used_for_answer:
+            data.problem(where, f"{ref} is both relevant and not_used_for_answer")
+    for fact in e.required_facts:
+        if fact in e.forbidden_claims:
+            data.problem(where, f"the fact {fact!r} is both required and forbidden")
+    if e.status_reason is not None and e.status not in _REASONS[e.status_reason]:
+        data.problem(where, f"status_reason {e.status_reason} does not fit status {e.status}")
+    undrafted = ("insufficient_evidence", "evidence_only", "unsupported_request", "ambiguous")
+    if e.status in undrafted and e.required_facts:
+        data.problem(where, f"{e.status} items are not drafted from evidence: no required facts")
+    if e.clarification and len(set(e.clarification.choices)) != len(e.clarification.choices):
+        data.problem(where, "clarification choices repeat")
+    if e.clarification and set(e.clarification.choices) & set(e.hidden_accounts):
+        data.problem(where, "an account is both a clarification choice and hidden")
+    if item.scope.account and item.scope.account in e.hidden_accounts:
+        data.problem(where, "the scope account is also hidden")
+    newest = e.freshness.newest_evidence_on if e.freshness else None
+    if newest is not None and newest > AS_OF.date():
+        data.problem(where, "newest evidence is dated after the dataset's now")
+
+
+def _check_egress_pair(data: Dataset, world: OrgWorld, where: str, item: GoldenItem) -> None:
+    """Evidence withheld under the default policy must be accounted for under the
+    confidential opt-in: confidential evidence becomes usable (relevant or acceptable),
+    restricted evidence is still withheld (D-3, D-15)."""
+    assert item.expected_by_egress is not None  # noqa: S101 - caller checks
+    default = item.expected_by_egress["default"]
+    opt_in = item.expected_by_egress["opt_in_confidential"]
+    usable = {_base(k) for k in (*opt_in.relevant, *opt_in.acceptable)}
+    withheld = {_base(k) for k in opt_in.not_used_for_answer}
+    for ref, record in _records(data, world, where, default.not_used_for_answer):
+        level = world.level(record)
+        if level == "restricted" and _base(ref) not in withheld:
+            data.problem(where, f"restricted {ref} must stay not_used_for_answer under opt-in")
+        if level == "confidential" and _base(ref) not in usable:
+            data.problem(where, f"confidential {ref} is lost under opt-in: relevant or acceptable")
+
+
+_KIND_OF_SOURCE = {
+    "doc": {"doc"},
+    "ticket": {"ticket"},
+    "chat": {"chat_thread", "chat_channel_day"},
+}
+
+
+def exhaustive_candidates(data: Dataset, item: GoldenItem) -> set[str]:
+    """Every part the persona can read, inside the item's scope, whose title or text
+    contains one of the review's terms (whole words, case-insensitive)."""
+    assert item.exhaustive_review is not None  # noqa: S101 - caller checks
+    world = data.worlds[item.organization]
+    patterns = [
+        re.compile(rf"(?<![A-Za-z0-9]){re.escape(t)}(?![A-Za-z0-9])", re.IGNORECASE)
+        for t in item.exhaustive_review.terms
+    ]
+    scope = item.scope
+    kinds = {k for t in scope.source_types for k in _KIND_OF_SOURCE[t]}
+    out = set()
+    for record in world.raw.records.values():
+        if not world.can_read(item.persona, record):
+            continue
+        if scope.account and world.account_of(record) != scope.account:
+            continue
+        if kinds and record.kind not in kinds:
+            continue
+        for part in record.parts:
+            day = part.occurred_at.date()
+            if (scope.since and day < scope.since) or (scope.until and day > scope.until):
+                continue
+            text = f"{record.title}\n{part.text}"
+            if item.exhaustive_review.scope_all or any(p.search(text) for p in patterns):
+                out.add(f"{record.key}#{part.anchor}")
+    return out
+
+
+def _expand(data: Dataset, org: str, refs: list[str]) -> set[str]:
+    """Part keys covered by ``refs`` (a record key covers every part)."""
+    out = set()
+    for ref in refs:
+        found = data.resolve(org, ref)
+        if isinstance(found, str):
+            continue
+        record, part = found
+        parts = [part] if part is not None else list(record.parts)
+        out |= {f"{record.key}#{p.anchor}" for p in parts}
+    return out
+
+
+def _check_exhaustive(data: Dataset, world: OrgWorld, where: str, item: GoldenItem) -> None:
+    review = item.exhaustive_review
+    assert review is not None  # noqa: S101 - caller checks
+    scope = item.scope
+    if review.scope_all and not (scope.account or scope.source_types or scope.since or scope.until):
+        data.problem(where, "scope_all needs a scope")
+        return
+    if item.expected_by_egress is not None:
+        data.problem(where, "exhaustive labels need a single expectation")
+        return
+    e = item.expected
+    assert e is not None  # noqa: S101 - one of the two is set
+    found = exhaustive_candidates(data, item)
+    for key in review.extra:
+        resolved = data.resolve(item.organization, key)
+        if isinstance(resolved, str) or resolved[1] is None:
+            data.problem(where, f"exhaustive extra {key} is not a part key")
+        elif not world.can_read(item.persona, resolved[0]):
+            data.problem(where, f"exhaustive extra {key} is not readable by {item.persona}")
+    expected_candidates = found | set(review.extra)
+    listed = set(review.candidates)
+    for key in sorted(expected_candidates - listed):
+        data.problem(where, f"exhaustive review misses candidate {key}")
+    for key in sorted(listed - expected_candidates):
+        data.problem(where, f"exhaustive review lists {key}, which no term or extra yields")
+    wanted = _expand(data, item.organization, [*e.relevant, *e.not_used_for_answer])
+    accepted = _expand(data, item.organization, e.acceptable)
+    for key in sorted(wanted | accepted):
+        if key not in listed:
+            data.problem(where, f"labelled part {key} is not among the reviewed candidates")
+    for key, verdict in sorted(review.candidates.items()):
+        if verdict == "relevant" and key not in wanted:
+            data.problem(where, f"reviewed relevant {key} is not labelled relevant")
+        if verdict == "acceptable" and key not in accepted:
+            data.problem(where, f"reviewed acceptable {key} is not labelled acceptable")
+        if verdict == "unrelated" and key in wanted | accepted:
+            data.problem(where, f"reviewed unrelated {key} is labelled")
+        if key in wanted and verdict != "relevant":
+            data.problem(where, f"labelled relevant {key} is reviewed as {verdict}")
 
 
 def _records(

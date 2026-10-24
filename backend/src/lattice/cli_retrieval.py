@@ -223,6 +223,7 @@ async def eval_retrieval(args: argparse.Namespace) -> int:
         f"R@1 {o['recall@1']} R@5 {o['recall@5']} R@10 {o['recall@10']} "
         f"R@20 {o['recall@20']} MRR {o['mrr']}"
     )
+    p = s["precision@10"]
     print(f"security: {s['security']}")
     print(f"semantic: {s['semantic_outcomes']}; misses: {s['miss_causes_top10']}")
     if report.provider_usage:
@@ -230,7 +231,15 @@ async def eval_retrieval(args: argparse.Namespace) -> int:
     print(
         f"document R@10 {o['document_recall@10']}; nDCG@10 (informational) {o['ndcg@10']}; "
         f"identifier at rank 1 {s['exact_identifier']['hits_at_rank_1']}/"
-        f"{s['exact_identifier']['items']}; precision: not computed (no exhaustive labels)"
+        f"{s['exact_identifier']['items']}; precision@10 {p['value']} of ideal {p['ideal']} "
+        f"over {p['items']} exhaustive items"
+    )
+    print(
+        "by split (held_out is reported, never tuned against): "
+        + "; ".join(
+            f"{name} {b['items_with_targets']} with targets, R@10 {b['recall@10']} MRR {b['mrr']}"
+            for name, b in s["by_split"].items()
+        )
     )
     print(f"database platform: {report.database_platform}; config {report.config_version}")
     if report.embedding_provider == "fake":

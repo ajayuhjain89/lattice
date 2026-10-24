@@ -238,6 +238,14 @@ async def eval_answer(args: argparse.Namespace) -> int:
         f"abstention caught before the model {f['abstention']['catch_before_model']}; "
         f"false abstention {f['abstention']['false_abstention']}"
     )
+    print(
+        "by split (held_out is reported, never tuned against): "
+        + "; ".join(
+            f"{name} {b['ran']} runs, status accuracy {b['status_accuracy']}, context recall "
+            f"{b['context_recall']['macro']}"
+            for name, b in s["by_split"].items()
+        )
+    )
     if s["judge"]:
         print(f"judge (uncalibrated): {s['judge']}")
     if spec.provider == "fake":

@@ -89,10 +89,10 @@ async def test_the_answer_pipeline_reproduces_its_committed_baseline(
     identities: Identities,
     corpus: Corpus,
 ) -> None:
-    """P13.1: configuration A (exact + lexical retrieval, fake extractive generator) per
-    run against ``evals/baselines/answer-A.json``: status, model call, relevant targets
-    in the prompt. Plumbing only -- and the P13.0 finding it pins: no expected-abstain run
-    is stopped before the model (G1)."""
+    """P13.1 (regenerated in P13.2): configuration A (exact + lexical retrieval, fake
+    extractive generator) per run against ``evals/baselines/answer-A.json``: status, model
+    call, relevant targets in the prompt. Plumbing only -- and the P13.0 finding it pins:
+    no expected-abstain run is stopped before the model (G1)."""
     report = await evaluate_answers(
         app_db,
         owner_db,
@@ -109,9 +109,15 @@ async def test_the_answer_pipeline_reproduces_its_committed_baseline(
     result = baseline.compare(reference, baseline.normalize(report))
     assert result.verdict == "identical", baseline.render(result)
     f = report.summary["foundation"]
+    # P13.2 golden set (159 items, 171 runs): still no expected-abstain run is stopped
+    # before the model (25 runs; 13 of them are the Phase 3 runs pinned in P13.1).
     assert f["abstention"]["catch_before_model"]["count"] == 0
-    assert f["abstention"]["catch_before_model"]["n"] == 13
-    assert f["context_recall"]["macro"] == 0.7012
+    assert f["abstention"]["catch_before_model"]["n"] == 25
+    assert f["context_recall"]["macro"] == 0.7063
+    # Both splits are reported with their denominators (EC-7).
+    by_split = report.summary["by_split"]
+    assert set(by_split) == {"dev", "held_out"}
+    assert sum(b["ran"] for b in by_split.values()) == report.summary["ran"]
 
 
 def _ask_deps(harness: Harness) -> AskDependencies:

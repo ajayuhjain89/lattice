@@ -10,6 +10,10 @@
         Validate the synthetic dataset and the golden set (no database, no model).
     lattice dataset generate [--data DIR]
         Regenerate the deterministic bulk distractor tickets.
+    lattice dataset splits [--propose [--write]] [--json]
+    lattice dataset freeze-labels --reason R [--item ID ...] [--phase3-correction]
+    lattice dataset review-packet [--out DIR] [--check]
+        Golden-set splits, label freezes and the owner review packet (cli_dataset).
     lattice sync --org SLUG --sources FILE [--source KEY ...] [--mode full|acl_only]
                  [--dry-run] [--allow-mass-deletion] [--embedding none|fake|local|gemini|openai]
         Apply each source's Lattice configuration from FILE and sync it (ingestion).
@@ -78,6 +82,7 @@ from pydantic import ValidationError
 
 from lattice import (
     cli_answer,
+    cli_dataset,
     cli_deploy,
     cli_identity,
     cli_org,
@@ -349,6 +354,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     lint_cmd.add_argument("--golden", type=Path, default=DATA.parents[1] / "evals" / "golden")
     generate = dataset_commands.add_parser("generate", help="Regenerate bulk distractor tickets")
     generate.add_argument("--data", type=Path, default=DATA)
+    cli_dataset.add_parsers(dataset_commands)
 
     embedding_choices = list(PROVIDER_NAMES)
     sync = commands.add_parser("sync", help="Sync sources (ingestion)")
@@ -388,6 +394,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "dataset":
         if args.dataset_command == "lint":
             return _dataset_lint(args.data, args.golden)
+        if args.dataset_command in ("splits", "freeze-labels", "review-packet"):
+            return cli_dataset.run(args)
         for path in write_bulk_tickets(args.data):
             print(f"wrote {path}")
         return 0

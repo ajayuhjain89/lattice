@@ -21,6 +21,7 @@ from dataclasses import replace
 from typing import Any
 
 import pytest
+from sqlalchemy import text
 
 from lattice.cli_retrieval import BASELINES
 from lattice.dataset.lint import Dataset, load_dataset
@@ -43,10 +44,13 @@ from lattice.retrieval import DEFAULT_CONFIG, RetrievalConfig
 
 from ...ingestion.conftest import DATA, GOLDEN
 
-ITEMS = [item.id for item in select_items(load_dataset(DATA, GOLDEN))]
+GOLDENS = select_items(load_dataset(DATA, GOLDEN))
+ITEMS = [item.id for item in GOLDENS]
+PHASE3 = {item.id for item in GOLDENS if item.label_source == "authored_phase3"}
 
-# Measured on this corpus with this configuration (retrieval-6); a drop below fails CI.
-# The per-item baselines below are the exact check; these floors are the coarse one.
+# Measured on this corpus with this configuration (retrieval-6) over the 89 Phase 3 items
+# (the historical benchmark; P13.2 added items are pinned per item by the baselines); a
+# drop below fails CI. The per-item baselines below are the exact check, these the coarse.
 FLOOR_R10_FAKE = 0.49  # measured 0.5123 on an aarch64 database, 0.5172 on x86-64
 FLOOR_R10_LEXICAL_ONLY = 0.64  # measured 0.6679 on both
 
@@ -113,12 +117,17 @@ def test_security_metrics_are_zero(
 def test_recall_does_not_regress(
     with_semantic: dict[str, ItemResult], lexical_only: dict[str, ItemResult]
 ) -> None:
-    fake = _summary(with_semantic)["overall"]
-    lexical = _summary(lexical_only)["overall"]
-    print(f"\nR@10 fake {fake['recall@10']}, exact+lexical {lexical['recall@10']}")
+    fake = summarize([r for i, r in with_semantic.items() if i in PHASE3])["overall"]
+    lexical = summarize([r for i, r in lexical_only.items() if i in PHASE3])["overall"]
+    print(f"\nPhase 3 items R@10 fake {fake['recall@10']}, exact+lexical {lexical['recall@10']}")
     assert fake["items_with_targets"] == lexical["items_with_targets"] == 68
     assert fake["recall@10"] >= FLOOR_R10_FAKE
     assert lexical["recall@10"] >= FLOOR_R10_LEXICAL_ONLY
+    # Every item is reported by split and label source, with denominators (EC-7, EC-8).
+    s = _summary(lexical_only)
+    assert set(s["by_split"]) == {"dev", "held_out"}
+    assert sum(b["items"] for b in s["by_split"].values()) == len(ITEMS)
+    assert s["by_label_source"]["authored_phase3"]["items_with_targets"] == 68
 
 
 def test_semantic_ran_for_every_item(with_semantic: dict[str, ItemResult]) -> None:
@@ -136,7 +145,8 @@ def test_same_question_groups_give_each_persona_only_their_own_evidence(
     with_semantic: dict[str, ItemResult], dataset: Dataset
 ) -> None:
     groups = _summary(with_semantic)["same_question_groups"]
-    assert len(groups) == 10
+    assert len(groups) == len({i.same_question_group for i in GOLDENS if i.same_question_group})
+    assert len(groups) >= 10
     differing = 0
     for group, g in groups.items():
         personas = g["personas"]
@@ -290,7 +300,7 @@ def test_cross_org_items_never_see_the_other_tenant(with_semantic: dict[str, Ite
     for item_id, result in with_semantic.items():
         assert not [v for v in result.violations if v["kind"] == "cross_org"], item_id
     veridian = [r for r in with_semantic.values() if r.organization == "veridian"]
-    assert len(veridian) == 3
+    assert len(veridian) == sum(1 for i in GOLDENS if i.organization == "veridian") >= 13
     for r in veridian:
         assert all(not e["record"].startswith("veridian/") for e in r.evidence)
 
@@ -318,7 +328,7 @@ def test_injection_items_retrieve_their_evidence_as_plain_data(
     with_semantic: dict[str, ItemResult], dataset: Dataset
 ) -> None:
     injections = [r for r in with_semantic.values() if r.category == "prompt_injection"]
-    assert len(injections) == 4
+    assert len(injections) == sum(1 for i in GOLDENS if i.category == "prompt_injection") >= 4
     for r in injections:
         assert r.violations == []
     # Injection-bearing records are returned as ordinary evidence when relevant...
@@ -369,8 +379,9 @@ def test_configuration_a_reproduces_its_committed_baseline_exactly(
     reference = baseline.load(BASELINES / "retrieval-A.json")
     result = baseline.compare(reference, run)
     assert result.verdict == "identical", baseline.render(result)
-    assert reference["summary"]["overall"]["recall@10"] == 0.6679
-    assert reference["summary"]["overall"]["mrr"] == 0.6405
+    # The Phase 3 items still give P13.0's numbers exactly (P13.2 only added items).
+    phase3 = reference["summary"]["by_label_source"]["authored_phase3"]
+    assert (phase3["recall@10"], phase3["mrr"]) == (0.6679, 0.6405)
 
 
 async def test_configuration_b_reproduces_the_baseline_of_this_database_architecture(
@@ -446,3 +457,90 @@ async def test_compare_catches_an_injected_regression(
     # Reports and comparisons carry keys and ranks, never question or evidence text.
     rendered = baseline.render(declared) + json.dumps(declared.to_json())
     assert not any(item.question in rendered for item in select_items(dataset))
+
+
+# --- P13.2: exhaustive labels and hidden strong matches -------------------------------------
+
+
+def test_precision_is_computed_for_exhaustive_items_only(
+    lexical_only: dict[str, ItemResult],
+) -> None:
+    exhaustive = {i.id for i in GOLDENS if i.exhaustive}
+    assert len(exhaustive) >= 8
+    for item_id, result in lexical_only.items():
+        if item_id in exhaustive:
+            assert result.precision10 is not None, item_id
+            assert result.precision10_ideal is not None, item_id
+            assert 0 <= result.precision10 <= result.precision10_ideal <= 1, item_id
+        else:
+            assert result.precision10 is None, item_id
+    precision = _summary(lexical_only)["precision@10"]
+    assert precision["items"] == len(exhaustive)
+
+
+# P13.2 items whose strongest match is a record the persona may not read (same tenant).
+STRONG_TRAPS = [
+    item.id
+    for item in GOLDENS
+    if item.label_source == "authored_phase13"
+    and item.trap_phrases
+    and {"unauthorized_more_relevant", "restricted_contains_answer"} & set(item.tags)
+]
+
+
+async def test_a_hidden_strong_match_changes_nothing_the_persona_receives(
+    app_db: Database,
+    owner_db: Database,
+    dataset: Dataset,
+    identities: Identities,
+    corpus: Corpus,
+    lexical_only: dict[str, ItemResult],
+) -> None:
+    """S4 / SEC-5 over the new traps: with the forbidden same-tenant records removed from
+    the corpus, each persona's evidence, ranks, scores and channel counts are identical --
+    the unreadable match never influenced matching or ranking."""
+    from lattice.evals.retrieval import forbidden
+
+    items = {item.id: item for item in GOLDENS}
+    assert len(STRONG_TRAPS) >= 4
+    for item_id in STRONG_TRAPS:
+        item = items[item_id]
+        org_id = identities.org_ids[item.organization]
+        hidden = sorted(
+            t.record.split(":", 1)[1]
+            for t in forbidden(item)
+            if t.organization == item.organization
+        )
+        assert hidden, item_id
+        before = lexical_only[item_id]
+        try:
+            async with owner_db.tenant_transaction(org_id) as s:
+                await s.execute(
+                    text(
+                        "UPDATE documents SET status = 'deleted' "
+                        "WHERE organization_id = :o AND external_id = ANY(:ids)"
+                    ),
+                    {"o": org_id, "ids": hidden},
+                )
+            after = await evaluate_item(
+                app_db,
+                item,
+                dataset=dataset,
+                identities=identities,
+                corpus=corpus,
+                provider=None,
+                config=DEFAULT_CONFIG,
+                now=AS_OF,
+            )
+        finally:
+            async with owner_db.tenant_transaction(org_id) as s:
+                await s.execute(
+                    text(
+                        "UPDATE documents SET status = 'active' "
+                        "WHERE organization_id = :o AND external_id = ANY(:ids)"
+                    ),
+                    {"o": org_id, "ids": hidden},
+                )
+        assert after.violations == []
+        assert after.evidence == before.evidence, item_id
+        assert after.counts == before.counts, item_id

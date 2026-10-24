@@ -410,6 +410,142 @@ MUTATIONS: dict[str, tuple[Mutation, str]] = {
         ),
         "undeclared canary LATTICE-CANARY-C01-000000",
     ),
+    # golden provenance, splits, classes, exhaustive labels, constraints (P13.2)
+    "golden Phase 3 label changed": (
+        lambda d, g: _golden(
+            g,
+            "lookup.yaml",
+            'required_facts: ["15 December 2026"]',
+            'required_facts: ["16 December 2026"]',
+        ),
+        "lookup-acme-renewal-date: Phase 3 labels changed",
+    ),
+    "golden frozen held-out label changed": (
+        lambda d, g: _golden(
+            g,
+            "conflicts_and_supersession.yaml",
+            '"30 days: refund policy v1 (effective',
+            '"31 days: refund policy v1 (effective',
+        ),
+        "temporal-refund-may-2025-tom: frozen held-out labels changed",
+    ),
+    "golden label freeze missing": (
+        lambda d, g: (g / "provenance" / "label-freeze.json").unlink(),
+        "missing: run `lattice dataset freeze-labels`",
+    ),
+    "golden item without a split": (
+        lambda d, g: _golden(
+            g,
+            "ai_egress.yaml",
+            "  split: dev\n  classes: [egress_withheld]\n",
+            "  classes: [egress_withheld]\n",
+        ),
+        "no split",
+    ),
+    "golden information need straddling the splits": (
+        lambda d, g: _golden(
+            g,
+            "lookup.yaml",
+            "  split: dev\n  classes: [keyword_vs_natural, inaccessible_strong_match]",
+            "  split: held_out\n  owner_review: {batch: H1, status: pending}\n  classes: [keyword_vs_natural, inaccessible_strong_match]",
+        ),
+        "one information need straddles dev and held_out",
+    ),
+    "golden held-out item without an owner review": (
+        lambda d, g: _golden(
+            g, "lookup.yaml", "  owner_review: {batch: H1, status: pending}\n", ""
+        ),
+        "held-out items carry an owner_review record",
+    ),
+    "golden owner_reviewed without an approved review": (
+        lambda d, g: _golden(
+            g,
+            "lookup.yaml",
+            "  label_source: authored_phase13\n  split: held_out\n  owner_review: {batch: H1, status: pending}",
+            "  label_source: owner_reviewed\n  split: held_out\n  owner_review: {batch: H1, status: pending}",
+        ),
+        "label_source owner_reviewed needs an approved owner_review",
+    ),
+    "golden paraphrase group of one": (
+        lambda d, g: _golden(
+            g,
+            "conflicts_and_supersession.yaml",
+            "paraphrase_group: scim-design-current",
+            "paraphrase_group: scim-design-alone",
+        ),
+        "paraphrase group scim-design-alone: needs at least two items",
+    ),
+    "golden class the labels do not exercise": (
+        lambda d, g: _golden(
+            g,
+            "lookup.yaml",
+            "  classes: [keyword_vs_natural]\n",
+            "  classes: [keyword_vs_natural, scoped_retrieval]\n",
+        ),
+        "kw-eu-region-maya: class scoped_retrieval is not exercised",
+    ),
+    "golden class below its minimum": (
+        lambda d, g: _golden(g, "lookup.yaml", "  classes: [keyword_vs_natural]\n", ""),
+        "class keyword_vs_natural: 3 items (minimum 4)",
+    ),
+    "golden exhaustive review missing a candidate": (
+        lambda d, g: _golden(g, "cross_org.yaml", '      "ticket:HAL-4533#c1": unrelated\n', ""),
+        "exhaustive review misses candidate ticket:HAL-4533#c1",
+    ),
+    "golden exhaustive review contradicting the labels": (
+        lambda d, g: _golden(
+            g,
+            "cross_org.yaml",
+            '      "doc:refund-policy-v2#2": relevant\n',
+            '      "doc:refund-policy-v2#2": unrelated\n',
+        ),
+        "labelled relevant doc:refund-policy-v2#2 is reviewed as unrelated",
+    ),
+    "golden evidence both wanted and prohibited": (
+        lambda d, g: _golden(
+            g,
+            "lookup.yaml",
+            'relevant: ["doc:eu-data-residency-decision#2"]\n    acceptable: ["doc:eu-data-residency-decision#5"',
+            'relevant: ["doc:eu-data-residency-decision#2"]\n    must_not_retrieve: ["doc:eu-data-residency-decision#2"]\n    acceptable: ["doc:eu-data-residency-decision#5"',
+        ),
+        "relevant doc:eu-data-residency-decision#2 is also must_not_retrieve",
+    ),
+    "golden fact both required and forbidden": (
+        lambda d, g: _golden(
+            g,
+            "lookup.yaml",
+            'required_facts: ["GA of the Frankfurt (eu-central-1) region is planned for Q1 2027"]',
+            'required_facts: ["GA of the Frankfurt (eu-central-1) region is planned for Q1 2027"]\n    forbidden_claims: ["GA of the Frankfurt (eu-central-1) region is planned for Q1 2027"]',
+        ),
+        "is both required and forbidden",
+    ),
+    "golden status reason that does not fit the status": (
+        lambda d, g: _golden(
+            g,
+            "insufficient_and_refusal.yaml",
+            "status_reason: no_relevant_evidence",
+            "status_reason: egress_policy",
+        ),
+        "status_reason egress_policy does not fit status insufficient_evidence",
+    ),
+    "golden confidential evidence lost under the opt-in": (
+        lambda d, g: _golden(
+            g,
+            "ai_egress.yaml",
+            'relevant: ["doc:exec-offsite-notes-2026-09#3"]\n      acceptable: ["doc:fy2027-headcount-plan#3"]',
+            'relevant: ["doc:fy2027-headcount-plan#3"]',
+        ),
+        "confidential doc:exec-offsite-notes-2026-09#3 is lost under opt-in",
+    ),
+    "golden scope dates in the wrong order": (
+        lambda d, g: _golden(
+            g,
+            "stale.yaml",
+            "scope: {until: 2026-08-20}",
+            "scope: {since: 2026-09-01, until: 2026-08-20}",
+        ),
+        "scope since is after until",
+    ),
 }
 
 

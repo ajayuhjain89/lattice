@@ -5,6 +5,10 @@
   category: cross_source
   persona: tom
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [multi_document, inaccessible_strong_match]
+  paraphrase_group: scim-delay-reason
   question: Why was Directory Sync delayed?
   same_question_group: why-scim-delayed
   expected:
@@ -27,6 +31,9 @@
   category: cross_source
   persona: priya
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [inaccessible_strong_match]
   question: Why was Directory Sync delayed?
   same_question_group: why-scim-delayed
   expected:
@@ -47,6 +54,9 @@
   category: cross_source
   persona: maya
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [inaccessible_strong_match]
   question: Why was Directory Sync delayed?
   same_question_group: why-scim-delayed
   expected:
@@ -65,6 +75,10 @@
   category: cross_source
   persona: priya
   organization: halden
+  label_source: authored_phase3
+  split: held_out
+  owner_review: {batch: H2, status: pending}
+  classes: [multi_document, contradictory_evidence, inaccessible_strong_match]
   question: What happened with the Kestrel SSO outage?
   same_question_group: kestrel-outage
   expected:
@@ -87,6 +101,11 @@
   category: cross_source
   persona: daniel
   organization: halden
+  label_source: authored_phase3
+  split: held_out
+  owner_review: {batch: H2, status: pending}
+  classes: [multi_document, inaccessible_strong_match]
+  paraphrase_group: kestrel-incident-window
   question: What happened with the Kestrel SSO outage?
   same_question_group: kestrel-outage
   expected:
@@ -106,6 +125,9 @@
   category: cross_source
   persona: daniel
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [multi_document]
   question: Is Brightwater Health in the SCIM beta, and what have we told them?
   expected:
     status: answered
@@ -121,6 +143,10 @@
   category: cross_source
   persona: priya
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [temporal_supersession]
+  paraphrase_group: larkspur-refund
   question: What was Larkspur told about their refund, and was it consistent with our policy?
   expected:
     status: answered
@@ -140,6 +166,10 @@
   category: cross_source
   persona: maya
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [multi_document]
+  paraphrase_group: acme-sso-problems
   question: What SSO problems has Acme Corp had since going live?
   expected:
     status: answered
@@ -158,6 +188,9 @@
   category: cross_source
   persona: maya
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [multi_document, inaccessible_strong_match]
   question: What can I tell Acme's procurement team about the SCIM date for the order form?
   expected:
     status: answered
@@ -173,3 +206,153 @@
   notes: >-
     The confidential exec notes say exactly what may go into the order form (the credit,
     the flat renewal) after legal review. Maya must get the decision-record answer only.
+
+# --- P13.2 additions (label_source authored_phase13; provisional until owner review) ---
+# Group "compare-scim-acme-brightwater": a two-account comparison asked by Support (both
+# accounts visible) and by Daniel (Brightwater only; Acme is outside his scope).
+
+- id: xsrc-scim-askers-tom
+  category: cross_source
+  persona: tom
+  organization: halden
+  label_source: authored_phase13
+  split: held_out
+  owner_review: {batch: H2, status: pending}
+  classes: [multi_document, multi_account_comparison, paraphrase, inaccessible_strong_match]
+  paraphrase_group: scim-customers-told
+  question: Which customers have asked for Directory Sync, and what were they told?
+  expected:
+    status: answered
+    relevant: ["ticket:HAL-4821#c3", "ticket:HAL-4810#c5", "ticket:HAL-4930#c2", "doc:acme-kickoff-call-notes#3"]
+    acceptable: ["ticket:HAL-4810#c2", ticket:HAL-4870, "doc:scim-ga-decision#4", "doc:weekly-support-report-2026-09-21#2", chat:C0SUPPORT01:1786454400.000100, "ticket:HAL-4930#c4", "doc:identity-roadmap-2026-04#5", "ticket:HAL-4821#c5"]
+    must_not_retrieve: [doc:project-tern-memo, veridian/ticket:HAL-4821]
+    required_facts:
+      - "Acme Corp: Q3 at the June kickoff, then 'expected in October' on HAL-4821 (14 August); the ticket has not been updated since"
+      - "Brightwater Health: 'expected in October' (12 August), corrected on 22 September to December GA with a beta from 16 November"
+      - "Kestrel Bank: the December macro on HAL-4930 (21 September); not in the beta"
+  tags: [security]
+  notes: >-
+    Superset of xdoc-scim-october-customers (one information need, so one split).
+    Orbital Freight lists SCIM as a requirement on its trial ticket but was told no
+    date there.
+
+- id: xsrc-kestrel-timeline-daniel
+  category: cross_source
+  persona: daniel
+  organization: halden
+  label_source: authored_phase13
+  split: held_out
+  owner_review: {batch: H2, status: pending}
+  classes: [multi_document, paraphrase, inaccessible_strong_match]
+  paraphrase_group: kestrel-since-july
+  question: Give me a timeline of the Kestrel relationship since the July outage.
+  expected:
+    status: answered
+    relevant: ["ticket:HAL-4711#c5", "chat:C0ACCTKES01:day:2026-08-05", chat:C0ACCTKES01:1788526800.000100, chat:C0ACCTKES01:1789143600.000100, "chat:C0ACCTKES01:day:2026-09-22"]
+    acceptable: ["doc:kestrel-account-brief#4", "chat:C0ACCTKES01:day:2026-07-22", "chat:C0ACCTKES01:day:2026-07-28", "chat:C0ACCTKES01:day:2026-08-12", ticket:HAL-4889, ticket:HAL-4902, ticket:HAL-4930, "doc:kestrel-sso-incident-customer-rca#6", "ticket:HAL-4711#c3"]
+    must_not_retrieve: [doc:kestrel-renewal-risk-2026, chat:G0EXECESC01:1789146000.000100, doc:renewal-risk-register-2026-q3, doc:postmortem-inc-2026-031]
+    required_facts:
+      - "28 July: RCA sent; one month's service credit applied to the August invoice"
+      - "4 September: new 'assertion expired' errors (HAL-4889), which Kestrel sees as the incident continuing"
+      - "11 September: Kestrel's risk committee wants a vendor review and a competing quote"
+      - "22 September: Martin asked about SCIM timing; Kestrel is not in the beta"
+    must_not_contain: [LATTICE-CANARY-C02-8c41f0]
+  tags: [security, unauthorized_more_relevant]
+  trap_phrases: [Kestrel]
+  notes: >-
+    Same information need as xdoc-kestrel-account-channel, wider. The confidential
+    renewal assessment and the exec channel are the most complete timeline and are
+    Leadership-only.
+
+- id: compare-scim-acme-brightwater-priya
+  category: cross_source
+  persona: priya
+  organization: halden
+  label_source: authored_phase13
+  split: dev
+  classes: [multi_account_comparison, multi_document, inaccessible_strong_match]
+  same_question_group: compare-scim-acme-brightwater
+  question: How do Acme Corp's and Brightwater Health's Directory Sync situations compare?
+  expected:
+    status: answered
+    relevant: ["ticket:HAL-4821#c5", "ticket:HAL-4810#c5", "doc:scim-beta-program-plan#2"]
+    acceptable: ["ticket:HAL-4821#c3", "ticket:HAL-4810#c2", "doc:scim-ga-decision#2", "doc:scim-ga-decision#4", chat:C0ANNOUNC01:1789741800.000100, "doc:acme-account-brief#5", "doc:brightwater-account-brief#4", "ticket:HAL-4821#c6"]
+    must_not_retrieve: [doc:acme-exec-escalation-notes, veridian/ticket:HAL-4821, veridian/doc:scim-ga-decision]
+    required_facts:
+      - "Both were told 'expected in October' by Support in August"
+      - "Brightwater's ticket was updated on 22 September: December GA, beta from 16 November (one hospital, about 400 users)"
+      - "Acme's ticket still has no new date: Support is holding the update (21 September); Acme's beta starts 9 November"
+  tags: [security, cross_org_same_identifier]
+  notes: >-
+    A two-account comparison across tickets and the beta plan. Veridian promised the
+    same Acme an October beta under its own decision record with the same ID.
+
+- id: scoped-brightwater-september-daniel
+  category: cross_source
+  persona: daniel
+  organization: halden
+  label_source: authored_phase13
+  split: dev
+  classes: [scoped_retrieval, temporal_supersession, multi_document]
+  question: What's happened with Brightwater this month?
+  scope: {account: brightwater-health, since: 2026-09-01}
+  expected:
+    status: answered
+    relevant: ["chat:C0ACCTBRW01:day:2026-09-18", "chat:C0ACCTBRW01:day:2026-09-21", "chat:C0ACCTBRW01:day:2026-09-22"]
+    acceptable: ["ticket:HAL-4810#c4", "ticket:HAL-4810#c5"]
+    must_not_retrieve: [veridian/ticket:HAL-4889, veridian/ticket:HAL-4702]
+    required_facts:
+      - "18 September: Brightwater is in the Directory Sync beta from 16 November"
+      - "21 September: Karen accepted the November beta and December GA, and wants the audit log streaming beta"
+      - "22 September: Marcus Doyle wants a security review of the beta setup before connecting Entra ID"
+  tags: [security, cross_org_same_name]
+  notes: >-
+    Account and date scope; "this month" adds recency intent. Veridian's Brightwater
+    had a September login loop at another tenant.
+
+- id: para-scim-v1-failure-sofia
+  category: cross_source
+  persona: sofia
+  organization: halden
+  label_source: authored_phase13
+  split: dev
+  classes: [paraphrase, inaccessible_strong_match, multi_document]
+  paraphrase_group: scim-delay-reason
+  question: What went wrong with the first SCIM design?
+  expected:
+    status: answered
+    relevant: ["doc:directory-sync-rewrite-rfc#2", chat:G0PRODIDEN1:1788430500.000100, "doc:scim-provisioning-worker-design#5"]
+    acceptable: ["doc:scim-ga-decision#3", "chat:G0PRODIDEN1:day:2026-08-28", "doc:directory-sync-rewrite-rfc#5", "doc:directory-sync-rewrite-rfc#1", "doc:scim-provisioning-worker-design#3"]
+    must_not_retrieve: [doc:project-tern-memo]
+    required_facts:
+      - "Okta's PATCH group changes became full reconciliation jobs: a p95 provisioning lag of 38 minutes at 20,000 users (target under 2 minutes)"
+      - "The shared job queue did not order user and group jobs: 0.4% of test users ended up in the wrong groups"
+      - "Deprovisioning waited behind data-flow jobs; the May design had listed ordering and untested PATCH traffic as risks"
+    must_not_contain: [Quillmark, LATTICE-CANARY-T-91d2e7]
+  tags: [security, restricted_contains_answer]
+  trap_phrases: [SCIM]
+  notes: >-
+    Paraphrase of "why was Directory Sync delayed" from the engineering side, without
+    its words. The restricted Tern memo calls the rewrite a delivery risk.
+
+- id: kw-scim-load-test-tom
+  category: cross_source
+  persona: tom
+  organization: halden
+  label_source: authored_phase13
+  split: dev
+  classes: [keyword_vs_natural, multi_document]
+  paraphrase_group: scim-delay-reason
+  question: SCIM load test p95 lag 20k users
+  expected:
+    status: answered
+    relevant: [chat:G0PRODIDEN1:1788430500.000100, "chat:G0PRODIDEN1:day:2026-08-28", "doc:directory-sync-rewrite-rfc#2"]
+    acceptable: ["doc:scim-beta-program-plan#4", "doc:scim-ga-decision#3", "doc:directory-sync-rewrite-rfc#4"]
+    must_not_retrieve: [doc:project-tern-memo]
+    required_facts:
+      - "38 minutes p95 provisioning lag at 20,000 users in both rounds (28 August and 3 September), against a target under 2 minutes"
+      - "The GA exit criterion is p95 under 2 minutes at 25,000 users"
+  tags: [security, keyword_query]
+  notes: >-
+    Keyword form with numbers ("20k", "p95") that the corpus writes as "20,000 users"
+    and "p95": lexical matching depends on how numbers tokenize.

@@ -10,7 +10,9 @@ information they are authorized to see.
 known quality gaps, evaluation contracts, checkpoints and decisions D-38–D-45 — is in
 [docs/phase-13-plan.md](docs/phase-13-plan.md) and was approved 2026-10-21; P13.1 (the
 evaluation foundation: new metrics, item-level baselines, `lattice eval compare`) is
-delivered. No retrieval or answering behaviour has changed. History: Phases 1–11 and the frontend product-design overhaul (D0–D7,
+approved; P13.2 (159 golden items with dev/held-out splits, label provenance and an owner
+review packet in [docs/golden-review/](docs/golden-review/)) is delivered, its held-out
+review pending. No retrieval or answering behaviour has changed. History: Phases 1–11 and the frontend product-design overhaul (D0–D7,
 [design direction](docs/design-direction.md)) is merged; [design system
 v2](docs/design-system.md) is canonical. Phase 11 (Production Deployment, Identity
 Operations & Reliability) was verified on a local production-shaped stack only: real
@@ -446,8 +448,9 @@ apps/web/           Next.js web app (src/: app routes, components, API client; e
 infra/postgres/     superuser bootstrap: roles, databases, extensions (also copied into the backend image)
 data/synthetic/     synthetic organizations: manifests, raw source exports, ground truth
                     (see data/synthetic/README.md)
-evals/golden/       golden question set (evals/reports/: evaluation output, not committed)
-evals/baselines/    compact item-level evaluation baselines (committed; P13.1)
+evals/golden/       golden question set, splits and label freezes (evals/reports/: evaluation output, not committed)
+docs/golden-review/ held-out label review packet for the product owner (generated; P13.2)
+evals/baselines/    compact item-level evaluation baselines (committed; P13.1, regenerated P13.2)
 docs/               product, architecture, security and design documentation
 compose.yaml        local Postgres only (development)
 compose.production.yaml  production-shaped local reference stack (Phase 11; make prod-*)

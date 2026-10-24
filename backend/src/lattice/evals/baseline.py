@@ -145,6 +145,7 @@ def snapshot(report: Mapping[str, Any], *, label: str) -> dict[str, Any]:
                 f"{r['id']}|{r['egress_config']}": {
                     "category": r["category"],
                     "persona": r["persona"],
+                    "split": r.get("split"),
                     "expected": r["expected_status"],
                     "status": r["status"],
                     "reason": r["status_reason"],
@@ -164,11 +165,14 @@ def snapshot(report: Mapping[str, Any], *, label: str) -> dict[str, Any]:
             r["id"]: {
                 "category": r["category"],
                 "persona": r["persona"],
+                "split": r.get("split"),
+                "label_source": r.get("label_source"),
                 "error": r["error"],
                 "targets": r["found_at"],
                 "documents": r.get("documents_found_at", {}),
                 "misses": {m["target"]: m["cause"] for m in r["misses"]},
                 "identifier_hit": r.get("identifier_hit"),
+                "precision@10": r.get("precision10"),
                 "top": [_chunk_key(e) for e in r["evidence"][:TOP]],
                 "ranking": _ranking_digest(r["evidence"]),
             }
@@ -187,7 +191,10 @@ def _retrieval_summary(s: Mapping[str, Any]) -> dict[str, Any]:
         "overall": block(s["overall"]),
         "by_category": {c: block(b) for c, b in s["by_category"].items()},
         "by_target_count": {n: block(b) for n, b in s.get("by_target_count", {}).items()},
+        "by_split": {n: block(b) for n, b in s.get("by_split", {}).items()},
+        "by_label_source": {n: block(b) for n, b in s.get("by_label_source", {}).items()},
         "exact_identifier": s.get("exact_identifier"),
+        "precision@10": s.get("precision@10"),
     }
 
 
@@ -449,10 +456,21 @@ def _slices(
     group = "expected" if kind == "answer" else "category"
     measure = _answer_slice if kind == "answer" else _retrieval_slice
     names = sorted({v[group] for v in base.values()} | {v[group] for v in run.values()})
+    # P13.2: the same rows per split (dev, held_out), when both sides record splits.
+    split_names = sorted(
+        {f"split:{v['split']}" for v in run.values() if v.get("split")}
+        & {f"split:{v['split']}" for v in base.values() if v.get("split")}
+    )
+
+    def members(rows: Mapping[str, Mapping[str, Any]], name: str) -> Iterable[Mapping[str, Any]]:
+        if name.startswith("split:"):
+            return (v for v in rows.values() if f"split:{v.get('split')}" == name)
+        return (v for v in rows.values() if v[group] == name)
+
     rows = []
-    for name in names:
-        b = measure(v for v in base.values() if v[group] == name)
-        r = measure(v for v in run.values() if v[group] == name)
+    for name in [*names, *split_names]:
+        b = measure(members(base, name))
+        r = measure(members(run, name))
         row: dict[str, Any] = {"slice": name, "baseline": b, "run": r}
         if kind == "retrieval" and b["recall@10"] is not None and r["recall@10"] is not None:
             delta = round(r["recall@10"] - b["recall@10"], 4)
@@ -543,8 +561,14 @@ def compare(
             metric = "status correct" if new["kind"] == "answer" else "recall@10"
             key = "status_correct" if new["kind"] == "answer" else "recall@10"
             detail = f"{metric} {b[key]} (n {b['n']}) -> {r[key]} (n {r['n']}){note}"
+            split = row["slice"].startswith("split:")
             result.findings.append(
-                Finding(f"category:{row['slice']}", "category_regressed", detail, True)
+                Finding(
+                    row["slice"] if split else f"category:{row['slice']}",
+                    "split_regressed" if split else "category_regressed",
+                    detail,
+                    True,
+                )
             )
 
     if result.verdict == "security":

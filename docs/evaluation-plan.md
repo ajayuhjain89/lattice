@@ -12,8 +12,11 @@ baseline at `main` 00a15d2**, with what the harness measured then; **§15 is the
 evaluation foundation** (2026-10-21): the metrics added to both harnesses, the committed
 item-level baselines (`evals/baselines/`), `lattice eval baseline` / `lattice eval
 compare`, the rerank ablation and the explained aarch64/x86-64 difference of the fake
-configuration. [phase-13-plan.md](phase-13-plan.md) §9 holds the Phase 13 evaluation
-contracts.
+configuration. **§16 is P13.2** (2026-10-24): the golden set grown to 159 items with
+dev/held-out splits, label provenance and freezes (§3.1), exhaustive labels and
+Precision@10, the owner review packet, regenerated baselines and the first configuration C
+(local mxbai) reference. [phase-13-plan.md](phase-13-plan.md) §9 holds the Phase 13
+evaluation contracts.
 Related: `retrieval-design.md`, `security-model.md` §9, `product-brief.md` §8.
 
 Evaluation is built alongside the system: the retrieval harness lands in the same
@@ -142,6 +145,49 @@ opt_in_confidential: …}`.
 | `same_question_group` | Items asking the identical question as different personas |
 | `trap_phrases` | Words of the question that occur verbatim in `must_not_retrieve` evidence |
 | `tags` | e.g. `security`, `critical_scenario`, `cross_org_same_identifier`, `restricted_contains_answer` |
+| `label_source` | **Added P13.2** (EC-8), required: `authored_phase3`, `authored_phase13` or `owner_reviewed`. Engineering-authored labels are provisional expectations; `owner_reviewed` only with an approved `owner_review` |
+| `split` | **Added P13.2** (EC-7), required by the lint: `dev` (values may be chosen on it) or `held_out` (reported, never tuned against) |
+| `paraphrase_group` | **Added P13.2**: items asking for the same information need (the same decisive answer facts), whatever the wording or persona. With `same_question_group` it decides the split unit |
+| `classes` | **Added P13.2**: the phase-13-plan §10 evaluation classes the item exercises (`paraphrase`, `keyword_vs_natural`, `identifier_variant`, `ambiguous_account`, `hidden_account_collision`, `multi_document`, `multi_account_comparison`, `contradictory_evidence`, `temporal_supersession`, `insufficient_evidence`, `egress_withheld`, `inaccessible_strong_match`, `scoped_retrieval`, `injection_misleading`, `veridian_cross_tenant`); the lint checks each against the labels and requires ≥ 4 items per class |
+| `exhaustive`, `exhaustive_review` | **Added P13.2** (EC-3): labels cover every readable relevant part; the review lists every candidate part the persona can read (by `terms`, or `scope_all` inside a scope, plus `extra`), each classified `relevant`, `acceptable` or `unrelated`. The lint recomputes the candidates from the corpus. Only these items have Precision@10 |
+| `owner_review` | **Added P13.2** (D-41), required on held-out items: `{batch: H<n>, status: pending \| approved \| corrections_requested, reviewed_on, notes}` |
+
+### 3.1 Label provenance, splits and owner review (P13.2)
+
+- **Provenance.** Every item says who authored its labels. The 89 Phase 3 items are
+  `authored_phase3`; P13.2 items are `authored_phase13`. Both are engineering's
+  expectations, not independently verified ground truth. An item becomes
+  `owner_reviewed` only after the product owner approves it (D-41); nothing is marked so
+  on engineering's judgement, and no model judgement counts as review.
+- **Freezes** (`evals/golden/provenance/label-freeze.json`, `lattice.dataset.provenance`).
+  A label digest covers everything an item expects and excludes its evaluation metadata
+  (provenance, split, groups, classes, owner review), so reviewing or re-splitting an item
+  never changes it. The Phase 3 freeze holds the 89 historical items as they were at
+  22fd800 (every digest re-computed and matched); the held-out freeze holds every
+  held-out item, frozen before any P13.3 tuning. A changed frozen label is a lint failure
+  until `lattice dataset freeze-labels --item ID --reason R` records it; a Phase 3 label
+  additionally needs `--phase3-correction`, its own commit and the evidence in the reason.
+- **Splits** (`lattice dataset splits`, `lattice.dataset.splits`). A split unit is a
+  connected component of `same_question_group` and `paraphrase_group`; a unit never
+  straddles dev and held-out, and near-duplicate questions (content-word Jaccard ≥ 0.75)
+  on different sides are refused unless grouped. The committed `split` values are the
+  source of truth; `--propose` (deterministic, group-aware, stratified by category,
+  organization, persona, status, label source, target count, class and security tag)
+  only fills items without one. The report lists denominators per stratum and the target
+  records that serve items on both sides (allowed: different information needs).
+- **Owner review** (`docs/golden-review/`, `lattice dataset review-packet`). Held-out
+  items are reviewed in batches of 10–16. The packet is rendered from the golden files
+  and the synthetic sources (record keys, excerpts with canaries redacted, persona access,
+  expected status, facts, prohibited evidence, open points, approve/correct boxes);
+  `--check` (and a test) fails when it differs from the labels. Applying a review: set
+  `owner_review.status` (`approved` with `reviewed_on`, and `label_source:
+  owner_reviewed`), or make the requested correction in its own commit and record it with
+  `freeze-labels`. Until a batch is approved its items stay `authored_phase*` and no
+  held-out quality gate that depends on owner approval is active.
+- **Exhaustive labels.** An item is exhaustive only with a documented candidate review;
+  "the list looks complete" is not enough. Precision@10 is computed for those items only,
+  never averaged with others; for every other item precision is unavailable, nDCG@10 stays
+  an informational lower bound and Recall@k/MRR use the item's targets.
 
 Record keys: `doc:<front-matter id>#<n>` (part *n*: preamble, then one per H1/H2
 section), `ticket:<id>#c<n>` (comment *n*), `chat:<channel>:<thread ts>` or
@@ -170,6 +216,15 @@ the reference authorization policy (e.g. `relevant` must be readable by the pers
 
 Phase 3 total: 89 items; 10 same-question groups; 51 items tagged `security`.
 
+**P13.2 (2026-10-24): 159 items** (89 Phase 3 + 70 new, against the existing corpus; no
+record was added). By category (Phase 3 + new): lookup 10+7, cross_document 8+9,
+cross_source 9+6, potential_conflicts 4+5, supersession 4+5, ai_egress 6+6, stale 7+3,
+ambiguous 4+2, inaccessible 8+3, insufficient_evidence 5+7, refusal 4+0,
+prompt_injection 4+3, cross_org 6+7, account_visibility 10+7. 17 same-question groups,
+22 paraphrase groups, 96 items tagged `security`, 13 Veridian items (3 before), 13 scoped
+items (5 before), 12 egress-differentiated items, 171 runs. Every phase-13-plan §10 class
+has ≥ 4 new items (§16).
+
 ## 5. Metrics
 
 **Security (CI, deterministic, release-blocking):**
@@ -192,9 +247,12 @@ marked; definitions as built in §7 and §15)
 - Recall@1, @5, @10, @20 over the targets at chunk/part level (**built, Phase 5**) and
   the document-level variant over target records (**built, P13.1**).
 - MRR of the first target (**built, Phase 5**).
-- Precision@10 where the labels are exhaustive: **not computed**. No golden item has
-  reviewed exhaustive labels yet (P13.2 adds the `exhaustive` flag; phase-13-plan
-  EC-3); the report says "not computed" instead of a number.
+- Precision@10 where the labels are exhaustive (**built, P13.2**): over items with an
+  `exhaustive_review` only (§3.1), the share of the first 10 evidence chunks satisfying a
+  target or an `acceptable` key, reported beside each item's ideal (the labelled chunks
+  it could reach, at most 10) and per split. Never averaged with other items.
+- Every retrieval and answer block also per split (`dev`, `held_out`) and per label
+  source (**built, P13.2**); `eval compare` adds split rows when both runs record splits.
 - nDCG@10, relevant = 2, `acceptable` = 1 (**built, P13.1; informational**: unlabelled
   evidence is not irrelevant, so it is a lower bound and gates nothing).
 - Exact-identifier hit: the target record the question names at rank 1 (**built, P13.1**).
@@ -984,10 +1042,12 @@ test_compare_catches_an_injected_regression`); the synthetic suite covers every 
 
 ### Limitations (P13.1)
 
-- Precision@10 stays unavailable until P13.2 adds reviewed `exhaustive` labels.
+- Precision@10 stays unavailable until P13.2 adds reviewed `exhaustive` labels. *P13.2:
+  computed for 8 items with engineering-reviewed exhaustive labels (§16).*
 - nDCG@10 is a lower bound (unlabelled ≠ irrelevant) and informational.
 - Every label is still engineering-authored (`authored_phase3`); no dev/held-out split
-  exists yet (P13.2, D-41): nothing here may be used to tune.
+  exists yet (P13.2, D-41): nothing here may be used to tune. *P13.2: splits exist; owner
+  review pending (§16).*
 - Every slice is small (most categories have 2–10 items with targets): category
   percentages move in steps of 5–25 points per target.
 - B is a test double: its recall, ablation and context recall say nothing about
@@ -998,3 +1058,193 @@ test_compare_catches_an_injected_regression`); the synthetic suite covers every 
   chunks; they are not production figures.
 - The answer harness has no B baseline: its prompt order inherits B's platform
   dependence; the CI answer step still gates security only.
+
+## 16. Golden set growth, splits and label provenance (P13.2, 2026-10-24)
+
+Dataset and evaluation infrastructure only: no retrieval, ranking, relevance-gate,
+answering, provider, ingestion, chunking or authorization behaviour changed, and no
+corpus record was added (every class of phase-13-plan §10 could be expressed with the
+Phase 3 data). Measured on branch `phase/13-retrieval-answer-quality` in isolated
+databases (Compose project `lattice-p13eval`, aarch64, port 5440; `lattice-p13x86`, the
+same image as `linux/amd64` under emulation; one at a time), migrated, seeded and synced
+as CI does. The development database was not touched; no external provider was called;
+no Ollama or local LLM ran.
+
+### The set
+
+159 items (89 `authored_phase3` + 70 `authored_phase13`), 171 runs (12 items under both
+egress configurations), 124 items with retrieval targets (68 + 56). Category counts §4.
+
+| Persona | Items (P3 + P13) | | Persona | Items (P3 + P13) |
+| ------- | ---------------: | - | ------- | ---------------: |
+| priya | 18 + 17 | | grace | 6 + 8 |
+| maya | 23 + 7 | | sofia | 4 + 6 |
+| daniel | 13 + 11 | | arjun | 3 + 2 |
+| tom | 14 + 9 | | lena | 5 + 0 |
+| felix (Veridian) | 1 + 4 | | noor (Veridian) | 1 + 4 |
+| ines (Veridian) | 1 + 2 | | | |
+
+Expected status (runs): answered 119, insufficient_evidence 25, evidence_only 10,
+partial 7, ambiguous 6, unsupported_request 4.
+
+Classes (items exercising each; Phase 3 items were classified by the lint's rules, the
+judgement classes -- paraphrase, keyword vs natural language, identifier variants,
+multi-account comparisons -- only on new items):
+
+| Class | P3 | New | Dev | Held-out |
+| ----- | -: | --: | --: | -------: |
+| paraphrase | 0 | 28 | 14 | 14 |
+| keyword_vs_natural | 0 | 4 | 3 | 1 |
+| identifier_variant | 0 | 7 | 5 | 2 |
+| ambiguous_account | 5 | 5 | 5 | 5 |
+| hidden_account_collision | 9 | 7 | 9 | 7 |
+| multi_document (≥ 3 target records) | 22 | 15 | 24 | 13 |
+| multi_account_comparison | 0 | 5 | 4 | 1 |
+| contradictory_evidence | 14 | 6 | 11 | 9 |
+| temporal_supersession | 17 | 10 | 18 | 9 |
+| insufficient_evidence | 17 | 15 | 20 | 12 |
+| egress_withheld | 7 | 7 | 8 | 6 |
+| inaccessible_strong_match | 36 | 23 | 38 | 21 |
+| scoped_retrieval | 5 | 8 | 7 | 6 |
+| injection_misleading | 5 | 5 | 6 | 4 |
+| veridian_cross_tenant | 3 | 10 | 8 | 5 |
+
+### Splits
+
+dev 103, held-out 56 (35.2%); 89 split units, 29 with several items (largest 9: the
+"what was Acme promised" need across three same-question groups). Every category and
+every class has items on both sides; small held-out slices (one keyword-variant item, one
+multi-account item, one refusal) are reported, not interpreted. No unit straddles the
+splits and no near-duplicate question pair is on different sides (lint). 19 target
+records serve items on both sides (e.g. the SCIM decision record): different information
+needs, reported by `lattice dataset splits`, not forbidden.
+
+### Provenance and review
+
+| Label source | Items |
+| ------------ | ----: |
+| authored_phase3 | 89 (labels byte-for-byte as at 22fd800: every digest matched) |
+| authored_phase13 | 70 |
+| owner_reviewed | **0** |
+
+All 56 held-out items (34 Phase 3, 22 new) are in the owner-review packet
+(`docs/golden-review/`, batches H1 14, H2 11, H3 15, H4 16), status pending, labels
+frozen. No Phase 3 label was changed. Two new questions were reworded during authoring
+(before any freeze or commit): "Acme's" → "Acme Corp's" in `ident-hal-9999-priya` and
+`injection-iam-07-priya`, because for a scope-"all" persona a bare "Acme" is genuinely
+ambiguous (Acme Corp, Acme Health) and those items do not test ambiguity.
+
+### Exhaustive labels and Precision@10
+
+Eight new items (3 dev, 5 held-out) have exhaustive labels with an engineering candidate
+review (provisional until owner review): two scoped by account/source/date (`scope_all`),
+two identifier items, a two-release synthesis, an EU-residency paraphrase and two
+Veridian items. P@10 (ideal in brackets: the labelled chunks reachable within 10):
+
+| Configuration | All 8 | Dev (3) | Held-out (5) |
+| ------------- | ----- | ------- | ------------ |
+| A | 0.613 (0.825) | 0.700 (0.733) | 0.560 (0.880) |
+| B (fake) | 0.550 (0.825) | 0.600 (0.733) | 0.520 (0.880) |
+| C (local mxbai) | 0.675 (0.825) | 0.633 (0.733) | 0.700 (0.880) |
+
+Eight items: indicative only.
+
+### Results (items with targets; macro)
+
+| Configuration | Slice | n | R@1 | R@5 | R@10 | R@20 | MRR | Doc R@10 | nDCG@10 |
+| ------------- | ----- | -: | --: | --: | ---: | ---: | --: | -------: | ------: |
+| A exact + lexical | all | 124 | 0.281 | 0.531 | **0.673** | 0.767 | 0.606 | 0.790 | 0.569 |
+| | dev | 80 | 0.315 | 0.573 | 0.722 | 0.806 | 0.656 | 0.813 | 0.606 |
+| | held-out | 44 | 0.221 | 0.455 | 0.585 | 0.696 | 0.514 | 0.748 | 0.502 |
+| | Phase 3 items | 68 | 0.316 | 0.534 | 0.668 | 0.779 | 0.640 | 0.780 | 0.571 |
+| B fake (*test double*), aarch64 | all | 124 | 0.183 | 0.420 | 0.530 | 0.669 | 0.462 | 0.699 | 0.443 |
+| | dev / held-out | 80 / 44 | | | 0.560 / 0.476 | | 0.484 / 0.423 | | |
+| B fake (*test double*), x86-64 | all | 124 | 0.183 | 0.420 | 0.533 | 0.669 | 0.462 | 0.702 | 0.443 |
+| **C local mxbai, approved restricted** | all | 124 | 0.265 | 0.579 | **0.702** | 0.802 | 0.610 | 0.796 | 0.574 |
+| | dev | 80 | 0.293 | 0.618 | 0.739 | 0.824 | 0.640 | 0.816 | 0.592 |
+| | held-out | 44 | 0.214 | 0.508 | 0.635 | 0.762 | 0.554 | 0.760 | 0.541 |
+| | Phase 3 items | 68 | 0.295 | 0.572 | 0.695 | 0.801 | 0.640 | 0.743 | 0.575 |
+
+By number of targets, R@10 (A / C): one target (37 items) 0.919 / 0.946; two (44) 0.670 /
+0.682; three or more (43) 0.465 / 0.514. Exact identifier at rank 1: 11/11 in A, B and C.
+Security: every metric 0 in A, B (both architectures), C and answer A.
+
+The held-out split is harder than dev in every configuration (A R@10 0.585 vs 0.722).
+That is an observation about which needs landed where (the stratified proposal balances
+categories and classes, not difficulty), not a defect to correct: splits are never
+re-drawn to move a number. Held-out R@10 by category (A; n): account_visibility (6)
+0.417, cross_document (7) 0.391, cross_source (4) 0.438, lookup (5) 0.400 -- the paraphrase
+and keyword items of the held-out units (e.g. `para-eu-region-priya` 0.000 in A) carry most
+of the gap; C raises held-out lookup to 0.800.
+
+**C is a real semantic retrieval reference, not an answer-quality benchmark.** It
+reproduces the historical Phase 5 local figure on the Phase 3 items (R@10 0.6949 vs
+0.695, §10) at HEAD. Over the whole set C beats A by 0.029 R@10 (0.702 vs 0.673), with
+semantic-only evidence still never reaching a prompt (G3; `SEMANTIC_FLOOR` empty).
+
+Answer pipeline, configuration A (fake extractive generator; plumbing, not quality): 171
+runs, security all 0, status accuracy 0.749 (dev 0.755 / 110, held-out 0.738 / 61);
+context recall 0.706 over 126 runs (dev 0.767 / 81, held-out 0.597 / 45); abstention caught
+before any model call **0/25** (95% CI 0.000–0.133; dev 0/17, held-out 0/8) -- G1
+unchanged; false abstention 0/126; conflict coverage all 21/36, potential conflict 8/22,
+superseded 13/14; the 12-item prompt limit binds in 137/162 prompts.
+
+### Previous items and baselines
+
+Every committed baseline was regenerated with `--replace` and a reason, each recording
+the P13.1 file it supersedes:
+
+| Baseline | Golden | Corpus | Previous items (P13.1 file, `--allow-golden-change`) |
+| -------- | ------ | ------ | ---------------------------------------------------- |
+| `retrieval-A.json` | 159 items | 5961e8a6e13f (unchanged) | 0 item-level findings (89 items identical) |
+| `retrieval-B-aarch64.json` | 159 | 5961e8a6e13f | 0 item-level findings |
+| `retrieval-B-x86_64.json` | 159 | 5961e8a6e13f | 0 item-level findings |
+| `answer-A.json` | 171 runs | 5961e8a6e13f | 0 run-level findings (96 runs identical) |
+| `retrieval-C-aarch64.json` (**new**) | 159 | c1449f77b103 (local vectors) | — (first C reference; not gated in CI) |
+
+So the baselines changed because the golden set grew; retrieval behaviour did not change,
+and there is no regression. Across architectures B now differs in 37 rankings (22 before,
+the new items add ties) and still in exactly one target outcome
+(`xsrc-kestrel-outage-daniel`); A is identical on aarch64 and x86-64.
+
+**C snapshot.** The C database (1,325 chunks embedded by
+`mxbai-embed-large-v1@b33106f585b9`, both organizations, local model approved
+`restricted`) is dumped outside the repository:
+`~/.cache/lattice/eval-snapshots/p13-2-config-C-c1449f77b103.dump` (8.1 MB, SHA-256
+`51fe2f56…22d1`; restore verified: 1,325 embedded chunks). Restore it into an isolated
+database (`pg_restore --no-owner`) instead of re-embedding until the corpus, chunker or
+embedding input changes (D-38). The corpus embedding took one bounded run on the M1
+(6 min 54 s for the registration sync, the approval and both re-embeds, under a watchdog on free memory and swap growth: lowest free memory
+24%, swap +171 MB); no other heavy task ran alongside.
+
+### Findings for the product owner (no label changed)
+
+1. **`visibility-orbital-maya` expects "no evidence"**, indistinguishable from the
+   nonexistent Pinecrest Mutual, but the company-wide `doc:scim-beta-program-plan#2`
+   (readable by everyone) says "Orbital Freight's trial is not eligible" -- it is Maya's
+   rank-1 evidence in A. The README's rule "Orbital's name appears only in
+   Orbital-scoped records" does not hold for this record. Either the corpus line or the
+   label is wrong; deciding which is the owner's call (the item and its control are dev
+   items, outside the review packet).
+2. **Account-scoped Phase 3 items label account-less records relevant.** With scope
+   `acme-corp`, `egress-acme-commitments-grace`, `egress-acme-offer-arjun` and
+   `visibility-commitments-priya` expect `doc:scim-ga-decision#2` and/or the
+   #exec-escalations thread, which have no account and are filtered out by the scope by
+   design (`not_retrieved` structurally). All three are held-out (in the review packet).
+   Either the labels should drop them or the scope semantics should change; recorded, not
+   changed.
+
+### Limitations (P13.2)
+
+- Every label is engineering-authored; none is owner-reviewed. Held-out results gate
+  nothing until the review (D-41).
+- Exhaustive labels: 8 items, engineering-reviewed; their candidate sets are complete for
+  the listed terms (lint-checked against the corpus), which bounds but does not prove
+  semantic completeness.
+- Slices are small (most categories 2–12 items per split); the item lists are the
+  finding, not percentages.
+- B remains a test double; C is one local model on one machine (aarch64) and is compared
+  only with a C run on the same architecture.
+- Answer metrics are the fake generator's; real answer quality is not measured (D-43).
+- Latency figures are from the M1 (B on x86-64 under emulation is slower and meaningless
+  as a latency figure).
