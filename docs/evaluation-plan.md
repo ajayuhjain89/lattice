@@ -1234,6 +1234,46 @@ embedding input changes (D-38). The corpus embedding took one bounded run on the
    Either the labels should drop them or the scope semantics should change; recorded, not
    changed.
 
+### Owner decisions on the findings (2026-10-25)
+
+1. **Orbital: a corpus correction**, not a label change. The beta plan's sentence is
+   replaced by an anonymous one in its own commit; `visibility-orbital-maya` keeps its
+   Phase 3 label.
+2. **Scoped items: a Phase 3 label correction**, in its own commit; the scope semantics
+   stay (a hard filter on `documents.account_id` since the Phase 0 retrieval design,
+   `retrieval/permitted.py`). The labels were authored in `b3055ea`, one day before the
+   filter was implemented (`fe201fd`), using the scope to remove the Acme ambiguity for
+   scope-"all" personas while keeping company-wide evidence. A question-design error,
+   not a factual one (the removed records are about Acme's commitments) and not an
+   implementation discrepancy. The correction is recorded with `freeze-labels
+   --phase3-correction`; the change record keeps the original digests. Owner review of
+   the three items stays pending (H3, H4).
+
+| Item | Removed (no account) | Changed | Phase 3 digest → corrected |
+| ---- | -------------------- | ------- | -------------------------- |
+| `visibility-commitments-priya` | `doc:scim-ga-decision#2` | relevant + `ticket:HAL-4821#c5` ("GA to December … beta from 9 Nov"); decision fact reworded to it (no Acme Corp record Priya reads says 8 December); conflict `HAL-4821#c3` vs `#c5`; class `multi_document` dropped (2 records) | `444365…` → `ac3bee…` |
+| `egress-acme-commitments-grace` | `doc:scim-ga-decision#2`, `chat:G0EXECESC01:1790101200.000100`, acceptable `doc:renewal-risk-register-2026-q3`, `doc:pricing-packaging-2027-draft` | default egress notice "one confidential source" (the escalation notes are the only confidential `acme-corp` record); the decision fact is carried by `chat:G0ACCTACME1:1790244300.000100`; conflicts repointed to it (default) and to `doc:acme-exec-escalation-notes#3` (opt-in) | `0ee800…` → `bc82d3…` |
+| `egress-acme-offer-arjun` | `chat:G0EXECESC01:1790101200.000100`, acceptable `chat:G0EXECESC01:1789984800.000100` | none: every opt-in fact is in `doc:acme-exec-escalation-notes#3`, which stays confidential, so default remains `evidence_only` | `d6b351…` → `1656c9…` |
+
+Measured in isolated databases (Compose projects `lattice-p13fix` aarch64,
+`lattice-p13fx86` amd64 under emulation, `lattice-p13fc` restored from the C snapshot;
+one at a time, port 5440): every compare against the P13.2 baselines shows exactly these
+three items as item-level findings (target sets only), 0 regressions, identical
+rankings and MRR, security 0. Grace 0.167 → 0.250 (A, C), Arjun 0.500 → 1.000 (A, C),
+Priya 0.000 → 0.000 (`HAL-4821#c5` is outside the fused pool in A). R@10:
+
+| Config | overall | dev | held-out | Phase 3 items |
+| ------ | ------- | --- | -------- | ------------- |
+| A | 0.673 → 0.678 | 0.722 → 0.722 | 0.585 → 0.598 | 0.6679 → 0.6765 |
+| B aarch64 | 0.530 → 0.530 | 0.560 → 0.560 | 0.476 → 0.476 | unchanged |
+| B x86-64 | 0.533 → 0.533 | 0.560 → 0.560 | 0.484 → 0.484 | unchanged |
+| C aarch64 | 0.702 → 0.707 | 0.739 → 0.739 | 0.635 → 0.648 | — |
+
+Answer A: 0 item-level findings; context recall 0.7063 → 0.7114 (held-out 0.597 →
+0.612). The metric rises because unreachable targets leave the denominator, not because
+retrieval changed. All five baselines are regenerated with `--replace --reason`, and
+the two summary pins in the golden tests now name both values.
+
 ### Limitations (P13.2)
 
 - Every label is engineering-authored; none is owner-reviewed. Held-out results gate

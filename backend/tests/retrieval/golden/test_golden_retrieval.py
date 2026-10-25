@@ -379,9 +379,11 @@ def test_configuration_a_reproduces_its_committed_baseline_exactly(
     reference = baseline.load(BASELINES / "retrieval-A.json")
     result = baseline.compare(reference, run)
     assert result.verdict == "identical", baseline.render(result)
-    # The Phase 3 items still give P13.0's numbers exactly (P13.2 only added items).
+    # The Phase 3 items give P13.0's numbers (R@10 0.6679, MRR 0.6405) except for the
+    # owner-approved scope-reachability correction of three items (evaluation-plan §16),
+    # which drops unreachable targets: R@10 0.6765, rankings and MRR unchanged.
     phase3 = reference["summary"]["by_label_source"]["authored_phase3"]
-    assert (phase3["recall@10"], phase3["mrr"]) == (0.6679, 0.6405)
+    assert (phase3["recall@10"], phase3["mrr"]) == (0.6765, 0.6405)
 
 
 async def test_configuration_b_reproduces_the_baseline_of_this_database_architecture(

@@ -113,7 +113,8 @@ async def test_the_answer_pipeline_reproduces_its_committed_baseline(
     # before the model (25 runs; 13 of them are the Phase 3 runs pinned in P13.1).
     assert f["abstention"]["catch_before_model"]["count"] == 0
     assert f["abstention"]["catch_before_model"]["n"] == 25
-    assert f["context_recall"]["macro"] == 0.7063
+    # 0.7063 before the scope-reachability correction (evaluation-plan §16).
+    assert f["context_recall"]["macro"] == 0.7114
     # Both splits are reported with their denominators (EC-7).
     by_split = report.summary["by_split"]
     assert set(by_split) == {"dev", "held_out"}

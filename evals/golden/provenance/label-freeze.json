@@ -17,8 +17,8 @@
    "cross-org-hal-4821-priya": "a376b419bb89053bcdfcf7dfe20583118dd1313c50b6379ffc6734b37b0f23c9",
    "cross-org-refund-v2-tom": "8993855794d431da6c1027dbd344fc1fa5d9db5d83743ef835781bb0c676948d",
    "cross-org-told-acme-scim-noor": "efc790ea6eaeed95e25afad78f1387f5482d1b463cb598a103ceb69ad4046b72",
-   "egress-acme-commitments-grace": "0ee8002dd3d19627fc8ce464dbd47b32fa85568a210eec913477a07ec257fac2",
-   "egress-acme-offer-arjun": "d6b351cfcf46733bea2b3df941a5cbf60f74808dae60a12ca30cbeb8012292ba",
+   "egress-acme-commitments-grace": "bc82d37891e5ce51d36a05265a90f2d4cc3ca1e11bd037a9e0611805e4f0acf0",
+   "egress-acme-offer-arjun": "1656c9b287fc2fe4e6f74b349af09baac654f8fde0b4e620dd67de9c3fb3efc2",
    "egress-kestrel-risk-grace": "32bebeca4c7723349db92682f28ab55c2eca1687fee3cf91d543f14d03cefb00",
    "egress-scim-ga-date-arjun": "9760c715cdc1e2a9935f020eab6e1ab0e61c9330fb785787f20c0ead9942ebe6",
    "egress-scim-pricing-grace": "2c5afbeedbdb83dde4201c4ea9da8483471aec1624aa554071522fd4a7cfc83b",
@@ -67,7 +67,7 @@
    "supersession-sla-changes-daniel": "c7fd533fdbd3cef11a62e7b9c4e9f9695a9919b994b070b2f9258d60286aea97",
    "visibility-commitments-daniel": "10cf78a63ca82d2ce79eda533a0ecec92a3bc2606e7e50f5185a71e5b8b3652a",
    "visibility-commitments-maya": "23a9738b9c9b33dc35d0ea91978469353058cea8b195c644c6939406fb223000",
-   "visibility-commitments-priya": "444365734ac70d78b94978f6a29b9e422fcb746ffe5f54cfe4696e90e5db1f6f",
+   "visibility-commitments-priya": "ac3bee186bfcbf6f5750f67ef0f3eb4b1ecfa1646ba973a86b47a43ceb162023",
    "visibility-kestrel-latest-maya": "1d27df895a15114b5798045cd5fa0339e968d1eae59108a42397e7853542c674",
    "visibility-kestrel-outage-maya": "0bbe365affc50f0e46e408fac5d955bd26ebfa8a77f260f1e04f622f5b9eb721",
    "visibility-orbital-maya": "65d88b4b24515d96c9128e2f86046a3bad3106b1b5e231188ca09b792e6d00c0",
@@ -109,8 +109,8 @@
    "cross-org-refund-v2-tom": "8993855794d431da6c1027dbd344fc1fa5d9db5d83743ef835781bb0c676948d",
    "cross-org-refund-window-felix": "57ede36d9b85b9c35c9fef3f1eda2a392b9e0b21bb9d69b5c0d5176ab14ff4eb",
    "cross-org-told-acme-scim-noor": "efc790ea6eaeed95e25afad78f1387f5482d1b463cb598a103ceb69ad4046b72",
-   "egress-acme-commitments-grace": "0ee8002dd3d19627fc8ce464dbd47b32fa85568a210eec913477a07ec257fac2",
-   "egress-acme-offer-arjun": "d6b351cfcf46733bea2b3df941a5cbf60f74808dae60a12ca30cbeb8012292ba",
+   "egress-acme-commitments-grace": "bc82d37891e5ce51d36a05265a90f2d4cc3ca1e11bd037a9e0611805e4f0acf0",
+   "egress-acme-offer-arjun": "1656c9b287fc2fe4e6f74b349af09baac654f8fde0b4e620dd67de9c3fb3efc2",
    "egress-acme-slip-credit-grace": "5cfd941cee1eca3082811b1c6a3078918746ea730864e9d3404413f500d4e282",
    "egress-tern-arjun": "f7dd1a90130a6889c93a63b5921210186955e8657282c113fe1dd9db4c97d512",
    "followups-saml-incident-priya": "830c7defb94dde95ec37ab71c515c3e3fdf4ead4e167fc02ea17fb13d70d8f39",
@@ -142,7 +142,7 @@
    "visibility-acme-renewal-daniel": "9cd4e1db284046e319ca0cf21e8f816b91c9144fe6664e5dee4c6a8f6aa85089",
    "visibility-commitments-daniel": "10cf78a63ca82d2ce79eda533a0ecec92a3bc2606e7e50f5185a71e5b8b3652a",
    "visibility-commitments-maya": "23a9738b9c9b33dc35d0ea91978469353058cea8b195c644c6939406fb223000",
-   "visibility-commitments-priya": "444365734ac70d78b94978f6a29b9e422fcb746ffe5f54cfe4696e90e5db1f6f",
+   "visibility-commitments-priya": "ac3bee186bfcbf6f5750f67ef0f3eb4b1ecfa1646ba973a86b47a43ceb162023",
    "visibility-kestrel-outage-maya": "0bbe365affc50f0e46e408fac5d955bd26ebfa8a77f260f1e04f622f5b9eb721",
    "visibility-promise-acme-maya": "ff20da951dc0edf701a6522d3ba215201596f137c64a4275b7b15197fdbec132",
    "visibility-why-maya-kestrel-lena": "218f4c3db8bd1d1ca1bc598956b8497a0841df26a824ffb4b71d9e8542966253",
@@ -160,6 +160,11 @@
    "on": "2026-10-24",
    "items": "all",
    "reason": "P13.2: Phase 3 labels as at 22fd800; held-out labels frozen before any P13.3 tuning (EC-7)"
+  },
+  {
+   "on": "2026-10-25",
+   "items": "egress-acme-commitments-grace, egress-acme-offer-arjun, visibility-commitments-priya",
+   "reason": "P13.2 owner-approved Phase 3 correction (structural reachability, not tuning). Under scope account acme-corp the retrieval scope filter (documents.account_id = scope account, a hard filter since the Phase 0 retrieval design; permitted.py) cannot return account-less records, so labels naming them were unsatisfiable: doc:scim-ga-decision#2 (no account), chat:G0EXECESC01:1790101200.000100 and chat:G0EXECESC01:1789984800.000100 (#exec-escalations, no account), doc:renewal-risk-register-2026-q3 and doc:pricing-packaging-2027-draft (no account). Removed them; Priya's decision fact now cites ticket:HAL-4821#c5; Grace's default egress notice is one confidential source (the only confidential acme-corp record); conflicts repointed to in-scope records. Original labels: b3055ea, frozen at 22fd800; original digests egress-acme-commitments-grace 0ee8002dd3d19627fc8ce464dbd47b32fa85568a210eec913477a07ec257fac2, egress-acme-offer-arjun d6b351cfcf46733bea2b3df941a5cbf60f74808dae60a12ca30cbeb8012292ba, visibility-commitments-priya 444365734ac70d78b94978f6a29b9e422fcb746ffe5f54cfe4696e90e5db1f6f. Evidence: evaluation-plan \u00a716."
   }
  ]
 }
