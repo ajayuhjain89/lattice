@@ -1274,6 +1274,37 @@ Answer A: 0 item-level findings; context recall 0.7063 → 0.7114 (held-out 0.59
 retrieval changed. All five baselines are regenerated with `--replace --reason`, and
 the two summary pins in the golden tests now name both values.
 
+### Orbital corpus correction (2026-10-25)
+
+Two company-wide documents named Orbital Freight, against the dataset's rule that its
+name appears only in Orbital-scoped records (`ground-truth.yaml` `orbital-freight`,
+README §6 K and §13). Both sentences are now anonymous; no label changed.
+
+| Record | Before | After |
+| ------ | ------ | ----- |
+| `doc:scim-beta-program-plan#2` | "Orbital Freight's trial is not eligible." | "Prospects on a trial are not eligible." |
+| `doc:identity-roadmap-2026-04#5` | "…Brightwater Health (Entra ID), Orbital-style prospects that list SCIM…" | "…Brightwater Health (Entra ID), and prospects that list SCIM…" |
+
+The only content records that name Orbital are now `ticket:HAL-4870` and
+`doc:orbital-freight-opportunity-brief`, both on the Orbital account. Corpus fingerprint
+`5961e8a6e13f` → `7f914a8ce283` (same chunk counts: Halden 1,110, Veridian 215); sync
+updated 2 documents. Compare refuses a corpus change, so each run was diffed per item
+against its committed baseline:
+
+| Config | Items ranking differently | R@10 | MRR | Note |
+| ------ | ------------------------- | ---- | --- | ---- |
+| A | 2 (`visibility-orbital-maya`, `-tom`) | 0.678 (unchanged) | 0.606 (unchanged) | both chunks leave the top 10 of both Orbital items; target ranks unchanged |
+| B aarch64 | 20 | 0.530 (unchanged) | 0.4624 → 0.4615 | fake vectors of the two edited chunks; three target ranks move, none across k |
+| B x86-64 | 22 | 0.533 (unchanged) | 0.4624 → 0.4615 | the same target moves (plus known tie ordering) |
+| C aarch64 | 21 | 0.707 (unchanged) | 0.6098 → 0.6113 | Tom's `HAL-4870` 7 → 6; both chunks leave Maya's and Tom's top 10 |
+| answer A | 0 of 171 runs | — | — | context recall 0.7114 (unchanged) |
+
+Security 0 in every run; dev and held-out R@10 unchanged everywhere. The C database was
+the P13.2 snapshot restored with the two edited chunks re-embedded by
+`mxbai-embed-large-v1@b33106f585b9` (7 reused; 1,325 chunks, one model). The current C
+snapshot is `~/.cache/lattice/eval-snapshots/p13-2-orbital-fix-config-C-277fb9ff8982.dump`
+(8.1 MB, SHA-256 `3b3de884…38b5`); the P13.2 snapshot is kept for its baseline's history.
+
 ### Limitations (P13.2)
 
 - Every label is engineering-authored; none is owner-reviewed. Held-out results gate

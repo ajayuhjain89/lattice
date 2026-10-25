@@ -3,11 +3,11 @@
  "kind": "answer",
  "label": "A",
  "platform": null,
- "corpus": {"sha256":"5961e8a6e13ffdc28d396a92d48d7aace67c972c0dc34fac7c8fb623f958145d","chunks":{"halden":1110,"veridian":215},"chunker":"chunker-1","embedding_input":"embed-input-1"},
+ "corpus": {"sha256":"7f914a8ce283b77b8b20889721747410c012c685bdff399092adcede99ff6bd8","chunks":{"halden":1110,"veridian":215},"chunker":"chunker-1","embedding_input":"embed-input-1"},
  "golden": {"sha256":"d5369dd975fb1fa046fd5ceca99df48e7cf6221b60b02f739c579ca7e6deb930","items":159},
  "security_total": 0,
  "configuration": {"generation_provider":"fake","generation_model":"fake-extractive-v1","embedding_provider":null,"embedding_model":null,"judge":null},
- "created": {"on":"2026-10-25","reason":"P13.2 owner-approved Phase 3 correction: three acme-corp-scoped held-out items no longer label account-less records the scope cannot return (evaluation-plan \u00a716); answering unchanged (0 item-level findings); security 0","supersedes":"52f777a64888a2a5ddb7d3d73a72a1483c1a985b5bd09a63c005ec1d6377b650"},
+ "created": {"on":"2026-10-25","reason":"P13.2 owner-approved corpus correction: the beta program plan and the identity roadmap no longer name Orbital Freight (README/ground-truth rule: named only in Orbital-scoped records; evaluation-plan \u00a716). Corpus 5961e8a6e13f -> 7f914a8ce283, same chunk counts; golden labels unchanged; answer A: 0 runs differ, security 0","supersedes":"1181b3b6cee94404697a1dab7cd565965d8f7cc3a61afca1006083830c479532"},
  "summary": {
   "ran": 171,
   "status_accuracy": 0.7485,
