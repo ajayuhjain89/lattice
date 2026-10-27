@@ -5,8 +5,9 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–12 are implemented and merged (Phase 12: 00a15d2, 2026-10-20). Phase 13
-(Retrieval, Grounding and Answer Quality) is in progress: P13.0 — the measured baseline,
+**Status: Phases 1–13 are implemented and merged (Phase 12: 00a15d2, 2026-10-20). Phase 13
+(Retrieval, Grounding and Answer Quality) was accepted 2026-10-27 with its quality criterion
+unmet as recorded: P13.0 — the measured baseline,
 known quality gaps, evaluation contracts, checkpoints and decisions D-38–D-45 — is in
 [docs/phase-13-plan.md](docs/phase-13-plan.md) and was approved 2026-10-21; P13.1 (the
 evaluation foundation: new metrics, item-level baselines, `lattice eval compare`) is

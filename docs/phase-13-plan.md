@@ -17,7 +17,9 @@ change adopted** (§22–23; evaluation-plan §18–19): no variant improved hel
 (second hop) approved under D-40, built and not adopted** (§24, §28). **P13.7 (validator suite, prompt-2)
 delivered 2026-10-27** (§25; evaluation-plan §20). **P13.8 (conflicts, temporal)
 delivered 2026-10-27 with no behaviour change** (§26; evaluation-plan §21). **P13.9
-engineering closure 2026-10-27** (§27): the phase's remaining decisions are the owner's. P13.4–P13.9 were authorized together
+engineering closure 2026-10-27** (§27). **Phase 13 accepted by the product owner
+2026-10-27 with criterion 3 unmet as recorded** (§27 "Owner decision"); pushed and merged
+to `main` with `--no-ff`. P13.4–P13.9 were authorized together
 on 2026-10-27 ("finish P13"); nothing is pushed.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 13. Phase 12
@@ -1002,6 +1004,14 @@ two in-rule validator fixes and `answer-prompt-2`. Nothing is pushed.
    characters stay under 25%; raising it needs a real-model measurement (D-43).
 4. **Closure:** accept Phase 13 with criterion 3 unmet (as recorded) and authorize the
    push, branch CI and merge.
+
+### Owner decision (2026-10-27)
+
+**Phase 13 accepted with completion criterion 3 unmet, as recorded above**, and the push,
+branch CI and `--no-ff` merge into `main` authorized. Still open after the merge, not
+blocking it: the D-41 review of the 56 held-out items (no held-out figure is binding until
+then), the 12-item prompt budget (needs a real-model measurement, D-43), and real answer
+quality (not measured).
 
 ## 28. P13.6 delivery record (2026-10-27)
 

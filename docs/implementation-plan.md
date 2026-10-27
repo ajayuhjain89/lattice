@@ -29,7 +29,7 @@ status log. **Phase 12 — Organization Setup, Identity Configuration & Integrat
 merged (00a15d2, 2026-10-20; [phase-12-plan.md](phase-12-plan.md)).
 
 **Current state (2026-10-27).** Phases 1–12 are merged. **Phase 13 — Retrieval,
-Grounding and Answer Quality** (§4 "Later phases") is in progress on
+Grounding and Answer Quality** (§4 "Later phases") was built on
 `phase/13-retrieval-answer-quality` ([phase-13-plan.md](phase-13-plan.md)): P13.0
 (planning, evaluation design and a measured baseline) approved 2026-10-21 with decisions
 D-38–D-45 (§7); P13.1 (evaluation foundation: metrics, item-level baselines,
@@ -44,8 +44,10 @@ fusion, selection or conflict-candidate change survived held-out, so retrieval i
 unchanged; P13.6 (second hop) was approved under D-40, built and not adopted (no dev gain);
 P13.7 added the
 validator adversarial suite, two in-rule validator fixes and `answer-prompt-2`; P13.9
-closed engineering with the quality criterion unmet and the owner's decisions listed
-(phase-13-plan §27). Not pushed.
+closed engineering with the quality criterion unmet (phase-13-plan §27). **Phase 13
+accepted by the owner 2026-10-27 with criterion 3 unmet as recorded, and merged to `main`
+with `--no-ff`.** Open, not blocking: the D-41 held-out review, the prompt item budget,
+real answer quality (D-43).
 
 ---
 
@@ -1262,7 +1264,7 @@ evidence can never enter a prompt (G3); every security metric is 0.
 | P13.6 | Multi-hop evidence expansion (only with D-40) | D-40 approved 2026-10-27; built, not adopted (no dev gain; phase-13-plan §28; evaluation-plan §23) |
 | P13.7 | Context construction and validator verification | Delivered 2026-10-27 (2ec9324; §25; evaluation-plan §20) |
 | P13.8 | Conflicts and temporal reasoning | Delivered 2026-10-27, no behaviour change (35885a0; §26; evaluation-plan §21) |
-| P13.9 | Regression, performance, optional real-model evaluation, closure | Engineering closure 2026-10-27 (§27; evaluation-plan §22); quality criterion not met; owner decisions pending |
+| P13.9 | Regression, performance, optional real-model evaluation, closure | Accepted 2026-10-27 with criterion 3 unmet as recorded (§27; evaluation-plan §22); merged to `main` |
 
 ---
 
