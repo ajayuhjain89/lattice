@@ -12,8 +12,9 @@ pending. **P13.3 (relevance gate and abstention calibration) delivered 2026-10-2
 accepted by the product owner the same day as committed (cb82ce2, `gate_v1`), with its
 held-out trade-off recorded** (§21; evaluation-plan §17): the first behaviour change --
 answering only; retrieval unchanged.
-Every later improvement in §11 still needs its own checkpoint approval; P13.4 is not
-authorized.
+**P13.4 (lexical ranking) delivered 2026-10-27 with no change adopted** (§22;
+evaluation-plan §18): no variant improved held-out. P13.4–P13.9 were authorized together
+on 2026-10-27 ("finish P13"); nothing is pushed.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 13. Phase 12
 is merged (00a15d2, branch and merge CI green, images published). Phase 14 owns scale and
@@ -498,6 +499,9 @@ records its measurements in evaluation-plan §14+. "Re-index" means `lattice rei
 - **Security regressions.** D-10: account terms remain query-time and visible-only;
   the tsv still carries no account names.
 - **Resources.** Re-index of the eval corpus (seconds); no re-embed.
+- **Status: delivered 2026-10-27, no change adopted** (§22; evaluation-plan §18). No
+  variant met the held-out rule; `retrieval-6` stays; the variants remain evaluation
+  tunables (`lattice eval retrieval --set`).
 
 ### P13.5 — Fusion, selection and multi-document evidence (G4, part of G2)
 
@@ -788,3 +792,21 @@ recorded trade-off:
 - Not re-tuned here: the two refusal patterns go to P13.5 as candidates. P13.4 is not
   authorized.
 
+## 22. P13.4 delivery record (2026-10-27)
+
+Authorized with the rest of Phase 13 ("finish P13", 2026-10-27). Retrieval behaviour is
+**unchanged**: no lexical ranking variant met the acceptance rule, so the product keeps
+`retrieval-6` and every committed baseline. Full record: evaluation-plan §18.
+
+| Item | Result |
+| ---- | ------ |
+| Variants (`RetrievalConfig`, off by default) | `lexical_term_weights` (count / idf), `lexical_counted_terms` (all / content), `lexical_title_factor`, `lexical_account_factor`; the weighted statement scores each matched lexeme by its weight, a title-only match by the title factor (`'lexeme':D` matches the text), the named visible account by its factor |
+| Statistics | `retrieval.terms.question_statistics`: the question's lexemes (content first, ≤ 48) with their permitted-chunk counts, one pass over the reader's permitted chunks; run only when a weighted variant is configured |
+| Evaluation | `lattice eval retrieval --set NAME=VALUE` (repeatable, evaluation only; the version string names the overrides) |
+| Dev choice | content terms only + account factor 0.5: dev R@10 0.722 → 0.739, MRR 0.656 → 0.679, no dev category down |
+| Held-out | R@10 0.598 → 0.578, MRR 0.514 → 0.461; cross_org, stale, cross_document down > 2 points → **not adopted**. Every single change flat or worse on held-out |
+| Security | Every metric 0; SQL-structure suite covers both new statement shapes; unreadable documents change no statistic (S1, S4); D-10 unchanged |
+| Not done | `simple` title vector (no conflation found); C runs (nothing adopted); question-length normalization is a rescaling of the fixed bonuses (evaluation-plan §18) |
+
+Carried to P13.5: most remaining A misses are targets no channel returns or targets lost
+at selection, not lexical order.

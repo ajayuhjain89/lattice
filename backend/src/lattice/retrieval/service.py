@@ -73,6 +73,7 @@ from lattice.retrieval.semantic import (
     question_policy,
     semantic_candidates,
 )
+from lattice.retrieval.terms import lexical_weights, question_statistics
 from lattice.retrieval.trace import build_trace, log_trace
 
 
@@ -166,7 +167,29 @@ async def retrieve_with_context(
         )
     semantic: list[Candidate] = []
     outcome: SemanticOutcome
+    terms = QuestionTerms(
+        text=text,
+        excluded=" ".join(
+            (QUESTION_FRAME_WORDS, *(label for a in mentions for label in a.labels()))
+        ),
+        text_search_config=config.text_search_config,
+    )
     try:
+        weights = None
+        if config.lexical_weighted:
+            statistics = await _timed(
+                timings,
+                "question_statistics",
+                question_statistics(
+                    session,
+                    ctx,
+                    text,
+                    terms.excluded,
+                    config.text_search_config,
+                    [a.id for a in mentions],
+                ),
+            )
+            weights = lexical_weights(statistics, config)
         exact = await _timed(
             timings, "exact", exact_candidates(session, ctx, scope, identifiers, config)
         )
@@ -181,6 +204,7 @@ async def retrieve_with_context(
                 config,
                 identifiers=identifiers,
                 mentioned_account_ids=[a.id for a in mentions],
+                weights=weights,
             ),
         )
         if embedding is None or provider is None:
@@ -234,13 +258,6 @@ async def retrieve_with_context(
     )
     timings["fuse_rerank"] = (time.perf_counter() - fusion_started) * 1000
 
-    terms = QuestionTerms(
-        text=text,
-        excluded=" ".join(
-            (QUESTION_FRAME_WORDS, *(label for a in mentions for label in a.labels()))
-        ),
-        text_search_config=config.text_search_config,
-    )
     evidence, question_terms = await _timed(
         timings, "hydrate", hydrate(session, ctx, selected, terms)
     )

@@ -137,6 +137,11 @@ As built (Phase 5 evaluation, `evaluation-plan.md` §9):
 Known weakness (unchanged): the `english` stemmer may conflate product names; the
 `simple` title vector is still the first mitigation if the eval shows it.
 
+Weighted variants (P13.4, evaluation only, off in the product): IDF term weights over the
+reader's permitted chunks, content terms only, a title-only factor and an account factor
+(`RetrievalConfig.lexical_*`; statistics from `retrieval.terms.question_statistics`).
+None improved the held-out split, so ranking stays as above (evaluation-plan §18).
+
 ## 5. Semantic channel (`retrieval.semantic`, pgvector)
 
 **Query egress (D-13).** The question can itself carry confidential information, so

@@ -80,6 +80,20 @@ class RetrievalConfig:
     # A visible account named in the question counts as a matched term (+1) for
     # documents of that account (D-10: query time, visible accounts only).
     lexical_account_terms: bool = True
+    # P13.4 (G5): how matched question lexemes add up in ``coverage`` mode.
+    # count: every distinct question lexeme the chunk contains adds 1 (retrieval-6).
+    # idf: each adds its smoothed inverse document frequency over the reader's
+    #   permitted chunks (the relevance gate's weights), so a rare word outranks a
+    #   common one.
+    lexical_term_weights: Literal["count", "idf"] = "count"
+    # all: every lexeme of the question counts; content: framing words and the names of
+    #   the visible accounts it mentions do not (the account counts as its own term).
+    lexical_counted_terms: Literal["all", "content"] = "all"
+    # A lexeme found only in the title, headings or display reference (weight A, which
+    # every chunk of the document repeats) counts this fraction of one found in the text.
+    lexical_title_factor: float = 1.0
+    # The visible account named in the question, relative to one content term.
+    lexical_account_factor: float = 1.0
     query_embed_timeout_seconds: float = 5.0
     weight_account_match: float = 0.15
     weight_authority: float = 0.10
@@ -96,6 +110,20 @@ class RetrievalConfig:
                 raise ValueError(f"{name} out of range")
         if not 1 <= self.max_chunks_per_document <= MAX_LIMIT:
             raise ValueError("max_chunks_per_document out of range")
+        for name in ("lexical_title_factor", "lexical_account_factor"):
+            if not 0.0 <= getattr(self, name) <= 1.0:
+                raise ValueError(f"{name} out of range")
+
+    @property
+    def lexical_weighted(self) -> bool:
+        """Whether lexical ranking weighs the question's lexemes (P13.4) and so needs
+        their statistics before the lexical statement."""
+        return self.lexical_mode == "coverage" and (
+            self.lexical_term_weights != "count"
+            or self.lexical_counted_terms != "all"
+            or self.lexical_title_factor != 1.0
+            or self.lexical_account_factor != 1.0
+        )
 
     def limits(self) -> dict[str, int]:
         return {

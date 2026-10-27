@@ -23,7 +23,8 @@ so an unreadable chunk that matches the words better is never selected.
 """
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, Final
 
 from sqlalchemy import (
@@ -101,17 +102,24 @@ QUESTION_FRAME_WORDS: Final = (
 )
 
 
-def _content_term(regconfig: ColumnElement[str], text: Any, excluded: Any) -> tuple[Any, Any]:
-    """The question's content lexemes (P13.3): its own lexemes -- the configuration has
-    already dropped stopwords -- except those of ``excluded`` (the names and aliases of
-    the *visible* accounts it mentions, and the question-framing words) and hyphenated
-    compounds ("high-priority" is also parsed into "high" and "priority"; an identifier
-    part such as "-4821" is kept). Returns the lexeme column and the condition."""
-    term = _terms(regconfig, text)
-    return term, and_(
+def content_lexeme_condition(
+    regconfig: ColumnElement[str], term: Any, excluded: Any
+) -> ColumnElement[bool]:
+    """Whether a question lexeme is a content lexeme (P13.3): not one of ``excluded``
+    (the names and aliases of the *visible* accounts the question mentions, and the
+    question-framing words) and not a hyphenated compound ("high-priority" is also
+    parsed into "high" and "priority"; an identifier part such as "-4821" is kept). The
+    configuration has already dropped stopwords."""
+    return and_(
         term != all_(func.tsvector_to_array(func.to_tsvector(regconfig, excluded))),
         term.op("!~")(literal_column("'.-'")),
     )
+
+
+def _content_term(regconfig: ColumnElement[str], text: Any, excluded: Any) -> tuple[Any, Any]:
+    """The question's content lexemes: the lexeme column and the condition."""
+    term = _terms(regconfig, text)
+    return term, content_lexeme_condition(regconfig, term, excluded)
 
 
 def content_terms_matched(regconfig: ColumnElement[str], text: Any, excluded: Any) -> Any:
@@ -132,6 +140,15 @@ def content_terms(regconfig: ColumnElement[str], text: Any, excluded: Any) -> An
     return func.array(select(term).where(content).order_by(term).scalar_subquery())
 
 
+@dataclass(frozen=True, slots=True)
+class LexicalWeights:
+    """What each matched question lexeme, and the named visible account, adds to a
+    chunk's lexical score (P13.4). Lexemes not listed add nothing (they still match)."""
+
+    lexemes: Mapping[str, float]
+    account: float
+
+
 def lexical_statement(
     ctx: AuthorizationContext,
     scope: ResolvedScope,
@@ -140,10 +157,12 @@ def lexical_statement(
     *,
     identifiers: Sequence[str] = (),
     mentioned_account_ids: Sequence[uuid.UUID] = (),
+    weights: LexicalWeights | None = None,
 ) -> Select[tuple[object, ...]]:
     """``identifiers`` are the record references found in the question;
     ``mentioned_account_ids`` must be accounts the reader may see (resolved through
-    ``authz.visible_accounts_predicate``) -- never any other account."""
+    ``authz.visible_accounts_predicate``) -- never any other account. ``weights`` (P13.4,
+    when ``config.lexical_weighted``) replace coordination's one-per-lexeme."""
     # The configuration name is validated by RetrievalConfig (never client input).
     regconfig: ColumnElement[str] = literal_column(f"'{config.text_search_config}'::regconfig")
     param = bindparam("lexical_query", text, type_=Text)
@@ -155,7 +174,17 @@ def lexical_statement(
     # ts_rank_cd with normalization 32 is in [0, 1): with coordination it only breaks
     # ties between chunks that contain the same number of the question's terms.
     score: Any = func.ts_rank_cd(CHUNKS.c.tsv, query, literal_column("32"))
-    if config.lexical_mode == "coverage":
+    if config.lexical_mode == "coverage" and weights is not None:
+        for i, (lexeme, weight) in enumerate(sorted(weights.lexemes.items())):
+            quoted = func.quote_literal(bindparam(f"lexeme_{i}", lexeme, type_=Text))
+            in_text = cast(quoted.op("||")(literal_column("':D'")), TSQUERY)
+            anywhere = cast(quoted, TSQUERY)
+            score = score + weight * case(
+                (CHUNKS.c.tsv.bool_op("@@")(in_text), 1.0),
+                (CHUNKS.c.tsv.bool_op("@@")(anywhere), config.lexical_title_factor),
+                else_=0.0,
+            )
+    elif config.lexical_mode == "coverage":
         score = score + _terms_matched(regconfig, param)
     if config.lexical_identifier_phrases:
         # "HAL-4821" parses into the lexemes 'hal' and '-4821'; 'hal' is in every
@@ -173,7 +202,8 @@ def lexical_statement(
             literal(sorted(mentioned_account_ids), ARRAY(UUID(as_uuid=True)))
         )
         matches = or_(matches, of_account)
-        score = score + case((of_account, 1), else_=0)
+        account_weight = 1.0 if weights is None else weights.account
+        score = score + case((of_account, account_weight), else_=0)
     return (
         select(*candidate_columns(), score.label("score"))
         .select_from(chunks_with_documents(ctx))
@@ -193,6 +223,7 @@ async def lexical_candidates(
     *,
     identifiers: Sequence[str] = (),
     mentioned_account_ids: Sequence[uuid.UUID] = (),
+    weights: LexicalWeights | None = None,
 ) -> list[Candidate]:
     statement = lexical_statement(
         ctx,
@@ -201,6 +232,7 @@ async def lexical_candidates(
         config,
         identifiers=identifiers,
         mentioned_account_ids=mentioned_account_ids,
+        weights=weights,
     )
     rows = (await session.execute(statement)).all()
     return to_candidates(rows, "lexical")

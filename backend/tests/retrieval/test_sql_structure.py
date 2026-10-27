@@ -30,15 +30,25 @@ from lattice.authz import (
 )
 from lattice.retrieval.evidence import QuestionTerms, evidence_statement
 from lattice.retrieval.exact import exact_statement
-from lattice.retrieval.lexical import lexical_statement
+from lattice.retrieval.lexical import LexicalWeights, lexical_statement
 from lattice.retrieval.models import RetrievalConfig
 from lattice.retrieval.permitted import DOCUMENTS, VISIBLE_ACCOUNT, ResolvedScope
 from lattice.retrieval.semantic import semantic_statement
-from lattice.retrieval.terms import term_statistics_statement
+from lattice.retrieval.terms import question_statistics_statement, term_statistics_statement
 
 DIALECT = postgresql.dialect()  # type: ignore[no-untyped-call]
 CONFIG = RetrievalConfig()
-PATHS = ["exact", "lexical", "semantic", "evidence", "evidence_terms", "term_statistics"]
+PATHS = [
+    "exact",
+    "lexical",
+    "lexical_weighted",
+    "semantic",
+    "evidence",
+    "evidence_terms",
+    "term_statistics",
+    "question_statistics",
+]
+WEIGHTED = RetrievalConfig(lexical_term_weights="idf", lexical_title_factor=0.5)
 
 
 def _ctx(scope: str = "assigned", clearance: str = "internal") -> AuthorizationContext:
@@ -105,6 +115,19 @@ def statements(ctx: AuthorizationContext) -> dict[str, Select[tuple[object, ...]
             ctx, [uuid.uuid4()], QuestionTerms("refund window", "Acme Corp Acme", "english")
         ),
         "term_statistics": term_statistics_statement(ctx, ["refund", "window"], [uuid.uuid4()]),
+        # P13.4: weighted lexical ranking and the question's statistics it is built from.
+        "lexical_weighted": lexical_statement(
+            ctx,
+            scope,
+            "refund window",
+            WEIGHTED,
+            identifiers=["HAL-4821"],
+            mentioned_account_ids=[uuid.uuid4()],
+            weights=LexicalWeights({"refund": 2.5, "window": 1.5}, account=0.5),
+        ),
+        "question_statistics": question_statistics_statement(
+            ctx, "refund window", "Acme Corp Acme", "english", [uuid.uuid4()]
+        ),
     }
 
 

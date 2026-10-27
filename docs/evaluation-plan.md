@@ -1446,3 +1446,75 @@ missing from an older baseline as a declared change.
 - Answer metrics are the fake generator's; whether a real model would have abstained on
   the runs the gate now stops is not measured (D-43).
 
+## 18. Lexical candidate quality and ranking (P13.4, 2026-10-27)
+
+**Outcome: no change adopted.** No lexical ranking change met P13.4's acceptance rule
+(phase-13-plan §11: A's R@10 *and* MRR up on held-out, no category down more than 2
+points). The product keeps `retrieval-6`; the committed baselines are unchanged (retrieval
+A compares identical with 0 item-level findings). The variants stay in the code as
+evaluation tunables, off by default, so this record can be reproduced and P13.5 can
+reuse them: `lattice eval retrieval --embedding none --set NAME=VALUE ...`.
+
+What was tried (`RetrievalConfig`, P13.4 fields; lexical channel only, coverage mode):
+
+| Tunable | Values | What it changes |
+| ------- | ------ | --------------- |
+| `lexical_term_weights` | `count` (product), `idf` | each matched lexeme adds 1, or its smoothed IDF over the reader's permitted chunks (the gate's weights) |
+| `lexical_counted_terms` | `all` (product), `content` | framing words and the names of the visible accounts named stop counting (the account counts as its own term) |
+| `lexical_title_factor` | 1.0 (product) .. 0 | a lexeme found only in the title, headings or display reference (weight A, repeated in every chunk of the document) counts this fraction |
+| `lexical_account_factor` | 1.0 (product) .. 0 | the named visible account's term, relative to one content term |
+
+Weighted variants need the question's statistics first: one statement
+(`retrieval.terms.question_statistics`, one pass over the reader's permitted chunks with
+the authorization predicate in its WHERE, at most 48 lexemes) -- +1 statement and about
+6 ms (p50, M1) per search, and so not paid by the product default. "Coverage normalized
+by question length" needs no variant of its own: dividing every chunk's count by the
+question's lexeme count is constant within a question, so it only rescales the fixed
+identifier and account bonuses, which `lexical_account_factor` covers (identifiers
+already rank first: 11/11 at rank 1). A `simple`-configuration title vector was not tried:
+no stemmer conflation was found among the misses.
+
+Configuration A (exact + lexical), items with targets, macro; dev 80 items, held-out 44.
+Each single change was measured on dev and then held-out (the plan's procedure);
+combinations were compared on **dev only**, and the chosen one measured on held-out once.
+
+| Variant | Dev R@10 | Dev MRR | Held-out R@10 | Held-out MRR |
+| ------- | -------: | ------: | ------------: | -----------: |
+| `retrieval-6` (product) | 0.722 | 0.656 | 0.598 | 0.514 |
+| title factor 0.5 | 0.723 | 0.631 | 0.567 | 0.496 |
+| title factor 0 | 0.698 | 0.630 | 0.594 | 0.501 |
+| account factor 0.5 | 0.727 | 0.658 | 0.598 | 0.515 |
+| content terms only | 0.731 | 0.673 | 0.578 | 0.464 |
+| IDF weights | 0.737 | 0.651 | 0.578 | 0.492 |
+| IDF + content | 0.746 | 0.660 | — | — |
+| IDF + content + account 0.5 | 0.742 | 0.661 | — | — |
+| IDF + account 0.5 | 0.740 | 0.651 | — | — |
+| IDF + content + title 0.7 | 0.763 | 0.629 | — | — |
+| **content + account 0.5** (chosen on dev) | **0.739** | **0.679** | **0.578** | **0.461** |
+
+The dev choice was the only combination with R@10 and MRR both up and no dev category
+down (account_visibility 0.81 → 0.88, ai_egress, cross_document, stale up; 6 items up, 2
+down). On held-out it lost: R@10 −2.0, MRR −5.3 points; cross_org 0.833 → 0.700, stale
+0.633 → 0.567, cross_document 0.390 → 0.343 (prompt_injection 0.556 → 0.667). The losses
+are account-centred questions ("What's the latest with Acme?", the Kestrel account
+channel, Veridian's Acme): with the account term halved and "latest" no longer counted,
+an account's own chunks fall behind chunks that share one content word. Single changes
+were flat or worse on held-out too; the best, account factor 0.5, moves held-out MRR by
+0.0003 -- noise.
+
+Reading: on this corpus the first-stage lexical order is not the binding constraint the
+P13.0 analysis expected (G5: 52 lexical-matched targets ranked out in Phase 5). Dev
+moves of 1–2 points are within what 80 items can show, and they do not transfer. The
+misses that remain are mostly targets **no channel returns** (`not_retrieved` 29 of the
+A misses) and **selection losses** (`not_selected` 49): P13.5 (selection) and P13.6
+(multi-hop) territory, not lexical weighting.
+
+Security: every metric 0 in every variant run (A; dev and held-out). The weighted
+statement and the statistics statement are covered by the SQL-structure suite (predicate,
+tenant, lifecycle, account join through visibility) and by a test that an unreadable
+document changes no statistic (`tests/retrieval/test_lexical_weights.py`). Account terms
+stay query-time and visible-only; the `tsv` is unchanged (D-10).
+
+Limitations: configuration C was not run for these variants (nothing was adopted; C is
+P13.5's deciding configuration). Held-out was seen for the five single changes and for
+the dev choice -- no choice was made from it.

@@ -38,6 +38,7 @@ from lattice.errors import LatticeError
 from lattice.evals import baseline
 from lattice.evals.retrieval import (
     ItemResult,
+    config_overrides,
     evaluate_retrieval,
     render_markdown,
     rerank_ablation,
@@ -198,7 +199,12 @@ async def eval_retrieval(args: argparse.Namespace) -> int:
     )
     provider = build_embedding_provider(args.embedding, load_provider_settings())
     app, owner = _databases("lattice-eval")
-    config = rerank_ablation() if args.no_rerank else DEFAULT_CONFIG
+    try:
+        config = config_overrides(
+            args.set or (), rerank_ablation() if args.no_rerank else DEFAULT_CONFIG
+        )
+    except (TypeError, ValueError) as exc:
+        return _fail(str(exc))
     try:
         report = await evaluate_retrieval(
             app,
@@ -362,6 +368,12 @@ def add_parsers(
         "--no-rerank",
         action="store_true",
         help="rerank ablation: every rerank_v1 weight 0 (RRF order); evaluation only",
+    )
+    retrieval.add_argument(
+        "--set",
+        action="append",
+        metavar="NAME=VALUE",
+        help="change one RetrievalConfig tunable for this run (VALUE as JSON); evaluation only",
     )
     add_compare_arguments(retrieval, required=False)
 

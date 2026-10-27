@@ -71,17 +71,19 @@ depends on it (pgvector's float32 distances differ in the last bits between aarc
 and x86-64, and exactly tied fake vectors then order differently; evaluation-plan §15).
 
 ``--no-rerank`` is the rerank ablation: every rerank_v1 weight 0, so evidence follows
-the RRF order. It is an evaluation configuration with its own version string, never
-the product's.
+the RRF order. ``--set NAME=VALUE`` changes one ``RetrievalConfig`` tunable for the run
+(the experiments of evaluation-plan §18+ are reproduced this way). Both are evaluation
+configurations with their own version string, never the product's.
 """
 
 import hashlib
+import json
 import math
 import re
 import uuid
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime
 from typing import Any
 
@@ -387,6 +389,26 @@ def rerank_ablation(config: RetrievalConfig = DEFAULT_CONFIG) -> RetrievalConfig
         weight_recency=0.0,
         weight_identifier=0.0,
     )
+
+
+def config_overrides(
+    pairs: Sequence[str], config: RetrievalConfig = DEFAULT_CONFIG
+) -> RetrievalConfig:
+    """Evaluation only: ``NAME=VALUE`` pairs (VALUE as JSON, else a string) applied to
+    ``config``; the version names them, so the run never passes for the product's."""
+    if not pairs:
+        return config
+    tunable = {f.name for f in fields(RetrievalConfig)} - {"version", "rerank_version"}
+    changes: dict[str, Any] = {}
+    for pair in pairs:
+        name, sep, raw = pair.partition("=")
+        if not sep or name not in tunable:
+            raise ValueError(f"not a retrieval tunable: {pair!r}")
+        try:
+            changes[name] = json.loads(raw)
+        except json.JSONDecodeError:
+            changes[name] = raw
+    return replace(config, version=f"{config.version}+{','.join(sorted(pairs))}", **changes)
 
 
 # --- one item -------------------------------------------------------------------------
