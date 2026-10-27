@@ -1654,3 +1654,72 @@ characters, binds; §13 forbids raising it without a measured gain, and a gain i
 measurable with a real model. C's recall at 12 vs 20 (evaluation-plan §19: 0.732 vs
 0.807) is the size of what a larger item budget could add to context recall. Decision for
 the owner, not taken here.
+
+## 21. Conflicts and temporal reasoning (P13.8, 2026-10-27)
+
+**Outcome: no behaviour change.** Measured on configuration A (171 runs, fake generator;
+the state after P13.7, identical to `answer-A.json`).
+
+### Where conflict handling stands
+
+| Measure | Dev | Held-out | Plan target |
+| ------- | --: | -------: | ----------- |
+| Conflict coverage (both labelled sides in the prompt) | 12/21 (0.57) | 8/15 (0.53) | ≥ 0.8 on held-out |
+| Supersession found | 13/14 overall | | 100% where both sides are retrieved |
+| Unfounded supersession | 0/171 runs | | 0 |
+| Potential conflict found | 0/22 (the fake draft never proposes one) | | model-side; needs D-43 |
+
+Supersession already meets its target: it is assembled deterministically from explicit
+source links between documents in the evidence (D-14), so it is found whenever both
+sides are retrieved -- the one miss (`stale-acme-urgent-response`) has neither SLA policy
+among the retrieved items -- and never invented.
+
+Conflict coverage does **not** meet ≥ 0.8, and the cause is retrieval, not the prompt: of
+the 16 runs with a side missing from the prompt, in 8 the side's record was never
+retrieved, in 6 another chunk of the same record was retrieved but not the labelled one
+(HAL-4821 comment 3 beside other HAL-4821 comments -- the record-neighbour case of the
+P13.6 design, phase-13-plan §24), and 2 were refused by the relevance gate. A step that
+works on the prompt's evidence cannot add a side that retrieval did not return.
+
+### Deterministic conflict candidates: measured, rejected
+
+The plan's pre-pass (pairs of prompt items from different documents that share a
+question content term and state differing dates or numbers, passed to the model as a
+hint) was built and measured on **dev** before deciding whether to prompt with it:
+
+| Rule | Labelled pairs found (both sides in the prompt) | Prompted runs without a labelled conflict that get a candidate |
+| ---- | ----------------------------------------------: | --------------------------------------------------------------: |
+| any differing time or quantity | 6/12 | 58/66 (88%) |
+| a time or quantity of the same kind with different values | 6/12 | 57/66 (86%) |
+
+In this corpus almost every pair of related items states different dates (a decision
+record, the tickets that preceded it, the chat that discussed it), so the hint would
+accompany nearly every prompt and could only push a real model towards reporting
+disagreements that are not there; it finds half of the labelled ones. Not shipped; the
+code was removed. A useful candidate signal needs more than surface facts (for example
+the same attribute of the same subject), which is a language judgement.
+
+### Temporal: in-text dates as scope -- not built
+
+Of the 37 golden questions containing a date expression, many use the date as
+**content**, not as a scope over when evidence was written: "Is Directory Sync coming in
+October or December?" (the two options), "Will Directory Sync cost extra after January
+2027?", "In which month of 2027 will the Frankfurt region go live?", "Is the May design
+for SCIM provisioning still our current approach?", "since the July incident" (an event,
+not a date). Narrowing by such dates removes the evidence the question is about; and
+"How did our Enterprise support response targets change this year?" needs the 2025
+policy that a "this year" filter would drop. A deterministic parser cannot tell scope
+from content reliably, and the plan allows only narrowing, which fails exactly in these
+cases. The asker's explicit scope (`since` / `until`) remains the narrowing mechanism;
+temporal intent keeps its recency boost (rerank_v1).
+
+### Staleness
+
+5/8 (`staleness` check). The three misses come from the fake draft's citations, not from
+thresholds: `stale-refund-window` cites refund-policy v1 because it is ranked first
+(a real answer cites v2); the Northpeak pair differs by persona while the fake cites the
+same items for both; `visibility-kestrel-latest-maya` cites the RCA. Per-authority
+thresholds (system-of-record documents already have their own) would not change any of
+them; not changed.
+
+Security: every metric 0 in every run.

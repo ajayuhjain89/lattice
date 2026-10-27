@@ -15,7 +15,8 @@ answering only; retrieval unchanged.
 **P13.4 (lexical ranking) and P13.5 (fusion and selection) delivered 2026-10-27 with no
 change adopted** (§22–23; evaluation-plan §18–19): no variant improved held-out. **P13.6
 designed for the D-40 review, not built** (§24). **P13.7 (validator suite, prompt-2)
-delivered 2026-10-27** (§25; evaluation-plan §20). P13.4–P13.9 were authorized together
+delivered 2026-10-27** (§25; evaluation-plan §20). **P13.8 (conflicts, temporal)
+delivered 2026-10-27 with no behaviour change** (§26; evaluation-plan §21). P13.4–P13.9 were authorized together
 on 2026-10-27 ("finish P13"); nothing is pushed.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 13. Phase 12
@@ -588,6 +589,10 @@ records its measurements in evaluation-plan §14+. "Re-index" means `lattice rei
 - **Security regressions.** The pre-pass reads permitted evidence only (S4); date
   filters only narrow.
 - **Resources.** Negligible.
+- **Status: delivered 2026-10-27, no behaviour change** (§26; evaluation-plan §21).
+  Supersession meets its target already; conflict coverage (dev 0.57, held-out 0.53) is
+  bound by retrieval; the candidate pre-pass fired on 86% of unlabelled runs and was
+  rejected; in-text date narrowing not built (dates are often content).
 
 ### P13.9 — Regression, performance, optional real-model evaluation and closure
 
@@ -917,3 +922,16 @@ Answering only. Full record: evaluation-plan §20.
 | Prompt budget | unchanged (12 items, 24,000 characters); the item limit binds in 116/129 prompts, characters never pass 25%: raising items is the owner's decision (§13) |
 | Answer A | identical to `answer-A.json`; every security metric 0 |
 | Not measured | real answer quality (D-43) |
+
+## 26. P13.8 delivery record (2026-10-27)
+
+No behaviour change. Full record: evaluation-plan §21.
+
+| Item | Result |
+| ---- | ------ |
+| Supersession | Already deterministic from explicit links: found 13/14 (the miss has neither side retrieved), 0 unfounded in 171 runs -- the target is met |
+| Conflict coverage | dev 12/21, held-out 8/15 (target ≥ 0.8 on held-out: **not met**). Of 16 short runs: 8 side records never retrieved, 6 another chunk of the record retrieved (P13.6 §24 (a)), 2 gate refusals |
+| Candidate pre-pass | built and measured on dev: finds 6/12 labelled pairs, proposes a pair on 57/66 prompted runs without a labelled conflict → rejected, code removed |
+| In-text dates as scope | not built: dates in questions are often content ("October or December", "after January 2027", "this year" for a change since 2025); narrowing would remove what the question asks about |
+| Staleness | 5/8; the misses come from the fake draft's citations, not thresholds; unchanged |
+| Security | every metric 0 |
