@@ -1723,3 +1723,23 @@ thresholds (system-of-record documents already have their own) would not change 
 them; not changed.
 
 Security: every metric 0 in every run.
+
+## 22. Phase 13 closure measurements (P13.9, 2026-10-27)
+
+At the P13.9 HEAD, on isolated databases (port 5440), M1:
+
+| Run | Result |
+| --- | ------ |
+| Retrieval A vs `retrieval-A.json` | identical, 0 item-level findings |
+| Retrieval B (aarch64) vs `retrieval-B-aarch64.json` | identical |
+| Retrieval C vs `retrieval-C-aarch64.json` | identical (run during P13.4; P13.5's RRF weights default to 1.0 and the C screening's neutral runs reproduced it) |
+| Answer A vs `answer-A.json` | identical, 171 runs |
+| Answer C | not re-run: answer A is identical and the P13.7 changes (validator word forms, curly quotes, prompt order) change no fake-pipeline outcome; P13.3's C figures (§17) stand |
+| B (x86-64) | not re-run: retrieval code is unchanged in effect; `retrieval-B-x86_64.json` stays valid |
+| Security | every metric 0 in every run |
+| Latency (A) | retrieval p50 19 ms, p95 32 ms; whole Ask (fake model) p50 37 ms, p95 54 ms |
+| Mutation checks (not committed) | statistics predicate removed → 3 failures; validator number check removed → 7 failures |
+| Full backend suite | **3,459 passed** in 17 min (isolated test database) |
+
+No committed baseline changed during P13.4–P13.9. Phase verdict and the owner's decisions:
+phase-13-plan §27.

@@ -16,7 +16,8 @@ answering only; retrieval unchanged.
 change adopted** (§22–23; evaluation-plan §18–19): no variant improved held-out. **P13.6
 designed for the D-40 review, not built** (§24). **P13.7 (validator suite, prompt-2)
 delivered 2026-10-27** (§25; evaluation-plan §20). **P13.8 (conflicts, temporal)
-delivered 2026-10-27 with no behaviour change** (§26; evaluation-plan §21). P13.4–P13.9 were authorized together
+delivered 2026-10-27 with no behaviour change** (§26; evaluation-plan §21). **P13.9
+engineering closure 2026-10-27** (§27): the phase's remaining decisions are the owner's. P13.4–P13.9 were authorized together
 on 2026-10-27 ("finish P13"); nothing is pushed.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 13. Phase 12
@@ -607,6 +608,9 @@ records its measurements in evaluation-plan §14+. "Re-index" means `lattice rei
 - **Acceptance.** §16.
 - **Resources.** One full backend suite (~17 min, alone), one C run, CI once at the
   closure push.
+- **Status: engineering closure 2026-10-27** (§27; evaluation-plan §22). Completion
+  criteria 1, 2, 4, 5 met; 3 not met (no G2–G6 gain survived held-out); 6–8 wait on the
+  owner (D-41 review, D-43, the closure push).
 
 ## 12. Priorities and dependencies
 
@@ -935,3 +939,65 @@ No behaviour change. Full record: evaluation-plan §21.
 | In-text dates as scope | not built: dates in questions are often content ("October or December", "after January 2027", "this year" for a change since 2025); narrowing would remove what the question asks about |
 | Staleness | 5/8; the misses come from the fake draft's citations, not thresholds; unchanged |
 | Security | every metric 0 |
+
+## 27. Phase 13 closure report (P13.9, 2026-10-27)
+
+**Verdict: engineering is complete as far as it can go without the owner; the phase does
+not meet its quality criterion (§16.3).** The one behaviour change that survived held-out
+evaluation is P13.3's relevance gate, accepted with its trade-off. P13.4 (lexical), P13.5
+(fusion and selection) and P13.8 (conflict candidates) each produced dev gains or
+signals that did not hold on held-out or did not discriminate, and were not adopted.
+P13.6 is designed and waits for the D-40 review. P13.7 delivered the validator suite,
+two in-rule validator fixes and `answer-prompt-2`. Nothing is pushed.
+
+### Final measurements (HEAD, isolated databases, M1)
+
+| Check | Result |
+| ----- | ------ |
+| Retrieval A vs `retrieval-A.json` | identical (0 item-level findings) |
+| Retrieval B (aarch64) vs `retrieval-B-aarch64.json` | identical |
+| Retrieval C vs `retrieval-C-aarch64.json` | identical (P13.4 run; retrieval code unchanged in effect since: RRF weights default 1.0) |
+| Answer A vs `answer-A.json` | identical (171 runs) |
+| Security metrics | 0 in every run of every configuration and split, every checkpoint |
+| Latency (A, local DB) | retrieval p50 19 ms / p95 32 ms (budget 150 ms); whole Ask with the fake model p50 37 ms / p95 54 ms |
+| SQL statements per Ask | unchanged since P13.3 (+1 over P13.0: the gate's statistics); the P13.4 statistics statement runs only for evaluation variants |
+| Prompt | ≤ 12 items, ≤ 6,022 evidence characters (budget 24,000) |
+| Mutation checks (not committed) | predicate removed from `question_statistics` → 3 tests fail; `unsupported_number` removed from the validator → 7 suite cases fail |
+| Full backend suite | 3,459 passed (17 min, isolated test database) |
+| Web | untouched (no API or OpenAPI change) |
+
+### Completion criteria (§16)
+
+| # | Criterion | Status |
+| - | --------- | ------ |
+| 1 | Security metrics 0 everywhere; new statements covered by SQL-structure and property tests | **Met** (new statements: SQL-structure suite and an unreadable-document statistics test; mutation-checked) |
+| 2 | Held-out results for A and C against the P13.0 baseline per item; no unexplained category drop > 2 points | **Met**: retrieval is identical to the P13.0-era baselines; the answer changes are P13.3's, explained and accepted |
+| 3 | G1 to D-39; G2–G5 improved on held-out; G6 conflict coverage ≥ 0.8; G7 staleness ≥ baseline | **Not met.** G1: dev yes, held-out no (owner-accepted, §21). G2–G5: no change survived held-out (§22–23). G6: held-out coverage 0.53, bound by retrieval (§26). G7: 5/8 at HEAD; P13.0's 6/8 was over a different set of runs (P13.2 grew the golden set), and P13.4–P13.8 changed no answer outcome |
+| 4 | Validator adversarial suite at its acceptance level; claim-level fail-closed unchanged | **Met**: 31/31 invalid rejected, 0/30 valid rejected (§25) |
+| 5 | Latency and prompt budgets (§13) | **Met** |
+| 6 | Golden ≥ 150 with provenance and splits; owner review per D-41 | Set: met (159). **Owner review of the 56 held-out items pending**, so no held-out figure is binding |
+| 7 | Real answer quality measured under D-43 or recorded as not measured | **Not measured** (D-43 not approved; reference hardware cannot host a local model) |
+| 8 | Docs as built; full suite; web untouched or green; CI green once at closure | Docs and suite: this checkpoint. **CI and the push wait for the owner's approval** |
+
+### What the phase learned
+
+- With 80 dev and 44 held-out items, one item moving is 1.3 and 2.3 points. Every
+  ranking change tried moved dev by 1–2 points and did not hold; the evaluation
+  foundation (P13.1–P13.2) is what made that visible instead of shipping noise.
+- The largest retrievable gap that does not depend on ordering is evidence no channel
+  returns, a third of it other chunks of a record already found (P13.6 §24 (a)); it is
+  also what bounds conflict coverage (§26).
+- The validator's deterministic floor is now measured: it rejects every authored invalid
+  claim and no authored valid one; entailment remains outside it by design.
+
+### Decisions for the owner
+
+1. **D-40 / P13.6:** approve `expansion_v1` (§24), narrow it to record neighbours, or
+   defer it to a later phase.
+2. **D-41:** review the 56 held-out items (docs/golden-review/ H1–H4); until then no
+   held-out number is binding. A larger held-out split would make future ranking
+   decisions measurable.
+3. **Prompt item budget (§13):** the 12-item limit binds in 116/129 prompts while
+   characters stay under 25%; raising it needs a real-model measurement (D-43).
+4. **Closure:** accept Phase 13 with criterion 3 unmet (as recorded) and authorize the
+   push, branch CI and merge -- or continue with P13.6 first.

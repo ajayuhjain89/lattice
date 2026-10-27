@@ -39,7 +39,12 @@ splits, label provenance and freezes, exhaustive labels, owner review packet, ba
 regenerated) delivered 2026-10-24 with the product owner's held-out review pending;
 P13.3 (the relevance gate: deterministic abstention and the egress-held `evidence_only`,
 calibrated on dev) accepted 2026-10-27 with its held-out trade-off recorded, the first
-answering behaviour change; retrieval is unchanged. P13.4 is not authorized.
+answering behaviour change. P13.4–P13.9 (authorized together 2026-10-27): no lexical,
+fusion, selection or conflict-candidate change survived held-out, so retrieval is
+unchanged; P13.6 (second hop) is designed and awaits the D-40 review; P13.7 added the
+validator adversarial suite, two in-rule validator fixes and `answer-prompt-2`; P13.9
+closed engineering with the quality criterion unmet and the owner's decisions listed
+(phase-13-plan §27). Not pushed.
 
 ---
 
@@ -1251,12 +1256,12 @@ evidence can never enter a prompt (G3); every security metric is 0.
 | P13.1 | Evaluation foundation: metrics, item-level baseline and compare | Approved 2026-10-24 (22fd800; phase-13-plan §19; evaluation-plan §15) |
 | P13.2 | Golden set growth, dev/held-out splits, label provenance | Engineering complete 2026-10-24; owner review of 56 held-out items pending (phase-13-plan §20; evaluation-plan §16) |
 | P13.3 | Relevance gate and abstention calibration | Accepted 2026-10-27 (cb82ce2, `gate_v1`; held-out trade-off recorded in phase-13-plan §21; evaluation-plan §17) |
-| P13.4 | Lexical candidate quality and ranking | Proposed |
-| P13.5 | Fusion, selection and multi-document evidence | Proposed |
-| P13.6 | Multi-hop evidence expansion (only with D-40) | Proposed |
-| P13.7 | Context construction and validator verification | Proposed |
-| P13.8 | Conflicts and temporal reasoning | Proposed |
-| P13.9 | Regression, performance, optional real-model evaluation, closure | Proposed |
+| P13.4 | Lexical candidate quality and ranking | Delivered 2026-10-27, no change adopted (ec11f5c; phase-13-plan §22; evaluation-plan §18) |
+| P13.5 | Fusion, selection and multi-document evidence | Delivered 2026-10-27, no change adopted (c46b94b; §23; evaluation-plan §19) |
+| P13.6 | Multi-hop evidence expansion (only with D-40) | Designed (d13fac6; §24); D-40 review pending; not built |
+| P13.7 | Context construction and validator verification | Delivered 2026-10-27 (2ec9324; §25; evaluation-plan §20) |
+| P13.8 | Conflicts and temporal reasoning | Delivered 2026-10-27, no behaviour change (35885a0; §26; evaluation-plan §21) |
+| P13.9 | Regression, performance, optional real-model evaluation, closure | Engineering closure 2026-10-27 (§27; evaluation-plan §22); quality criterion not met; owner decisions pending |
 
 ---
 
