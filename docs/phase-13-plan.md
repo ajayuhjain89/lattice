@@ -543,6 +543,8 @@ records its measurements in evaluation-plan §14+. "Re-index" means `lattice rei
 - **Security regressions.** S6 (egress of evidence-derived text) and S9 (injection
   steering) are the new risks; both have dedicated tests.
 - **Resources.** One extra SQL round trip per question (budget §13).
+- **Status: design written 2026-10-27 for the D-40 review; no code** (§24). D-40
+  approved the idea, not an implementation: the design waits for the owner.
 
 ### P13.7 — Context construction and grounded-answer verification (G2, G8 answer side)
 
@@ -831,3 +833,68 @@ Retrieval behaviour is **unchanged**. Full record: evaluation-plan §19.
 The finding for the owner: on this golden set, ranking changes move 1–2 points on dev and
 do not hold on held-out. What remains is evidence no channel returns (P13.6, D-40) and the
 size of the held-out split (44 items with targets).
+
+## 24. P13.6 second-hop design (for the D-40 review; not implemented)
+
+D-40 approved one bounded, deterministic second pass *in principle* and required its
+design to be reviewed before any code. This is that design. Nothing below is built.
+
+### 24.1 What the misses say (C snapshot, all 124 items with targets)
+
+Of the 107 targets C misses in the top 10, **33 are other chunks of a record already in
+the top 10** (A: 41 of 117): HAL-4821 comments 3, 5, 6 and 7 when the ticket's opening is
+found; release-notes sections; refund-policy-v2 §3; HAL-4877 comments 3 and 5; the
+scim-ga-decision paragraph after the one found. 73 targets are never in the top 20; the
+rest are cross-record hops ("What commitments have we made to Acme?" → the SCIM decision
+record and HAL-4821 comment 3, neither of which mentions Acme or a commitment) and
+vocabulary gaps ("Directory Sync" ↔ "SCIM").
+
+### 24.2 Proposed design: `expansion_v1`
+
+One extra statement per request, after selection and before hydration, inside the same
+snapshot. Inputs are the **top `k_seed = 5` selected candidates** -- chunks the reader may
+read (they passed the SQL predicate and E4). Three sources, at most `k_expand = 10`
+candidates in all:
+
+| Source | What it adds | From |
+| ------ | ------------ | ---- |
+| (a) Record neighbours | the chunks of the seed documents adjacent to a seed chunk (ordinal ± 1), and chunks of a seed document that contain a question content term | seed document IDs (no text) |
+| (b) References | records whose display reference is an identifier (`HAL-1234`, `INC-2026-031`, ...) written in a seed chunk's text and not in the question; at most 5 identifiers | permitted evidence text, parsed by the existing identifier grammar |
+| (c) Readable links | the readable supersession neighbours of seed documents (already computed by hydration, D-14) | metadata |
+
+Pseudo-relevance terms (salient words of the seeds as a new lexical query) are **left
+out** of v1: they need text from evidence to become a query, they are the injection path
+S9 worries about most, and the misses above are mostly (a). They can be a v2 after v1 is
+measured.
+
+The statement is one `UNION ALL` of the three, each branch with the tenant, lifecycle and
+`readable_documents_predicate` conditions in its own WHERE (S1), ranked (a) by seed rank
+then ordinal distance, (b) by identifier order, (c) by seed rank. Expansion candidates
+join fusion as a fourth list with RRF weight 0.5 (they never outrank what the question
+found on its own), then rerank and selection as today. E4 runs over them with every
+other candidate (S2).
+
+### 24.3 Security
+
+| Risk | Control | Test |
+| ---- | ------- | ---- |
+| S1 retrieve-then-filter | every branch carries the predicate | SQL-structure suite gains the expansion statement |
+| S4 an unreadable document changes the outcome | seeds are permitted rows only; the statement selects permitted rows only | same result with and without a hidden document that names a seed's identifier |
+| S6 egress of evidence-derived text | nothing is embedded or sent anywhere: (a)–(c) are SQL over IDs and identifiers | `expansion_egress_violations` = 0 by construction; test asserts no provider call |
+| S9 injected identifiers steer retrieval | an identifier planted in a readable chunk can only reach a record the reader may read (the predicate), at most 5, at weight 0.5; claims still need valid citations | planted-identifier fixture: a readable ticket names a confidential record and a non-existent one; neither appears for a reader without access; the answer validator rejects claims citing nothing |
+| S5 hidden accounts | no account input; account metadata stays the visible join | existing golden `hidden_accounts` |
+| S10 traces | trace holds counts and chunk IDs per source, never identifiers or text | trace test |
+
+### 24.4 Cost and acceptance
+
++1 statement (budget §13: ≤ +2), index-served (document ID, `display_ref`, ordinal); no
+model call. Acceptance stays as the plan states (§11 P13.6): multi-hop targets found @10
+for ≥ 30% of them on held-out, no category down more than 2 points, expansion security
+metrics 0. Given P13.4–P13.5, the owner should expect the held-out effect to be judged on
+44 items; (a) is the part with the clearest mechanism.
+
+### 24.5 Decisions for the owner
+
+1. Approve `expansion_v1` as above, or narrow it (for example (a) only).
+2. Confirm pseudo-relevance terms stay out of Phase 13.
+3. Confirm the fourth-list weight 0.5 is a starting value to be chosen on dev only.
