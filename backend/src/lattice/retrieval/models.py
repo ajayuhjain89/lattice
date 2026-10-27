@@ -69,6 +69,10 @@ class RetrievalConfig:
     fused_pool: int = 40
     max_chunks_per_document: int = 3
     rrf_k: int = 60
+    # P13.5: each channel's RRF contribution is multiplied by its weight.
+    rrf_weight_exact: float = 1.0
+    rrf_weight_lexical: float = 1.0
+    rrf_weight_semantic: float = 1.0
     text_search_config: str = "english"
     # all_terms: websearch_to_tsquery (every term must match; the Phase 0 design).
     # any_term: any of the question's lexemes may match; ranked by ts_rank_cd.
@@ -113,6 +117,17 @@ class RetrievalConfig:
         for name in ("lexical_title_factor", "lexical_account_factor"):
             if not 0.0 <= getattr(self, name) <= 1.0:
                 raise ValueError(f"{name} out of range")
+        for name in ("rrf_weight_exact", "rrf_weight_lexical", "rrf_weight_semantic"):
+            if not 0.0 < getattr(self, name) <= 4.0:
+                raise ValueError(f"{name} out of range")
+
+    @property
+    def rrf_weights(self) -> dict[Channel, float]:
+        return {
+            "exact": self.rrf_weight_exact,
+            "lexical": self.rrf_weight_lexical,
+            "semantic": self.rrf_weight_semantic,
+        }
 
     @property
     def lexical_weighted(self) -> bool:

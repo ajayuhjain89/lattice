@@ -1518,3 +1518,65 @@ stay query-time and visible-only; the `tsv` is unchanged (D-10).
 Limitations: configuration C was not run for these variants (nothing was adopted; C is
 P13.5's deciding configuration). Held-out was seen for the five single changes and for
 the dev choice -- no choice was made from it.
+
+## 19. Fusion, selection and multi-document evidence (P13.5, 2026-10-27)
+
+**Outcome: no change adopted.** Configuration C (local mxbai approved `restricted`, the
+P13.2 Orbital-fix snapshot 277fb9ff8982; D-38) decided, as the plan requires; A was
+screened first. The product keeps `retrieval-6`; retrieval A and C compare identical with
+their committed baselines. New evaluation tunables, off by default: per-channel RRF
+weights (`rrf_weight_exact`, `rrf_weight_lexical`, `rrf_weight_semantic`); `lattice eval
+answer` gains `--set` too, and answer reports now record the retrieval configuration
+version (a declared change for `eval compare`).
+
+Dev screening (items with targets, macro; dev 80 items):
+
+| Variant | A R@10 | A MRR | C R@10 | C MRR | C ≥3-target R@10 | Note |
+| ------- | -----: | ----: | -----: | ----: | ---------------: | ---- |
+| `retrieval-6` (product) | 0.722 | 0.656 | 0.739 | 0.641 | 0.564 | |
+| ≤ 1 chunk per document first (`max_chunks_per_document=1`) | 0.650 | 0.629 | 0.622 | 0.579 | 0.510 | document R@10 up (C 0.816 → 0.873), but targets are often several chunks of one document; lookup, supersession, conflicts and injection lose |
+| ≤ 2 per document | 0.697 | 0.653 | 0.700 | 0.627 | 0.538 | same, smaller |
+| fused pool 80 (from 40) | 0.722 | 0.656 | 0.739 | 0.641 | 0.564 | identical: nothing ranked 41–80 reaches the top 20 |
+| RRF k 30 | 0.727 | 0.665 | — | — | — | |
+| rerank off (RRF order) | 0.722 | 0.643 | 0.752 | 0.622 | 0.543 | rerank_v1 buys MRR (+1.3 A, +1.9 C) for ≤ 1.2 points of recall: **kept as is** |
+| semantic ×1.5 | — | — | 0.708 | 0.648 | 0.564 | account_visibility 0.81 → 0.60 |
+| lexical ×1.25 (**dev choice**) | — | — | **0.756** | **0.651** | 0.557 | cross_document, cross_source, stale up; nothing down |
+| lexical ×1.5 | — | — | 0.752 | 0.655 | 0.544 | |
+| lexical ×2 | — | — | 0.733 | 0.661 | 0.544 | |
+| lexical ×1.5, k 30 (after the held-out look) | — | — | 0.760 | 0.674 | 0.551 | dev only; see below |
+
+Held-out (44 items), measured once for the dev choice: C R@10 0.649 → **0.626**, MRR 0.558
+→ 0.558, ≥3-target 0.443 → 0.443. The loss is one single-target lookup
+(`lookup-acme-renewal-date`, rank 10 → 11); every other change is a rank moving by one or
+two. P13.5's rule (C R@10 *and* context recall up on held-out, ≥3-target items better) is
+not met: **not adopted**. The last row was tried on dev after the held-out result was
+known; testing it on held-out would be a second look at the same 44 items, so it is
+recorded as a dev-only candidate for a fresh held-out (after the D-41 review or the next
+golden growth), not as a result.
+
+Other scope items:
+
+- **Evidence limit vs prompt budget.** Retrieval returns 12 items to Ask (the prompt
+  budget, §13 "never above"), the evaluation 20. Recall at 10 / 12 / 20 over all items:
+  A 0.678 / 0.719 / 0.772, C 0.707 / 0.732 / 0.807. About 7 points of C's recall sit at
+  ranks 13–20 and cannot reach a 12-item prompt; raising the budget is P13.7's question,
+  and §13 forbids it without a measured gain.
+- **C′ (local approved `internal`) was not run**: its question (does a guaranteed lexical
+  share stop confidential lexical-only chunks being crowded out?) is answered by the
+  lexical weight, which did not survive C's held-out.
+- **The P13.3 refusal patterns** (paraphrase without a shared specific word, account
+  questions about large accounts) are gate decisions; no fusion change touches them.
+
+Where the misses are (all items, top 10): A `not_retrieved` 29, `not_selected` 49,
+`outside_fused_pool` 6, `ranked_below_k` 33; C 16, 45, 12, 34. Selection losses are
+targets the reranked pool holds at ranks 21–40 behind chunks that share the question's
+topic -- ordering noise at this corpus size, as the screening shows. The retrievable gap
+that does not depend on ordering is `not_retrieved` (P13.6).
+
+Security: every metric 0 in every run (A, C; dev and held-out). Fusion is in Python over
+candidates the database already authorized; weights change order only (S1, S2 unchanged).
+
+Reading for the phase: two checkpoints of ranking work produced dev gains of 1–2 points
+that did not hold on held-out. With 80 dev and 44 held-out items, a one-item move is 1.3
+and 2.3 points; differences of this size are not evidence. The plan's assumption that G4
+and G5 were large, rankable losses is not supported at this corpus size.

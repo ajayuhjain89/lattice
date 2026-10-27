@@ -12,8 +12,8 @@ pending. **P13.3 (relevance gate and abstention calibration) delivered 2026-10-2
 accepted by the product owner the same day as committed (cb82ce2, `gate_v1`), with its
 held-out trade-off recorded** (§21; evaluation-plan §17): the first behaviour change --
 answering only; retrieval unchanged.
-**P13.4 (lexical ranking) delivered 2026-10-27 with no change adopted** (§22;
-evaluation-plan §18): no variant improved held-out. P13.4–P13.9 were authorized together
+**P13.4 (lexical ranking) and P13.5 (fusion and selection) delivered 2026-10-27 with no
+change adopted** (§22–23; evaluation-plan §18–19): no variant improved held-out. P13.4–P13.9 were authorized together
 on 2026-10-27 ("finish P13"); nothing is pushed.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 13. Phase 12
@@ -520,6 +520,8 @@ records its measurements in evaluation-plan §14+. "Re-index" means `lattice rei
 - **Security regressions.** Confidential lexical-only evidence gains rank but stays
   subject to the egress level when the prompt is built (S6).
 - **Resources.** C query-side runs only (corpus reused).
+- **Status: delivered 2026-10-27, no change adopted** (§23; evaluation-plan §19). The
+  dev choice (lexical ×1.25 in fusion) lost C R@10 on held-out; rerank_v1 confirmed.
 
 ### P13.6 — Multi-hop evidence expansion (G2)
 
@@ -810,3 +812,22 @@ Authorized with the rest of Phase 13 ("finish P13", 2026-10-27). Retrieval behav
 
 Carried to P13.5: most remaining A misses are targets no channel returns or targets lost
 at selection, not lexical order.
+
+## 23. P13.5 delivery record (2026-10-27)
+
+Retrieval behaviour is **unchanged**. Full record: evaluation-plan §19.
+
+| Item | Result |
+| ---- | ------ |
+| Variants (evaluation tunables, off by default) | `rrf_weight_exact` / `_lexical` / `_semantic` (each channel's RRF contribution × its weight); the existing `max_chunks_per_document`, `fused_pool`, `rrf_k` and `--no-rerank` |
+| Evaluation | `lattice eval answer --set NAME=VALUE`; answer reports record `retrieval_config_version`, which `eval compare` treats as a declared configuration |
+| Dev choice (C) | lexical ×1.25: R@10 0.739 → 0.756, MRR 0.641 → 0.651, no category down |
+| Held-out (C) | R@10 0.649 → 0.626 (one lookup rank 10 → 11), MRR and ≥3-target flat → **not adopted** |
+| Selection | One or two chunks per document first raises document recall and lowers chunk recall (targets are often several chunks of one document): rejected. Pool 80: no effect. rerank_v1: kept (buys MRR) |
+| Prompt budget | 12 items unchanged; ~7 points of C recall sit at ranks 13–20 (evaluation-plan §19) |
+| Not run | C′ (the crowd-out mechanism did not survive C); context recall (nothing to adopt) |
+| Security | Every metric 0 in every run |
+
+The finding for the owner: on this golden set, ranking changes move 1–2 points on dev and
+do not hold on held-out. What remains is evidence no channel returns (P13.6, D-40) and the
+size of the held-out split (44 items with targets).

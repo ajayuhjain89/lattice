@@ -107,7 +107,7 @@ from lattice.providers.generation import (
 from lattice.providers.generation_factory import Declaration, GenerationFactory
 from lattice.providers.records import CredentialRef, GenerationConfig
 from lattice.providers.secrets import SecretStore
-from lattice.retrieval import RetrievalScope
+from lattice.retrieval import DEFAULT_CONFIG, RetrievalConfig, RetrievalScope
 
 ACTOR = "operator:eval-answer"
 SECURITY_KINDS = (
@@ -335,6 +335,7 @@ async def evaluate_item(
     deps: AskDependencies,
     recorder: RecordingFactory,
     judge: "Judge | None",
+    retrieval_config: RetrievalConfig = DEFAULT_CONFIG,
 ) -> AnswerItemResult:
     out = AnswerItemResult(
         id=item.id,
@@ -377,6 +378,7 @@ async def evaluate_item(
                 ),
             ),
             deps=deps,
+            config=retrieval_config,
             now=AS_OF,
         )
     except LatticeError as exc:
@@ -703,6 +705,8 @@ class AnswerReport:
     database_platform: str = "unknown"
     # P13.3: the relevance gate's version (a declared change for ``eval compare``).
     gate_version: str = DEFAULT_GATE.version
+    # P13.5: the retrieval configuration the Asks ran with (``--set`` names overrides).
+    retrieval_config_version: str = DEFAULT_CONFIG.version
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
@@ -916,6 +920,7 @@ async def evaluate_answers(
     items: Sequence[GoldenItem],
     judge: Judge | None = None,
     progress: Callable[[AnswerItemResult], None] | None = None,
+    retrieval_config: RetrievalConfig = DEFAULT_CONFIG,
 ) -> AnswerReport:
     texts = await load_texts(owner, identities.org_ids)
     platform = await database_platform(owner)
@@ -946,6 +951,7 @@ async def evaluate_answers(
                 deps=deps,
                 recorder=recorder,
                 judge=judge,
+                retrieval_config=retrieval_config,
             )
             results.append(result)
             if progress is not None:
@@ -966,6 +972,7 @@ async def evaluate_answers(
         corpus_fingerprint=corpus.fingerprint,
         golden_version=golden_version(items),
         database_platform=platform,
+        retrieval_config_version=retrieval_config.version,
     )
 
 

@@ -119,6 +119,8 @@ def _answer_configuration(report: Mapping[str, Any]) -> dict[str, Any]:
         "judge": report.get("judge"),
         # P13.3; reports and baselines from before the gate have none.
         "gate_version": report.get("gate_version"),
+        # P13.5; reports and baselines from before it have none.
+        "retrieval_config_version": report.get("retrieval_config_version"),
     }
 
 

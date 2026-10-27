@@ -342,3 +342,15 @@ def test_a_new_relevance_gate_is_a_declared_change_even_against_older_baselines(
     assert result.intended == ["gate_version: None -> gate_v1"]
     assert result.verdict == "changed"
     assert baseline.compare(run, run).verdict == "identical"
+
+
+def test_the_retrieval_configuration_of_an_answer_run_is_declared() -> None:
+    # P13.5: an answer run records the retrieval configuration its Asks used, so a
+    # `--set` experiment or a new retrieval default is a declared change, never drift.
+    base = _answer_report(_answer_run("nps")) | {"retrieval_config_version": "retrieval-6"}
+    run = base | {"retrieval_config_version": "retrieval-6+max_chunks_per_document=2"}
+    result = baseline.compare(base, run)
+    assert result.intended == [
+        "retrieval_config_version: retrieval-6 -> retrieval-6+max_chunks_per_document=2"
+    ]
+    assert result.verdict == "identical"  # declared, and nothing moved

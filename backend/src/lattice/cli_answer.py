@@ -44,7 +44,7 @@ from lattice.evals.answer import (
     evaluate_answers,
     render_markdown,
 )
-from lattice.evals.retrieval import load_corpus, load_identities, select_items
+from lattice.evals.retrieval import config_overrides, load_corpus, load_identities, select_items
 from lattice.providers.egress import ProviderRecord
 from lattice.providers.factory import PROVIDER_NAMES, build_embedding_provider
 from lattice.providers.generation_factory import DefaultGenerationFactory
@@ -197,6 +197,10 @@ async def eval_answer(args: argparse.Namespace) -> int:
         personas=args.persona or (),
         item_ids=args.item or (),
     )
+    try:
+        retrieval_config = config_overrides(args.set or ())
+    except (TypeError, ValueError) as exc:
+        return _fail(str(exc))
     factory = DefaultGenerationFactory(_env())
     embedding = build_embedding_provider(args.embedding, load_provider_settings())
     app, owner = _databases("lattice-eval-answer")
@@ -217,6 +221,7 @@ async def eval_answer(args: argparse.Namespace) -> int:
             items=items,
             judge=judge,
             progress=None if args.quiet else _progress,
+            retrieval_config=retrieval_config,
         )
     finally:
         await app.dispose()
@@ -295,4 +300,10 @@ def add_parsers(
     answer.add_argument("--golden", type=Path, default=GOLDEN)
     answer.add_argument("--out", type=Path, default=REPORTS)
     answer.add_argument("--quiet", action="store_true")
+    answer.add_argument(
+        "--set",
+        action="append",
+        metavar="NAME=VALUE",
+        help="change one RetrievalConfig tunable for this run (VALUE as JSON); evaluation only",
+    )
     add_compare_arguments(answer, required=False)

@@ -242,7 +242,12 @@ async def retrieve_with_context(
     )
 
     fusion_started = time.perf_counter()
-    fused = fuse((exact, lexical, semantic), k=config.rrf_k, pool=config.fused_pool)
+    fused = fuse(
+        (exact, lexical, semantic),
+        k=config.rrf_k,
+        pool=config.fused_pool,
+        weights=config.rrf_weights,
+    )
     account_targets = {a.id for a in mentions} | (
         {scope.account_id} if scope.account_id is not None else set()
     )

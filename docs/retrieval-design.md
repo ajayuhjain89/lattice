@@ -199,6 +199,8 @@ the exact, lexical and semantic lists. A chunk found by several channels is one
 candidate with its per-channel ranks and scores (`matched_by`). Identity is
 `(organization_id, chunk_id)`: two tenants' rows are never merged. Order: fused score,
 best channel rank, stable key, ID (total, deterministic). Top `fused_pool = 40`.
+Per-channel weights (`rrf_weight_*`, P13.5) exist as evaluation tunables at 1.0; no
+weighting improved the held-out split (evaluation-plan §19).
 
 **rerank_v1** (`retrieval.rerank`, deterministic, versioned):
 
