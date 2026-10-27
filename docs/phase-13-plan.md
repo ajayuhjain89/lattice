@@ -13,7 +13,9 @@ accepted by the product owner the same day as committed (cb82ce2, `gate_v1`), wi
 held-out trade-off recorded** (§21; evaluation-plan §17): the first behaviour change --
 answering only; retrieval unchanged.
 **P13.4 (lexical ranking) and P13.5 (fusion and selection) delivered 2026-10-27 with no
-change adopted** (§22–23; evaluation-plan §18–19): no variant improved held-out. P13.4–P13.9 were authorized together
+change adopted** (§22–23; evaluation-plan §18–19): no variant improved held-out. **P13.6
+designed for the D-40 review, not built** (§24). **P13.7 (validator suite, prompt-2)
+delivered 2026-10-27** (§25; evaluation-plan §20). P13.4–P13.9 were authorized together
 on 2026-10-27 ("finish P13"); nothing is pushed.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 13. Phase 12
@@ -565,6 +567,9 @@ records its measurements in evaluation-plan §14+. "Re-index" means `lattice rei
 - **Security regressions.** Prompt changes never add access metadata, IDs, hidden
   accounts or other tenants; nonce delimiters and injection tests unchanged.
 - **Resources.** Zero cost (scripted provider).
+- **Status: delivered 2026-10-27** (§25; evaluation-plan §20). Validator suite 31/31
+  invalid rejected, 0/30 valid rejected after two in-rule fixes; `answer-prompt-2`;
+  citation completeness measured in the trace, not enforced; answer A identical.
 
 ### P13.8 — Conflicts and temporal reasoning (G6, G7)
 
@@ -898,3 +903,17 @@ metrics 0. Given P13.4–P13.5, the owner should expect the held-out effect to b
 1. Approve `expansion_v1` as above, or narrow it (for example (a) only).
 2. Confirm pseudo-relevance terms stay out of Phase 13.
 3. Confirm the fourth-list weight 0.5 is a starting value to be chosen on dev only.
+
+## 25. P13.7 delivery record (2026-10-27)
+
+Answering only. Full record: evaluation-plan §20.
+
+| Item | Result |
+| ---- | ------ |
+| Validator adversarial suite | 65 authored claims: 31/31 invalid rejected with the expected code, 0/30 valid rejected, 4 "beyond the contract" cases documented as passing (entailment is the judge's, D-44) |
+| Validator fixes (within the documented rules) | word forms compared after one common suffix ("moved" shares "moves"); curly outer quotes stripped like straight ones. Before: 3/30 valid rejected |
+| `answer-prompt-2` | a record's chunks adjacent; supersession between records in the prompt named by handle; one instruction line. Version in every trace |
+| Citation completeness | not enforced: as a status rule it mislabelled 8/119 expected-answered fake runs and its real effect needs D-43; the trace records `decisive_in_prompt` / `decisive_cited` |
+| Prompt budget | unchanged (12 items, 24,000 characters); the item limit binds in 116/129 prompts, characters never pass 25%: raising items is the owner's decision (§13) |
+| Answer A | identical to `answer-A.json`; every security metric 0 |
+| Not measured | real answer quality (D-43) |

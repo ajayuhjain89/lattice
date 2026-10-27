@@ -336,6 +336,9 @@ for every provider.
   an account the asker may not see as structured metadata.
 - Evidence is ordered **chronologically** within the prompt (with rank retained as an
   attribute) — this makes temporal reasoning about conflicts easier for the model.
+  Since `answer-prompt-2` (P13.7) a record's chunks are adjacent (records ordered by
+  their earliest chunk) and supersession between two records in the prompt is named by
+  handle (`supersedes`, `superseded_by`).
 - The instructions require: answer only from evidence; every factual claim cites ≥ 1
   handle with a short verbatim quote; mark whether each claim directly answers the
   question; when evidence disagrees, attribute each statement to its source and date

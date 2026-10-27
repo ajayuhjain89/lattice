@@ -321,6 +321,7 @@ async def answer_question(
         [e for e in candidates if not access.permits(e)] if access.level and not action else []
     )
     fits, _ = budget(permitted)
+    decisive_in_prompt = relevance.decisive & {e.chunk_id for e in fits}
     calls = _Calls()
     validation: Validation | None = None
     prompt: Prompt | None = None
@@ -497,6 +498,18 @@ async def answer_question(
             "conflicts_proposed": validation.conflicts_proposed if validation else 0,
             "conflicts_discarded": validation.conflicts_discarded if validation else 0,
             "model_status": validation.model_status if validation else None,
+            # P13.7 citation completeness, measured not enforced (evaluation-plan §20): the
+            # gate's decisive items the prompt carried, and how many direct answers cite.
+            "decisive_in_prompt": len(decisive_in_prompt) if prompt else 0,
+            "decisive_cited": len(
+                decisive_in_prompt
+                & {
+                    c.chunk_id
+                    for claim in (validation.claims if validation else [])
+                    if claim.role == "direct_answer"
+                    for c in claim.citations
+                }
+            ),
         },
         "answer": answer.model_dump(mode="json", exclude={"evidence", "trace_id"}),
         "status": status,

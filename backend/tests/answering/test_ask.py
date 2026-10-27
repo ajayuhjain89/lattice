@@ -343,7 +343,7 @@ async def test_the_trace_row_holds_references_not_content(app_db: Database, org:
         )
     assert row["status"] == "answered"
     assert row["prompt_chunk_ids"]
-    assert row["egress"]["prompt_version"] == "answer-prompt-1"
+    assert row["egress"]["prompt_version"] == "answer-prompt-2"
     stored = str(dict(row["retrieval"])) + str(dict(row["egress"])) + str(dict(row["validation"]))
     assert "Enterprise customers may request" not in stored  # no evidence text
     assert "answer drafter" not in stored  # no prompt

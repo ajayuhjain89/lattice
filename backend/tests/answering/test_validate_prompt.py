@@ -206,6 +206,29 @@ def test_prompt_blocks_handles_and_order() -> None:
     assert not re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-", prompt.text)
 
 
+def test_a_records_chunks_are_adjacent_and_supersession_is_named_by_handle() -> None:
+    # answer-prompt-2 (P13.7): records ordered by their earliest chunk, a record's chunks
+    # together in their order; links name handles of records in the same prompt only.
+    doc, policy_v1, policy_v2, outside = (uuid.uuid4() for _ in range(4))
+    late = ev("Third part.", "Plan", rank=1, document=doc, when=datetime(2026, 9, 3, tzinfo=UTC))
+    early = ev("First part.", "Plan", rank=4, document=doc, when=datetime(2026, 9, 1, tzinfo=UTC))
+    late = late.model_copy(update={"ordinal": 2})
+    middle = ev("Between.", "Chat", rank=2, when=datetime(2026, 9, 2, tzinfo=UTC))
+    v1 = ev("Refunds within 30 days.", "Refund v1", rank=3, document=policy_v1).model_copy(
+        update={"superseded_by_document_ids": (policy_v2, outside)}
+    )
+    v2 = ev("Refunds within 14 days.", "Refund v2", rank=5, document=policy_v2).model_copy(
+        update={"supersedes_document_id": policy_v1}
+    )
+    prompt = build_prompt("q?", [late, middle, v1, early, v2], nonce=NONCE)
+    titles = [(i.evidence.title, i.evidence.text) for i in prompt.items]
+    assert titles[:3] == [("Plan", "First part."), ("Plan", "Third part."), ("Chat", "Between.")]
+    handle = {i.evidence.document_id: i.handle for i in prompt.items}
+    assert f'superseded_by="{handle[policy_v2]}">' in prompt.text  # not the absent record
+    assert f'supersedes="{handle[policy_v1]}">' in prompt.text
+    assert prompt.text.count("supersedes=") == 1
+
+
 def test_account_attribute_only_when_visible() -> None:
     visible = VisibleAccount(id=uuid.uuid4(), key="acme", name="Acme Corp")
     shown = build_prompt("q?", [ev("Some text here.", account=visible)], nonce=NONCE)

@@ -1580,3 +1580,77 @@ Reading for the phase: two checkpoints of ranking work produced dev gains of 1�
 that did not hold on held-out. With 80 dev and 44 held-out items, a one-item move is 1.3
 and 2.3 points; differences of this size are not evidence. The plan's assumption that G4
 and G5 were large, rankable losses is not supported at this corpus size.
+
+## 20. Context construction and grounded-answer verification (P13.7, 2026-10-27)
+
+Answering only; retrieval unchanged. Fake extractive generator throughout (EC-1): these
+are pipeline decisions; whether a real model answers better with the new prompt is **not
+measured** (D-43).
+
+### Validator adversarial suite (EC-4)
+
+`tests/answering/test_validator_suite.py`: five authored evidence items (decision record,
+ticket, postmortem, policy, chat) and 65 authored claims, each validated alone as a
+scripted provider would send it.
+
+| Kind | Cases | Rejected | Acceptance |
+| ---- | ----: | -------: | ---------- |
+| Invalid: unknown or foreign handles (missing, another request's, lower-case, a document or chunk UUID) | 5 | 5 | all |
+| Invalid: quotes not verbatim in the cited item (paraphrased, number altered, borrowed from another item, spliced, case changed, invented, too short, too long) | 8 | 8 | all |
+| Invalid: numbers the cited evidence lacks (minutes, days, year, day, percent, a number from an uncited item, invented) | 7 | 7 | all |
+| Invalid: a real quote that does not concern the claim (unrelated, cross-claim, other person, attribution only) | 4 | 4 | all |
+| Invalid: unsafe content and shape (URL, markdown link, e-mail, HTML, no citation, six citations, too long) | 7 | 7 | all |
+| **Invalid total** | **31** | **31 (100%)** | 100% |
+| **Valid** (paraphrase around a verbatim quote, attribution, metadata dates, two and three citations, curly quotes, non-breaking hyphens, ellipsis, handle named in the text) | **30** | **0 (0%)** | ≤ 5% |
+| Beyond the contract (negation, a month swapped without a digit, wrong person, over-claim) | 4 | 0 | documented: entailment is the judge's (D-44) |
+
+The suite found two false-rejection causes in the validator (3 of 30 valid claims, 10%,
+before the fix), both corrected **within the documented rules** and with every invalid
+case still rejected:
+
+- **Word forms.** `no_shared_terms` compared words after stripping trailing "s" only, so
+  "GA moved to 8 December" did not share a word with "general availability moves from 15
+  October to 8 December" (the title supplied "Directory Sync"; month names are
+  attribution words). One common English suffix (`ing`, `ed`, `es`, `s`, `e`) is now
+  removed before comparing. The rule is unchanged: a claim must share a content word
+  with its quote's sentence.
+- **Curly outer quotes.** "Surrounding quotation marks are ignored" applied to straight
+  quotes only; a quote the model wrapped in “…” was `quote_not_found`.
+
+The "beyond" cases are the honest boundary: a wrong statement sharing words with a real
+quote and carrying no digit passes the deterministic validator (it never claimed to
+check entailment). Claim-level fail-closed behaviour is unchanged (S8).
+
+### answer-prompt-2
+
+Evidence blocks keep their attributes; a record's chunks are now adjacent, in their
+order within the record (records ordered by their earliest chunk, as before by date), and
+an explicit supersession link between two records in the same prompt is named by handle
+(`supersedes="E2"`, `superseded_by="E5"`; readable documents only, D-14). One instruction
+line explains both. No access metadata, IDs or accounts were added (the prompt tests
+assert no UUID appears).
+
+### Citation completeness: measured, not enforced
+
+The plan proposed downgrading a direct answer that cites none of the gate's decisive
+items to `partial`. Under the fake generator (which cites its top-ranked item) that rule
+turned 8 of 119 expected-`answered` runs into `partial`; the decisive signal (coverage ≥
+0.5, identifier, semantic floor) is a relevance proxy, and a real model citing a
+relevant item the proxy rates `partial` would be mislabelled. Whether the rule helps
+needs a real model (D-43). It is therefore **not a status rule**: the trace's
+`validation` records `decisive_in_prompt` and `decisive_cited` (counts), so the rate can
+be read from a D run when one is approved.
+
+### Results (configuration A, 171 runs)
+
+`lattice eval answer --compare ../evals/baselines/answer-A.json`: **identical** -- no
+item, target or category differs (the validator fixes and the prompt order change no
+fake-pipeline outcome; the fake draft quotes first sentences verbatim). Security: every
+metric 0. Context recall 0.657 (= P13.3).
+
+Prompt budget (A): evidence per prompt p50 3,398 / p95 5,036 / max 6,022 characters of
+the 24,000 allowed; **116 of 129 prompts are at the 12-item limit**. The item limit, not
+characters, binds; §13 forbids raising it without a measured gain, and a gain is only
+measurable with a real model. C's recall at 12 vs 20 (evaluation-plan §19: 0.732 vs
+0.807) is the size of what a larger item budget could add to context recall. Decision for
+the owner, not taken here.

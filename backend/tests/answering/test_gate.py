@@ -19,7 +19,7 @@ from lattice.db.engine import Database
 from lattice.retrieval import RetrievalQuery, retrieve
 
 from ..retrieval.world import FAKE, NOW, Org, new_org
-from .helpers import Harness, configure_generation, deps, run
+from .helpers import Harness, claim, configure_generation, deps, draft, handles, run
 
 PLAN = "Acme Corp renewed for three years and expanded to the EU region."
 CALL = "The Acme Corp team asked about SSO and the onboarding checklist."
@@ -174,3 +174,27 @@ async def test_content_terms_exclude_visible_accounts_framing_and_compounds(
         now=NOW,
     )
     assert result.question_terms == expected
+
+
+async def test_citation_completeness_is_measured_not_enforced(app_db: Database, org: Org) -> None:
+    # P13.7: the survey decides the question. A draft answering only from the account
+    # plan (an account-only item) keeps its status -- whether a real model's answer is
+    # complete is not measurable without one (D-43) -- and the trace counts it.
+    await org.document(
+        "acme-survey", "Acme survey", ["Acme Corp's NPS score in September was 41."], account="acme"
+    )
+
+    def citing(title: str, text: str, quote: str) -> Any:
+        return lambda prompt: draft(claim(text, (handles(prompt)[title], quote)))
+
+    plan_only = citing("Acme account plan", "Acme Corp renewed for three years.", PLAN[:33])
+    outcome = await run(app_db, org, "maya", NPS, Harness(outputs=[plan_only]))
+    assert outcome.answer.status == "answered"
+    validation = outcome.trace["validation"]
+    assert validation["decisive_in_prompt"] >= 1
+    assert validation["decisive_cited"] == 0
+
+    survey = citing("Acme survey", "Acme Corp's NPS score was 41.", "NPS score in September was 41")
+    outcome = await run(app_db, org, "maya", NPS, Harness(outputs=[survey]))
+    assert outcome.answer.status == "answered"
+    assert outcome.trace["validation"]["decisive_cited"] == 1
