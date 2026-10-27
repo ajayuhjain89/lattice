@@ -16,8 +16,8 @@ from typing import Final, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-Channel = Literal["exact", "lexical", "semantic"]
-CHANNELS: Final[tuple[Channel, ...]] = ("exact", "lexical", "semantic")
+Channel = Literal["exact", "lexical", "semantic", "expansion"]
+CHANNELS: Final[tuple[Channel, ...]] = ("exact", "lexical", "semantic", "expansion")
 
 # The product's source types; each maps to the document kinds it stores.
 SourceType = Literal["doc", "ticket", "chat"]
@@ -69,6 +69,18 @@ class RetrievalConfig:
     fused_pool: int = 40
     max_chunks_per_document: int = 3
     rrf_k: int = 60
+    # P13.5: each channel's RRF contribution is multiplied by its weight.
+    rrf_weight_exact: float = 1.0
+    rrf_weight_lexical: float = 1.0
+    rrf_weight_semantic: float = 1.0
+    # P13.6 expansion_v1 (D-40): one bounded second hop from the best selected chunks.
+    expansion: bool = False
+    k_seed: int = 5
+    k_expand: int = 10
+    max_references: int = 5
+    rrf_weight_expansion: float = 0.5
+    # Add only chunks no first-hop channel returned (True), or also nudge found ones.
+    expansion_new_only: bool = True
     text_search_config: str = "english"
     # all_terms: websearch_to_tsquery (every term must match; the Phase 0 design).
     # any_term: any of the question's lexemes may match; ranked by ts_rank_cd.
@@ -80,6 +92,20 @@ class RetrievalConfig:
     # A visible account named in the question counts as a matched term (+1) for
     # documents of that account (D-10: query time, visible accounts only).
     lexical_account_terms: bool = True
+    # P13.4 (G5): how matched question lexemes add up in ``coverage`` mode.
+    # count: every distinct question lexeme the chunk contains adds 1 (retrieval-6).
+    # idf: each adds its smoothed inverse document frequency over the reader's
+    #   permitted chunks (the relevance gate's weights), so a rare word outranks a
+    #   common one.
+    lexical_term_weights: Literal["count", "idf"] = "count"
+    # all: every lexeme of the question counts; content: framing words and the names of
+    #   the visible accounts it mentions do not (the account counts as its own term).
+    lexical_counted_terms: Literal["all", "content"] = "all"
+    # A lexeme found only in the title, headings or display reference (weight A, which
+    # every chunk of the document repeats) counts this fraction of one found in the text.
+    lexical_title_factor: float = 1.0
+    # The visible account named in the question, relative to one content term.
+    lexical_account_factor: float = 1.0
     query_embed_timeout_seconds: float = 5.0
     weight_account_match: float = 0.15
     weight_authority: float = 0.10
@@ -96,6 +122,40 @@ class RetrievalConfig:
                 raise ValueError(f"{name} out of range")
         if not 1 <= self.max_chunks_per_document <= MAX_LIMIT:
             raise ValueError("max_chunks_per_document out of range")
+        for name in ("lexical_title_factor", "lexical_account_factor"):
+            if not 0.0 <= getattr(self, name) <= 1.0:
+                raise ValueError(f"{name} out of range")
+        for name in ("k_seed", "k_expand", "max_references"):
+            if not 1 <= getattr(self, name) <= MAX_LIMIT:
+                raise ValueError(f"{name} out of range")
+        for name in (
+            "rrf_weight_exact",
+            "rrf_weight_lexical",
+            "rrf_weight_semantic",
+            "rrf_weight_expansion",
+        ):
+            if not 0.0 < getattr(self, name) <= 4.0:
+                raise ValueError(f"{name} out of range")
+
+    @property
+    def rrf_weights(self) -> dict[Channel, float]:
+        return {
+            "exact": self.rrf_weight_exact,
+            "lexical": self.rrf_weight_lexical,
+            "semantic": self.rrf_weight_semantic,
+            "expansion": self.rrf_weight_expansion,
+        }
+
+    @property
+    def lexical_weighted(self) -> bool:
+        """Whether lexical ranking weighs the question's lexemes (P13.4) and so needs
+        their statistics before the lexical statement."""
+        return self.lexical_mode == "coverage" and (
+            self.lexical_term_weights != "count"
+            or self.lexical_counted_terms != "all"
+            or self.lexical_title_factor != 1.0
+            or self.lexical_account_factor != 1.0
+        )
 
     def limits(self) -> dict[str, int]:
         return {
@@ -252,6 +312,11 @@ class Evidence(_Frozen):
     rrf_score: float
     features: dict[str, float]
     final_score: float
+    # P13.3: the question's content lexemes (stopwords, framing words, compounds and the
+    # names of the visible accounts it mentions excluded) this chunk contains; empty on
+    # direct lookup. The asker's own words, for the relevance gate: never in a trace or
+    # a log.
+    terms_matched: tuple[str, ...] = ()
 
 
 class SemanticOutcome(_Frozen):
@@ -333,4 +398,6 @@ class RetrievalResult(_Frozen):
     # Accounts named in the question, among the accounts the reader may see only.
     account_mentions: tuple[VisibleAccount, ...]
     temporal_intent: bool
+    # P13.3: the question's content lexemes (``Evidence.terms_matched``); never traced.
+    question_terms: tuple[str, ...]
     trace: RetrievalTrace

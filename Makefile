@@ -10,7 +10,7 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits prod-authz prod-drills prod-perf prod-onboard prod-backup alerts-test privilege-snapshot
+.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer eval-compare models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits prod-authz prod-drills prod-perf prod-onboard prod-backup alerts-test privilege-snapshot
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -65,6 +65,9 @@ GENERATION ?= fake
 
 eval-answer: ## Answer + security metrics over the golden set (GENERATION=fake|ollama; after `make sync`)
 	$(UV_RUN) lattice eval answer --generation $(GENERATION) --embedding $(EMBEDDING)
+
+eval-compare: ## Configuration A (exact + lexical) per item against its committed baseline (after `make sync`)
+	$(UV_RUN) lattice eval retrieval --embedding none --quiet --compare ../evals/baselines/retrieval-A.json
 
 models-fetch: ## Download and verify the pinned local embedding model (1.34 GB, once; ADR-009)
 	cd backend && LATTICE_ENV=development uv run --extra local lattice models fetch mxbai-embed-large-v1

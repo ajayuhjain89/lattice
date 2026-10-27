@@ -43,14 +43,17 @@ from lattice.authz import (
 from lattice.db.engine import Database
 from lattice.errors import ErrorCode, ErrorDetail, LatticeError
 from lattice.providers.embedding import EmbeddingProvider
-from lattice.retrieval.evidence import hydrate
+from lattice.retrieval.evidence import QuestionTerms, hydrate
 from lattice.retrieval.exact import exact_candidates
+from lattice.retrieval.expansion import expansion_candidates
 from lattice.retrieval.fusion import fuse
-from lattice.retrieval.lexical import lexical_candidates
+from lattice.retrieval.lexical import QUESTION_FRAME_WORDS, lexical_candidates
 from lattice.retrieval.models import (
     DEFAULT_CONFIG,
     SOURCE_TYPE_KINDS,
     Candidate,
+    FusedCandidate,
+    RankedCandidate,
     RetrievalConfig,
     RetrievalQuery,
     RetrievalResult,
@@ -73,6 +76,7 @@ from lattice.retrieval.semantic import (
     question_policy,
     semantic_candidates,
 )
+from lattice.retrieval.terms import lexical_weights, question_statistics
 from lattice.retrieval.trace import build_trace, log_trace
 
 
@@ -166,7 +170,29 @@ async def retrieve_with_context(
         )
     semantic: list[Candidate] = []
     outcome: SemanticOutcome
+    terms = QuestionTerms(
+        text=text,
+        excluded=" ".join(
+            (QUESTION_FRAME_WORDS, *(label for a in mentions for label in a.labels()))
+        ),
+        text_search_config=config.text_search_config,
+    )
     try:
+        weights = None
+        if config.lexical_weighted:
+            statistics = await _timed(
+                timings,
+                "question_statistics",
+                question_statistics(
+                    session,
+                    ctx,
+                    text,
+                    terms.excluded,
+                    config.text_search_config,
+                    [a.id for a in mentions],
+                ),
+            )
+            weights = lexical_weights(statistics, config)
         exact = await _timed(
             timings, "exact", exact_candidates(session, ctx, scope, identifiers, config)
         )
@@ -181,6 +207,7 @@ async def retrieve_with_context(
                 config,
                 identifiers=identifiers,
                 mentioned_account_ids=[a.id for a in mentions],
+                weights=weights,
             ),
         )
         if embedding is None or provider is None:
@@ -218,23 +245,63 @@ async def retrieve_with_context(
     )
 
     fusion_started = time.perf_counter()
-    fused = fuse((exact, lexical, semantic), k=config.rrf_k, pool=config.fused_pool)
     account_targets = {a.id for a in mentions} | (
         {scope.account_id} if scope.account_id is not None else set()
     )
-    ranked = rerank(
-        fused,
-        account_targets=account_targets,
-        temporal_intent=temporal_intent,
-        now=now,
-        config=config,
-    )
-    selected = select_evidence(
-        ranked, limit=query.limit, per_document=config.max_chunks_per_document
-    )
+
+    def fuse_and_select(
+        lists: tuple[list[Candidate], ...],
+    ) -> tuple[list[FusedCandidate], list[RankedCandidate], list[RankedCandidate]]:
+        fused = fuse(lists, k=config.rrf_k, pool=config.fused_pool, weights=config.rrf_weights)
+        ranked = rerank(
+            fused,
+            account_targets=account_targets,
+            temporal_intent=temporal_intent,
+            now=now,
+            config=config,
+        )
+        selected = select_evidence(
+            ranked, limit=query.limit, per_document=config.max_chunks_per_document
+        )
+        return fused, ranked, selected
+
+    fused, ranked, selected = fuse_and_select((exact, lexical, semantic))
     timings["fuse_rerank"] = (time.perf_counter() - fusion_started) * 1000
 
-    evidence = await _timed(timings, "hydrate", hydrate(session, ctx, selected))
+    if config.expansion:
+        # P13.6 expansion_v1: one bounded second hop from the best selected chunks, through
+        # the predicate, then E4 and fusion with the first-hop channels.
+        seeds = [r.fused.candidate.chunk_id for r in selected[: config.k_seed]]
+        expansion = await _timed(
+            timings,
+            "expansion",
+            expansion_candidates(
+                session,
+                ctx,
+                scope,
+                seeds,
+                text,
+                terms.excluded,
+                identifiers,
+                config,
+                found=(
+                    {c.chunk_id for c in exact + lexical + semantic}
+                    if config.expansion_new_only
+                    else ()
+                ),
+            ),
+        )
+        stages["expansion"] = expansion
+        if on_candidates is not None:
+            on_candidates({"expansion": list(expansion)})
+        await assert_all_readable(session, ctx, {c.document_id for c in expansion})
+        refused_started = time.perf_counter()
+        fused, ranked, selected = fuse_and_select((exact, lexical, semantic, expansion))
+        timings["fuse_rerank"] += (time.perf_counter() - refused_started) * 1000
+
+    evidence, question_terms = await _timed(
+        timings, "hydrate", hydrate(session, ctx, selected, terms)
+    )
     # E4 again at the boundary: nothing leaves retrieval without passing it.
     await assert_all_readable(session, ctx, {e.document_id for e in evidence})
     timings["total"] = (time.perf_counter() - started) * 1000
@@ -259,6 +326,7 @@ async def retrieve_with_context(
         identifiers=identifiers,
         account_mentions=tuple(VisibleAccount(id=a.id, key=a.key, name=a.name) for a in mentions),
         temporal_intent=temporal_intent,
+        question_terms=question_terms,
         trace=trace,
     )
 

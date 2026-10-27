@@ -13,7 +13,8 @@ now, executable purge in Phase 15, C14) were decided by engineering under the pr
 owner's delegation, as were corrections to D-31 and D-36 (C18). **P12.1 delivered
 (2026-10-08), P12.2 (2026-10-09), P12.3 (2026-10-12), P12.4 (2026-10-13), P12.5
 (2026-10-17), P12.6 (2026-10-18), P12.7 (2026-10-19) and P12.8 (2026-10-20), local
-commits; Part III.** Phase 12 awaits the product owner's closure review and merge decision.
+commits; Part III.** **Approved and merged to `main` --no-ff as 00a15d2 (2026-10-20; branch
+and merge CI green, images published).** Phase 13: [phase-13-plan.md](phase-13-plan.md).
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 12. Phase 11
 is closed (143392f); real external staging validation stays deferred and remains a

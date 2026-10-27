@@ -42,6 +42,19 @@ def candidate(
     )
 
 
+def test_channel_weights_scale_each_contribution() -> None:
+    # P13.5 evaluation tunables: absent or 1.0, fusion is the plain RRF above.
+    lexical, semantic = uuid.uuid4(), uuid.uuid4()
+    lists = [[candidate(lexical, "lexical", 2)], [candidate(semantic, "semantic", 1)]]
+    plain = fuse(lists, k=60, pool=40)
+    assert [f.candidate.chunk_id for f in plain] == [semantic, lexical]
+    assert fuse(lists, k=60, pool=40, weights=CONFIG.rrf_weights) == plain
+    weighted = fuse(lists, k=60, pool=40, weights={"lexical": 1.5})
+    assert [f.candidate.chunk_id for f in weighted] == [lexical, semantic]
+    assert weighted[0].rrf_score == 1.5 / 62
+    assert CONFIG.rrf_weights == {"exact": 1.0, "lexical": 1.0, "semantic": 1.0, "expansion": 0.5}
+
+
 def test_rrf_uses_k_60_over_every_channel_that_found_a_chunk() -> None:
     a, b, c = (uuid.uuid4() for _ in range(3))
     fused = fuse(

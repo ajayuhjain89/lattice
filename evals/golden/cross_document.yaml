@@ -4,6 +4,9 @@
   category: cross_document
   persona: daniel
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [temporal_supersession]
   question: Summarize Kestrel Bank's open SSO tickets.
   expected:
     status: answered
@@ -23,6 +26,9 @@
   category: cross_document
   persona: priya
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [multi_document, scoped_retrieval]
   question: Which Acme Corp tickets are still open or pending?
   scope: {account: acme-corp, source_types: [ticket]}
   expected:
@@ -40,6 +46,9 @@
   category: cross_document
   persona: tom
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [multi_document, contradictory_evidence, inaccessible_strong_match]
   question: How has the planned Directory Sync date changed across our planning documents this year?
   expected:
     status: answered
@@ -62,6 +71,10 @@
   category: cross_document
   persona: priya
   organization: halden
+  label_source: authored_phase3
+  split: held_out
+  owner_review: {batch: H2, status: pending}
+  paraphrase_group: scim-customers-told
   question: Which customers did Support tell that SCIM would arrive in October?
   expected:
     status: answered
@@ -81,6 +94,11 @@
   category: cross_document
   persona: daniel
   organization: halden
+  label_source: authored_phase3
+  split: held_out
+  owner_review: {batch: H2, status: pending}
+  classes: [multi_document, inaccessible_strong_match]
+  paraphrase_group: kestrel-since-july
   question: What has the Kestrel account team discussed about the renewal since the July incident?
   expected:
     status: answered
@@ -101,6 +119,10 @@
   category: cross_document
   persona: sofia
   organization: halden
+  label_source: authored_phase3
+  split: held_out
+  owner_review: {batch: H1, status: pending}
+  paraphrase_group: saml-incident-actions
   question: What action items came out of the SAML certificate incident, and which are still open?
   expected:
     status: answered
@@ -116,6 +138,9 @@
   category: cross_document
   persona: tom
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [inaccessible_strong_match]
   question: Which product decisions have been approved since the beginning of August?
   expected:
     status: answered
@@ -134,6 +159,9 @@
   category: cross_document
   persona: daniel
   organization: halden
+  label_source: authored_phase3
+  split: dev
+  classes: [multi_document, scoped_retrieval]
   question: What has Brightwater Health asked us for in their tickets this summer?
   scope: {account: brightwater-health}
   expected:
@@ -147,3 +175,325 @@
       - "The current list of BAA sub-processors (HAL-4861)"
   tags: [cross_org_same_name]
   notes: Veridian also has a "Brightwater Health" account with its own tickets.
+
+# --- P13.2 additions (label_source authored_phase13; provisional until owner review) ---
+# Group "saml-incident-open-followups": the same question, Support (reads the postmortem
+# by department grant) and Product (does not).
+
+- id: ident-two-tickets-daniel
+  category: cross_document
+  persona: daniel
+  organization: halden
+  label_source: authored_phase13
+  split: held_out
+  owner_review: {batch: H2, status: pending}
+  classes: [identifier_variant]
+  question: Compare HAL-4702 and HAL-4711 -- what did each ask for and how was it resolved?
+  expected:
+    status: answered
+    relevant: ["ticket:HAL-4702#c1", "ticket:HAL-4702#c4", "ticket:HAL-4711#c1", "ticket:HAL-4711#c3", "ticket:HAL-4711#c5"]
+    acceptable: ["ticket:HAL-4702#c2", "ticket:HAL-4702#c3", "ticket:HAL-4702#c5", "ticket:HAL-4702#c6", "ticket:HAL-4711#c2", "ticket:HAL-4711#c4", "chat:C0SUPPORT01:1784620680.000100#1784620680.000100", "chat:C0INCIDENT1:1784621160.000100#1784621160.000100", "ticket:HAL-4705#c2", "doc:kestrel-sso-incident-customer-rca#1", "doc:kestrel-account-brief#4", "chat:C0ACCTKES01:day:2026-07-28#1785230400.000100"]
+    must_not_retrieve: [veridian/ticket:HAL-4702, doc:postmortem-inc-2026-031]
+    required_facts:
+      - "HAL-4702 (21 July): P1, no Kestrel user could sign in through SSO; web logins were restored at 09:55 UTC by reverting the certificate change"
+      - "HAL-4711 (23 July): Sunita Rao asked for a written RCA and service credits; the RCA was sent on 28 July and one month's credit went on the August invoice"
+  tags: [exact_identifier, security, cross_org_same_identifier]
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-24
+    reviewer: engineering
+    terms: [HAL-4702, HAL-4711]
+    extra: ["ticket:HAL-4702#c1", "ticket:HAL-4702#c2", "ticket:HAL-4702#c3", "ticket:HAL-4702#c4", "ticket:HAL-4702#c5", "ticket:HAL-4702#c6", "ticket:HAL-4711#c1", "ticket:HAL-4711#c2", "ticket:HAL-4711#c3", "ticket:HAL-4711#c4", "ticket:HAL-4711#c5"]
+    candidates:
+      "chat:C0ACCTKES01:day:2026-07-28#1785230400.000100": acceptable
+      "chat:C0INCIDENT1:1784621160.000100#1784621160.000100": acceptable
+      "chat:C0SUPPORT01:1784620680.000100#1784620680.000100": acceptable
+      "doc:kestrel-account-brief#4": acceptable
+      "doc:kestrel-sso-incident-customer-rca#1": acceptable
+      "ticket:HAL-4702#c1": relevant
+      "ticket:HAL-4702#c2": acceptable
+      "ticket:HAL-4702#c3": acceptable
+      "ticket:HAL-4702#c4": relevant
+      "ticket:HAL-4702#c5": acceptable
+      "ticket:HAL-4702#c6": acceptable
+      "ticket:HAL-4705#c2": acceptable
+      "ticket:HAL-4711#c1": relevant
+      "ticket:HAL-4711#c2": acceptable
+      "ticket:HAL-4711#c3": relevant
+      "ticket:HAL-4711#c4": acceptable
+      "ticket:HAL-4711#c5": relevant
+    notes: >-
+      Every part of the two tickets (their IDs are not in their own text, so they are listed as extra) and every readable part naming either ID. The other tickets' comments are the asks and resolutions; mentions elsewhere restate them.
+  notes: >-
+    Two identifiers in one question (the extractor takes up to five). The postmortem
+    also names HAL-4702 and is Engineering-only.
+
+- id: followups-saml-incident-priya
+  category: cross_document
+  persona: priya
+  organization: halden
+  label_source: authored_phase13
+  split: held_out
+  owner_review: {batch: H1, status: pending}
+  classes: [paraphrase]
+  same_question_group: saml-incident-open-followups
+  paraphrase_group: saml-incident-actions
+  question: Which follow-ups from the July SSO incident are still not done?
+  expected:
+    status: answered
+    relevant: ["doc:postmortem-inc-2026-031#5", "doc:engineering-all-hands-2026-09#4"]
+    acceptable: [chat:C0INCIDENT1:1789637400.000100, "doc:release-notes-2026-08#2", "doc:kestrel-sso-incident-customer-rca#5", "chat:C0ENGINEER1:day:2026-07-22"]
+    required_facts:
+      - "The staging rotation test with a pinning IdP (owner Sofia Marchetti) is still open"
+      - "Dual-signing, the 14-day notice and the SAML failure-rate alert are done"
+  notes: >-
+    Paraphrase of xdoc-postmortem-actions ("action items ... still open") for Support. On
+    17 September Sam Patel proposed a game day the following week to close the last
+    item; whether it happened is not in the evidence.
+
+- id: followups-saml-incident-tom
+  category: cross_document
+  persona: tom
+  organization: halden
+  label_source: authored_phase13
+  split: held_out
+  owner_review: {batch: H1, status: pending}
+  classes: [paraphrase, inaccessible_strong_match]
+  same_question_group: saml-incident-open-followups
+  paraphrase_group: saml-incident-actions
+  question: Which follow-ups from the July SSO incident are still not done?
+  expected:
+    status: answered
+    relevant: ["doc:engineering-all-hands-2026-09#4", chat:C0INCIDENT1:1789637400.000100]
+    acceptable: ["doc:kestrel-sso-incident-customer-rca#5", "doc:release-notes-2026-08#2", "chat:C0ENGINEER1:day:2026-07-22"]
+    must_not_retrieve: [doc:postmortem-inc-2026-031]
+    required_facts:
+      - "The staging rotation test for SAML certificates is still open (all-hands, 17 September)"
+    must_not_contain: [LATTICE-CANARY-C06-e17b3c]
+  tags: [security, unauthorized_more_relevant]
+  notes: >-
+    The postmortem's action-item table answers best and is Engineering (plus Support by
+    grant) only; Product gets the all-hands reminder and the #incidents game-day thread.
+
+- id: xdoc-sso-problems-2026-priya
+  category: cross_document
+  persona: priya
+  organization: halden
+  label_source: authored_phase13
+  split: dev
+  classes: [multi_document]
+  question: Which customers had SSO login problems in 2026, and what caused each one?
+  expected:
+    status: answered
+    relevant: [ticket:HAL-4612, ticket:HAL-4655, ticket:HAL-4702, ticket:HAL-4704, ticket:HAL-4889]
+    acceptable: ["doc:postmortem-inc-2026-031#2", chat:C0INCIDENT1:1784621160.000100, chat:C0SUPPORT01:1783068000.000100, "doc:sso-troubleshooting-runbook#3", ticket:HAL-4705, "doc:weekly-support-report-2026-09-21#2", chat:C0ACCTKES01:1788526800.000100, "chat:C0EXTACME01:day:2026-06-22"]
+    must_not_retrieve: [veridian/ticket:HAL-4889, veridian/ticket:HAL-4702]
+    required_facts:
+      - "Acme Corp, June: one Okta preview user looped because the NameID was not the email address (HAL-4612)"
+      - "Tidewell Energy, July: 'assertion expired' from an ADFS node 5 minutes behind (HAL-4655)"
+      - "Kestrel Bank and Larkspur Retail, 21 July: the certificate rotation without dual-signing (HAL-4702, HAL-4704)"
+      - "Kestrel Bank, September: 'assertion expired' from PingFederate node ping-fed-03, about 4 minutes behind (HAL-4889, open)"
+  tags: [security, cross_org_same_identifier]
+  notes: >-
+    Five tickets of four customers. Brightwater's Entra ID loop (HAL-3960) is from
+    November 2025 and not a 2026 problem. Veridian's HAL-4889 is an SSO loop at another
+    tenant.
+
+- id: xdoc-releases-sofia
+  category: cross_document
+  persona: sofia
+  organization: halden
+  label_source: authored_phase13
+  split: dev
+  classes: []
+  question: What shipped in the 2026.08 and 2026.09 releases?
+  expected:
+    status: answered
+    relevant: ["doc:release-notes-2026-08#2", "doc:release-notes-2026-08#3", "doc:release-notes-2026-08#4", "doc:release-notes-2026-09#2", "doc:release-notes-2026-09#3", "doc:release-notes-2026-09#4"]
+    acceptable: ["doc:release-notes-2026-08#1", "doc:release-notes-2026-08#5", "doc:release-notes-2026-09#1", "doc:release-notes-2026-09#5", "chat:C0ANNOUNC01:day:2026-08-18#1787036400.000100", "chat:C0ANNOUNC01:day:2026-09-15#1789455600.000100", "doc:engineering-all-hands-2026-09#1", "chat:C0GENERAL01:day:2026-09-17#1789666800.000100", "chat:C0ENGINEER1:day:2026-08-18#1787035500.000100", "chat:C0ENGINEER1:day:2026-09-15#1789455000.000100", "chat:C0ENGINEER1:1785233700.000100#1785233700.000100", "doc:kestrel-sso-incident-customer-rca#5", "doc:postmortem-inc-2026-031#5", "doc:sso-troubleshooting-runbook#2", "doc:sso-troubleshooting-runbook#3", "chat:C0SUPPORT01:day:2026-08-19#1787151600.000100", "ticket:HAL-4711#c3", "chat:C0ACCTBRW01:day:2026-09-21#1790010600.000100", "ticket:HAL-3323#c2", "ticket:HAL-3369#c2", "ticket:HAL-3551#c2", "ticket:HAL-3566#c2", "ticket:HAL-4200#c2", "ticket:HAL-4621#c2"]
+    required_facts:
+      - "2026.08 (18 August): SAML signing certificate rollover with a 30-day overlap and 14-day admin notice, SSO correlation IDs, a 'Wait for approval' step, workspace-local schedule time zones, NetSuite connector v2"
+      - "2026.09 (15 September): audit log streaming in beta, run history search, parallel branch merge, a seat usage report with last-login dates"
+      - "Directory Sync was not in 2026.09"
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-24
+    reviewer: engineering
+    terms: ["2026.08", "2026.09"]
+    candidates:
+      "chat:C0ACCTBRW01:day:2026-09-21#1790010600.000100": acceptable
+      "chat:C0ANNOUNC01:day:2026-07-02#1782979500.000100": unrelated
+      "chat:C0ANNOUNC01:day:2026-08-18#1787036400.000100": acceptable
+      "chat:C0ANNOUNC01:day:2026-09-15#1789455600.000100": acceptable
+      "chat:C0ENGINEER1:1785233700.000100#1785233700.000100": acceptable
+      "chat:C0ENGINEER1:day:2026-08-17#1786982400.000100": unrelated
+      "chat:C0ENGINEER1:day:2026-08-18#1787035500.000100": acceptable
+      "chat:C0ENGINEER1:day:2026-08-18#1787054400.000100": unrelated
+      "chat:C0ENGINEER1:day:2026-09-14#1789401600.000100": unrelated
+      "chat:C0ENGINEER1:day:2026-09-15#1789455000.000100": acceptable
+      "chat:C0GENERAL01:day:2026-09-17#1789666800.000100": acceptable
+      "chat:C0SUPPORT01:day:2026-08-19#1787151600.000100": acceptable
+      "doc:engineering-all-hands-2026-09#1": acceptable
+      "doc:kestrel-sso-incident-customer-rca#5": acceptable
+      "doc:postmortem-inc-2026-031#5": acceptable
+      "doc:release-notes-2026-08#1": acceptable
+      "doc:release-notes-2026-08#2": relevant
+      "doc:release-notes-2026-08#3": relevant
+      "doc:release-notes-2026-08#4": relevant
+      "doc:release-notes-2026-08#5": acceptable
+      "doc:release-notes-2026-09#1": acceptable
+      "doc:release-notes-2026-09#2": relevant
+      "doc:release-notes-2026-09#3": relevant
+      "doc:release-notes-2026-09#4": relevant
+      "doc:release-notes-2026-09#5": acceptable
+      "doc:roadmap-2026-h2#2": unrelated
+      "doc:sso-troubleshooting-runbook#2": acceptable
+      "doc:sso-troubleshooting-runbook#3": acceptable
+      "doc:weekly-support-report-2026-09-21#2": unrelated
+      "ticket:HAL-3323#c2": acceptable
+      "ticket:HAL-3369#c2": acceptable
+      "ticket:HAL-3551#c2": acceptable
+      "ticket:HAL-3566#c2": acceptable
+      "ticket:HAL-4200#c2": acceptable
+      "ticket:HAL-4621#c2": acceptable
+      "ticket:HAL-4711#c3": acceptable
+    notes: >-
+      Release notes sections are the answer; announcements, deploy notes and anything stating that a feature shipped in (or exists since) one of the two releases restate it. Plans (roadmap), release-train logistics and bugs found after a release are unrelated.
+  notes: >-
+    Two records, six sections; release numbers are not identifiers for the exact
+    channel. Announcements and deploy messages restate the notes.
+
+- id: compare-account-idps-priya
+  category: cross_document
+  persona: priya
+  organization: halden
+  label_source: authored_phase13
+  split: dev
+  classes: [multi_account_comparison, multi_document]
+  same_question_group: account-idps
+  question: Which identity providers do Acme Corp, Kestrel Bank and Brightwater Health use?
+  expected:
+    status: answered
+    relevant: ["doc:acme-account-brief#4", "doc:kestrel-account-brief#2", "doc:brightwater-account-brief#2"]
+    acceptable: ["doc:acme-kickoff-call-notes#2", chat:C0EXTACME01:1785607200.000100, "ticket:HAL-4702#c1", ticket:HAL-4810, ticket:HAL-3960, "doc:acme-onboarding-plan-2024#3", "doc:kestrel-sso-incident-customer-rca#3", "doc:scim-beta-program-plan#2"]
+    must_not_retrieve: [veridian/ticket:HAL-4889, veridian/doc:acme-account-plan]
+    required_facts:
+      - "Acme Corp: Okta Workforce Identity since 1 August 2026 (Azure AD before)"
+      - "Kestrel Bank: PingFederate (SAML), with pinned signing certificates"
+      - "Brightwater Health: Microsoft Entra ID"
+  tags: [security, cross_org_same_name]
+  notes: >-
+    Three account briefs, one fact each. Veridian's Brightwater (Entra ID) and Acme
+    Corp records are another tenant's.
+
+- id: scoped-slack-scim-dates-tom
+  category: cross_document
+  persona: tom
+  organization: halden
+  label_source: authored_phase13
+  split: dev
+  classes: [scoped_retrieval, multi_document, contradictory_evidence]
+  question: What has been said in Slack about the Directory Sync date?
+  scope: {source_types: [chat]}
+  expected:
+    status: answered
+    relevant: [chat:G0PRODIDEN1:1786352400.000100, chat:C0SUPPORT01:1786454400.000100, chat:G0PRODIDEN1:1788430500.000100, chat:C0ANNOUNC01:1789741800.000100, chat:G0PRODIDEN1:1790265600.000100, "chat:C0SALES0001:day:2026-09-25"]
+    acceptable: [chat:G0PRODIDEN1:1782900000.000100, "chat:C0ANNOUNC01:day:2026-07-02", "chat:C0SALES0001:day:2026-07-02", chat:C0SALES0001:1789741920.000100, "chat:C0SUPPORT01:day:2026-09-18", "chat:G0PRODIDEN1:day:2026-09-18", chat:C0SUPPORT01:1790003100.000100, "chat:G0PRODIDEN1:day:2026-08-28"]
+    must_not_retrieve: [doc:project-tern-memo]
+    required_facts:
+      - "July: September GA ('tight but yes', in the H2 roadmap)"
+      - "10-11 August: September is off; October is a target, not a commitment"
+      - "3 September: load tests fail; October is off"
+      - "18 September: GA moves to 8 December, beta from 9 November"
+      - "24 September: Tom says GA stays 8 December until the beta exit criteria are met"
+      - "25 September: unverified #sales speculation about an early-November GA"
+    conflict: {kind: potential_conflict, records: ["chat:C0SALES0001:day:2026-09-25", chat:G0PRODIDEN1:1790265600.000100]}
+  tags: [security, newer_lower_authority]
+  notes: >-
+    Scoped to chat: decision records and roadmaps are filtered out, so the answer is the
+    Slack history only. The newest message (speculation) is lower authority than Tom's.
+
+- id: scoped-kestrel-docs-priya
+  category: cross_document
+  persona: priya
+  organization: halden
+  label_source: authored_phase13
+  split: dev
+  classes: [scoped_retrieval, inaccessible_strong_match]
+  question: What documents do we have about Kestrel Bank?
+  scope: {account: kestrel-bank, source_types: [doc]}
+  expected:
+    status: answered
+    relevant: [doc:kestrel-account-brief, doc:kestrel-sso-incident-customer-rca]
+    must_not_retrieve: [doc:kestrel-renewal-risk-2026]
+    required_facts:
+      - "The Kestrel Bank account brief (Daniel Reyes, updated 20 August 2026)"
+      - "The customer RCA for the 21 July SSO login failures (28 July 2026)"
+    must_not_contain: [LATTICE-CANARY-C02-8c41f0]
+  tags: [security]
+  trap_phrases: [Kestrel]
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-24
+    reviewer: engineering
+    scope_all: true
+    candidates:
+      "doc:kestrel-account-brief#1": relevant
+      "doc:kestrel-account-brief#2": relevant
+      "doc:kestrel-account-brief#3": relevant
+      "doc:kestrel-account-brief#4": relevant
+      "doc:kestrel-account-brief#5": relevant
+      "doc:kestrel-sso-incident-customer-rca#1": relevant
+      "doc:kestrel-sso-incident-customer-rca#2": relevant
+      "doc:kestrel-sso-incident-customer-rca#3": relevant
+      "doc:kestrel-sso-incident-customer-rca#4": relevant
+      "doc:kestrel-sso-incident-customer-rca#5": relevant
+      "doc:kestrel-sso-incident-customer-rca#6": relevant
+    notes: >-
+      Every Kestrel-account document Priya can read: the brief and the RCA, all sections relevant to 'what documents do we have'. The renewal-risk assessment is not readable.
+  notes: >-
+    Account and source-type scope. The confidential renewal-risk assessment is a
+    Kestrel document Priya cannot read; it must not appear or be counted.
+
+- id: scoped-veridian-acme-september-felix
+  category: cross_document
+  persona: felix
+  organization: veridian
+  label_source: authored_phase13
+  split: held_out
+  owner_review: {batch: H2, status: pending}
+  classes: [scoped_retrieval, multi_document, veridian_cross_tenant]
+  question: Which Acme tickets came in this month?
+  scope: {account: acme-corp, source_types: [ticket], since: 2026-09-01}
+  expected:
+    status: answered
+    relevant: [ticket:HAL-4838, ticket:HAL-4855, ticket:HAL-4905]
+    must_not_retrieve: [halden/ticket:HAL-4944, halden/ticket:HAL-4903, halden/ticket:HAL-4821]
+    required_facts:
+      - "HAL-4838 (4 September): an embedded dashboard showed a blank frame; solved by allowing the intranet origin"
+      - "HAL-4855 (4 September): chart totals shifted after a workspace time-zone change; explained and solved"
+      - "HAL-4905 (14 September): dashboards unavailable for all plants for about six hours; Derek asked to speak with leadership"
+  tags: [security, cross_org_same_name]
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-24
+    reviewer: engineering
+    scope_all: true
+    candidates:
+      "ticket:HAL-4838#c1": relevant
+      "ticket:HAL-4838#c2": relevant
+      "ticket:HAL-4838#c3": relevant
+      "ticket:HAL-4838#c4": relevant
+      "ticket:HAL-4855#c1": relevant
+      "ticket:HAL-4855#c2": relevant
+      "ticket:HAL-4855#c3": relevant
+      "ticket:HAL-4855#c4": relevant
+      "ticket:HAL-4905#c1": relevant
+      "ticket:HAL-4905#c2": relevant
+      "ticket:HAL-4905#c3": relevant
+      "ticket:HAL-4905#c4": relevant
+    notes: >-
+      Every Veridian Acme Corp ticket comment from 1 September on: three tickets, each relevant as a whole to 'which tickets came in this month'.
+  notes: >-
+    Veridian's Acme tickets since 1 September. Halden's Acme Corp (the same company)
+    opened HAL-4944 and HAL-4903 with Halden in September; they belong to another tenant.

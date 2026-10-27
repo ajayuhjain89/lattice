@@ -5,13 +5,26 @@ across internal documents, support tickets and Slack, and get answers that are
 grounded, cited, aware of stale and potentially conflicting evidence, and built only from
 information they are authorized to see.
 
-**Status: Phases 1–11 are implemented, and the frontend product-design overhaul (D0–D7,
+**Status: Phases 1–13 are implemented and merged (Phase 12: 00a15d2, 2026-10-20). Phase 13
+(Retrieval, Grounding and Answer Quality) was accepted 2026-10-27 with its quality criterion
+unmet as recorded: P13.0 — the measured baseline,
+known quality gaps, evaluation contracts, checkpoints and decisions D-38–D-45 — is in
+[docs/phase-13-plan.md](docs/phase-13-plan.md) and was approved 2026-10-21; P13.1 (the
+evaluation foundation: new metrics, item-level baselines, `lattice eval compare`) is
+approved; P13.2 (159 golden items with dev/held-out splits, label provenance and an owner
+review packet in [docs/golden-review/](docs/golden-review/)) is delivered, its held-out
+review pending; P13.3 (the relevance gate: answers stop before any model call when no
+permitted evidence addresses the question) is accepted; P13.4–P13.9 are delivered as far
+as they can go without the product owner: no ranking change survived held-out evaluation,
+so retrieval is unchanged, the second hop (P13.6) was built and measured without a gain,
+and the answer validator now has an adversarial suite (phase-13-plan §27–28). History: Phases 1–11
+and the frontend product-design overhaul (D0–D7,
 [design direction](docs/design-direction.md)) is merged; [design system
 v2](docs/design-system.md) is canonical. Phase 11 (Production Deployment, Identity
 Operations & Reliability) was verified on a local production-shaped stack only: real
 external staging validation is deferred and gates v1 GA ([plan](docs/phase-11-plan.md)
 §21.1). Phase 11 is merged (143392f). Phase 12 (Organization Setup, Identity
-Configuration & Integrations) is in progress: P12.1 foundations are built (encrypted
+Configuration & Integrations) delivered: P12.1 foundations are built (encrypted
 credentials, the outbound-target policy, `lattice org create`, the backend-owned setup
 record and the Organization page) and P12.2 members and administrators (members added by
 hand on their exact identity-provider identifier, the administrator capability with a
@@ -34,7 +47,7 @@ backend suite; [docs/onboarding.md](docs/onboarding.md)) and P12.8 closure (a se
 review that bounded the purge's audit exemption to the session's organization — migration
 0024 — the deployed authorization sweep extended to every Phase 12 route family, a
 product-consistency and accessibility review, and the deferred-capability register in
-[phase-12-plan](docs/phase-12-plan.md) Part III) are delivered locally and await review. The three source types are **export-based**
+[phase-12-plan](docs/phase-12-plan.md) Part III), merged to `main` as 00a15d2. The three source types are **export-based**
 (Markdown documents, Lattice ticket JSON Lines, Slack workspace export) — not live
 integrations.** What runs today: a FastAPI
 backend with typed fail-fast configuration, PostgreSQL 16 + pgvector with forced
@@ -167,6 +180,7 @@ state-changing request needs the `X-Lattice-Request: 1` header (CSRF protection)
 | `make eval` | Retrieval metrics and security checks over the golden set, as each persona (after `make sync`; `EMBEDDING=fake\|local\|gemini\|openai\|none`, matching the sync); reports in `evals/reports/` |
 | `make worker` | The background worker (as `lattice_worker`): runs the syncs administrators request from the Sources page; `lattice worker --once` runs what is due and exits |
 | `make models-fetch` | Download and verify the pinned local embedding model (explicit; the only command that downloads weights) |
+| `make eval-compare` | Configuration A (exact + lexical) per item against the committed baseline `evals/baselines/retrieval-A.json` (after `make sync`); `lattice eval compare` compares any two runs (evaluation-plan §7, §15) |
 | `make eval-answer` | Answer and security metrics over the golden set (after `make sync`; `GENERATION=fake` by default: plumbing and security, not answer quality); run it on an evaluation database, since it reconfigures the organizations' generation providers |
 | `lattice ask --org halden --as maya.okafor@halden.example "When will SCIM ship?"` | Ask as a member with the organization's generation configuration (`--json`; development/test only) |
 | `lattice provider configure\|approve\|credential\|enable\|disable\|list`, `lattice org egress` | Organization provider configuration and AI egress ceilings; every change needs `--reason` and is audited ([runbook §3](docs/runbook.md)) |
@@ -440,7 +454,9 @@ apps/web/           Next.js web app (src/: app routes, components, API client; e
 infra/postgres/     superuser bootstrap: roles, databases, extensions (also copied into the backend image)
 data/synthetic/     synthetic organizations: manifests, raw source exports, ground truth
                     (see data/synthetic/README.md)
-evals/golden/       golden question set (evals/reports/: evaluation output, not committed)
+evals/golden/       golden question set, splits and label freezes (evals/reports/: evaluation output, not committed)
+docs/golden-review/ held-out label review packet for the product owner (generated; P13.2)
+evals/baselines/    compact item-level evaluation baselines (committed; P13.1, regenerated P13.2; answer-A P13.3)
 docs/               product, architecture, security and design documentation
 compose.yaml        local Postgres only (development)
 compose.production.yaml  production-shaped local reference stack (Phase 11; make prod-*)

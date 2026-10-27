@@ -17,7 +17,7 @@ Chloe Martin.
 | Brightwater Health | Entra ID | 16 November | One hospital, about 400 users |
 
 Kestrel Bank asked to join (HAL-4930). Not included: we want their SAML issues closed
-first. Orbital Freight's trial is not eligible.
+first. Prospects on a trial are not eligible.
 
 ## What beta customers get
 

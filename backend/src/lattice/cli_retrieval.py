@@ -1,4 +1,5 @@
-"""``lattice search`` and ``lattice eval retrieval`` (Phase 5).
+"""``lattice search``, ``lattice eval retrieval`` (Phase 5), ``lattice eval baseline`` and
+``lattice eval compare`` (P13.1).
 
 Both act *as a member*: they resolve a persona's membership (operator lookup, as
 lattice_owner) and then retrieve exactly as the product does -- as the runtime role
@@ -9,6 +10,12 @@ outside development and test, like the seed.
 ``search`` prints that member's permitted evidence (titles and, with ``--text``, chunk
 text). ``eval retrieval`` prints metrics and record keys, never chunk text, and writes
 ``report.json`` + ``report.md`` under ``evals/reports/<timestamp>/`` (not committed).
+
+``eval baseline`` turns a report into a compact committed baseline (``evals/baselines/``;
+never over an existing one without ``--replace`` and a reason) and ``eval compare``
+compares a run with a baseline or another run (``lattice.evals.baseline``). Both read
+files only: no database, no provider. ``eval retrieval --compare`` (and ``eval answer
+--compare``) runs the comparison right after the evaluation.
 """
 
 import argparse
@@ -18,6 +25,7 @@ import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from pydantic import ValidationError
 from sqlalchemy import text
@@ -27,17 +35,21 @@ from lattice.dataset.distractors import DATA
 from lattice.dataset.lint import load_dataset
 from lattice.db.engine import Database, create_engine
 from lattice.errors import LatticeError
+from lattice.evals import baseline
 from lattice.evals.retrieval import (
     ItemResult,
+    config_overrides,
     evaluate_retrieval,
     render_markdown,
+    rerank_ablation,
     select_items,
 )
 from lattice.providers.factory import PROVIDER_NAMES, build_embedding_provider
-from lattice.retrieval import RetrievalQuery, RetrievalResult, retrieve
+from lattice.retrieval import DEFAULT_CONFIG, RetrievalQuery, RetrievalResult, retrieve
 
 REPORTS = DATA.parents[1] / "evals" / "reports"
 GOLDEN = DATA.parents[1] / "evals" / "golden"
+BASELINES = DATA.parents[1] / "evals" / "baselines"
 
 
 def _fail(message: str) -> int:
@@ -188,8 +200,20 @@ async def eval_retrieval(args: argparse.Namespace) -> int:
     provider = build_embedding_provider(args.embedding, load_provider_settings())
     app, owner = _databases("lattice-eval")
     try:
+        config = config_overrides(
+            args.set or (), rerank_ablation() if args.no_rerank else DEFAULT_CONFIG
+        )
+    except (TypeError, ValueError) as exc:
+        return _fail(str(exc))
+    try:
         report = await evaluate_retrieval(
-            app, owner, dataset, provider, items=items, progress=None if args.quiet else _progress
+            app,
+            owner,
+            dataset,
+            provider,
+            items=items,
+            config=config,
+            progress=None if args.quiet else _progress,
         )
     finally:
         await app.dispose()
@@ -205,17 +229,104 @@ async def eval_retrieval(args: argparse.Namespace) -> int:
         f"R@1 {o['recall@1']} R@5 {o['recall@5']} R@10 {o['recall@10']} "
         f"R@20 {o['recall@20']} MRR {o['mrr']}"
     )
+    p = s["precision@10"]
     print(f"security: {s['security']}")
     print(f"semantic: {s['semantic_outcomes']}; misses: {s['miss_causes_top10']}")
     if report.provider_usage:
         print(f"query embedding usage: {report.provider_usage}")
+    print(
+        f"document R@10 {o['document_recall@10']}; nDCG@10 (informational) {o['ndcg@10']}; "
+        f"identifier at rank 1 {s['exact_identifier']['hits_at_rank_1']}/"
+        f"{s['exact_identifier']['items']}; precision@10 {p['value']} of ideal {p['ideal']} "
+        f"over {p['items']} exhaustive items"
+    )
+    print(
+        "by split (held_out is reported, never tuned against): "
+        + "; ".join(
+            f"{name} {b['items_with_targets']} with targets, R@10 {b['recall@10']} MRR {b['mrr']}"
+            for name, b in s["by_split"].items()
+        )
+    )
+    print(f"database platform: {report.database_platform}; config {report.config_version}")
     if report.embedding_provider == "fake":
         print("note: the fake provider is a test double; recall here is not semantic quality")
     print(f"report: {out}")
     if report.security_failures:
         print("SECURITY FAILURE: see the report", file=sys.stderr)
         return 1
+    if args.compare is not None:
+        return compare_into(baseline.normalize(report), args, out)
     return 0
+
+
+def compare_into(run: dict[str, Any], args: argparse.Namespace, out: Path | None) -> int:
+    """Compare ``run`` with ``args.compare``; print and (with ``out``) save the result."""
+    try:
+        reference = baseline.load(args.compare)
+    except (OSError, ValueError) as exc:
+        return _fail(f"cannot read the baseline: {exc}")
+    result = baseline.compare(
+        reference,
+        run,
+        allow_golden_change=args.allow_golden_change,
+        cross_platform=args.cross_platform,
+    )
+    rendered = baseline.render(result)
+    print(rendered)
+    if out is not None:
+        (out / "compare.md").write_text(rendered)
+        (out / "compare.json").write_text(json.dumps(result.to_json(), indent=2) + "\n")
+    return result.exit_code
+
+
+def eval_compare(args: argparse.Namespace) -> int:
+    try:
+        run = baseline.load(args.report)
+    except (OSError, ValueError) as exc:
+        return _fail(f"cannot read the run: {exc}")
+    return compare_into(run, args, args.out)
+
+
+def eval_baseline(args: argparse.Namespace) -> int:
+    try:
+        report = baseline.load(args.report)
+    except (OSError, ValueError) as exc:
+        return _fail(f"cannot read the report: {exc}")
+    if baseline.is_baseline(report):
+        return _fail("--report must be an evaluation report, not a baseline")
+    try:
+        data = baseline.write_baseline(
+            report, args.out, label=args.label, reason=args.reason, replace=args.replace
+        )
+    except baseline.BaselineError as exc:
+        return _fail(str(exc))
+    print(
+        f"baseline {args.out}: {data['kind']} {data['label']}, {len(data['items'])} items, "
+        f"platform {data['platform'] or 'independent'}, corpus {data['corpus']['sha256'][:12]}, "
+        f"golden {data['golden']['sha256'][:12]}"
+    )
+    return 0
+
+
+def add_compare_arguments(parser: argparse.ArgumentParser, *, required: bool) -> None:
+    parser.add_argument(
+        "--compare" if not required else "--baseline",
+        dest="compare",
+        type=Path,
+        required=required,
+        metavar="BASELINE",
+        help="a baseline (evals/baselines/...) or another run's report.json",
+    )
+    parser.add_argument(
+        "--allow-golden-change",
+        action="store_true",
+        help="compare the items both runs share when the golden set differs",
+    )
+    parser.add_argument(
+        "--cross-platform",
+        action="store_true",
+        help="list differences between database architectures instead of refusing",
+    )
 
 
 def add_parsers(
@@ -253,4 +364,34 @@ def add_parsers(
     retrieval.add_argument("--golden", type=Path, default=GOLDEN)
     retrieval.add_argument("--out", type=Path, default=REPORTS)
     retrieval.add_argument("--quiet", action="store_true")
+    retrieval.add_argument(
+        "--no-rerank",
+        action="store_true",
+        help="rerank ablation: every rerank_v1 weight 0 (RRF order); evaluation only",
+    )
+    retrieval.add_argument(
+        "--set",
+        action="append",
+        metavar="NAME=VALUE",
+        help="change one RetrievalConfig tunable for this run (VALUE as JSON); evaluation only",
+    )
+    add_compare_arguments(retrieval, required=False)
+
+    compare = eval_commands.add_parser(
+        "compare", help="Compare a run with a baseline, per item and category (files only)"
+    )
+    compare.add_argument("--report", type=Path, required=True, help="report.json or its directory")
+    add_compare_arguments(compare, required=True)
+    compare.add_argument("--out", type=Path, help="also write compare.md and compare.json here")
+
+    base = eval_commands.add_parser(
+        "baseline", help="Write a compact item-level baseline from a report (files only)"
+    )
+    base.add_argument("--report", type=Path, required=True, help="report.json or its directory")
+    base.add_argument("--label", required=True, help="configuration label, e.g. A or B")
+    base.add_argument("--out", type=Path, required=True, help=f"e.g. {BASELINES}/retrieval-A.json")
+    base.add_argument("--reason", required=True)
+    base.add_argument(
+        "--replace", action="store_true", help="supersede an existing baseline (recorded)"
+    )
     return eval_commands

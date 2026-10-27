@@ -47,6 +47,8 @@ Commands (from the repository root):
 make dataset-lint        # validate everything; no database, no model
 make dataset-generate    # regenerate tickets-bulk.jsonl after changing authored tickets
 make seed                # seed org.yaml (people, accounts, admin groups) into Postgres
+lattice dataset splits   # golden dev/held-out report (from backend/, uv run)
+lattice dataset review-packet --check   # the owner review packet matches the labels
 ```
 
 `make test` also runs `backend/tests/dataset/` (lint on the committed data, 44 deliberate
@@ -76,6 +78,12 @@ corruptions the lint must catch, the oracle compared with the seeded database).
   prohibited evidence is not, egress levels are respected, ambiguity choices and hidden
   accounts match account visibility, D-8 cases really hide the account, trap phrases
   really appear in the prohibited evidence, same-question groups really differ.
+- Golden provenance and splits (P13.2): Phase 3 and held-out labels match their frozen
+  digests; every item has a split and no information need (same question or paraphrase
+  group) or near-duplicate question straddles dev and held-out; held-out items have an
+  owner-review record; declared classes are exercised by the labels (≥ 4 items each);
+  exhaustive reviews cover every candidate the persona can read; no evidence is both
+  wanted and prohibited, no fact both required and forbidden, statuses and reasons agree.
 
 ## 3. Halden
 
@@ -322,20 +330,32 @@ isolation failures look like plausible answers:
 
 ## 12. Golden set
 
-89 items in `evals/golden/*.yaml`, schema in `docs/evaluation-plan.md` §3 and
+159 items in `evals/golden/*.yaml` (89 authored in Phase 3, 70 in P13.2 against this
+same corpus -- no record was added for them), schema in `docs/evaluation-plan.md` §3 and
 `lattice.dataset.manifests.GoldenItem`.
 
-| Category | Items | | Category | Items |
-| -------- | ----: | - | -------- | ----: |
-| lookup | 10 | | stale | 7 |
-| cross_document | 8 | | ambiguous | 4 |
-| cross_source | 9 | | inaccessible | 8 |
-| potential_conflicts | 4 | | insufficient_evidence | 5 |
-| supersession | 4 | | refusal | 4 |
-| ai_egress | 6 | | prompt_injection | 4 |
-| account_visibility | 10 | | cross_org | 6 |
+| Category | Items (Phase 3 + P13.2) | | Category | Items (Phase 3 + P13.2) |
+| -------- | ----------------------: | - | -------- | ----------------------: |
+| lookup | 10 + 7 | | stale | 7 + 3 |
+| cross_document | 8 + 9 | | ambiguous | 4 + 2 |
+| cross_source | 9 + 6 | | inaccessible | 8 + 3 |
+| potential_conflicts | 4 + 5 | | insufficient_evidence | 5 + 7 |
+| supersession | 4 + 5 | | refusal | 4 + 0 |
+| ai_egress | 6 + 6 | | prompt_injection | 4 + 3 |
+| account_visibility | 10 + 7 | | cross_org | 6 + 7 |
 
-Same question, different personas (`same_question_group`, 10 groups):
+Since P13.2 every item also carries its label provenance (`label_source`), its split
+(`dev` or `held_out`), the evaluation classes it exercises, and -- held-out items -- an
+owner-review record (D-41); items asking for the same information need share a
+`paraphrase_group`. Eight items have exhaustive labels with a candidate review. The
+Phase 3 labels and every held-out label are frozen by digest
+(`evals/golden/provenance/label-freeze.json`). `lattice dataset splits` reports the
+splits, `lattice dataset review-packet` renders the owner's review packet
+(`docs/golden-review/`). Rules: `docs/evaluation-plan.md` §3.1.
+
+Same question, different personas (`same_question_group`; the 10 Phase 3 groups, P13.2
+added 7 more -- `saml-incident-open-followups`, `account-idps`, `compare-scim-acme-brightwater`,
+`acme-sso-question`, `acme-beta-start`, `brightwater-dashboard-exports`, `kestrel-discount`):
 `acme-commitments` (Maya, Grace with Acme Corp scope, Priya, Daniel — the critical
 scenario), `why-scim-delayed` (Tom, Priya, Maya), `scim-ga-date` (Maya, Tom, Arjun),
 `hal-4821-status` (Priya, Daniel, Veridian's Felix), `kestrel-outage` (Priya, Daniel, Maya),

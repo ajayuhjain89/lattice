@@ -43,6 +43,24 @@ content above an external provider's egress level), one judge call per answered 
 scores required facts, forbidden claims, unsupported claims and whether a potential
 conflict is presented as resolved. The judge is uncalibrated (evaluation-plan §6): its
 scores are informational and gate nothing.
+
+**Evaluation foundation** (P13.1, phase-13-plan EC-4/EC-9; deterministic, no model
+beyond the configured generator):
+
+* *context recall* -- of the expected ``relevant`` evidence, the share that reached the
+  prompt (macro over runs expecting ``answered``/``partial`` with relevant evidence);
+* *conflict coverage* -- runs whose expectation names ``conflict.records``: every side
+  in the prompt;
+* *abstention* -- catch rate: runs expecting ``insufficient_evidence`` that got it
+  **before any model call** (the deterministic gate); false abstention: runs expecting
+  ``answered``/``partial`` that got ``insufficient_evidence``. Both with denominators
+  and 95% Wilson intervals; the status confusion matrix is reported in full;
+* *prompt size and budget* -- prompt characters per generation call, evidence items and
+  characters per prompt against the budget (``MAX_PROMPT_EVIDENCE``,
+  ``MAX_PROMPT_CHARS``), and evidence withheld by reason (relevance floor, budget,
+  egress), counted per chunk.
+
+With a fake or scripted generator these measure the pipeline, never answer quality.
 """
 
 import json
@@ -55,19 +73,30 @@ from collections import Counter, defaultdict
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, get_args
 
 from pydantic import SecretStr
 from sqlalchemy import text
 
-from lattice.answering.models import Answer, AskRequest
+from lattice.answering.gate import DEFAULT_GATE
+from lattice.answering.models import Answer, AnswerStatus, AskRequest
+from lattice.answering.prompt import MAX_PROMPT_CHARS, MAX_PROMPT_EVIDENCE
 from lattice.answering.service import OFFLINE_GENERATION_DEADLINE_SECONDS, AskDependencies, ask
 from lattice.dataset.access import EGRESS_LEVEL
 from lattice.dataset.lint import Dataset
 from lattice.dataset.manifests import AS_OF, CANARY, GoldenItem
 from lattice.db.engine import Database
 from lattice.errors import LatticeError
-from lattice.evals.retrieval import Corpus, Identities, Target, parse_key, targets
+from lattice.evals.retrieval import (
+    Corpus,
+    Identities,
+    Target,
+    database_platform,
+    golden_version,
+    parse_key,
+    targets,
+)
+from lattice.evals.stats import distribution, percentile, proportion
 from lattice.providers import configuration
 from lattice.providers.embedding import EmbeddingProvider
 from lattice.providers.generation import (
@@ -78,7 +107,7 @@ from lattice.providers.generation import (
 from lattice.providers.generation_factory import Declaration, GenerationFactory
 from lattice.providers.records import CredentialRef, GenerationConfig
 from lattice.providers.secrets import SecretStore
-from lattice.retrieval import RetrievalScope
+from lattice.retrieval import DEFAULT_CONFIG, RetrievalConfig, RetrievalScope
 
 ACTOR = "operator:eval-answer"
 SECURITY_KINDS = (
@@ -93,6 +122,8 @@ SECURITY_KINDS = (
     "dangling_citations",
     "secret_leaks",
 )
+ANSWERABLE = ("answered", "partial")
+STATUS_COLUMNS: tuple[str, ...] = get_args(AnswerStatus)
 
 
 @dataclass(frozen=True)
@@ -151,6 +182,8 @@ class AnswerItemResult:
     tags: list[str]
     expected_status: str
     expected_reason: str | None
+    split: str | None = None
+    label_source: str | None = None
     status: str | None = None
     status_reason: str | None = None
     error: str | None = None
@@ -168,6 +201,15 @@ class AnswerItemResult:
     targets: list[str] = field(default_factory=list)
     targets_in_prompt: list[str] = field(default_factory=list)
     targets_cited: list[str] = field(default_factory=list)
+    relevant: list[str] = field(default_factory=list)
+    conflict_records: list[str] = field(default_factory=list)
+    conflict_in_prompt: list[str] = field(default_factory=list)
+    model_called: bool = False
+    gate: dict[str, Any] = field(default_factory=dict)  # P13.3: decision and item signals
+    prompt_chars: list[int] = field(default_factory=list)  # per generation call
+    prompt_items: int = 0
+    prompt_evidence_chars: int = 0
+    not_used_reasons: dict[str, int] = field(default_factory=dict)  # per chunk
     violations: list[dict[str, str]] = field(default_factory=list)
     checks: dict[str, bool | None] = field(default_factory=dict)
     judge: dict[str, Any] | None = None
@@ -293,6 +335,7 @@ async def evaluate_item(
     deps: AskDependencies,
     recorder: RecordingFactory,
     judge: "Judge | None",
+    retrieval_config: RetrievalConfig = DEFAULT_CONFIG,
 ) -> AnswerItemResult:
     out = AnswerItemResult(
         id=item.id,
@@ -305,6 +348,8 @@ async def evaluate_item(
         tags=list(item.tags),
         expected_status=expected.status,
         expected_reason=expected.status_reason,
+        split=item.split,
+        label_source=item.label_source,
     )
     world = dataset.worlds[item.organization]
     membership = identities.memberships.get((item.organization, item.persona))
@@ -333,6 +378,7 @@ async def evaluate_item(
                 ),
             ),
             deps=deps,
+            config=retrieval_config,
             now=AS_OF,
         )
     except LatticeError as exc:
@@ -371,6 +417,15 @@ async def evaluate_item(
         for e in answer.evidence
         if not e.used_for_answer
     }
+    out.not_used_reasons = dict(
+        Counter(e.not_used_reason or "-" for e in answer.evidence if not e.used_for_answer)
+    )
+    out.model_called = bool(trace["validation"].get("generation_calls"))
+    out.prompt_chars = [len(r.prompt) for r in recorder.requests]
+    out.prompt_items = len(trace["prompt_chunk_ids"])
+    out.prompt_evidence_chars = sum(
+        len(texts.by_chunk.get(c, "")) for c in trace["prompt_chunk_ids"]
+    )
     for conflict in answer.conflicts:
         out.conflicts.append(
             {
@@ -483,6 +538,34 @@ async def evaluate_item(
     ]
     out.targets_cited = [
         t.label(item.organization) for t in relevant if covered(t, trace["cited_chunk_ids"])
+    ]
+    out.relevant = [t.label(item.organization) for t in relevant]
+    # P13.3: the relevance gate's decision and each item's signals, by record.
+    egress_held = {e.evidence_id for e in answer.evidence if e.not_used_reason == "egress_policy"}
+    gate = trace["retrieval"]["relevance_gate"]
+    out.gate = {
+        "decision": gate["decision"],
+        "question_terms": gate["question_terms"],
+        "items": [
+            {
+                "record": record_of(chunk_id := uuid.UUID(i["chunk_id"])),
+                "code": i["code"],
+                "terms_matched": i["terms_matched"],
+                "coverage": i["coverage"],
+                "semantic": i["semantic"],
+                "held_by_egress": chunk_id in egress_held,
+                "relevant": any(
+                    (ref := corpus.chunks.get(chunk_id)) is not None and t.satisfied_by(ref)
+                    for t in relevant
+                ),
+            }
+            for i in gate["items"]
+        ],
+    }
+    sides = [parse_key(k, item.organization) for k in expected.conflict.records]
+    out.conflict_records = [t.label(item.organization) for t in sides]
+    out.conflict_in_prompt = [
+        t.label(item.organization) for t in sides if covered(t, trace["prompt_chunk_ids"])
     ]
     out.checks["status"] = answer.status == expected.status
     kinds = {c["kind"] for c in out.conflicts}
@@ -614,6 +697,16 @@ class AnswerReport:
     judge: str | None
     summary: dict[str, Any]
     items: list[AnswerItemResult]
+    # Comparability (lattice.evals.baseline).
+    kind: str = "answer"
+    embedding_model: str | None = None
+    corpus_fingerprint: dict[str, Any] = field(default_factory=dict)
+    golden_version: dict[str, Any] = field(default_factory=dict)
+    database_platform: str = "unknown"
+    # P13.3: the relevance gate's version (a declared change for ``eval compare``).
+    gate_version: str = DEFAULT_GATE.version
+    # P13.5: the retrieval configuration the Asks ran with (``--set`` names overrides).
+    retrieval_config_version: str = DEFAULT_CONFIG.version
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
@@ -627,11 +720,85 @@ def _rate(values: Sequence[bool]) -> float | None:
     return round(sum(values) / len(values), 4) if values else None
 
 
-def _percentile(values: Sequence[float], q: float) -> float | None:
-    if not values:
-        return None
-    ordered = sorted(values)
-    return round(ordered[min(len(ordered) - 1, int(q * len(ordered)))], 1)
+def foundation(ran: Sequence[AnswerItemResult]) -> dict[str, Any]:
+    """The P13.1 pipeline metrics (module docstring), every rate with its denominator."""
+    confusion: dict[str, dict[str, int]] = {}
+    for r in ran:
+        row = confusion.setdefault(r.expected_status, {})
+        row[str(r.status)] = row.get(str(r.status), 0) + 1
+    answerable = [r for r in ran if r.expected_status in ANSWERABLE]
+    with_relevant = [r for r in answerable if r.relevant]
+    recall = [len(r.targets_in_prompt) / len(r.relevant) for r in with_relevant]
+    conflicts = [r for r in ran if r.conflict_records]
+    abstain = [r for r in ran if r.expected_status == "insufficient_evidence"]
+    caught = [r for r in abstain if r.status == "insufficient_evidence" and not r.model_called]
+    called = [r for r in ran if r.model_called]
+    calls = [c for r in called for c in r.prompt_chars]
+    withheld: Counter[str] = Counter()
+    for r in ran:
+        withheld.update(r.not_used_reasons)
+    return {
+        "status_confusion": {
+            expected: dict(sorted(row.items())) | {"total": sum(row.values())}
+            for expected, row in sorted(confusion.items())
+        },
+        "context_recall": {
+            "runs": len(with_relevant),
+            "macro": round(statistics.mean(recall), 4) if recall else None,
+            "all_in_prompt": sum(
+                1 for r in with_relevant if set(r.relevant) <= set(r.targets_in_prompt)
+            ),
+            "none_in_prompt": sum(1 for r in with_relevant if not r.targets_in_prompt),
+        },
+        "conflict_coverage": {
+            kind: proportion(
+                sum(1 for r in rs if set(r.conflict_records) <= set(r.conflict_in_prompt)), len(rs)
+            )
+            for kind, rs in (
+                ("all", conflicts),
+                *(
+                    (k, [r for r in conflicts if r.checks.get(check) is not None])
+                    for k, check in (
+                        ("potential_conflict", "potential_conflict_found"),
+                        ("superseded", "supersession_found"),
+                    )
+                ),
+            )
+        },
+        "abstention": {
+            "catch_before_model": proportion(len(caught), len(abstain)),
+            "abstained_after_model_call": sum(
+                1 for r in abstain if r.status == "insufficient_evidence" and r.model_called
+            ),
+            "expected_abstain_reaching_model": sum(1 for r in abstain if r.model_called),
+            "false_abstention": proportion(
+                sum(1 for r in answerable if r.status == "insufficient_evidence"),
+                len(answerable),
+            ),
+        },
+        "prompt": {
+            "generation_calls": len(calls),
+            "prompt_chars_per_call": distribution([float(c) for c in calls]),
+            "estimated_tokens_per_call_p50": (
+                round(p50 / 4) if (p50 := percentile([float(c) for c in calls], 0.5)) else None
+            ),
+            "evidence_items_per_prompt": distribution([float(r.prompt_items) for r in called]),
+            "evidence_chars_per_prompt": distribution(
+                [float(r.prompt_evidence_chars) for r in called]
+            ),
+            "budget": {
+                "max_items": MAX_PROMPT_EVIDENCE,
+                "max_chars": MAX_PROMPT_CHARS,
+                "prompts_at_item_limit": sum(
+                    1 for r in called if r.prompt_items >= MAX_PROMPT_EVIDENCE
+                ),
+                "prompts_over_80pct_chars": sum(
+                    1 for r in called if r.prompt_evidence_chars > 0.8 * MAX_PROMPT_CHARS
+                ),
+            },
+            "withheld_chunks_by_reason": dict(sorted(withheld.items())),
+        },
+    }
 
 
 def summarize(results: Sequence[AnswerItemResult]) -> dict[str, Any]:
@@ -679,6 +846,17 @@ def summarize(results: Sequence[AnswerItemResult]) -> dict[str, Any]:
         "checks": {name: _rate(values) for name, values in sorted(checks.items())},
         "check_counts": {name: len(values) for name, values in sorted(checks.items())},
         "by_category": by_category,
+        # P13.2 (EC-7): every split reported with its denominators; held_out is never tuned.
+        "by_split": {
+            split: {
+                "ran": len(rs),
+                "status_accuracy": _rate([r.checks["status"] is True for r in rs]),
+                "context_recall": foundation(rs)["context_recall"],
+                "abstention": foundation(rs)["abstention"],
+            }
+            for split in sorted({r.split or "unassigned" for r in ran})
+            if (rs := [r for r in ran if (r.split or "unassigned") == split])
+        },
         "generation": {
             "items_with_model_call": len(called),
             "generation_calls": sum(int(r.validation.get("generation_calls", 0)) for r in ran),
@@ -710,15 +888,16 @@ def summarize(results: Sequence[AnswerItemResult]) -> dict[str, Any]:
             else None
         ),
         "latency_ms": {
-            "total_p50": _percentile([r.duration_ms for r in ran], 0.5),
-            "total_p95": _percentile([r.duration_ms for r in ran], 0.95),
-            "generation_p50": _percentile(generation_ms, 0.5),
-            "generation_p95": _percentile(generation_ms, 0.95),
+            "total_p50": percentile([r.duration_ms for r in ran], 0.5),
+            "total_p95": percentile([r.duration_ms for r in ran], 0.95),
+            "generation_p50": percentile(generation_ms, 0.5),
+            "generation_p95": percentile(generation_ms, 0.95),
         },
         "tokens": {
             "input": sum(r.usage.get("input_tokens", 0) for r in ran),
             "output": sum(r.usage.get("output_tokens", 0) for r in ran),
         },
+        "foundation": foundation(ran),
     }
 
 
@@ -741,8 +920,10 @@ async def evaluate_answers(
     items: Sequence[GoldenItem],
     judge: Judge | None = None,
     progress: Callable[[AnswerItemResult], None] | None = None,
+    retrieval_config: RetrievalConfig = DEFAULT_CONFIG,
 ) -> AnswerReport:
     texts = await load_texts(owner, identities.org_ids)
+    platform = await database_platform(owner)
     recorder = RecordingFactory(factory)
     deps = AskDependencies(
         embedding=embedding,
@@ -770,6 +951,7 @@ async def evaluate_answers(
                 deps=deps,
                 recorder=recorder,
                 judge=judge,
+                retrieval_config=retrieval_config,
             )
             results.append(result)
             if progress is not None:
@@ -786,6 +968,11 @@ async def evaluate_answers(
         else f"{judge.provider.provider}/{judge.provider.model} {JUDGE_VERSION}",
         summary=summarize(results),
         items=results,
+        embedding_model=None if embedding is None else embedding.model,
+        corpus_fingerprint=corpus.fingerprint,
+        golden_version=golden_version(items),
+        database_platform=platform,
+        retrieval_config_version=retrieval_config.version,
     )
 
 
@@ -822,6 +1009,38 @@ def render_markdown(report: AnswerReport) -> str:
         f"{g['citation_coverage']}; retrieval-limited items: {g['retrieval_limited_items']}",
         f"- Checks: {s['checks']} (n = {s['check_counts']})",
         f"- Latency ms: {s['latency_ms']}; tokens: {s['tokens']}",
+        "",
+    ]
+    f = s["foundation"]
+    a = f["abstention"]
+    c = f["context_recall"]
+    pr = f["prompt"]
+    lines += [
+        "## Evaluation foundation (pipeline metrics; not answer quality with a fake model)",
+        "",
+        f"- Context recall (relevant evidence in the prompt): {c['macro']} over {c['runs']} "
+        f"runs; all in prompt {c['all_in_prompt']}, none {c['none_in_prompt']}",
+        f"- Abstention caught before any model call: {a['catch_before_model']['count']}/"
+        f"{a['catch_before_model']['n']} (95% CI {a['catch_before_model']['ci95']}); "
+        f"expected-abstain runs reaching the model: {a['expected_abstain_reaching_model']}",
+        f"- False abstention: {a['false_abstention']['count']}/{a['false_abstention']['n']} "
+        f"(95% CI {a['false_abstention']['ci95']})",
+        "- Conflict coverage (every side in the prompt): "
+        + "; ".join(f"{k} {v['count']}/{v['n']}" for k, v in f["conflict_coverage"].items()),
+        f"- Prompt chars per call: {pr['prompt_chars_per_call']} (≈ "
+        f"{pr['estimated_tokens_per_call_p50']} tokens p50, chars/4); evidence items "
+        f"{pr['evidence_items_per_prompt']}, evidence chars {pr['evidence_chars_per_prompt']}; "
+        f"budget {pr['budget']}",
+        f"- Withheld from the prompt (chunks, by reason): {pr['withheld_chunks_by_reason']}",
+        "",
+        "| Expected status | " + " | ".join(STATUS_COLUMNS) + " | Total |",
+        "| --------------- | " + " | ".join("--:" for _ in STATUS_COLUMNS) + " | ----: |",
+        *(
+            f"| {expected} | "
+            + " | ".join(str(row.get(col, 0)) for col in STATUS_COLUMNS)
+            + f" | {row['total']} |"
+            for expected, row in f["status_confusion"].items()
+        ),
         "",
     ]
     if s["judge"]:

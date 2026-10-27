@@ -419,7 +419,7 @@ See `trust-boundaries.md` §4. Architecture, not prompt wording, carries the wei
 no tools, only permitted evidence, schema-constrained output, handle-only citations,
 verbatim quote verification, plain-text rendering.
 
-As built (Phase 6): fixed versioned instructions (`answer-prompt-1`) that name the rules;
+As built (Phase 6): fixed versioned instructions (`answer-prompt-1`; `answer-prompt-2` since P13.7) that name the rules;
 the question and every evidence block inside delimiters ending in a per-request random
 nonce, so retrieved text cannot close its block; request-local handles (no IDs); no tools
 in any provider payload (asserted per adapter); claims containing URLs, web or email

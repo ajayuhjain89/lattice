@@ -14,17 +14,25 @@ then the chunk's stable key, then its ID.
 """
 
 import uuid
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 from lattice.retrieval.models import Candidate, Channel, FusedCandidate
 
 
-def rrf_contribution(rank: int, k: int) -> float:
-    return 1.0 / (k + rank)
+def rrf_contribution(rank: int, k: int, weight: float = 1.0) -> float:
+    return weight / (k + rank)
 
 
-def fuse(channels: Iterable[Sequence[Candidate]], *, k: int, pool: int) -> list[FusedCandidate]:
-    """The top ``pool`` fused candidates."""
+def fuse(
+    channels: Iterable[Sequence[Candidate]],
+    *,
+    k: int,
+    pool: int,
+    weights: Mapping[Channel, float] | None = None,
+) -> list[FusedCandidate]:
+    """The top ``pool`` fused candidates. ``weights`` (P13.5, evaluation tunables) scale
+    each channel's contribution; absent, every channel weighs 1."""
+    weight = weights or {}
     first: dict[tuple[uuid.UUID, uuid.UUID], Candidate] = {}
     ranks: dict[tuple[uuid.UUID, uuid.UUID], dict[Channel, int]] = {}
     scores: dict[tuple[uuid.UUID, uuid.UUID], dict[Channel, float]] = {}
@@ -38,7 +46,7 @@ def fuse(channels: Iterable[Sequence[Candidate]], *, k: int, pool: int) -> list[
             scores.setdefault(c.key, {})[c.channel] = c.score
 
     def rrf(key: tuple[uuid.UUID, uuid.UUID]) -> float:
-        return sum(rrf_contribution(r, k) for r in ranks[key].values())
+        return sum(rrf_contribution(r, k, weight.get(c, 1.0)) for c, r in ranks[key].items())
 
     ordered = sorted(
         first,

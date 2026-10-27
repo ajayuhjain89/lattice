@@ -31,5 +31,5 @@ scheduling and retries. Kofi will write the design in May.
 
 ## Customers waiting
 
-Acme Corp (Okta migration this summer), Brightwater Health (Entra ID), Orbital-style
+Acme Corp (Okta migration this summer), Brightwater Health (Entra ID), and
 prospects that list SCIM as a hard requirement.

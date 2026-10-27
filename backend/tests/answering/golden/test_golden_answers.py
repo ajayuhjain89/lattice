@@ -23,10 +23,12 @@ from sqlalchemy import text
 from lattice.answering.evidence import get_evidence
 from lattice.answering.models import AskRequest
 from lattice.answering.service import AskDependencies, ask
+from lattice.cli_retrieval import BASELINES
 from lattice.config import Environment
 from lattice.dataset.lint import Dataset
 from lattice.dataset.manifests import AS_OF
 from lattice.db.engine import Database
+from lattice.evals import baseline
 from lattice.evals.answer import GenerationSpec, configure, evaluate_answers
 from lattice.evals.retrieval import Corpus, Identities, select_items
 from lattice.providers.embedding import FakeEmbeddingProvider
@@ -78,6 +80,48 @@ async def test_every_golden_item_passes_the_security_gate(
     # nothing is labelled superseded without an explicit link.
     assert s["checks"]["no_unfounded_supersession"] == 1.0
     assert s["generation"]["claims_proposed"] > 0
+
+
+async def test_the_answer_pipeline_reproduces_its_committed_baseline(
+    app_db: Database,
+    owner_db: Database,
+    dataset: Dataset,
+    identities: Identities,
+    corpus: Corpus,
+) -> None:
+    """P13.1 (regenerated in P13.2 and P13.3): configuration A (exact + lexical
+    retrieval, fake extractive generator) per run against ``evals/baselines/answer-A.json``:
+    status, model call, relevant targets in the prompt. Plumbing only -- and since P13.3
+    the relevance gate's effect: expected-abstain runs stopped before any model call, and
+    the answerable runs it refuses (evaluation-plan §17)."""
+    report = await evaluate_answers(
+        app_db,
+        owner_db,
+        dataset,
+        identities=identities,
+        corpus=corpus,
+        spec=FAKE_SPEC,
+        factory=DefaultGenerationFactory(Environment.TEST),
+        secrets=EnvironmentSecretStore(environ={}),
+        embedding=None,
+        items=select_items(dataset),
+    )
+    reference = baseline.load(BASELINES / "answer-A.json")
+    result = baseline.compare(reference, baseline.normalize(report))
+    assert result.verdict == "identical", baseline.render(result)
+    f = report.summary["foundation"]
+    # P13.3 gate_v1: 15 of the 25 expected-abstain runs are stopped before the model (0
+    # in P13.2: G1); 10 of the 126 answerable runs are refused by the gate.
+    assert f["abstention"]["catch_before_model"]["count"] == 15
+    assert f["abstention"]["catch_before_model"]["n"] == 25
+    assert f["abstention"]["false_abstention"]["count"] == 10
+    # 0.7114 in P13.2: the refused runs carry no evidence to the prompt (evaluation-plan
+    # §17); no other run lost a target.
+    assert f["context_recall"]["macro"] == 0.6571
+    # Both splits are reported with their denominators (EC-7).
+    by_split = report.summary["by_split"]
+    assert set(by_split) == {"dev", "held_out"}
+    assert sum(b["ran"] for b in by_split.values()) == report.summary["ran"]
 
 
 def _ask_deps(harness: Harness) -> AskDependencies:

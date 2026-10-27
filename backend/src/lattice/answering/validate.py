@@ -13,18 +13,19 @@ with the bad citation stripped. Rules, in order, for each claim:
    it was not given (``unknown_handle``).
 3. **Quotes** -- every quote is found verbatim in its handle's chunk text after
    normalization only: Unicode NFC, whitespace collapsed, curly/straight quotes and
-   dash variants treated alike; surrounding quotation marks and a trailing ellipsis are
-   ignored. No fuzzy matching, no case folding. A quote must be substantial: at least
-   two words and six characters, at most 300 characters (``quote_not_found``,
-   ``quote_too_short``, ``quote_too_long``). The verified offsets become the
-   inspector's highlight.
+   dash variants treated alike; surrounding quotation marks (straight or curly) and a
+   trailing ellipsis are ignored. No fuzzy matching, no case folding. A quote must be
+   substantial: at least two words and six characters, at most 300 characters
+   (``quote_not_found``, ``quote_too_short``, ``quote_too_long``). The verified offsets
+   become the inspector's highlight.
 4. **Support floor** -- deterministic checks that one valid quote cannot legitimize an
    unrelated statement: every number in the claim occurs in the text or metadata of the
    evidence the claim cites (``unsupported_number``), and a claim with content words
    (not counting the cited sources' own titles, authors, references, dates and generic
    attribution words) shares at least one with the sentence around one of its quotes
-   (``no_shared_terms``). Whether a quote really *entails* its claim is a language
-   judgement, measured by the evaluation judge.
+   (``no_shared_terms``; word forms are compared after removing one common English
+   suffix, so "moved" shares "moves" -- P13.7). Whether a quote really *entails* its
+   claim is a language judgement, measured by the evaluation judge.
 5. **Safe content** -- no URLs, web or email addresses, markdown links/images or HTML
    in anything shown (``unsafe_content``): exfiltration through rendered links is
    impossible even if the model repeats an injected payload.
@@ -221,8 +222,20 @@ _STOPWORDS: Final = frozenset(
 )
 
 
+# Word forms compared by ``_terms``: one of these suffixes is removed when at least three
+# letters remain ("moves", "moved" and "move" are one term; so are "cause" and "caused").
+_SUFFIXES: Final = ("ing", "ed", "es", "s", "e")
+
+
+def _stem(word: str) -> str:
+    for suffix in _SUFFIXES:
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            return word[: -len(suffix)]
+    return word
+
+
 _ATTRIBUTION: Final = frozenset(
-    w.rstrip("s")
+    _stem(w)
     for w in [
         "january",
         "february",
@@ -327,7 +340,11 @@ def _strip_quote(quote: str) -> str:
     q = quote.strip()
     for ellipsis in ("...", "\u2026"):
         q = q.removeprefix(ellipsis).removesuffix(ellipsis).strip()
-    while len(q) >= 2 and q[0] in _OUTER and q[-1] in _OUTER:
+    while (
+        len(q) >= 2
+        and q[0].translate(_EQUIVALENT) in _OUTER
+        and q[-1].translate(_EQUIVALENT) in _OUTER
+    ):
         q = q[1:-1].strip()
     return q
 
@@ -358,7 +375,7 @@ def _numbers(text: str) -> set[str]:
 
 def _terms(text: str) -> set[str]:
     words = _WORD.findall(normalize(text).lower().replace("'s", ""))
-    return {w.rstrip("s") for w in words if len(w) >= 4 and w not in _STOPWORDS}
+    return {_stem(w) for w in words if len(w) >= 4 and w not in _STOPWORDS}
 
 
 def evidence_facts(e: Evidence) -> str:

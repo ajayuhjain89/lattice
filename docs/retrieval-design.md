@@ -3,7 +3,9 @@
 Status: **Part I implemented in Phase 5** (`backend/src/lattice/retrieval/`, evaluated by
 `lattice eval retrieval`; tests in `backend/tests/retrieval/`). **Part II implemented in
 Phase 6** (`backend/src/lattice/answering/`, `lattice eval answer`; tests in
-`backend/tests/answering/`); §13 lists where the build differs from §8–11. Where Phase 5 differs from the Phase 0 draft, the section says so and
+`backend/tests/answering/`); §13 lists where the build differs from §8–11. Phase 13
+(P13.0) baseline and known quality gaps of this design as built:
+[phase-13-plan.md](phase-13-plan.md) §4–7. Where Phase 5 differs from the Phase 0 draft, the section says so and
 `implementation-plan.md` (Phase 5, as built) lists why.
 Related: `authorization-model.md`, `data-model.md` §6, ADR-003, ADR-004, ADR-006, ADR-008.
 
@@ -135,6 +137,11 @@ As built (Phase 5 evaluation, `evaluation-plan.md` §9):
 Known weakness (unchanged): the `english` stemmer may conflate product names; the
 `simple` title vector is still the first mitigation if the eval shows it.
 
+Weighted variants (P13.4, evaluation only, off in the product): IDF term weights over the
+reader's permitted chunks, content terms only, a title-only factor and an account factor
+(`RetrievalConfig.lexical_*`; statistics from `retrieval.terms.question_statistics`).
+None improved the held-out split, so ranking stays as above (evaluation-plan §18).
+
 ## 5. Semantic channel (`retrieval.semantic`, pgvector)
 
 **Query egress (D-13).** The question can itself carry confidential information, so
@@ -192,6 +199,11 @@ the exact, lexical and semantic lists. A chunk found by several channels is one
 candidate with its per-channel ranks and scores (`matched_by`). Identity is
 `(organization_id, chunk_id)`: two tenants' rows are never merged. Order: fused score,
 best channel rank, stable key, ID (total, deterministic). Top `fused_pool = 40`.
+Per-channel weights (`rrf_weight_*`, P13.5) exist as evaluation tunables at 1.0; no
+weighting improved the held-out split (evaluation-plan §19). A second hop,
+`expansion_v1` (`retrieval.expansion`, P13.6, D-40), can add a fourth list from the best
+selected chunks' neighbours, named records and readable links; it is an evaluation
+tunable, off, because no setting improved dev (evaluation-plan §23).
 
 **rerank_v1** (`retrieval.rerank`, deterministic, versioned):
 
@@ -327,6 +339,9 @@ for every provider.
   an account the asker may not see as structured metadata.
 - Evidence is ordered **chronologically** within the prompt (with rank retained as an
   attribute) — this makes temporal reasoning about conflicts easier for the model.
+  Since `answer-prompt-2` (P13.7) a record's chunks are adjacent (records ordered by
+  their earliest chunk) and supersession between two records in the prompt is named by
+  handle (`supersedes`, `superseded_by`).
 - The instructions require: answer only from evidence; every factual claim cites ≥ 1
   handle with a short verbatim quote; mark whether each claim directly answers the
   question; when evidence disagrees, attribute each statement to its source and date
@@ -535,10 +550,10 @@ call; one INSERT records the trace.
 | `AnswerDraft` via Pydantic schema | Hand-written `ANSWER_SCHEMA` (type/properties/required/enum/items/additionalProperties only; `claims` first, `status` last; `clarifying_question` a string, `""` = none). The top level is parsed strictly, each claim, citation and conflict separately | One schema every structured-output mode accepts (Gemini `responseJsonSchema`, Ollama `format`); a malformed claim invalidates only that claim |
 | Evidence blocks `<evidence id="E3" ...>` | Delimiters end in a per-request random nonce (`<evidence-3f9a2c41d0be id="E1" rank=".." kind=".." title=".." ref=".." account=".." date=".." author=".." authority="..">`); attribute values cannot contain `"`, `<`, `>`; the question has its own nonce block | Retrieved text cannot close a block whose name it cannot guess; tested with injected `</evidence>` and fake "SYSTEM:" lines |
 | Validation steps 1–4 | Plus a quote floor (≥ 2 words, ≥ 6 characters, ≤ 300), a **support floor** (every number in a claim must occur in the text or prompt metadata of the evidence it cites, `unsupported_number`; a claim's content words, not counting the cited sources' titles, authors, references and generic attribution/date words, must share one with the sentence around one of its quotes, `no_shared_terms`) and **safe content** (no URL, web or email address, markdown link/image or HTML in any shown text, `unsafe_content`) | One valid quote must not legitimize an unrelated statement; exfiltration through rendered links is impossible even if the model repeats an injected payload. Entailment itself stays a judge metric (§9 step 9) |
-| Relevance floor "not met → insufficient_evidence" | Per item: an evidence item may enter the prompt only if the exact or lexical channel matched it, or its semantic similarity reaches a threshold calibrated for that embedding model (`SEMANTIC_FLOOR`; none is calibrated, so semantic-only neighbours never pass alone). No item passes → `insufficient_evidence` / `no_relevant_evidence`, no model call, no provider built. Items below the floor stay in the asker's list (`not_used_reason = relevance_floor`) | Nearest neighbours always exist; they are not evidence of relevance, and sending them wastes egress |
+| Relevance floor "not met → insufficient_evidence" | **Relevance gate** (`answering.gate`, `gate_v1`, P13.3; replaced the P6 floor "any exact or lexical match passes", which the any-lexeme lexical mode and the account term made always true). Per item, from permitted signals only: *identifier* (exact channel), *coverage* (weighted share of the question's content terms ≥ 0.50; terms weigh `ln((N+1)/(n+1)) + 1` over the asker's permitted chunks, `retrieval.terms`; stopwords, a short framing-word list, hyphenated compounds and the visible accounts named are not content terms, a named visible account is one term covered by its chunks), *semantic* (similarity ≥ the floor calibrated for that model and revision; only `mxbai-embed-large-v1@b33106f585b9`, 0.76) are decisive. No decisive item → `insufficient_evidence` / `no_relevant_evidence`, no model call, no provider built. Every decisive item above the egress level → `evidence_only` / `egress_policy`. Otherwise every exact- or lexical-matched item and every semantic item above the floor reach the prompt. A shared-alias account mention is clarified before gating. Items not used stay in the asker's list (`not_used_reason = relevance_floor`); the trace's `retrieval.relevance_gate` holds codes and numbers per item, never the terms | Abstention must not depend on an unmeasured model (G1); a word no permitted chunk contains is what a question is about; nearest neighbours always exist, so only a calibrated floor counts. Weights from permitted chunks only: an unreadable document cannot change the outcome (SEC-5). Calibrated on the dev split (evaluation-plan §17) |
 | `ambiguous` when ≥ 2 in-scope accounts match | Only when ≥ 2 visible accounts matched and **none is named in full** ("What did we promise Acme?"); "Acme Corp" also contains Acme Health's alias "Acme", and several full names are a comparison. The model may also return `ambiguous` with a clarifying question (`missing_referent`) | Phase 5 reports every visible match and leaves what to ask to Phase 6 |
 | `unsupported_request` (D-11) | Decided first by code from the question alone (`answering.request_kind`: an imperative that performs something, or a request to read others' use of Lattice), before the relevance, ambiguity and provider decisions: no model is called, no provider is built, and the status holds with no relevant evidence and with no provider available. Phrasings the patterns do not list reach the model, whose fixed rubric can still return it. Shows no claims and a fixed sentence; evidence still returned | D-11; an action request must not become `insufficient_evidence` or `evidence_only` because of what retrieval found. Patterns are narrow because a false positive refuses a real question |
-| `evidence_only` reasons | `egress_policy` (the invocation rule or the question's sensitivity forbids the call, or every relevant item is above the level) or `generation_unavailable` (no configuration, disabled, unsupported, no resolvable credential) | Configuration states are not policy outcomes; the trace keeps the exact reason code |
+| `evidence_only` reasons | `egress_policy` (the invocation rule or the question's sensitivity forbids the call, or every decisive item of the relevance gate is above the level -- a weaker remainder is not drafted from) or `generation_unavailable` (no configuration, disabled, unsupported, no resolvable credential) | Configuration states are not policy outcomes; the trace keeps the exact reason code |
 | `failed` | `provider_unavailable` (the provider raised; trace `error_code` `generation_failed:*`), `generation_invalid` (schema failure after the regeneration), `citation_validation_failed` (the response invariant withheld the answer; logged) | §9 step 10 |
 | Supersession | Deterministic items for every explicit link between two evidence documents (whatever the status); a model-proposed conflict between linked documents is reclassified, not duplicated | §10 |
 | Freshness thresholds org-configurable | Code defaults (ticket/chat 30 d, doc 180 d, system-of-record docs 365 d); no `org_settings.freshness_thresholds` column | No consumer needs the setting yet |
