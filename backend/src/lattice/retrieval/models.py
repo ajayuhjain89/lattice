@@ -16,8 +16,8 @@ from typing import Final, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-Channel = Literal["exact", "lexical", "semantic"]
-CHANNELS: Final[tuple[Channel, ...]] = ("exact", "lexical", "semantic")
+Channel = Literal["exact", "lexical", "semantic", "expansion"]
+CHANNELS: Final[tuple[Channel, ...]] = ("exact", "lexical", "semantic", "expansion")
 
 # The product's source types; each maps to the document kinds it stores.
 SourceType = Literal["doc", "ticket", "chat"]
@@ -73,6 +73,14 @@ class RetrievalConfig:
     rrf_weight_exact: float = 1.0
     rrf_weight_lexical: float = 1.0
     rrf_weight_semantic: float = 1.0
+    # P13.6 expansion_v1 (D-40): one bounded second hop from the best selected chunks.
+    expansion: bool = False
+    k_seed: int = 5
+    k_expand: int = 10
+    max_references: int = 5
+    rrf_weight_expansion: float = 0.5
+    # Add only chunks no first-hop channel returned (True), or also nudge found ones.
+    expansion_new_only: bool = True
     text_search_config: str = "english"
     # all_terms: websearch_to_tsquery (every term must match; the Phase 0 design).
     # any_term: any of the question's lexemes may match; ranked by ts_rank_cd.
@@ -117,7 +125,15 @@ class RetrievalConfig:
         for name in ("lexical_title_factor", "lexical_account_factor"):
             if not 0.0 <= getattr(self, name) <= 1.0:
                 raise ValueError(f"{name} out of range")
-        for name in ("rrf_weight_exact", "rrf_weight_lexical", "rrf_weight_semantic"):
+        for name in ("k_seed", "k_expand", "max_references"):
+            if not 1 <= getattr(self, name) <= MAX_LIMIT:
+                raise ValueError(f"{name} out of range")
+        for name in (
+            "rrf_weight_exact",
+            "rrf_weight_lexical",
+            "rrf_weight_semantic",
+            "rrf_weight_expansion",
+        ):
             if not 0.0 < getattr(self, name) <= 4.0:
                 raise ValueError(f"{name} out of range")
 
@@ -127,6 +143,7 @@ class RetrievalConfig:
             "exact": self.rrf_weight_exact,
             "lexical": self.rrf_weight_lexical,
             "semantic": self.rrf_weight_semantic,
+            "expansion": self.rrf_weight_expansion,
         }
 
     @property

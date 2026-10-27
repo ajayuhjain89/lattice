@@ -1743,3 +1743,65 @@ At the P13.9 HEAD, on isolated databases (port 5440), M1:
 
 No committed baseline changed during P13.4–P13.9. Phase verdict and the owner's decisions:
 phase-13-plan §27.
+
+## 23. Multi-hop evidence expansion (P13.6, 2026-10-27; D-40 approved)
+
+**Outcome: built as designed (phase-13-plan §24), not adopted.** No variant improved the
+dev split in A or C, so no dev choice existed to confirm and **held-out was not used**.
+`expansion_v1` stays as an evaluation tunable, off in the product (`RetrievalConfig.expansion`;
+`lattice eval retrieval --set expansion=true ...`), with its security tests.
+
+What runs when enabled: after the first selection, the best 5 selected chunks are seeds;
+one `UNION ALL` statement (+1 SQL statement, p50 9 ms / p95 19 ms on A) adds at most 10
+candidates -- (a) seed-document neighbours (ordinal ± 1, or containing a question content
+lexeme), (b) chunks of records whose display reference a seed's text names (not in the
+question; at most 5 records), (c) readable supersession neighbours containing a content
+lexeme -- as a fourth fusion list, then rerank and selection again. Every branch carries
+the tenant, lifecycle and authorization conditions for the chunk it returns and for the
+seed it reads; candidates pass E4 and the evaluation's per-stage security checks.
+
+Dev screening (items with targets, macro; dev 80):
+
+| Variant | A R@10 | A MRR | C R@10 | C MRR |
+| ------- | -----: | ----: | -----: | ----: |
+| product (`retrieval-6`) | 0.722 | 0.656 | 0.739 | 0.641 |
+| as written: every candidate, list ranks 1–10, weight 0.5 | **0.538** | **0.355** | — | — |
+| new chunks only, list ranks, weight 0.5 / 0.75 | 0.722 / 0.722 | 0.656 / 0.656 | — | — |
+| new chunks only, list ranks, weight 1.0 | 0.651 | 0.576 | — | — |
+| new chunks only, ranked by their seed, weight 0.5 / 0.75 | 0.722 / 0.722 | 0.656 / 0.656 | — / 0.739 | — / 0.641 |
+| new chunks only, ranked by their seed, weight 0.9 / 1.0 | 0.689 / — | 0.641 / — | 0.739 / 0.733 | 0.641 / 0.641 |
+| found chunks nudged too, ranked by their seed, weight 0.1 / 0.2 / 0.3 | 0.687 / 0.633 / 0.607 | 0.530 / 0.444 / 0.400 | 0.692 / — / — | 0.595 / — / — |
+
+Why it cannot help here:
+
+- **As written it buries the question's own evidence.** Most neighbours are already in the
+  lexical list; a second fusion contribution lifts them above the seed they came from (a
+  rank-1 SLA paragraph falls out of the top 20 behind its own document's other sections).
+- **Only new chunks: almost nothing new to add.** Of the dev targets missed at 10, the hop
+  reaches **3 of 66 in A and 2 of 61 in C** as new evidence (on average 3.4 and 2.8 chunks
+  added per question; none for a third of the questions). The P13.6 analysis counted 33 of
+  C's 107 misses as "another chunk of a record already in the top 10" -- but those chunks
+  are mostly **already retrieved** by the first hop, ranked 11–50. Their problem is order,
+  not reach. Weighted low, new chunks stay below the top 20; weighted high, they displace
+  better evidence.
+- **Nudging the already-found neighbours** is a ranking change, and even at weight 0.1 it
+  displaces targets (A MRR −12.6 points): a record's other chunks are, on average, less
+  relevant than what the question matched directly.
+
+Two deviations from the written design were tried, each recorded above: adding only chunks
+the first hop did not return (the design did not say; without it the hop is a ranking
+change), and ranking each candidate by its seed's rank (the design's list ranks put every
+candidate below the 50th lexical item at weight 0.5). Neither changed the outcome.
+
+Acceptance (phase-13-plan §11 P13.6: multi-hop targets @10 ≥ 30% on held-out): **not met**
+-- not tested on held-out because nothing passed dev.
+
+Security (independent of adoption): `tests/retrieval/test_expansion.py` -- every branch
+carries the predicate for the chunk and for the seed (both scopes); a planted identifier
+reaches a readable record and never a confidential one for a reader without access, while
+a reader with access reaches both (S9); an unreadable record changes neither the evidence
+nor the expansion stage (S4); nothing is sent to a provider (S6: SQL only); the trace holds
+counts and chunk IDs (S10). Mutation checks (not committed): seed predicate removed → 2
+failures; chunk predicate removed → 4. Every security metric 0 in every run above.
+Retrieval A, B (aarch64), C and answer A compare identical with their baselines with the
+code present (off).

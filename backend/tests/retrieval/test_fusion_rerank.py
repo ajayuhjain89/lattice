@@ -52,7 +52,7 @@ def test_channel_weights_scale_each_contribution() -> None:
     weighted = fuse(lists, k=60, pool=40, weights={"lexical": 1.5})
     assert [f.candidate.chunk_id for f in weighted] == [lexical, semantic]
     assert weighted[0].rrf_score == 1.5 / 62
-    assert CONFIG.rrf_weights == {"exact": 1.0, "lexical": 1.0, "semantic": 1.0}
+    assert CONFIG.rrf_weights == {"exact": 1.0, "lexical": 1.0, "semantic": 1.0, "expansion": 0.5}
 
 
 def test_rrf_uses_k_60_over_every_channel_that_found_a_chunk() -> None:

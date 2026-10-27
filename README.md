@@ -15,8 +15,8 @@ review packet in [docs/golden-review/](docs/golden-review/)) is delivered, its h
 review pending; P13.3 (the relevance gate: answers stop before any model call when no
 permitted evidence addresses the question) is accepted; P13.4–P13.9 are delivered as far
 as they can go without the product owner: no ranking change survived held-out evaluation,
-so retrieval is unchanged, the second hop (P13.6) is designed and awaits review, and the
-answer validator now has an adversarial suite (phase-13-plan §27). History: Phases 1–11
+so retrieval is unchanged, the second hop (P13.6) was built and measured without a gain,
+and the answer validator now has an adversarial suite (phase-13-plan §27–28). History: Phases 1–11
 and the frontend product-design overhaul (D0–D7,
 [design direction](docs/design-direction.md)) is merged; [design system
 v2](docs/design-system.md) is canonical. Phase 11 (Production Deployment, Identity

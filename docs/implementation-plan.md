@@ -41,7 +41,8 @@ P13.3 (the relevance gate: deterministic abstention and the egress-held `evidenc
 calibrated on dev) accepted 2026-10-27 with its held-out trade-off recorded, the first
 answering behaviour change. P13.4–P13.9 (authorized together 2026-10-27): no lexical,
 fusion, selection or conflict-candidate change survived held-out, so retrieval is
-unchanged; P13.6 (second hop) is designed and awaits the D-40 review; P13.7 added the
+unchanged; P13.6 (second hop) was approved under D-40, built and not adopted (no dev gain);
+P13.7 added the
 validator adversarial suite, two in-rule validator fixes and `answer-prompt-2`; P13.9
 closed engineering with the quality criterion unmet and the owner's decisions listed
 (phase-13-plan §27). Not pushed.
@@ -1258,7 +1259,7 @@ evidence can never enter a prompt (G3); every security metric is 0.
 | P13.3 | Relevance gate and abstention calibration | Accepted 2026-10-27 (cb82ce2, `gate_v1`; held-out trade-off recorded in phase-13-plan §21; evaluation-plan §17) |
 | P13.4 | Lexical candidate quality and ranking | Delivered 2026-10-27, no change adopted (ec11f5c; phase-13-plan §22; evaluation-plan §18) |
 | P13.5 | Fusion, selection and multi-document evidence | Delivered 2026-10-27, no change adopted (c46b94b; §23; evaluation-plan §19) |
-| P13.6 | Multi-hop evidence expansion (only with D-40) | Designed (d13fac6; §24); D-40 review pending; not built |
+| P13.6 | Multi-hop evidence expansion (only with D-40) | D-40 approved 2026-10-27; built, not adopted (no dev gain; phase-13-plan §28; evaluation-plan §23) |
 | P13.7 | Context construction and validator verification | Delivered 2026-10-27 (2ec9324; §25; evaluation-plan §20) |
 | P13.8 | Conflicts and temporal reasoning | Delivered 2026-10-27, no behaviour change (35885a0; §26; evaluation-plan §21) |
 | P13.9 | Regression, performance, optional real-model evaluation, closure | Engineering closure 2026-10-27 (§27; evaluation-plan §22); quality criterion not met; owner decisions pending |

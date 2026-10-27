@@ -14,7 +14,7 @@ held-out trade-off recorded** (§21; evaluation-plan §17): the first behaviour 
 answering only; retrieval unchanged.
 **P13.4 (lexical ranking) and P13.5 (fusion and selection) delivered 2026-10-27 with no
 change adopted** (§22–23; evaluation-plan §18–19): no variant improved held-out. **P13.6
-designed for the D-40 review, not built** (§24). **P13.7 (validator suite, prompt-2)
+(second hop) approved under D-40, built and not adopted** (§24, §28). **P13.7 (validator suite, prompt-2)
 delivered 2026-10-27** (§25; evaluation-plan §20). **P13.8 (conflicts, temporal)
 delivered 2026-10-27 with no behaviour change** (§26; evaluation-plan §21). **P13.9
 engineering closure 2026-10-27** (§27): the phase's remaining decisions are the owner's. P13.4–P13.9 were authorized together
@@ -547,8 +547,9 @@ records its measurements in evaluation-plan §14+. "Re-index" means `lattice rei
 - **Security regressions.** S6 (egress of evidence-derived text) and S9 (injection
   steering) are the new risks; both have dedicated tests.
 - **Resources.** One extra SQL round trip per question (budget §13).
-- **Status: design written 2026-10-27 for the D-40 review; no code** (§24). D-40
-  approved the idea, not an implementation: the design waits for the owner.
+- **Status: D-40 approved 2026-10-27; built as designed, not adopted** (§28;
+  evaluation-plan §23). No variant improved dev in A or C; held-out not used. Off in the
+  product; an evaluation tunable with its security tests.
 
 ### P13.7 — Context construction and grounded-answer verification (G2, G8 answer side)
 
@@ -848,10 +849,11 @@ The finding for the owner: on this golden set, ranking changes move 1–2 points
 do not hold on held-out. What remains is evidence no channel returns (P13.6, D-40) and the
 size of the held-out split (44 items with targets).
 
-## 24. P13.6 second-hop design (for the D-40 review; not implemented)
+## 24. P13.6 second-hop design (reviewed under D-40; built and measured in §28)
 
 D-40 approved one bounded, deterministic second pass *in principle* and required its
-design to be reviewed before any code. This is that design. Nothing below is built.
+design to be reviewed before any code. This is that design; the owner approved it on
+2026-10-27 and it was built and measured (§28).
 
 ### 24.1 What the misses say (C snapshot, all 124 items with targets)
 
@@ -947,7 +949,7 @@ not meet its quality criterion (§16.3).** The one behaviour change that survive
 evaluation is P13.3's relevance gate, accepted with its trade-off. P13.4 (lexical), P13.5
 (fusion and selection) and P13.8 (conflict candidates) each produced dev gains or
 signals that did not hold on held-out or did not discriminate, and were not adopted.
-P13.6 is designed and waits for the D-40 review. P13.7 delivered the validator suite,
+P13.6 was approved under D-40, built and measured: no variant improved dev (§28). P13.7 delivered the validator suite,
 two in-rule validator fixes and `answer-prompt-2`. Nothing is pushed.
 
 ### Final measurements (HEAD, isolated databases, M1)
@@ -992,12 +994,32 @@ two in-rule validator fixes and `answer-prompt-2`. Nothing is pushed.
 
 ### Decisions for the owner
 
-1. **D-40 / P13.6:** approve `expansion_v1` (§24), narrow it to record neighbours, or
-   defer it to a later phase.
+1. ~~D-40 / P13.6~~ -- approved and built 2026-10-27; not adopted (§28).
 2. **D-41:** review the 56 held-out items (docs/golden-review/ H1–H4); until then no
    held-out number is binding. A larger held-out split would make future ranking
    decisions measurable.
 3. **Prompt item budget (§13):** the 12-item limit binds in 116/129 prompts while
    characters stay under 25%; raising it needs a real-model measurement (D-43).
 4. **Closure:** accept Phase 13 with criterion 3 unmet (as recorded) and authorize the
-   push, branch CI and merge -- or continue with P13.6 first.
+   push, branch CI and merge.
+
+## 28. P13.6 delivery record (2026-10-27)
+
+D-40 approved by the owner 2026-10-27 ("build expansion_v1 as designed in §24, measure on
+dev then held-out"). Full record: evaluation-plan §23.
+
+| Item | Result |
+| ---- | ------ |
+| Built | `lattice.retrieval.expansion` (three branches, one statement, ≤ 10 candidates from 5 seeds, ≤ 5 referenced records); `expansion` channel in fusion; `RetrievalConfig.expansion` (off), `k_seed`, `k_expand`, `max_references`, `rrf_weight_expansion`, `expansion_new_only`; trace count `expansion` when enabled |
+| Dev (A, C) | no variant better than the product; the written design (all candidates, weight 0.5) A R@10 0.722 → 0.538; new chunks only: no change up to weight 0.75, worse above; nudging found chunks worse at every weight |
+| Why | the hop reaches 3/66 (A) and 2/61 (C) dev misses as new evidence; the same-record targets are already retrieved and lose on order |
+| Held-out | not used (nothing to confirm) |
+| Deviations tried | new chunks only; candidates ranked by their seed's rank. Neither helped |
+| Security | SQL-structure per branch (chunk and seed predicates), planted identifier (S9), unreadable record changes nothing (S4), no provider (S6), trace IDs/counts (S10); mutation-checked |
+| Cost when enabled | +1 statement, p50 9 ms / p95 19 ms (A) |
+| Product | unchanged; baselines unchanged; full backend suite 3,465 passed |
+
+With P13.6 measured, every retrieval checkpoint of Phase 13 has been tried; the evidence
+says the remaining gap on this corpus is order among already-retrieved chunks of shared
+topics, which neither weighting nor a second hop fixed. Owner decisions remaining: §27
+items 2–4.

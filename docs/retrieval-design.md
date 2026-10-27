@@ -200,7 +200,10 @@ candidate with its per-channel ranks and scores (`matched_by`). Identity is
 `(organization_id, chunk_id)`: two tenants' rows are never merged. Order: fused score,
 best channel rank, stable key, ID (total, deterministic). Top `fused_pool = 40`.
 Per-channel weights (`rrf_weight_*`, P13.5) exist as evaluation tunables at 1.0; no
-weighting improved the held-out split (evaluation-plan §19).
+weighting improved the held-out split (evaluation-plan §19). A second hop,
+`expansion_v1` (`retrieval.expansion`, P13.6, D-40), can add a fourth list from the best
+selected chunks' neighbours, named records and readable links; it is an evaluation
+tunable, off, because no setting improved dev (evaluation-plan §23).
 
 **rerank_v1** (`retrieval.rerank`, deterministic, versioned):
 

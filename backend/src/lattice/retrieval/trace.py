@@ -71,6 +71,7 @@ def build_trace(
             "exact": len(stages["exact"]),
             "lexical": len(stages["lexical"]),
             "semantic": len(stages["semantic"]),
+            **({"expansion": len(stages["expansion"])} if "expansion" in stages else {}),
             "merged": len(fused),
             "reranked": len(ranked),
             "final": final_count,
