@@ -331,3 +331,14 @@ def test_regressions_are_also_reported_per_split() -> None:
     # Runs without splits (P13.1 baselines) compare as before: no split rows.
     plain = baseline.compare(_report(), _moved(_report(), "lookup-b", "doc:c#1", 14))
     assert not [row for row in plain.categories if row["slice"].startswith("split:")]
+
+
+def test_a_new_relevance_gate_is_a_declared_change_even_against_older_baselines() -> None:
+    # Baselines written before P13.3 have no gate version: the gate's arrival is declared,
+    # so its differences are reported as a change and only its regressions fail.
+    base = _answer_report(_answer_run("nps", status="answered", model_called=True))
+    run = _answer_report(_answer_run("nps")) | {"gate_version": "gate_v1"}
+    result = baseline.compare(base, run)
+    assert result.intended == ["gate_version: None -> gate_v1"]
+    assert result.verdict == "changed"
+    assert baseline.compare(run, run).verdict == "identical"

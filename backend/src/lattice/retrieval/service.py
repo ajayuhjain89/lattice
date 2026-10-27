@@ -43,10 +43,10 @@ from lattice.authz import (
 from lattice.db.engine import Database
 from lattice.errors import ErrorCode, ErrorDetail, LatticeError
 from lattice.providers.embedding import EmbeddingProvider
-from lattice.retrieval.evidence import hydrate
+from lattice.retrieval.evidence import QuestionTerms, hydrate
 from lattice.retrieval.exact import exact_candidates
 from lattice.retrieval.fusion import fuse
-from lattice.retrieval.lexical import lexical_candidates
+from lattice.retrieval.lexical import QUESTION_FRAME_WORDS, lexical_candidates
 from lattice.retrieval.models import (
     DEFAULT_CONFIG,
     SOURCE_TYPE_KINDS,
@@ -234,7 +234,16 @@ async def retrieve_with_context(
     )
     timings["fuse_rerank"] = (time.perf_counter() - fusion_started) * 1000
 
-    evidence = await _timed(timings, "hydrate", hydrate(session, ctx, selected))
+    terms = QuestionTerms(
+        text=text,
+        excluded=" ".join(
+            (QUESTION_FRAME_WORDS, *(label for a in mentions for label in a.labels()))
+        ),
+        text_search_config=config.text_search_config,
+    )
+    evidence, question_terms = await _timed(
+        timings, "hydrate", hydrate(session, ctx, selected, terms)
+    )
     # E4 again at the boundary: nothing leaves retrieval without passing it.
     await assert_all_readable(session, ctx, {e.document_id for e in evidence})
     timings["total"] = (time.perf_counter() - started) * 1000
@@ -259,6 +268,7 @@ async def retrieve_with_context(
         identifiers=identifiers,
         account_mentions=tuple(VisibleAccount(id=a.id, key=a.key, name=a.name) for a in mentions),
         temporal_intent=temporal_intent,
+        question_terms=question_terms,
         trace=trace,
     )
 

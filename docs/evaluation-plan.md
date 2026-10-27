@@ -15,8 +15,10 @@ compare`, the rerank ablation and the explained aarch64/x86-64 difference of the
 configuration. **§16 is P13.2** (2026-10-24): the golden set grown to 159 items with
 dev/held-out splits, label provenance and freezes (§3.1), exhaustive labels and
 Precision@10, the owner review packet, regenerated baselines and the first configuration C
-(local mxbai) reference. [phase-13-plan.md](phase-13-plan.md) §9 holds the Phase 13
-evaluation contracts.
+(local mxbai) reference. **§17 is P13.3** (2026-10-27): the relevance gate (weighted
+content-term coverage, a calibrated semantic floor for the local model, the egress-held
+decision), its dev-only calibration and its dev and held-out results.
+[phase-13-plan.md](phase-13-plan.md) §9 holds the Phase 13 evaluation contracts.
 Related: `retrieval-design.md`, `security-model.md` §9, `product-brief.md` §8.
 
 Evaluation is built alongside the system: the retrieval harness lands in the same
@@ -1319,3 +1321,124 @@ snapshot is `~/.cache/lattice/eval-snapshots/p13-2-orbital-fix-config-C-277fb9ff
 - Answer metrics are the fake generator's; real answer quality is not measured (D-43).
 - Latency figures are from the M1 (B on x86-64 under emulation is slower and meaningless
   as a latency figure).
+
+## 17. Relevance gate and abstention calibration (P13.3, 2026-10-27)
+
+What changed: the answer pipeline's relevance floor ("any exact or lexical match passes")
+became the relevance gate `gate_v1` (`lattice.answering.gate`; retrieval-design Part II
+§7.1 row "Relevance gate"). Retrieval did not change: retrieval A, B (aarch64) and C each
+compare **identical** with their committed baselines (0 item-level findings). Measured on
+branch `phase/13-retrieval-answer-quality` in isolated databases (port 5440; A/B corpus
+7f914a8ce283, C corpus 277fb9ff8982 = the P13.2 Orbital-fix snapshot), fake extractive
+generator throughout: these are pipeline decisions, not answer quality (EC-1).
+
+### The gate
+
+Per evidence item, from permitted rows only: **identifier** (exact channel), **coverage**
+(weighted content-term coverage ≥ 0.50), **semantic** (similarity ≥ the floor calibrated
+for that model and revision: `mxbai-embed-large-v1@b33106f585b9` 0.76; no other model has
+one) are *decisive*; **partial**, **account_only**, **no_signal** are not. No decisive
+item → `insufficient_evidence` / `no_relevant_evidence` with no model call (G1). Decisive
+items exist but the egress policy holds all of them back → `evidence_only` /
+`egress_policy` (G9). Once the gate passes, everything the old floor admitted (any exact
+or lexical match) plus semantic items above the floor (G3) goes to the prompt, so the gate
+decides *whether* to answer, not what the answer may use. A question naming two accounts
+by a shared alias is clarified before it is gated (the account term cannot be weighed
+before the account is known).
+
+Content terms are the question's lexemes in the index's configuration, minus stopwords,
+minus the names and aliases of the *visible* accounts it mentions, minus a short list of
+question-framing words the English configuration keeps ("summarize", "latest",
+"situation", "according", "happen", "month", ...; general English only) and minus
+hyphenated compounds (PostgreSQL also emits their parts). A mentioned visible account is
+one more term, covered by its own chunks. Each term weighs `ln((N+1)/(n+1)) + 1` over the
+**asker's permitted chunks** (`lattice.retrieval.terms`, one statement with the
+authorization predicate): a word no permitted chunk contains weighs most, so "What is Acme
+Corp's NPS score?" over Acme chunks without an NPS stops; a word in every chunk weighs
+least but not zero, so a reader with two chunks still has a gate. An unreadable document
+cannot move any weight, so it cannot change the outcome (S4; `test_gate.py` proves the
+gate's trace identical with and without a hidden strong match).
+
+### Calibration (dev split only)
+
+Each variant was run on the 103 dev items (110 runs: 17 expected-abstain, 81 answerable,
+6 expected `evidence_only`); held-out was not used to choose anything.
+
+| Variant (dev) | A: caught / refused | C: caught / refused |
+| ------------- | ------------------- | ------------------- |
+| Plain content-lexeme coverage ≥ 0.5 (the P13.0 proposal) | 5/17 / 6/81 | — |
+| IDF-weighted coverage, best point (θ 0.34) | 6/17 / 4/81 | — |
+| + framing words and compounds dropped, θ 0.48 | 10/17 / 5/81 | 11/17 / 3/81 (floor 0.76) |
+| **+ smoothed weights (`+1`), θ 0.50 — `gate_v1`** | **11/17 / 4/81** | **11/17 / 2/81** (floor 0.76) |
+
+Plain coverage cannot separate the classes: expected-abstain questions match common words
+("decide", "September", "renew") and miss the one specific word ("offsite", "freeze",
+"NPS"), while answerable account questions ("What's happened with Brightwater this
+month?") match only the account. Rarity weighting fixes the first; framing words and the
+account-as-term fix the second. Smoothing was adopted when a two-chunk unit test showed
+that unsmoothed weights give a word every chunk contains no weight at all. The floor 0.76
+sits on a plateau (0.74–0.76) just above the highest similarity of any dev
+expected-abstain run's evidence (0.755); θ 0.50 is the highest value whose dev refusals
+stay within D-39's 5% in A.
+
+**Disclosure.** The held-out split was evaluated once with an earlier variant (unsmoothed,
+θ 0.48) before smoothing was adopted; the change was triggered by the unit test above and
+the value chosen from dev, but the held-out figures below are not the first ones seen.
+
+### Results (171 runs; security every metric 0 in A, B, C)
+
+| Configuration | Split | Abstain caught before the model | Answerable refused (by the gate) | Context recall (P13.2 → P13.3) | Status correct |
+| ------------- | ----- | ------------------------------: | -------------------------------: | -----------------------------: | -------------: |
+| **A** exact + lexical | dev | **11/17** (0.65) | **4/81** (0.049) | 0.767 → 0.722 | 83 → 94 / 110 |
+| | held-out | **4/8** (0.50) | **6/45** (0.133) | 0.612 → 0.541 | 45 → 46 / 61 |
+| | all | 15/25 (0.60, CI 0.41–0.77) | 10/126 (0.079) | 0.711 → 0.657 | 128 → 140 / 171 |
+| **C** local mxbai (restricted) | dev | **11/17** (0.65) | **2/81** (0.025) + 1 model-side | 0.763 → 0.747 | 83 → 96 / 110 |
+| | held-out | **4/8** (0.50) | **3/45** (0.067) | 0.661 → 0.617 | 45 → 49 / 61 |
+| | all | 15/25 (0.60) | 5/126 (0.040) | 0.727 → 0.700 | 128 → 145 / 171 |
+| B fake (*test double*) | dev / held-out | 12/17 / 5/8 | 8/81 / 10/45 | 0.554 / 0.393 | — |
+
+C "before" is the same database run with the P13.2 code (a worktree at 61057fe). Expected
+`evidence_only` (G9): A and C 0/10 → 7/10 (dev 4/6, held-out 3/4); one A run expected
+`evidence_only` is now `insufficient_evidence` (`egress-acme-slip-credit-grace`: the held
+evidence is below the gate). Model calls in A 162 → 129. Conflict coverage in A unchanged
+except one supersession whose run the gate refuses (13/14 → 12/14).
+
+**Against D-39's provisional targets** (≥ 60% caught, ≤ 5% refused): met on **dev** in A
+and C; **not met on held-out** in either (4/8 caught; 6/45 and 3/45 refused). Held-out is
+8 expected-abstain and 45 answerable runs: the item lists are the finding (§9.1). **Context
+recall** falls by more than 2 points in A (dev 4.5, held-out 7.1) and on C held-out (4.4);
+C dev falls 1.7. Every lost point is a refused run (its relevant evidence leaves the
+prompt with it): no run the gate passes lost a target (`eval compare`: 25 regressions,
+all `status_changed` + `target_left_prompt` of the 10 refused runs and the category rows).
+
+Refused answerable runs (A): dev `para-sla-p2-sofia` (paraphrase), `xdoc-decisions-since-
+august`, `compare-account-idps-priya` (words spread over several chunks), `scoped-kestrel-
+docs-priya` ("What documents do we have about Kestrel Bank?"); held-out
+`visibility-promise-acme-maya`, `para-eu-region-priya`, `stale-acme-idp`,
+`egress-acme-slip-credit-grace` (opt-in), `scoped-veridian-acme-september-felix`,
+`cross-org-told-acme-scim-noor`. Two patterns: paraphrases with no shared specific word
+(C's floor rescues some), and account-centred questions about a large account, where the
+account term weighs little. Expected-abstain runs still reaching the model are those whose
+specific words *are* in readable evidence (`insufficient-scim-google`,
+`inaccessible-kestrel-discount-daniel`, `insufficient-lisbon-headcount`): a lexical gate
+cannot know the fact is missing; the model and validator remain the guard.
+
+Latency (A, M1, local DB, whole Ask with the fake model): p50 34.3 → 37.5 ms, p95 56.7 →
+50.6 ms; one more SQL statement per Ask (`term_statistics`, one pass over the asker's
+permitted chunks; Phase 14 must bound it for large corpora).
+
+Baselines: `answer-A.json` regenerated (`--replace`, reason recorded, gate version
+declared); the retrieval baselines are unchanged. `eval compare` now treats a gate version
+missing from an older baseline as a declared change.
+
+### Limitations (P13.3)
+
+- Held-out labels are still engineering-authored and unreviewed (D-41); held-out results
+  gate nothing yet, and held-out misses the provisional targets.
+- One calibrated floor (local mxbai, one revision). An external embedding model has no
+  floor until it is calibrated: its semantic channel cannot make an item decisive.
+- The framing-word list is English and was chosen on dev; another text-search
+  configuration needs its own.
+- Answer metrics are the fake generator's; whether a real model would have abstained on
+  the runs the gate now stops is not measured (D-43).
+

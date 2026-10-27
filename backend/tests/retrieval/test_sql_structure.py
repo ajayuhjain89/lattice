@@ -28,15 +28,17 @@ from lattice.authz import (
     readable_documents_predicate,
     visible_accounts_predicate,
 )
-from lattice.retrieval.evidence import evidence_statement
+from lattice.retrieval.evidence import QuestionTerms, evidence_statement
 from lattice.retrieval.exact import exact_statement
 from lattice.retrieval.lexical import lexical_statement
 from lattice.retrieval.models import RetrievalConfig
 from lattice.retrieval.permitted import DOCUMENTS, VISIBLE_ACCOUNT, ResolvedScope
 from lattice.retrieval.semantic import semantic_statement
+from lattice.retrieval.terms import term_statistics_statement
 
 DIALECT = postgresql.dialect()  # type: ignore[no-untyped-call]
 CONFIG = RetrievalConfig()
+PATHS = ["exact", "lexical", "semantic", "evidence", "evidence_terms", "term_statistics"]
 
 
 def _ctx(scope: str = "assigned", clearance: str = "internal") -> AuthorizationContext:
@@ -98,11 +100,16 @@ def statements(ctx: AuthorizationContext) -> dict[str, Select[tuple[object, ...]
         ),
         "semantic": semantic_statement(ctx, scope, [0.1] * 1024, "text-embedding-3-small", CONFIG),
         "evidence": evidence_statement(ctx, [uuid.uuid4()]),
+        # P13.3: hydration with the question's term coverage, and the gate's statistics.
+        "evidence_terms": evidence_statement(
+            ctx, [uuid.uuid4()], QuestionTerms("refund window", "Acme Corp Acme", "english")
+        ),
+        "term_statistics": term_statistics_statement(ctx, ["refund", "window"], [uuid.uuid4()]),
     }
 
 
 @pytest.mark.parametrize("scope", ["assigned", "all"])
-@pytest.mark.parametrize("path", ["exact", "lexical", "semantic", "evidence"])
+@pytest.mark.parametrize("path", PATHS)
 def test_every_statement_contains_the_authz_predicate_tenant_and_lifecycle(
     path: str, scope: str
 ) -> None:
@@ -135,7 +142,7 @@ def test_the_predicate_is_the_authz_modules_own_sql() -> None:
         assert fragment in predicate
 
 
-@pytest.mark.parametrize("path", ["exact", "lexical", "semantic", "evidence"])
+@pytest.mark.parametrize("path", PATHS)
 def test_the_structured_account_is_joined_through_account_visibility_only(path: str) -> None:
     ctx = _ctx()
     compiled = sql(statements(ctx)[path])

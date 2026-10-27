@@ -117,6 +117,8 @@ def _answer_configuration(report: Mapping[str, Any]) -> dict[str, Any]:
         "embedding_provider": report.get("embedding_provider"),
         "embedding_model": report.get("embedding_model"),
         "judge": report.get("judge"),
+        # P13.3; reports and baselines from before the gate have none.
+        "gate_version": report.get("gate_version"),
     }
 
 
@@ -534,9 +536,11 @@ def compare(
             f"database platform: {base['platform']} vs {new['platform']} (semantic ranking "
             "depends on it; use the matching baseline or --cross-platform)"
         )
-    for key, value in _versions(base).items():
-        if base["kind"] == new["kind"] and _versions(new).get(key) != value:
-            result.intended.append(f"{key}: {value} -> {_versions(new).get(key)}")
+    versions = _versions(base), _versions(new)
+    for key in sorted(versions[0].keys() | versions[1].keys()):
+        before, after = versions[0].get(key), versions[1].get(key)
+        if base["kind"] == new["kind"] and after != before:
+            result.intended.append(f"{key}: {before} -> {after}")
 
     if any(security.values()):
         result.verdict = "security"

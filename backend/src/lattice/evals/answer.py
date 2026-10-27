@@ -78,6 +78,7 @@ from typing import Any, get_args
 from pydantic import SecretStr
 from sqlalchemy import text
 
+from lattice.answering.gate import DEFAULT_GATE
 from lattice.answering.models import Answer, AnswerStatus, AskRequest
 from lattice.answering.prompt import MAX_PROMPT_CHARS, MAX_PROMPT_EVIDENCE
 from lattice.answering.service import OFFLINE_GENERATION_DEADLINE_SECONDS, AskDependencies, ask
@@ -204,6 +205,7 @@ class AnswerItemResult:
     conflict_records: list[str] = field(default_factory=list)
     conflict_in_prompt: list[str] = field(default_factory=list)
     model_called: bool = False
+    gate: dict[str, Any] = field(default_factory=dict)  # P13.3: decision and item signals
     prompt_chars: list[int] = field(default_factory=list)  # per generation call
     prompt_items: int = 0
     prompt_evidence_chars: int = 0
@@ -536,6 +538,28 @@ async def evaluate_item(
         t.label(item.organization) for t in relevant if covered(t, trace["cited_chunk_ids"])
     ]
     out.relevant = [t.label(item.organization) for t in relevant]
+    # P13.3: the relevance gate's decision and each item's signals, by record.
+    egress_held = {e.evidence_id for e in answer.evidence if e.not_used_reason == "egress_policy"}
+    gate = trace["retrieval"]["relevance_gate"]
+    out.gate = {
+        "decision": gate["decision"],
+        "question_terms": gate["question_terms"],
+        "items": [
+            {
+                "record": record_of(chunk_id := uuid.UUID(i["chunk_id"])),
+                "code": i["code"],
+                "terms_matched": i["terms_matched"],
+                "coverage": i["coverage"],
+                "semantic": i["semantic"],
+                "held_by_egress": chunk_id in egress_held,
+                "relevant": any(
+                    (ref := corpus.chunks.get(chunk_id)) is not None and t.satisfied_by(ref)
+                    for t in relevant
+                ),
+            }
+            for i in gate["items"]
+        ],
+    }
     sides = [parse_key(k, item.organization) for k in expected.conflict.records]
     out.conflict_records = [t.label(item.organization) for t in sides]
     out.conflict_in_prompt = [
@@ -677,6 +701,8 @@ class AnswerReport:
     corpus_fingerprint: dict[str, Any] = field(default_factory=dict)
     golden_version: dict[str, Any] = field(default_factory=dict)
     database_platform: str = "unknown"
+    # P13.3: the relevance gate's version (a declared change for ``eval compare``).
+    gate_version: str = DEFAULT_GATE.version
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)

@@ -12,7 +12,9 @@ known quality gaps, evaluation contracts, checkpoints and decisions D-38–D-45 
 evaluation foundation: new metrics, item-level baselines, `lattice eval compare`) is
 approved; P13.2 (159 golden items with dev/held-out splits, label provenance and an owner
 review packet in [docs/golden-review/](docs/golden-review/)) is delivered, its held-out
-review pending. No retrieval or answering behaviour has changed. History: Phases 1–11 and the frontend product-design overhaul (D0–D7,
+review pending; P13.3 (the relevance gate: answers stop before any model call when no
+permitted evidence addresses the question) is delivered for review. Retrieval is
+unchanged. History: Phases 1–11 and the frontend product-design overhaul (D0–D7,
 [design direction](docs/design-direction.md)) is merged; [design system
 v2](docs/design-system.md) is canonical. Phase 11 (Production Deployment, Identity
 Operations & Reliability) was verified on a local production-shaped stack only: real
@@ -450,7 +452,7 @@ data/synthetic/     synthetic organizations: manifests, raw source exports, grou
                     (see data/synthetic/README.md)
 evals/golden/       golden question set, splits and label freezes (evals/reports/: evaluation output, not committed)
 docs/golden-review/ held-out label review packet for the product owner (generated; P13.2)
-evals/baselines/    compact item-level evaluation baselines (committed; P13.1, regenerated P13.2)
+evals/baselines/    compact item-level evaluation baselines (committed; P13.1, regenerated P13.2; answer-A P13.3)
 docs/               product, architecture, security and design documentation
 compose.yaml        local Postgres only (development)
 compose.production.yaml  production-shaped local reference stack (Phase 11; make prod-*)

@@ -89,10 +89,11 @@ async def test_the_answer_pipeline_reproduces_its_committed_baseline(
     identities: Identities,
     corpus: Corpus,
 ) -> None:
-    """P13.1 (regenerated in P13.2): configuration A (exact + lexical retrieval, fake
-    extractive generator) per run against ``evals/baselines/answer-A.json``: status, model
-    call, relevant targets in the prompt. Plumbing only -- and the P13.0 finding it pins:
-    no expected-abstain run is stopped before the model (G1)."""
+    """P13.1 (regenerated in P13.2 and P13.3): configuration A (exact + lexical
+    retrieval, fake extractive generator) per run against ``evals/baselines/answer-A.json``:
+    status, model call, relevant targets in the prompt. Plumbing only -- and since P13.3
+    the relevance gate's effect: expected-abstain runs stopped before any model call, and
+    the answerable runs it refuses (evaluation-plan §17)."""
     report = await evaluate_answers(
         app_db,
         owner_db,
@@ -109,12 +110,14 @@ async def test_the_answer_pipeline_reproduces_its_committed_baseline(
     result = baseline.compare(reference, baseline.normalize(report))
     assert result.verdict == "identical", baseline.render(result)
     f = report.summary["foundation"]
-    # P13.2 golden set (159 items, 171 runs): still no expected-abstain run is stopped
-    # before the model (25 runs; 13 of them are the Phase 3 runs pinned in P13.1).
-    assert f["abstention"]["catch_before_model"]["count"] == 0
+    # P13.3 gate_v1: 15 of the 25 expected-abstain runs are stopped before the model (0
+    # in P13.2: G1); 10 of the 126 answerable runs are refused by the gate.
+    assert f["abstention"]["catch_before_model"]["count"] == 15
     assert f["abstention"]["catch_before_model"]["n"] == 25
-    # 0.7063 before the scope-reachability correction (evaluation-plan §16).
-    assert f["context_recall"]["macro"] == 0.7114
+    assert f["abstention"]["false_abstention"]["count"] == 10
+    # 0.7114 in P13.2: the refused runs carry no evidence to the prompt (evaluation-plan
+    # §17); no other run lost a target.
+    assert f["context_recall"]["macro"] == 0.6571
     # Both splits are reported with their denominators (EC-7).
     by_split = report.summary["by_split"]
     assert set(by_split) == {"dev", "held_out"}

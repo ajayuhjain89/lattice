@@ -13,13 +13,27 @@ supersession cannot reveal the existence of a document the reader cannot see.
 
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Select, Table, and_, any_, func, literal, select
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    Table,
+    Text,
+    and_,
+    any_,
+    bindparam,
+    func,
+    literal,
+    literal_column,
+    select,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, UUID, aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lattice.authz import AuthorizationContext, readable_documents_predicate
+from lattice.retrieval.lexical import content_terms, content_terms_matched
 from lattice.retrieval.models import (
     KIND_SOURCE_TYPE,
     Channel,
@@ -42,8 +56,36 @@ _SOURCES = Source.__table__
 assert isinstance(_SOURCES, Table)  # noqa: S101 - declarative models map to Tables
 
 
+@dataclass(frozen=True, slots=True)
+class QuestionTerms:
+    """What the content-term coverage of each evidence chunk is measured against (P13.3):
+    the question as searched, and the text whose lexemes are not content terms -- the
+    question-framing words and the names and aliases of the *visible* accounts it
+    mentions (naming an account is not asking about its content)."""
+
+    text: str
+    excluded: str
+    text_search_config: str
+
+
+def _coverage_columns(terms: QuestionTerms | None) -> tuple[Any, Any]:
+    if terms is None:
+        empty = literal([], ARRAY(Text))
+        return empty.label("terms_matched"), empty.label("question_terms")
+    # The configuration name is validated by RetrievalConfig (never client input).
+    regconfig: ColumnElement[str] = literal_column(f"'{terms.text_search_config}'::regconfig")
+    text = bindparam("coverage_question", terms.text, type_=Text)
+    excluded = bindparam("coverage_excluded", terms.excluded, type_=Text)
+    return (
+        content_terms_matched(regconfig, text, excluded).label("terms_matched"),
+        content_terms(regconfig, text, excluded).label("question_terms"),
+    )
+
+
 def evidence_statement(
-    ctx: AuthorizationContext, chunk_ids: Sequence[uuid.UUID]
+    ctx: AuthorizationContext,
+    chunk_ids: Sequence[uuid.UUID],
+    terms: QuestionTerms | None = None,
 ) -> Select[tuple[Any, ...]]:
     predecessor = DOCUMENTS.alias("predecessor")
     successor = DOCUMENTS.alias("successor")
@@ -89,6 +131,7 @@ def evidence_statement(
             VISIBLE_ACCOUNT.c.name.label("account_name"),
             predecessor.c.id.label("supersedes_document_id"),
             successors.label("superseded_by"),
+            *_coverage_columns(terms),
         )
         .select_from(
             chunks_with_documents(ctx)
@@ -124,14 +167,21 @@ class EvidenceUnavailable(Exception):
 
 
 async def hydrate(
-    session: AsyncSession, ctx: AuthorizationContext, selected: Sequence[RankedCandidate]
-) -> list[Evidence]:
+    session: AsyncSession,
+    ctx: AuthorizationContext,
+    selected: Sequence[RankedCandidate],
+    terms: QuestionTerms | None = None,
+) -> tuple[list[Evidence], tuple[str, ...]]:
+    """The evidence, and the question's content lexemes (none without ``terms`` or
+    evidence)."""
     if not selected:
-        return []
+        return [], ()
     ids = [r.fused.candidate.chunk_id for r in selected]
-    rows = {row.chunk_id: row for row in (await session.execute(evidence_statement(ctx, ids)))}
+    statement = evidence_statement(ctx, ids, terms)
+    rows = {row.chunk_id: row for row in (await session.execute(statement))}
     if set(rows) != set(ids):
         raise EvidenceUnavailable()
+    question_terms = tuple(next(iter(rows.values())).question_terms)
     return [
         _evidence(
             rows[r.fused.candidate.chunk_id],
@@ -143,7 +193,7 @@ async def hydrate(
             final_score=round(r.final_score, 8),
         )
         for position, r in enumerate(selected, start=1)
-    ]
+    ], question_terms
 
 
 async def lookup_evidence(
@@ -215,4 +265,5 @@ def _evidence(
         rrf_score=rrf_score,
         features=features,
         final_score=final_score,
+        terms_matched=tuple(row.terms_matched),
     )

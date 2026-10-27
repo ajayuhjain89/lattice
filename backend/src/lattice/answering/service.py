@@ -8,9 +8,10 @@
         (configuration, invocation rule, question sensitivity, credential reference)
     [snapshot closed -- no transaction is held during a model call]
     an action request (by code)     → unsupported_request / action_request (evidence kept)
-    no evidence                     → insufficient_evidence / no_relevant_evidence
+    no decisive evidence (the gate) → insufficient_evidence / no_relevant_evidence
     ≥ 2 visible accounts named      → ambiguous / multiple_accounts (choices)
     no provider may be called       → evidence_only (egress_policy | generation_unavailable)
+    every decisive item above the level → evidence_only / egress_policy
     evidence above the level        → kept out of the prompt, returned "not used"
     prompt (fixed instructions + nonce-delimited question and evidence, handles only)
     → generation → claim-level validation → (one regeneration if anything failed)
@@ -33,7 +34,7 @@ from datetime import UTC, datetime
 from typing import Any, Final
 
 from lattice import metrics
-from lattice.answering import assemble
+from lattice.answering import assemble, gate
 from lattice.answering.models import ANSWER_SCHEMA, Answer, AskRequest, Claim, EvidenceItem
 from lattice.answering.policy import GenerationAccess, recheck_generation, resolve_generation
 from lattice.answering.prompt import (
@@ -63,6 +64,7 @@ from lattice.retrieval import (
     retrieve_with_context,
 )
 from lattice.retrieval.query import normalize
+from lattice.retrieval.terms import TermStatistics, term_statistics
 from lattice.tracing.recorder import record_trace
 
 logger = logging.getLogger(__name__)
@@ -74,13 +76,6 @@ GENERATION_DEADLINE_SECONDS: Final = 120.0
 # Operator and evaluation commands (`lattice ask`, `lattice eval answer`) keep the Phase
 # 6 bound of two 360-second calls: a local model on modest hardware is slow (ADR-012).
 OFFLINE_GENERATION_DEADLINE_SECONDS: Final = 720.0
-# The relevance floor (retrieval-design §7.1, §11): an evidence item may enter the
-# prompt only if the exact or lexical channel matched it, or its semantic similarity is
-# at or above a threshold calibrated for that embedding model; with no such item, no
-# model is called (insufficient_evidence). No model is calibrated yet, so a
-# semantic-only match never passes on its own (nearest neighbours always exist; they
-# are not evidence of relevance). Items below the floor stay in the asker's list.
-SEMANTIC_FLOOR: Final[dict[str, float]] = {}
 # Reasons meaning "the policy forbids it", as opposed to "nothing is available".
 POLICY_REASONS: Final = frozenset(
     {
@@ -181,18 +176,6 @@ async def _generate(
     return validation
 
 
-def _relevant(retrieval: RetrievalResult) -> set[uuid.UUID]:
-    """Chunk IDs that pass the relevance floor."""
-    floor = SEMANTIC_FLOOR.get(retrieval.semantic.model or "")
-    semantic = {c.chunk_id: c.score for c in retrieval.trace.stages.get("semantic", ())}
-    return {
-        e.chunk_id
-        for e in retrieval.evidence
-        if {"exact", "lexical"} & set(e.matched_by)
-        or (floor is not None and semantic.get(e.chunk_id, -1.0) >= floor)
-    }
-
-
 def _ambiguous(question: str, mentions: Sequence[VisibleAccount]) -> bool:
     """Retrieval reports every visible account whose name or alias occurs in the
     question (Phase 5 leaves what to ask to Phase 6). A question that names an account
@@ -263,6 +246,7 @@ async def answer_question(
     request: AskRequest,
     deps: AskDependencies,
     config: RetrievalConfig = DEFAULT_CONFIG,
+    gate_config: gate.GateConfig = gate.DEFAULT_GATE,
     now: datetime | None = None,
     nonce: str | None = None,
 ) -> AskOutcome:
@@ -292,8 +276,21 @@ async def answer_question(
             config=config,
             now=now,
         )
-        relevant_ids = _relevant(retrieval)
-        relevant = bool(relevant_ids)
+        # The relevance gate (P13.3): from permitted evidence and permitted statistics.
+        gate_started = time.perf_counter()
+        stats = (
+            await term_statistics(
+                session,
+                ctx,
+                retrieval.question_terms,
+                [a.id for a in retrieval.account_mentions],
+            )
+            if retrieval.evidence
+            else TermStatistics(chunks=0, document_frequency={}, account_chunks=0)
+        )
+        relevance = gate.evaluate(retrieval, stats, gate_config)
+        timings["gate"] = round((time.perf_counter() - gate_started) * 1000, 1)
+        relevant = bool(relevance.decisive)
         ambiguous = request.scope.account is None and _ambiguous(
             request.question, retrieval.account_mentions
         )
@@ -314,7 +311,11 @@ async def answer_question(
     timings["retrieval"] = retrieval.trace.timings_ms
 
     evidence = list(retrieval.evidence)
-    candidates = [e for e in evidence if e.chunk_id in relevant_ids]
+    decision = relevance.decide(access.permits, evidence)
+    # Below the gate, or with no decisive item the asker's policy lets the model see,
+    # nothing is drafted from: the items stay in the asker's list, "not used".
+    relevant_ids = relevance.admitted if decision == "pass" or ambiguous else set()
+    candidates = [e for e in evidence if e.chunk_id in relevance.admitted]
     permitted = [e for e in candidates if access.permits(e)]
     excluded = (
         [e for e in candidates if not access.permits(e)] if access.level and not action else []
@@ -330,16 +331,20 @@ async def answer_question(
 
     if action:
         status, reason = "unsupported_request", "action_request"
-    elif not relevant:
-        status, reason = "insufficient_evidence", "no_relevant_evidence"
-    elif ambiguous:
+    elif ambiguous and relevance.admitted:
+        # Which account is meant decides how the account weighs in the gate: with
+        # something matched (as before P13.3), ask first; the chosen account is gated.
         status, reason = "ambiguous", "multiple_accounts"
         clarification = assemble.clarification_for(retrieval.account_mentions)
         clarified_accounts = {a.id for a in retrieval.account_mentions}
+    elif not relevant:
+        status, reason = "insufficient_evidence", "no_relevant_evidence"
     elif access.provider is None:
         status = "evidence_only"
         reason = "egress_policy" if access.reason in POLICY_REASONS else "generation_unavailable"
-    elif not fits:
+    elif decision == "decisive_held_back" or not fits:
+        # G9: the evidence that addresses the question may not be sent; what remains is
+        # not drafted from.
         status, reason = "evidence_only", "egress_policy"
     else:
         prompt = build_prompt(normalize(request.question), fits, nonce=nonce)
@@ -454,7 +459,8 @@ async def answer_question(
         "question_sensitivity": retrieval.question_sensitivity,
         "scope": request.scope.model_dump(mode="json", exclude_none=True),
         "authz_snapshot": summarize_context(ctx),
-        "retrieval": retrieval.trace.model_dump(mode="json"),
+        "retrieval": retrieval.trace.model_dump(mode="json")
+        | {"relevance_gate": relevance.to_json(decision)},
         "evidence_chunk_ids": [e.chunk_id for e in evidence],
         "prompt_chunk_ids": sorted(used_ids),
         "cited_chunk_ids": sorted({c.evidence_id for claim in shown for c in claim.citations}),
@@ -476,7 +482,8 @@ async def answer_question(
             # refusal is ``decision_reason``).
             "recheck_refused": calls.recheck,
             "excluded_by_prompt_budget": len(permitted) - len(fits),
-            "below_relevance_floor": len(evidence) - len(candidates),
+            # Evidence the relevance gate kept from the prompt (as the asker's list says).
+            "below_relevance_floor": sum(i.not_used_reason == "relevance_floor" for i in items),
             "prompt_version": PROMPT_VERSION if prompt else None,
         },
         "validation": {
@@ -529,6 +536,7 @@ async def ask(
     request: AskRequest,
     deps: AskDependencies,
     config: RetrievalConfig = DEFAULT_CONFIG,
+    gate_config: gate.GateConfig = gate.DEFAULT_GATE,
     now: datetime | None = None,
 ) -> AskOutcome:
     outcome = await answer_question(
@@ -538,6 +546,7 @@ async def ask(
         request=request,
         deps=deps,
         config=config,
+        gate_config=gate_config,
         now=now,
     )
     await record_trace(db, outcome.trace)

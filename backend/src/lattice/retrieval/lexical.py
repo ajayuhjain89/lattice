@@ -24,12 +24,14 @@ so an unreadable chunk that matches the words better is never selected.
 
 import uuid
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Final
 
 from sqlalchemy import (
     ColumnElement,
     Select,
     Text,
+    all_,
+    and_,
     any_,
     bindparam,
     case,
@@ -84,6 +86,50 @@ def _terms_matched(regconfig: ColumnElement[str], text: Any) -> Any:
         .where(CHUNKS.c.tsv.bool_op("@@")(cast(func.quote_literal(term), TSQUERY)))
         .scalar_subquery()
     )
+
+
+# Words that frame a question rather than say what it is about, and that the English
+# text-search configuration does not drop as stopwords (P13.3, calibrated on the dev
+# split). General English only: never a domain word or a name.
+QUESTION_FRAME_WORDS: Final = (
+    "tell told say said know explain describe summarize summarise list show give find "
+    "compare mean situation status latest update thing anything something everything "
+    "anyone someone information info detail kind sort recent recently current currently "
+    "still yet ever already today happen happened go get got make made come came "
+    "consistent according regarding related overall exactly actually really much many "
+    "also week month quarter year"
+)
+
+
+def _content_term(regconfig: ColumnElement[str], text: Any, excluded: Any) -> tuple[Any, Any]:
+    """The question's content lexemes (P13.3): its own lexemes -- the configuration has
+    already dropped stopwords -- except those of ``excluded`` (the names and aliases of
+    the *visible* accounts it mentions, and the question-framing words) and hyphenated
+    compounds ("high-priority" is also parsed into "high" and "priority"; an identifier
+    part such as "-4821" is kept). Returns the lexeme column and the condition."""
+    term = _terms(regconfig, text)
+    return term, and_(
+        term != all_(func.tsvector_to_array(func.to_tsvector(regconfig, excluded))),
+        term.op("!~")(literal_column("'.-'")),
+    )
+
+
+def content_terms_matched(regconfig: ColumnElement[str], text: Any, excluded: Any) -> Any:
+    """The question's content lexemes the chunk contains (title, headings, display
+    reference and text alike), sorted. Correlated to ``chunks`` in the outer statement."""
+    term, content = _content_term(regconfig, text, excluded)
+    return func.array(
+        select(term)
+        .where(content, CHUNKS.c.tsv.bool_op("@@")(cast(func.quote_literal(term), TSQUERY)))
+        .order_by(term)
+        .scalar_subquery()
+    )
+
+
+def content_terms(regconfig: ColumnElement[str], text: Any, excluded: Any) -> Any:
+    """The question's content lexemes, sorted (reads no table)."""
+    term, content = _content_term(regconfig, text, excluded)
+    return func.array(select(term).where(content).order_by(term).scalar_subquery())
 
 
 def lexical_statement(

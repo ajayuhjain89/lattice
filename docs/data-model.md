@@ -570,7 +570,11 @@ Security-sensitive. Stores **references and measurements**, not document content
 clarification choices and the accounts of prompt evidence; NULL = unknown, which hides
 the answer on read), `egress` (`{provider, model, deployment, effective_level, decision_reason,
 question_sensitivity, excluded_by_egress_policy, excluded_by_prompt_budget,
-below_relevance_floor, prompt_version}`), `validation` (`{generation_calls, regenerated,
+below_relevance_floor` (evidence items the relevance gate kept out of the prompt),
+`prompt_version}`; the `retrieval` trace also carries `relevance_gate` (P13.3: gate
+version, threshold, semantic floor, number of content terms, total weight, decision, and
+per item chunk ID, code, matched-term count, coverage and similarity -- never the
+question's terms)), `validation` (`{generation_calls, regenerated,
 schema_failures, claims_proposed, claims_valid, claims_rejected, rejection_codes,
 conflicts_proposed, conflicts_discarded, model_status}`), `answer` (the validated answer
 without evidence text), `status` (the table below plus `unsupported_request`),

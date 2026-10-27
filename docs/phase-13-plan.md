@@ -8,8 +8,10 @@ evaluation-plan §15): measurement only, no retrieval or answering behaviour cha
 approved 2026-10-24.** **P13.2 (golden set growth, splits and label provenance)
 delivered 2026-10-24** (§20; evaluation-plan §16): dataset and evaluation infrastructure
 only; engineering complete, the product owner's review of the held-out labels (D-41)
-pending. Every improvement in §11 from P13.3 on still needs its own checkpoint approval;
-P13.3 is not authorized.
+pending. **P13.3 (relevance gate and abstention calibration) delivered 2026-10-27** (§21;
+evaluation-plan §17): the first behaviour change -- answering only; retrieval unchanged.
+Every later improvement in §11 still needs its own checkpoint approval; P13.4 is not
+authorized.
 
 Scope and roadmap position: `implementation-plan.md` §4 "Later phases", row 13. Phase 12
 is merged (00a15d2, branch and merge CI green, images published). Phase 14 owns scale and
@@ -474,6 +476,10 @@ records its measurements in evaluation-plan §14+. "Re-index" means `lattice rei
 - **Security regressions.** The gate must not use unreadable information (S4); a hidden
   strong match must not change the status (SEC-5).
 - **Resources.** A/B seconds; C one query-side run (~30 s) on the dumped corpus.
+- **Status: delivered 2026-10-27** (§21). Dev: A 11/17 caught, 4/81 refused; C 11/17,
+  2/81 -- D-39's provisional targets met on dev. Held-out (reported only): 4/8 caught in
+  A and C, 6/45 (A) and 3/45 (C) refused -- not met; context recall falls more than 2
+  points except on C dev. Security 0; S4 equivalence test added.
 
 ### P13.4 — Lexical candidate quality and ranking (G5)
 
@@ -728,3 +734,37 @@ need a decision (evaluation-plan §16): the Orbital name in the public beta plan
 `visibility-orbital-maya`, and three account-scoped Phase 3 items whose relevant evidence
 the scope excludes. (3) P13.3 itself needs explicit approval; it should calibrate on dev
 only and use the C snapshot for the semantic floor.
+
+## 21. P13.3 delivery record (2026-10-27)
+
+Answering only. Retrieval, ranking, providers, ingestion, chunking and authorization are
+unchanged (retrieval A, B and C compare identical with their baselines); the answer
+pipeline's relevance floor is replaced by the relevance gate. Full results and the
+calibration: evaluation-plan §17.
+
+| Item | Result |
+| ---- | ------ |
+| Gate (`lattice.answering.gate`, `gate_v1`) | Per item from permitted signals: identifier, weighted content-term coverage ≥ 0.50, semantic ≥ the model's calibrated floor are decisive. No decisive item → `insufficient_evidence` with no model call (G1); every decisive item held back by egress → `evidence_only` (G9); otherwise the old floor's items plus semantic items above the floor reach the prompt (G3). Ambiguous account mentions are clarified before gating |
+| Weights | `ln((N+1)/(n+1)) + 1` over the asker's permitted chunks (`lattice.retrieval.terms`, one statement with the authorization predicate); content terms exclude stopwords, the visible accounts named (one account term instead), a short English framing-word list and hyphenated compounds (`lattice.retrieval.lexical`) |
+| Semantic floor | `mxbai-embed-large-v1@b33106f585b9`: 0.76 (dev, C). No other model or revision has one |
+| Calibration | Dev split only, A and C; four variants compared (evaluation-plan §17). The held-out split was evaluated once with an earlier variant before the final one: disclosed there |
+| Results | Dev: A 11/17 caught, 4/81 refused; C 11/17, 2/81. Held-out: A 4/8, 6/45; C 4/8, 3/45. `evidence_only` 0/10 → 7/10. Context recall A 0.711 → 0.657, C 0.727 → 0.700; every lost point is a refused run |
+| Trace | `retrieval.relevance_gate`: version, threshold, floor, number of content terms, total weight, decision, and per item the chunk ID, code, matched-term count, coverage and similarity -- never the terms (S10) |
+| Tests | Gate behaviour and S4 equivalence (`tests/answering/test_gate.py`), SQL structure of the two new statement shapes, `eval compare` declaring a gate version older baselines lack, golden answer pins; validation tests reworded to evidence wording (the paraphrase case is now a gate test) |
+| Security | Every metric 0 in A, B and C, dev and held-out |
+| Cost | +1 SQL statement per Ask (a pass over the asker's permitted chunks: a Phase 14 bound is needed for large corpora); A whole-Ask p50 34 → 38 ms (M1) |
+
+**Decisions for the product owner before P13.4.**
+1. **Accept the trade-off or change it.** Dev meets D-39; held-out does not (4/8 caught;
+   refusals 6/45 in A, 3/45 in C), and context recall falls more than 2 points except on
+   C dev (all of it from refused runs). Options: (a) accept `gate_v1` as is; (b) gate only
+   where a calibrated semantic floor exists (A keeps the P13.2 behaviour: no G1 gain
+   without embeddings); (c) a lower threshold when no floor exists, re-chosen on dev
+   (less caught in A). Any re-tuning uses dev only; held-out has now been seen, which the
+   record would state.
+2. The owner review of the 56 held-out items (D-41) is still pending, so none of the
+   held-out figures above is binding.
+3. The two refusal patterns (paraphrase without a shared specific word; account-centred
+   questions about large accounts) are candidates for P13.5 (fusion/selection), not for
+   further gate tuning.
+

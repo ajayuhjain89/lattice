@@ -252,6 +252,11 @@ class Evidence(_Frozen):
     rrf_score: float
     features: dict[str, float]
     final_score: float
+    # P13.3: the question's content lexemes (stopwords, framing words, compounds and the
+    # names of the visible accounts it mentions excluded) this chunk contains; empty on
+    # direct lookup. The asker's own words, for the relevance gate: never in a trace or
+    # a log.
+    terms_matched: tuple[str, ...] = ()
 
 
 class SemanticOutcome(_Frozen):
@@ -333,4 +338,6 @@ class RetrievalResult(_Frozen):
     # Accounts named in the question, among the accounts the reader may see only.
     account_mentions: tuple[VisibleAccount, ...]
     temporal_intent: bool
+    # P13.3: the question's content lexemes (``Evidence.terms_matched``); never traced.
+    question_terms: tuple[str, ...]
     trace: RetrievalTrace

@@ -17,6 +17,9 @@ from .helpers import Harness, claim, configure_generation, draft, handles, run
 
 REFUND_V1 = "Enterprise customers may request a full refund within 30 days of purchase."
 REFUND_V2 = "Enterprise customers may request a full refund within 14 days of purchase."
+# Worded like the evidence: these tests are about validation and assembly, not the
+# relevance gate (a paraphrase with no semantic floor is test_gate.py's subject).
+QUESTION = "How many days do enterprise customers have to request a full refund?"
 
 
 @pytest.fixture
@@ -38,7 +41,7 @@ async def org(owner_db: Database) -> Org:
 
 async def test_a_grounded_answer_cites_only_request_evidence(app_db: Database, org: Org) -> None:
     harness = Harness()
-    outcome = await run(app_db, org, "maya", "What is the enterprise refund window?", harness)
+    outcome = await run(app_db, org, "maya", QUESTION, harness)
     answer = outcome.answer
     assert answer.status == "answered"
     assert answer.claims
@@ -72,7 +75,7 @@ async def test_invalid_handle_rejects_the_claim_and_regenerates_once(
 ) -> None:
     bad = draft(claim("The refund window is 14 days.", ("E9", "full refund within 14 days")))
     harness = Harness(outputs=[bad])
-    outcome = await run(app_db, org, "maya", "What is the enterprise refund window?", harness)
+    outcome = await run(app_db, org, "maya", QUESTION, harness)
     assert len(harness.requests) == 2  # one regeneration, never more
     assert "E9 is not one of the evidence handles" in harness.requests[1].prompt
     assert outcome.answer.status == "insufficient_evidence"
@@ -100,7 +103,7 @@ async def test_mixed_claims_only_validated_ones_survive(app_db: Database, org: O
         role="supporting",
     )
     harness = Harness(outputs=[_valid_and(fabricated)])
-    outcome = await run(app_db, org, "maya", "What is the enterprise refund window?", harness)
+    outcome = await run(app_db, org, "maya", QUESTION, harness)
     answer = outcome.answer
     assert answer.status == "partial"
     assert answer.status_reason == "claims_removed"
@@ -124,7 +127,7 @@ async def test_one_valid_and_one_invalid_citation_rejects_the_whole_claim(
         )
 
     harness = Harness(outputs=[build])
-    outcome = await run(app_db, org, "maya", "What is the enterprise refund window?", harness)
+    outcome = await run(app_db, org, "maya", QUESTION, harness)
     assert outcome.answer.claims == []  # never shown with the bad citation stripped
     assert outcome.answer.status_reason == "claims_unverified"
 
@@ -132,7 +135,7 @@ async def test_one_valid_and_one_invalid_citation_rejects_the_whole_claim(
 async def test_regeneration_can_recover(app_db: Database, org: Org) -> None:
     bad = draft(claim("The refund window is 14 days.", ("E9", "full refund within 14 days")))
     harness = Harness(outputs=[bad, _valid_and()])
-    outcome = await run(app_db, org, "maya", "What is the enterprise refund window?", harness)
+    outcome = await run(app_db, org, "maya", QUESTION, harness)
     assert len(harness.requests) == 2
     assert outcome.answer.status == "answered"
     assert outcome.trace["validation"]["regenerated"] is True
@@ -150,7 +153,7 @@ async def test_provider_failures_degrade_to_a_status_never_a_fabricated_answer(
     app_db: Database, org: Org, outputs: list[Any], status: str, reason: str
 ) -> None:
     harness = Harness(outputs=outputs)
-    outcome = await run(app_db, org, "maya", "What is the enterprise refund window?", harness)
+    outcome = await run(app_db, org, "maya", QUESTION, harness)
     assert outcome.answer.status == status
     assert outcome.answer.status_reason == reason
     assert outcome.answer.claims == []
@@ -239,7 +242,7 @@ async def test_an_action_request_is_unsupported_when_no_provider_is_available(
         harness = Harness(outputs=[GenerationError("generation_failed:network")])
     question = "Update the enterprise refund policy to a 30 day window."
     # The same question as a question degrades as usual (evidence_only / failed) ...
-    control = await run(app_db, org, "maya", "What is the enterprise refund window?", harness)
+    control = await run(app_db, org, "maya", QUESTION, harness)
     assert control.answer.status in ("evidence_only", "failed")
     # ... and as an action request it is refused, whatever the provider's state.
     harness.requests.clear()
@@ -262,7 +265,7 @@ async def test_a_model_proposed_conflict_between_linked_documents_is_superseded(
         return draft(positions[1], conflicts=[{"topic": "Refund window", "positions": positions}])
 
     harness = Harness(outputs=[build])
-    outcome = await run(app_db, org, "maya", "What is the enterprise refund window?", harness)
+    outcome = await run(app_db, org, "maya", QUESTION, harness)
     conflicts = outcome.answer.conflicts
     assert [c.kind for c in conflicts] == ["superseded"]  # reclassified, not duplicated
     assert len(conflicts[0].positions) == 2
@@ -315,9 +318,7 @@ async def test_a_conflict_whose_positions_cite_one_document_is_discarded(
         )
         return draft(a, conflicts=[{"topic": "Refunds", "positions": [a, b]}])
 
-    outcome = await run(
-        app_db, org, "maya", "What is the enterprise refund window?", Harness(outputs=[build])
-    )
+    outcome = await run(app_db, org, "maya", QUESTION, Harness(outputs=[build]))
     assert all(c.kind == "superseded" and not c.positions for c in outcome.answer.conflicts)
 
 
@@ -326,7 +327,7 @@ async def test_the_trace_row_holds_references_not_content(app_db: Database, org:
         app_db,
         org,
         "maya",
-        "What is the enterprise refund window?",
+        QUESTION,
         Harness(),
         persist=True,
     )
@@ -362,7 +363,7 @@ async def test_a_trace_hides_the_answer_once_any_of_its_evidence_is_revoked(
         app_db,
         org,
         "maya",
-        "What is the enterprise refund window?",
+        QUESTION,
         Harness(outputs=[build]),
         persist=True,
     )
@@ -414,7 +415,7 @@ async def test_a_forced_invariant_violation_withholds_the_answer(
         return Claim(text=claim_.text, role=claim_.role, citations=[*claim_.citations, bad])
 
     monkeypatch.setattr(assemble, "to_claim", dangling)
-    outcome = await run(app_db, org, "maya", "What is the enterprise refund window?", Harness())
+    outcome = await run(app_db, org, "maya", QUESTION, Harness())
     assert outcome.answer.status == "failed"
     assert outcome.answer.status_reason == "citation_validation_failed"
     assert outcome.answer.claims == []
