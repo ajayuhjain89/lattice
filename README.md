@@ -91,8 +91,9 @@ audit, and an isolation sweep over every route. See the
 ## Local setup
 
 Prerequisites: Docker with Compose v2, [`uv`](https://docs.astral.sh/uv/), `make`,
-`git`; for the web app, Node.js 22+ and [`pnpm`](https://pnpm.io/). `uv` installs
-Python 3.12 itself.
+`git`; for the web app, Node.js 22.19+ or 24+ and [`pnpm`](https://pnpm.io/) (Node 23
+before 23.8 lacks the zlib zstd API the unit-test tooling needs: its tests do not start).
+`uv` installs Python 3.12 itself.
 
 ```bash
 git clone <this repository> lattice && cd lattice

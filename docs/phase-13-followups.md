@@ -1,6 +1,7 @@
 # Phase 13 follow-ups: roadmap to finish what Phase 13 left open
 
-Status: **proposed 2026-10-28, not approved.** Phase 13 was accepted and merged
+Status: **proposed 2026-10-28; F1 (owner review) and F3 (hygiene) authorized the same
+day; F3 delivered (§6).** Phase 13 was accepted and merged
 (26bbd08) with completion criterion 3 unmet ([phase-13-plan.md](phase-13-plan.md) §27).
 This document lists everything Phase 13 left incomplete, why, and an ordered plan to
 close it. Nothing here starts without the product owner's go-ahead, checkpoint by
@@ -19,8 +20,8 @@ checkpoint, as in every phase.
 | O7 | Real answer quality never measured (D-43) | Fake extractive generator only | No approved key or quota; the M1 8 GB cannot host a local model | Prompt budget (O8), citation completeness (O9), conflict hints, answer-prompt-2's effect, judge calibration (D-44) |
 | O8 | 12-item prompt budget binds in 116/129 prompts | Characters never above 25% of 24,000 | §13 forbids raising it without a measured gain; ~7 points of C's recall sit at ranks 13–20 | Context recall |
 | O9 | Citation completeness is measured, not enforced | Trace counts `decisive_in_prompt` / `decisive_cited` | As a rule it mislabelled 8/119 fake runs; real effect unknown | Answer status honesty |
-| O10 | Term statistics scan the reader's whole corpus | +1 statement per Ask, a few ms at 1,300 chunks | Linear in corpus size | Phase 14 scale |
-| O11 | Local Node 23.7 cannot run the web unit tests after undici 8.12 | CI (Node 22) is fine; local runs used Node 24.13 | undici needs zlib zstd (Node ≥ 22.19 / ≥ 23.8) | Developer setup only |
+| O10 | Term statistics scan the reader's whole corpus | +1 statement per Ask, a few ms at 1,300 chunks; measured at 10× and 50× in F3 (§6) | Linear in the reader's permitted documents: the authorization predicate itself | Phase 14 scale (design options in §6) |
+| O11 | Local Node 23.7 cannot run the web unit tests after undici 8.12 | **Done in F3**: `engines` `^22.19.0 \|\| >=24`, README prerequisite | undici needs zlib zstd (Node ≥ 22.19 / ≥ 23.8) | — |
 
 ## 2. Principles carried over
 
@@ -144,3 +145,57 @@ tries the approaches Phase 13 did not, each needing its own decision where noted
 
 Without F1 and F2, no later checkpoint can show a real improvement: they are the
 critical path.
+
+## 6. F3 delivery record (2026-10-28)
+
+### Term statistics at scale (O10)
+
+Measured on an isolated copy of the A evaluation database (port 5440, project
+`lattice-f3scale`), multiplied with `backend/scripts/scale_corpus.sql` (new IDs per copy,
+grants copied, supersession links dropped on copies), timed with
+`backend/scripts/statistics_bench.py`: the gate's `term_statistics` for 8 Halden askers ×
+4 questions, 3 timed repetitions each, M1, local Docker.
+
+| Corpus | Chunks (Halden documents) | Permitted chunks per asker | `term_statistics` p50 / p95 |
+| ------ | ------------------------: | -------------------------: | --------------------------: |
+| reference (1×) | 1,325 (343) | ~200–1,060 | a few ms (P13.3) |
+| 10× | 13,250 (3,430) | 2,000–10,620 | 15.9 / 21.4 ms |
+| 50× | 66,250 (17,150) | 10,000–52,800 | 59.4 / 91.5 ms |
+
+The cost is linear, and the plan shows where it goes: a bitmap scan of the organization's
+documents with the authorization predicate evaluated on every one, hashed and joined to
+the chunks. Two bounded forms were built and measured -- and **rejected**:
+
+| Variant | 10× p50 / p95 | 50× p50 / p95 | Why it does not bound |
+| ------- | ------------: | ------------: | --------------------- |
+| at most 20,000 permitted chunks, the first in chunk-ID order (a uniform sample above the cap) | 24.6 / 32.5 | 86.1 / 154.0 | the planner sorts every permitted chunk before the limit (no index-ordered walk) |
+| each count stops at a cap (20,000 chunks; 2,000 per lexeme, found through the GIN index) | — | 123.2 / 163.8 | every capped count evaluates the authorization predicate over all the reader's documents again |
+
+The work that grows is the authorization predicate over the reader's documents, which
+any count of *permitted* chunks needs (S4: an unreadable document must not move a weight).
+The single pass in `main` already evaluates it once, so it stays unchanged. It is inside
+the retrieval budget (150 ms p95, phase-13-plan §13) up to about **50× the reference
+corpus per organization (~66k chunks, ~17k documents)**.
+
+Options for Phase 14 (scale), both S4-safe, neither built:
+
+1. **Statistics per access class.** Maintain, at ingestion, chunk and per-lexeme counts
+   per access class of document (organization, sensitivity, `policy` mode, department
+   set, account); a reader's statistics are the sum over the classes the reader may read,
+   plus one count over the reader's `grants_only` documents (few). Exact; cost grows with
+   the number of classes, not documents. Needs a migration and an ingestion change.
+2. **Per-reader cache** keyed by membership, `authz_updated_at`, policy version and a
+   corpus generation counter: one full pass per reader per change. Simple; invalidation
+   on every document or grant change makes it weak for busy organizations.
+
+### Node requirement (O11)
+
+`apps/web/package.json` `engines` is now `^22.19.0 || >=24` and the README states the
+requirement: undici 8.12 (via jsdom, unit tests only) uses the zlib zstd API that Node
+23 gained in 23.8. CI and the production image use Node 22. Web unit tests: 278 passed.
+
+### Parked candidate
+
+The dev-only candidate from P13.5 (configuration C: `rrf_weight_lexical=1.5`, `rrf_k=30`,
+dev R@10 0.760 / MRR 0.674) waits for F5.1, where it is tested on the new dev split and
+the sealed split once (it must not be tested on the old held-out again).
