@@ -1324,6 +1324,10 @@ snapshot is `~/.cache/lattice/eval-snapshots/p13-2-orbital-fix-config-C-277fb9ff
 
 ## 17. Relevance gate and abstention calibration (P13.3, 2026-10-27)
 
+**Accepted by the product owner 2026-10-27 as committed (cb82ce2, `gate_v1`)**, including
+the held-out shortfall against D-39 and the context-recall drop below (phase-13-plan §21
+"Owner decision"). The figures here are its reference.
+
 What changed: the answer pipeline's relevance floor ("any exact or lexical match passes")
 became the relevance gate `gate_v1` (`lattice.answering.gate`; retrieval-design Part II
 §7.1 row "Relevance gate"). Retrieval did not change: retrieval A, B (aarch64) and C each

@@ -13,7 +13,7 @@ evaluation foundation: new metrics, item-level baselines, `lattice eval compare`
 approved; P13.2 (159 golden items with dev/held-out splits, label provenance and an owner
 review packet in [docs/golden-review/](docs/golden-review/)) is delivered, its held-out
 review pending; P13.3 (the relevance gate: answers stop before any model call when no
-permitted evidence addresses the question) is delivered for review. Retrieval is
+permitted evidence addresses the question) is accepted. Retrieval is
 unchanged. History: Phases 1–11 and the frontend product-design overhaul (D0–D7,
 [design direction](docs/design-direction.md)) is merged; [design system
 v2](docs/design-system.md) is canonical. Phase 11 (Production Deployment, Identity

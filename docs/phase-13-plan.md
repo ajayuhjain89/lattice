@@ -8,8 +8,10 @@ evaluation-plan §15): measurement only, no retrieval or answering behaviour cha
 approved 2026-10-24.** **P13.2 (golden set growth, splits and label provenance)
 delivered 2026-10-24** (§20; evaluation-plan §16): dataset and evaluation infrastructure
 only; engineering complete, the product owner's review of the held-out labels (D-41)
-pending. **P13.3 (relevance gate and abstention calibration) delivered 2026-10-27** (§21;
-evaluation-plan §17): the first behaviour change -- answering only; retrieval unchanged.
+pending. **P13.3 (relevance gate and abstention calibration) delivered 2026-10-27 and
+accepted by the product owner the same day as committed (cb82ce2, `gate_v1`), with its
+held-out trade-off recorded** (§21; evaluation-plan §17): the first behaviour change --
+answering only; retrieval unchanged.
 Every later improvement in §11 still needs its own checkpoint approval; P13.4 is not
 authorized.
 
@@ -476,7 +478,7 @@ records its measurements in evaluation-plan §14+. "Re-index" means `lattice rei
 - **Security regressions.** The gate must not use unreadable information (S4); a hidden
   strong match must not change the status (SEC-5).
 - **Resources.** A/B seconds; C one query-side run (~30 s) on the dumped corpus.
-- **Status: delivered 2026-10-27** (§21). Dev: A 11/17 caught, 4/81 refused; C 11/17,
+- **Status: delivered and accepted 2026-10-27** (cb82ce2; §21). Dev: A 11/17 caught, 4/81 refused; C 11/17,
   2/81 -- D-39's provisional targets met on dev. Held-out (reported only): 4/8 caught in
   A and C, 6/45 (A) and 3/45 (C) refused -- not met; context recall falls more than 2
   points except on C dev. Security 0; S4 equivalence test added.
@@ -767,4 +769,22 @@ calibration: evaluation-plan §17.
 3. The two refusal patterns (paraphrase without a shared specific word; account-centred
    questions about large accounts) are candidates for P13.5 (fusion/selection), not for
    further gate tuning.
+
+**Owner decision (2026-10-27): option (a).** `gate_v1` is accepted as committed (cb82ce2),
+unchanged, in every configuration -- with or without a calibrated semantic floor. The
+recorded trade-off:
+
+- D-39's provisional targets are met on dev (A and C) and **not met on held-out** (4/8
+  caught; 6/45 refused in A, 3/45 in C). The product accepts more refused answerable
+  questions than D-39 allows in exchange for stopping most unanswerable ones before any
+  model call; a refusal still returns the asker's evidence list.
+- Context recall falls by more than the 2-point regression rule (EC-6) in A (dev 4.5,
+  held-out 7.1 points) and on C held-out (4.4); this is accepted and explained: every lost
+  point is a refused run, and no run the gate passes lost a target.
+- Configurations without embeddings (A) carry the larger cost (6/45 held-out refusals).
+- The held-out figures stay non-binding until the D-41 review of the 56 held-out items.
+- The held-out split was seen once with an earlier variant (evaluation-plan §17); any
+  later gate change is calibrated on dev only and states that.
+- Not re-tuned here: the two refusal patterns go to P13.5 as candidates. P13.4 is not
+  authorized.
 
