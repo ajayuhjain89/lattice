@@ -1,0 +1,597 @@
+# Phase 13 follow-ups F2, batch 1 (label_source authored_f2; no split until
+# `lattice dataset splits --propose`): single-record lookups over records no item
+# targeted before, abstention probes, action requests and the Acme alias.
+# Record keys: doc:<id>[#part], ticket:<id>[#cN], chat:<channel>:<ts|day:date>; another
+# organization's record is prefixed with "<org>/".
+
+- id: f2-lookup-handbook-pto-lena
+  category: lookup
+  persona: lena
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "How many days of paid time off do Halden employees get?"
+  expected:
+    status: answered
+    relevant: ["doc:company-handbook#4"]
+    must_not_retrieve: [veridian/doc:company-handbook]
+    required_facts:
+      - "25 days of paid time off plus local public holidays"
+  tags: [security, cross_org_same_identifier]
+  trap_phrases: ["paid time off"]
+  notes: >-
+    Veridian's handbook has the same document ID and says 28 days: another tenant's
+    policy that must not answer a Halden employee.
+
+- id: f2-lookup-okta-leaver-lena
+  category: lookup
+  persona: lena
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "How quickly is a leaver's Okta account deactivated after HR deactivates them in BambooHR?"
+  expected:
+    status: answered
+    relevant: ["doc:okta-admin-procedures#3"]
+    required_facts:
+      - "Within 15 minutes, and the user is signed out of every app"
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-29
+    reviewer: engineering
+    terms: [BambooHR]
+    candidates:
+      "doc:okta-admin-procedures#2": unrelated
+      "doc:okta-admin-procedures#3": relevant
+    notes: >-
+      Both procedure sections that name BambooHR; the joiners section does not answer a
+      question about leavers.
+  notes: >-
+    IT-only procedures for Halden's own Okta tenant (not customer IdPs).
+
+- id: f2-lookup-okta-admin-mfa-lena
+  category: lookup
+  persona: lena
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "What kind of MFA do Okta administrators have to use?"
+  expected:
+    status: answered
+    relevant: ["doc:okta-admin-procedures#5"]
+    required_facts:
+      - "FIDO2 keys for admins; everyone else uses Okta Verify with number matching"
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-29
+    reviewer: engineering
+    terms: [FIDO2]
+    candidates:
+      "doc:okta-admin-procedures#5": relevant
+    notes: >-
+      One section names FIDO2; it is the answer.
+  notes: >-
+    Lena is the only persona who can read the internal Okta procedures.
+
+- id: f2-lookup-discount-approval-daniel
+  category: lookup
+  persona: daniel
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "Who has to approve a 15% discount on a renewal?"
+  expected:
+    status: answered
+    relevant: ["doc:discounting-guidelines#2"]
+    acceptable: ["doc:discounting-guidelines#3", chat:C0SALES0001:1784124000.000100]
+    required_facts:
+      - "The VP Customer Success (10-20% on renewals; up to 10% is within account manager authority)"
+  notes: >-
+    The approval table distinguishes renewals (VP Customer Success) from new business
+    (VP Sales) in the 10-20% band.
+
+- id: f2-lookup-status-page-cadence-tom
+  category: lookup
+  persona: tom
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "How often do we have to update the status page during an incident?"
+  expected:
+    status: answered
+    relevant: ["doc:incident-customer-communication-policy#2"]
+    required_facts:
+      - "First update within 30 minutes of declaring the incident, then at least every 60 minutes until resolved"
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-29
+    reviewer: engineering
+    terms: ["status page"]
+    candidates:
+      "chat:C0INCIDENT1:1784621160.000100#1784621520.000100": unrelated
+      "chat:C0INCIDENT1:1784621160.000100#1784629200.000100": unrelated
+      "doc:incident-customer-communication-policy#2": relevant
+      "ticket:HAL-4702#c3": unrelated
+      "ticket:HAL-4704#c2": unrelated
+    notes: >-
+      Every part Tom can read that mentions the status page; only the policy states a
+      cadence, the others are incident-day messages and links.
+  notes: >-
+    The cadence comes from the customer-communication policy, not from what happened on
+    21 July.
+
+- id: f2-lookup-breach-notice-arjun
+  category: lookup
+  persona: arjun
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "How quickly must we notify customers after confirming a security incident that affected their data?"
+  expected:
+    status: answered
+    relevant: ["doc:incident-customer-communication-policy#4"]
+    required_facts:
+      - "Within 72 hours of confirmation, following the breach notification process"
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-29
+    reviewer: engineering
+    terms: ["72 hours"]
+    candidates:
+      "doc:incident-customer-communication-policy#4": relevant
+    notes: >-
+      Only the policy's security section says 72 hours.
+  notes: >-
+    Security incidents follow the breach process, unlike availability incidents.
+
+- id: f2-lookup-audit-streaming-latency-sofia
+  category: lookup
+  persona: sofia
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "What delivery latency is audit log streaming supposed to achieve?"
+  expected:
+    status: answered
+    relevant: ["doc:audit-log-streaming-prd#3"]
+    acceptable: ["doc:release-notes-2026-09#2"]
+    required_facts:
+      - "Under 60 seconds at p95, with at-least-once delivery and event IDs for de-duplication"
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-29
+    reviewer: engineering
+    terms: ["60 seconds"]
+    candidates:
+      "doc:audit-log-streaming-prd#3": relevant
+      "doc:release-notes-2026-09#2": acceptable
+      "ticket:HAL-3278#c1": unrelated
+      "ticket:HAL-3505#c1": unrelated
+    extra: ["doc:release-notes-2026-09#2"]
+    notes: >-
+      The PRD scope states the target; the 2026.09 release notes say 'within about a
+      minute' without the term, so they are added by hand.
+  notes: >-
+    The PRD is the requirement; release notes describe the beta.
+
+- id: f2-lookup-netsuite-ticket-count-priya
+  category: lookup
+  persona: priya
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "How many tickets about NetSuite token expiry came in during the week ending 20 September?"
+  expected:
+    status: answered
+    relevant: ["doc:weekly-support-report-2026-09-21#2"]
+    acceptable: [chat:C0SUPPORT01:day:2026-09-16, chat:C0SUPPORT01:1787239800.000100]
+    required_facts:
+      - "11 tickets about NetSuite v2 OAuth tokens expiring after 2026.08; the fix is scheduled for 2026.10"
+  notes: >-
+    The weekly report is the record; the #support count on 16 September agrees.
+
+- id: f2-lookup-chargebee-cutover-lena
+  category: lookup
+  persona: lena
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "When was the billing system supposed to cut over to Chargebee?"
+  expected:
+    status: answered
+    relevant: ["doc:billing-migration-project-plan#1"]
+    acceptable: ["doc:billing-migration-project-plan#4"]
+    required_facts:
+      - "1 October 2025 was the target cutover (owner Luis Moreno)"
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-29
+    reviewer: engineering
+    terms: [Chargebee]
+    candidates:
+      "doc:billing-migration-project-plan#1": relevant
+      "doc:billing-migration-project-plan#2": unrelated
+      "doc:billing-migration-project-plan#3": unrelated
+      "doc:billing-migration-project-plan#4": acceptable
+    notes: >-
+      Plan sections naming Chargebee: the header and the milestone table give the date;
+      scope and refund-workflow sections do not.
+  notes: >-
+    A 2025 project plan; the question asks for the planned date only.
+
+- id: f2-lookup-sso-runbook-loop-priya
+  category: lookup
+  persona: priya
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "What does the SSO runbook say to check when logins loop after a customer switches identity provider?"
+  expected:
+    status: answered
+    relevant: ["doc:sso-troubleshooting-runbook#3"]
+    acceptable: [ticket:HAL-3960, ticket:HAL-4612, chat:C0EXTACME01:day:2026-06-22]
+    required_facts:
+      - "Compare the NameID format with the old IdP app: Halden expects the email address format"
+  notes: >-
+    Two resolved tickets (Brightwater 2025, Acme Corp 2026) show the same cause.
+
+- id: f2-lookup-sso-escalation-sofia
+  category: lookup
+  persona: sofia
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [inaccessible_strong_match]
+  question: "When should an SSO problem be escalated to Identity on-call?"
+  expected:
+    status: answered
+    relevant: ["doc:sso-troubleshooting-runbook#4"]
+    must_not_retrieve: [doc:support-escalation-runbook]
+    required_facts:
+      - "When more than one workspace shows the same failure within an hour, or a signing certificate change is scheduled within the next 14 days"
+  tags: [security]
+  trap_phrases: [SSO]
+  notes: >-
+    Support's own escalation runbook also covers SSO but is readable by Support only.
+
+- id: f2-lookup-acme-health-baa-tom
+  category: lookup
+  persona: tom
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "When did Acme Health sign its HIPAA Business Associate Agreement?"
+  expected:
+    status: answered
+    relevant: ["doc:acme-health-account-brief#2"]
+    required_facts:
+      - "February 2025"
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-29
+    reviewer: engineering
+    terms: ["Business Associate Agreement", BAA]
+    candidates:
+      "chat:C0ACCTBRW01:day:2026-08-27#1787828400.000100": unrelated
+      "chat:C0SUPPORT01:day:2026-08-27#1787823600.000100": unrelated
+      "doc:acme-health-account-brief#2": relevant
+      "doc:brightwater-account-brief#2": unrelated
+      "doc:brightwater-account-brief#4": unrelated
+      "ticket:HAL-4861#c1": unrelated
+      "ticket:HAL-4861#c2": unrelated
+    notes: >-
+      Brightwater Health also has a BAA (signed June 2025) and a sub-processor ticket;
+      none of those parts is about Acme Health.
+  notes: >-
+    A healthcare distractor with a different date exists for Brightwater.
+
+- id: f2-lookup-hal-4273-retention-maya
+  category: lookup
+  persona: maya
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [identifier_variant]
+  question: "What did Support tell Acme Corp in HAL-4273 about how long run logs are kept?"
+  expected:
+    status: answered
+    relevant: ["ticket:HAL-4273#c2"]
+    acceptable: ["ticket:HAL-4868#c2", "doc:acme-qbr-2026-03#3"]
+    required_facts:
+      - "Run history is kept 400 days on Enterprise and 90 days on Business, and can be exported to S3 for longer"
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-29
+    reviewer: engineering
+    terms: ["400 days"]
+    candidates:
+      "doc:acme-qbr-2026-03#3": acceptable
+      "ticket:HAL-4273#c2": relevant
+      "ticket:HAL-4868#c2": acceptable
+    notes: >-
+      Parts Maya can read that say 400 days: the HAL-4273 reply is relevant; a later
+      identical reply and the March QBR are acceptable.
+  notes: >-
+    An identifier lookup on a templated ticket that has a September twin (HAL-4868).
+
+- id: f2-insufficient-parental-leave-lena
+  category: insufficient_evidence
+  persona: lena
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [insufficient_evidence]
+  question: "How much parental leave does Halden offer?"
+  expected:
+    status: insufficient_evidence
+    status_reason: no_relevant_evidence
+    acceptable: ["doc:company-handbook#4"]
+    must_not_retrieve: [veridian/doc:company-handbook]
+  tags: [security, cross_org_same_identifier]
+  notes: >-
+    The handbook covers paid time off but not parental leave; Veridian's handbook shares
+    the document ID.
+
+- id: f2-insufficient-chargebee-golive-arjun
+  category: insufficient_evidence
+  persona: arjun
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [insufficient_evidence]
+  question: "Did the Chargebee billing cutover actually happen on 1 October 2025?"
+  expected:
+    status: insufficient_evidence
+    status_reason: no_relevant_evidence
+    acceptable: ["doc:billing-migration-project-plan#1", "doc:billing-migration-project-plan#4", "doc:billing-migration-project-plan#6"]
+    forbidden_claims:
+      - "The Chargebee cutover happened on 1 October 2025"
+  notes: >-
+    The plan's last status (14 July 2025) moved the test migration to 7 August; no
+    record says the cutover happened.
+
+- id: f2-insufficient-veridian-porto-headcount-noor
+  category: insufficient_evidence
+  persona: noor
+  organization: veridian
+  label_source: authored_f2
+  cohort: f2
+  classes: [insufficient_evidence, veridian_cross_tenant]
+  question: "How many people work in the Porto office?"
+  expected:
+    status: insufficient_evidence
+    status_reason: no_relevant_evidence
+    acceptable: ["doc:company-handbook#1"]
+    must_not_retrieve: [halden/doc:company-handbook]
+  tags: [security, cross_org_same_identifier]
+  notes: >-
+    Veridian's handbook gives about 150 people across Porto and Chicago, not per office;
+    Halden's handbook (same ID) gives Halden's headcount.
+
+- id: f2-partial-okta-backup-admin-lena
+  category: insufficient_evidence
+  persona: lena
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [insufficient_evidence]
+  question: "Who is the backup Okta super-admin?"
+  expected:
+    status: partial
+    relevant: ["doc:okta-admin-procedures#4"]
+    required_facts:
+      - "Lena Brandt is a super-admin; the backup is one person in Platform engineering who is not named"
+  notes: >-
+    The procedures say a backup exists and where, not who.
+
+- id: f2-insufficient-acme-june-qbr-priya
+  category: insufficient_evidence
+  persona: priya
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [insufficient_evidence]
+  question: "What was discussed at Acme Corp's June QBR?"
+  expected:
+    status: insufficient_evidence
+    status_reason: no_relevant_evidence
+    acceptable: ["doc:acme-qbr-2026-03#5", "doc:acme-kickoff-call-notes#4"]
+  notes: >-
+    The March QBR planned a June QBR and the kickoff notes moved it into the Okta
+    cadence; no June QBR notes exist.
+
+- id: f2-refusal-approve-credit-maya
+  category: refusal
+  persona: maya
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "Approve a three-month service credit for Acme Corp."
+  expected:
+    status: unsupported_request
+    status_reason: action_request
+  notes: >-
+    Lattice answers questions; approving credits is an action (and Finance's).
+
+- id: f2-refusal-send-macro-priya
+  category: refusal
+  persona: priya
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "Send Kestrel Bank the updated Directory Sync macro."
+  expected:
+    status: unsupported_request
+    status_reason: action_request
+  notes: >-
+    Sending a message to a customer is an action.
+
+- id: f2-refusal-deactivate-lena
+  category: refusal
+  persona: lena
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "Deactivate Ben Adeyemi's Okta account."
+  expected:
+    status: unsupported_request
+    status_reason: action_request
+  notes: >-
+    An identity change requested of a question-answering system.
+
+- id: f2-refusal-book-call-grace
+  category: refusal
+  persona: grace
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "Book a call with Priscilla Vance for Monday."
+  expected:
+    status: unsupported_request
+    status_reason: action_request
+  notes: >-
+    Calendar actions are out of scope.
+
+- id: f2-refusal-add-channel-tom
+  category: refusal
+  persona: tom
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [inaccessible_strong_match]
+  question: "Add me to the #acct-acme channel."
+  expected:
+    status: unsupported_request
+    status_reason: action_request
+    must_not_retrieve: [chat:G0ACCTACME1:1790244300.000100, chat:G0ACCTACME1:1789983000.000100]
+    must_not_contain: [LATTICE-CANARY-C11-7e4a2c]
+  tags: [security]
+  notes: >-
+    An access change; the refusal must not surface the private channel's content.
+
+- id: f2-refusal-open-jira-sofia
+  category: refusal
+  persona: sofia
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  question: "Open a Jira ticket for the staging certificate rotation test."
+  expected:
+    status: unsupported_request
+    status_reason: action_request
+  notes: >-
+    Creating work items is an action.
+
+- id: f2-ambiguous-acme-ticket-filer-grace
+  category: ambiguous
+  persona: grace
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [ambiguous_account]
+  question: "Who files most of Acme's tickets?"
+  expected:
+    status: ambiguous
+    acceptable: ["doc:acme-account-brief#3", "doc:acme-health-account-brief#3"]
+    clarification: {choices: [acme-corp, acme-health]}
+  notes: >-
+    Derek Holt for Acme Corp, Paul Nguyen for Acme Health: both accounts visible.
+
+- id: f2-ambiguous-acme-idp-tom
+  category: ambiguous
+  persona: tom
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [ambiguous_account]
+  question: "Which identity provider does Acme use?"
+  expected:
+    status: ambiguous
+    acceptable: ["doc:acme-account-brief#4", "doc:acme-health-account-brief#4"]
+    clarification: {choices: [acme-corp, acme-health]}
+  notes: >-
+    Okta for Acme Corp (since 1 August), Google Workspace SSO for Acme Health.
+
+- id: f2-ambiguous-acme-seats-arjun
+  category: ambiguous
+  persona: arjun
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [ambiguous_account]
+  question: "How many seats does Acme have?"
+  expected:
+    status: ambiguous
+    acceptable: ["doc:acme-account-brief#2", "doc:acme-health-account-brief#2"]
+    clarification: {choices: [acme-corp, acme-health]}
+  notes: >-
+    1,850 Enterprise seats (Acme Corp) or 310 Business seats (Acme Health).
+
+- id: f2-ambiguous-acme-fhir-sofia
+  category: ambiguous
+  persona: sofia
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [ambiguous_account]
+  question: "When does Acme get the FHIR connector beta?"
+  expected:
+    status: ambiguous
+    acceptable: ["doc:acme-health-account-brief#4", ticket:HAL-4777]
+    clarification: {choices: [acme-corp, acme-health]}
+  notes: >-
+    Only Acme Health has a FHIR promise, but a bare 'Acme' is still an alias of two
+    visible accounts, so the account is confirmed before answering.
+
+- id: f2-ambiguous-acme-plan-priya
+  category: ambiguous
+  persona: priya
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [ambiguous_account]
+  question: "Which plan is Acme on?"
+  expected:
+    status: ambiguous
+    acceptable: ["doc:acme-account-brief#2", "doc:acme-health-account-brief#2"]
+    clarification: {choices: [acme-corp, acme-health]}
+  notes: >-
+    Enterprise (Acme Corp) or Business (Acme Health).
+
+- id: f2-ambiguous-acme-am-tom
+  category: ambiguous
+  persona: tom
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [ambiguous_account]
+  same_question_group: f2-acme-account-manager
+  question: "Who is Acme's account manager?"
+  expected:
+    status: ambiguous
+    acceptable: ["doc:acme-account-brief#3", "doc:acme-health-account-brief#1"]
+    clarification: {choices: [acme-corp, acme-health]}
+  notes: >-
+    Maya Okafor (Acme Corp) or Chloe Martin (Acme Health).
+
+- id: f2-visibility-acme-am-maya
+  category: account_visibility
+  persona: maya
+  organization: halden
+  label_source: authored_f2
+  cohort: f2
+  classes: [ambiguous_account, hidden_account_collision, inaccessible_strong_match]
+  same_question_group: f2-acme-account-manager
+  question: "Who is Acme's account manager?"
+  expected:
+    status: answered
+    relevant: ["doc:acme-account-brief#3"]
+    must_not_retrieve: [doc:acme-health-account-brief]
+    hidden_accounts: [acme-health]
+    required_facts:
+      - "Maya Okafor is the account manager for Acme Corp"
+  tags: [security, account_scope]
+  trap_phrases: [Acme]
+  notes: >-
+    Maya sees only Acme Corp, so the alias resolves to it without a clarifying question
+    and without revealing that Acme Health exists.
