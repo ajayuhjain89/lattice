@@ -1,7 +1,8 @@
 # Phase 13 follow-ups: roadmap to finish what Phase 13 left open
 
 Status: **proposed 2026-10-28; F1 (owner review) and F3 (hygiene) authorized the same
-day; F3 delivered (§6).** Phase 13 was accepted and merged
+day; F3 delivered (§6). F2 authorized 2026-10-29; its plan (§7) awaits the owner's
+answers before any item is authored.** Phase 13 was accepted and merged
 (26bbd08) with completion criterion 3 unmet ([phase-13-plan.md](phase-13-plan.md) §27).
 This document lists everything Phase 13 left incomplete, why, and an ordered plan to
 close it. Nothing here starts without the product owner's go-ahead, checkpoint by
@@ -199,3 +200,156 @@ requirement: undici 8.12 (via jsdom, unit tests only) uses the zlib zstd API tha
 The dev-only candidate from P13.5 (configuration C: `rrf_weight_lexical=1.5`, `rrf_k=30`,
 dev R@10 0.760 / MRR 0.674) waits for F5.1, where it is tested on the new dev split and
 the sealed split once (it must not be tested on the old held-out again).
+
+## 7. F2 plan (proposed 2026-10-29)
+
+The owner authorized F2 on 2026-10-29. This section is its plan. **No item is authored
+and no code is changed until the owner answers the questions in §7.7.**
+
+### 7.1 Starting point (measured at 8db520d)
+
+`lattice dataset splits`: 159 items, dev 103 / held-out 56, 89 split units. Held-out has
+**44 items with targets** (12 have none), so one item is 2.3 points of R@10. 56 held-out
+items are pending owner review (H1–H4, F1).
+
+Not all of the corpus is targeted yet. These records are not a target of any golden item:
+
+| Organization | Documents | Tickets | Chat records |
+| ------------ | --------: | ------: | -----------: |
+| Halden | 15 of 48 | 130 of 148 | 120 of 148 |
+| Veridian | 2 of 7 | 29 of 37 | 10 of 13 |
+
+The untargeted Halden documents include three Acme Corp account documents (QBR, Q3
+success plan, FY27 renewal plan), the Acme Health and Orbital Freight briefs, the
+handbook, the SSO and support-escalation runbooks, the discounting guidelines, the
+incident-communication policy, the audit-log streaming PRD and the weekly support report.
+One storyline (`acme-name-collision`) has no targeted record. That is enough material
+for ~130 new information needs, so **the corpus does not need to change**. That keeps
+the Phase 13 baselines comparable item by item and avoids a re-embed.
+
+### 7.2 Size and allocation
+
+| Split | New items | Of which with targets | Split after F2 | With targets after F2 |
+| ----- | --------: | --------------------: | -------------: | --------------------: |
+| dev | 22 | ~18 | 125 | ~98 |
+| held-out | 62 | ≥ 58 | 118 | **≥ 102** (1 item ≈ 1.0 point) |
+| sealed (new) | 46 | ≥ 40 | 46 | **≥ 40** |
+| **Total** | **130** | | 289 | |
+
+The roadmap's ~120 becomes 130 because F5.5 (gate recalibration) and F5.1 need new
+*dev* items in the weak categories, not only held-out ones. The authoring margin also
+lets the minimums survive group-aware assignment. With 40 items, the sealed split is a
+confirmation (direction and no regression); the held-out split is the precise
+measurement. Held-out is reported in two slices: the 56 already-seen items (Phase 13)
+and the 62 fresh ones (F2).
+
+### 7.3 What the new items cover
+
+| Theme | Items | Why |
+| ----- | ----: | --- |
+| Synthesis needing ≥ 3 target records (cross_document, cross_source) | 28 | The ≥ 3-target recall (0.437 at P13.0) is the weakest stratum |
+| Account-centred questions about large accounts (Acme Corp, Kestrel Bank) | 18 | Gate refusals on held-out (O4); same-account chunk ordering (O5) |
+| Paraphrase without a shared specific word: 10 pairs, keyword wording + no-shared-word wording | 20 | Gate misses on paraphrase (O4). A pair is one split unit |
+| Conflict and supersession with both sides labelled | 16 | Conflict coverage (O6) needs both sides as targets |
+| Abstention probes: insufficient evidence, near-miss topic, refusal | 18 | G1 needs abstention items in every split |
+| Single-record lookups over untargeted records | 18 | Fresh information needs; precision on short answers |
+| Security probes: inaccessible strong match, egress, Veridian cross-tenant, injection | 12 | Security metrics must be 0 in every split, sealed included |
+
+Cross-cutting rules:
+- ≥ 35% of new items carry security traps.
+- Every Halden persona gets ≥ 8 new items. Arjun, Lena and Sofia (≤ 3 held-out items
+  each today) get ≥ 10 each. Veridian gets ≥ 12.
+- Every evaluation class keeps ≥ `CLASS_MINIMUM` items per split, sealed included.
+- Every category has ≥ 2 items in sealed.
+
+### 7.4 Steps
+
+**F2a — tooling** (engineering; stop for review after it):
+1. `Split` gains `sealed` and `LabelSource` gains `authored_f2`.
+2. Sealed items live in **`evals/golden-sealed/`**, outside the default golden directory.
+   Every default eval run, baseline, `compare` and CI golden suite therefore never loads
+   them. `lattice dataset lint|splits|freeze-labels|review-packet` load both directories,
+   so the straddle and near-duplicate checks cover all three splits.
+3. `lattice eval retrieval|answer --sealed --reason "..."` evaluates sealed items only.
+   It refuses without a reason, writes to `evals/reports/sealed/` (never a baseline), and
+   appends date, commit, configuration versions, reason and item count to
+   `evals/golden/provenance/sealed-access.json`. Each sealed look is on record.
+4. `lattice dataset splits --propose --shares dev=…,held_out=…,sealed=…` fills items
+   without a split. It uses the same stratified, group-aware, deterministic objective,
+   now over three splits, and still never moves a committed split. A new item that joins
+   an existing unit inherits that unit's split, so a paraphrase of a dev item goes to dev.
+5. `label-freeze.json` gains a `sealed` section with the held-out rules: a frozen item
+   cannot move out of its split, and a label change needs `--reason`.
+6. The splits report gains decisive-record overlap: held-out and sealed target records
+   that are also dev targets. Eval split tables gain the held-out seen and fresh slices.
+7. Review packets: H5… for new held-out items, S1… for sealed items. A packet shows
+   labels, never results.
+8. Tests for each of the above, the runbook row "Grow or change the golden set" updated,
+   and one full backend suite, alone, in the background.
+
+**F2b — authoring** (engineering; 5 batches of ~26 items by theme, each committed locally
+after `lattice dataset lint` passes):
+- Items are authored with no `split`. The proposer assigns splits afterwards, so the
+  author does not choose where an item lands.
+- Labels come from the corpus and `ground-truth.yaml` only. **No retrieval or answer run
+  touches a new item before its split is assigned and frozen.** After the freeze, only
+  dev items are run during F2.
+- A new item's decisive facts must not be an existing dev item's decisive facts, unless
+  the new item declares that item's `paraphrase_group` (and then inherits dev).
+- Labels are exhaustive where that is cheap (narrow term sets): ≥ 20 new exhaustive
+  items, mostly in held-out and sealed.
+- Scope-all personas write "Acme Corp", not a bare "Acme", unless the ambiguity is the
+  point (P13.2 pitfall).
+
+**F2c — splits and freeze** (stop for the owner after it):
+1. Run `splits --propose --write` once and check the minimums in §7.2–7.3. If anything
+   falls short, author top-up items. Nothing is reshuffled.
+2. `freeze-labels --reason` for every new held-out and sealed item.
+3. Build the review packets and commit.
+
+**F2d — owner review** (D-41): about 9 batches, H5–H9 (~62 items) and S1–S4 (~46). The
+owner marks each item approved or corrected. Engineering applies corrections with
+`freeze-labels --reason` and sets `owner_reviewed` on approved items.
+
+**F2e — baselines** (engineering; stop after it):
+1. On the isolated A/B database, `compare --allow-golden-change` must show 0 item-level
+   findings for existing items.
+2. Regenerate with `--replace --reason`, one heavy run at a time: retrieval A, B aarch64,
+   B x86_64 (emulated database, `lattice-p13fx86`), C (local mxbai under the watchdog)
+   and answer A. These cover dev and held-out only.
+3. Report the new dev and held-out baseline figures, with the seen and fresh slices.
+   They are F5's reference.
+4. **There is no sealed run in F2.** The first sealed run is F5's final decision, with
+   the baseline and the candidate in the same run.
+
+### 7.5 Interaction with F1
+
+If the F1 corrections arrive during F2, engineering applies them when they arrive
+(`freeze-labels --reason`, `owner_reviewed`) and re-reports P13.3–P13.6 on the 56 items
+by ID. The owner then chooses (Q6) between one baseline regeneration at F2e covering both
+checkpoints, or the separate F1 regeneration that F1 defines.
+
+### 7.6 Limitation (to be recorded in evaluation-plan)
+
+Engineering authors every new item, sealed ones included, so the author knows the sealed
+questions. Mitigations:
+- The proposer assigns splits after authoring.
+- After the freeze, engineering never opens `evals/golden-sealed/` except through the
+  lint, freeze and review tools, until F5's final run.
+- Every sealed evaluation is logged.
+
+### 7.7 Questions for the owner
+
+| # | Question | Options (recommendation first) |
+| - | -------- | ------------------------------ |
+| Q1 | Size and allocation | 130 new: dev 22 / held-out 62 / sealed 46 · 120 (dev 12) · smaller (held-out stays below 100 with targets) |
+| Q2 | The 56 existing held-out items | stay in held-out, reported as a "seen" slice · demote to dev (bigger dev, but a fresh held-out of ~62 is below 100) |
+| Q3 | Sealed mechanics | separate directory + `--sealed --reason` + access log · same files with `split: sealed` and a default filter |
+| Q4 | Corpus | unchanged · a small extension for fresh sealed material (one C re-embed; every baseline shifts) |
+| Q5 | Owner review scope | all new held-out and sealed items, ~9 batches · sealed in full plus a held-out sample |
+| Q6 | Baseline regeneration with F1 | once at F2e if F1 corrections arrive first · twice, as F1 defines |
+
+**Cost:** ₹0. With the corpus unchanged there is no re-embed. Heavy runs happen only in
+F2a (one backend suite) and F2e (five baseline runs, one at a time). **Effort:** F2a about
+one session; F2b about five; F2c half a session; F2d is owner time (9 batches); F2e about
+one session.
