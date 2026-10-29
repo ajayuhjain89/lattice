@@ -5,29 +5,13 @@
 # Record keys: doc:<id>[#part], ticket:<id>[#cN], chat:<channel>:<ts|day:date>; another
 # organization's record is prefixed with "<org>/".
 
-- id: f2-stale-northpeak-seats-tom
-  category: stale
-  persona: tom
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [temporal_supersession]
-  question: "How many seats does Northpeak Logistics have?"
-  expected:
-    status: answered
-    relevant: ["doc:northpeak-account-brief#2"]
-    acceptable: ["doc:northpeak-expansion-proposal#3", ticket:HAL-4298, chat:C0ACCTNPK01:day:2026-03-20]
-    required_facts:
-      - "420 Business seats according to the March 2026 brief; a proposal for 180 more has had no recorded decision"
-    freshness: {stale: true, newest_evidence_on: 2026-03-20}
-  notes: >-
-    The newest seat figure is from March; the answer should date it.
-
 - id: f2-stale-billing-migration-status-lena
   category: stale
   persona: lena
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H8, status: pending}
   cohort: f2
   classes: [temporal_supersession]
   paraphrase_group: f2-billing-migration-status
@@ -43,29 +27,13 @@
     Grouped with the Chargebee go-live probe: the same need, answered from a fourteen-
     month-old status line.
 
-- id: f2-stale-weekly-support-numbers-arjun
-  category: stale
-  persona: arjun
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [temporal_supersession]
-  question: "What were the latest weekly support numbers?"
-  expected:
-    status: answered
-    relevant: ["doc:weekly-support-report-2026-09-21#1"]
-    acceptable: [chat:C0SUPPORT01:day:2026-09-24, "doc:weekly-support-report-2026-09-21#4"]
-    required_facts:
-      - "Week ending 20 September: 94 new tickets and 101 solved; Enterprise median first response 18 minutes; 2 SLA breaches, both P3 Business"
-    freshness: {stale: false}
-  notes: >-
-    'Latest' must pick the newest report; there is only one in the corpus.
-
 - id: f2-stale-acme-health-tom
   category: stale
   persona: tom
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H7, status: pending}
   cohort: f2
   classes: [inaccessible_strong_match, temporal_supersession]
   same_question_group: f2-acme-account-health
@@ -89,6 +57,7 @@
   persona: grace
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   classes: [egress_withheld]
   question: "How many people will Halden have at the end of FY27?"
@@ -113,6 +82,8 @@
   persona: arjun
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H8, status: pending}
   cohort: f2
   classes: [egress_withheld]
   question: "What would the proposed Enterprise Plus tier include?"
@@ -132,64 +103,12 @@
   notes: >-
     All evidence is confidential.
 
-- id: f2-egress-q4-priorities-arjun
-  category: ai_egress
-  persona: arjun
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [egress_withheld]
-  question: "What are leadership's priorities for Q4?"
-  expected_by_egress:
-    default:
-      status: evidence_only
-      status_reason: egress_policy
-      acceptable: ["doc:engineering-all-hands-2026-09#2"]
-      not_used_for_answer: [doc:exec-offsite-notes-2026-09]
-    opt_in_confidential:
-      status: answered
-      relevant: ["doc:exec-offsite-notes-2026-09#2"]
-      acceptable: ["doc:engineering-all-hands-2026-09#2"]
-      required_facts:
-        - "Ship Directory Sync"
-        - "Protect the Acme Corp and Kestrel Bank renewals (Grace owns both executive relationships)"
-        - "Keep the EU region on track for Q1 2027"
-  tags: [confidential]
-  notes: >-
-    The offsite notes are the record; Engineering's update covers only its part.
-
-- id: f2-egress-cio-letter-contents-grace
-  category: ai_egress
-  persona: grace
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [egress_withheld, insufficient_evidence, multi_document]
-  question: "What will the letter to Acme Corp's CIO cover?"
-  expected_by_egress:
-    default:
-      status: partial
-      relevant: [chat:G0ACCTACME1:1790244300.000100]
-      not_used_for_answer: [doc:acme-exec-escalation-notes, chat:G0EXECESC01:1790101200.000100]
-      required_facts:
-        - "A letter to Priscilla is going out this week; customer-facing dates stay those of the decision record (beta 9 November, GA 8 December)"
-    opt_in_confidential:
-      status: answered
-      relevant: ["doc:acme-exec-escalation-notes#4", "doc:acme-exec-escalation-notes#3"]
-      acceptable: [chat:G0ACCTACME1:1790244300.000100, chat:G0EXECESC01:1790101200.000100]
-      required_facts:
-        - "The 9 November beta with a dedicated engineer, GA targeted for 8 December, and a description of the interim deprovisioning control"
-        - "The credit and the flat renewal go into the order form only after legal review"
-  tags: [confidential]
-  notes: >-
-    The private account channel says a letter is coming; what it covers is in
-    confidential records.
-
 - id: f2-ident-hal-4815-tom
   category: lookup
   persona: tom
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   classes: [identifier_variant]
   question: "Did Acme Health need to do anything about the certificate banner in HAL-4815?"
@@ -202,45 +121,13 @@
   notes: >-
     An identifier lookup; the support chat summary agrees.
 
-- id: f2-ident-inc-2026-031-priya
-  category: lookup
-  persona: priya
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [identifier_variant]
-  question: "Who was incident commander for INC-2026-031, and who wrote the postmortem?"
-  expected:
-    status: answered
-    relevant: ["doc:postmortem-inc-2026-031#1", "chat:C0INCIDENT1:1784621160.000100#1784621160.000100"]
-    acceptable: ["chat:C0INCIDENT1:1784621160.000100#1784628900.000100", chat:C0INCIDENT1:day:2026-07-30]
-    required_facts:
-      - "Sam Patel was incident commander; Sofia Marchetti wrote the postmortem"
-  notes: >-
-    Incident ID as written in the postmortem and #incidents.
-
-- id: f2-ident-veridian-hal-4950-felix
-  category: lookup
-  persona: felix
-  organization: veridian
-  label_source: authored_f2
-  cohort: f2
-  classes: [identifier_variant, veridian_cross_tenant]
-  question: "Has the platform team answered HAL-4950 yet?"
-  expected:
-    status: answered
-    relevant: [ticket:HAL-4950]
-    acceptable: [chat:C0SUPPORT01:day:2026-09-22]
-    required_facts:
-      - "Not on record: Quarry Lane asked on 22 September to go from 600 to 1,200 requests per minute for a backfill, and Support said it would confirm by Thursday"
-  notes: >-
-    The honest answer is that no reply is recorded yet.
-
 - id: f2-scoped-brightwater-docs-daniel
   category: account_visibility
   persona: daniel
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H9, status: pending}
   cohort: f2
   classes: [scoped_retrieval]
   question: "What documents do we have about Brightwater Health?"
@@ -258,6 +145,8 @@
   persona: grace
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H6, status: pending}
   cohort: f2
   classes: [multi_account_comparison, multi_document]
   question: "Which renewals fall between October 2026 and March 2027?"
@@ -275,6 +164,7 @@
   persona: lena
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   classes: [multi_document]
   question: "What has been going on at the Lisbon hub?"
@@ -289,30 +179,12 @@
   notes: >-
     Small facts spread over two channels.
 
-- id: f2-xdoc-boston-hub-sofia
-  category: cross_source
-  persona: sofia
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [multi_document]
-  question: "What has happened at the Boston hub recently?"
-  expected:
-    status: answered
-    relevant: [chat:C0GENERAL01:day:2026-08-03, chat:C0RANDOM001:day:2026-09-18, chat:C0RANDOM001:day:2026-07-24]
-    acceptable: ["doc:company-handbook#1"]
-    required_facts:
-      - "The air conditioning was fixed in early August"
-      - "Cake on 18 September for Hannah's five years at Halden"
-      - "Lunch tip: the dumpling spot on Summer St"
-  notes: >-
-    Chat-only synthesis; the August #general post covers both hubs.
-
 - id: f2-xdoc-it-announcements-maya
   category: cross_source
   persona: maya
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   classes: [multi_document]
   question: "What has IT announced to staff since July?"

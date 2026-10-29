@@ -2,7 +2,8 @@
 
 Status: **proposed 2026-10-28; F1 (owner review) and F3 (hygiene) authorized the same
 day; F3 delivered (§6). F2 authorized 2026-10-29; the owner accepted the recommended answer
-to every F2 question the same day (§7.7); F2a (tooling) delivered (§8); F2b awaits the owner's go-ahead.** Phase 13 was accepted and merged
+to every F2 question the same day (§7.7); F2a-F2c delivered (§8, §9): 146 items authored,
+split and frozen; F2d (owner review of H5-H9 and S1-S4) is next.** Phase 13 was accepted and merged
 (26bbd08) with completion criterion 3 unmet ([phase-13-plan.md](phase-13-plan.md) §27).
 This document lists everything Phase 13 left incomplete, why, and an ordered plan to
 close it. Nothing here starts without the product owner's go-ahead, checkpoint by
@@ -388,3 +389,100 @@ Verification: `lattice dataset lint` OK (159 items, dev 103 / held-out 56);
 
 Next (F2b, needs the owner's go-ahead): author the 130 items in `evals/golden-staging/`
 in five themed batches, each linted and committed locally, with no evaluation run.
+
+## 9. F2b and F2c delivery record (2026-10-29)
+
+**F2b, authoring.** 146 items (`authored_f2`, `cohort: f2`) were written in
+`evals/golden-staging/` in five themed batches plus a top-up batch, and each was linted and
+committed locally: 0c9792e, 353cc7e, fdb0622, 591a9be, 607971c and 2dd138b. Labels come from the corpus and `ground-truth.yaml` only. **No retrieval or
+answer run touched any of them** before the split was assigned and the labels frozen. A
+scratch helper derived each item's classes from what its labels exercise, and listed every
+exhaustive candidate for review. Engineering read all 20 candidate lists; no verdict was
+changed.
+
+| Batch | Items | Content |
+| ----- | ----: | ------- |
+| 1 | 31 | 13 lookups over records no item targeted before; 5 abstention probes; 6 action requests; 6 ambiguous "Acme" questions and one scope contrast |
+| 2 | 25 | Synthesis needing three or more records (account histories, people across accounts, roadmap against delivery, incident policy against the record) |
+| 3 | 25 | 18 Acme Corp and Kestrel Bank questions; 7 abstention probes whose answer sits only in unreadable records |
+| 4 | 26 | 10 paraphrase pairs (keyword wording, and wording sharing no specific word with the evidence); 6 conflict or supersession items |
+| 5 | 23 | 10 conflict or supersession items; 1 stale item; 12 security probes (8 in Veridian, against Halden records with the same IDs or names) |
+| Top-up | 16 | 4 stale, 4 egress pairs, 3 identifier lookups, a scoped and a multi-account item, 3 chat syntheses |
+
+The conflict items include two inconsistencies found in the corpus while authoring:
+- **Orbital discount approver:** the Orbital brief routes a new-business discount to the
+  renewal approver.
+- **The October date:** Support's August "expected in October" came from a Slack thread,
+  which the commitments policy forbids.
+
+**F2c, splits and freeze.**
+- **Splits:** `splits --propose --shares dev=0.17,held_out=0.48,sealed=0.35 --write`
+  assigned dev 25, held-out 70 and sealed 51, and moved the sealed items to
+  `evals/golden-sealed/`.
+- **Freeze:** `freeze-labels` froze the 70 held-out and 51 sealed labels before any run.
+- **Review packets:** `review-packet` added H5–H9 and S1–S4 (12–15 items each). H1–H4
+  are byte-for-byte unchanged.
+
+| Measure | Minimum (§7.2–7.3) | After F2 |
+| ------- | ------------------ | -------- |
+| Held-out items with targets | ≥ 100 | **102** (of 126; 1 item ≈ 1.0 point) |
+| Sealed items with targets | ≥ 40 | **42** (of 51) |
+| Every category in sealed | ≥ 2 | met (14 categories) |
+| Halden personas / Arjun, Lena, Sofia / Veridian | ≥ 8 / ≥ 10 / ≥ 12 | met (lowest Halden persona 12; Arjun 15, Lena 14, Sofia 14; Veridian 13) |
+| New items with security traps | ≥ 35% | **34%** (50 of 146): not met; no top-up item carries one |
+| Exhaustive new items | ≥ 20 | 20 (dev 6, held-out 7, sealed 7) |
+| Evaluation classes per split, sealed included | ≥ 4 | **not met in sealed** for paraphrase 3, keyword_vs_natural 3, contradictory_evidence 3, egress_withheld 3, identifier_variant 2, ambiguous_account 2, multi_account_comparison 2, scoped_retrieval 2, injection_misleading 2, hidden_account_collision 1 |
+
+**Deviations from §7, for the owner:**
+1. **146 items, not 130.** The first 130 left held-out at 94 items with targets and sealed
+   at 36, with no stale or AI-egress item in sealed. As §7.4 provides, 16 top-ups were
+   authored; nothing was reshuffled. The shares are unchanged.
+2. **Theme mix.** Six action requests and six ambiguous items were added, so that every
+   category could reach sealed. Pure synthesis is 25 items rather than 28. Items needing
+   three or more records total 40 across all batches.
+3. **Class minimum in sealed (above) not met.** Meeting it would take roughly 25 more
+   multi-class items. The lint does not require it, and the sealed split's role is
+   confirmation (§7.2). Owner's call whether to top up further.
+4. **Questions reworded before the freeze** to clear the lint's near-duplicate check:
+   - The Veridian renewal question, before assignment.
+   - The Veridian PTO question, after assignment and before the freeze. This was the only
+     edit to a sealed file outside the dataset tools.
+5. **Two planned items dropped** because they would have duplicated another new item's
+   information need. Two pairs of new items were grouped so each pair stays in one split
+   unit: the billing-migration status probes, and the Acme health question asked by Tom
+   and by Grace.
+
+**Tests.** Updated for the post-F2 state:
+- `test_golden_provenance`: the P13.2 held-out share, new F2 minimums, and batches per
+  review round.
+- `test_dataset_lint`: two minimum mutations also neutralise the F2 files.
+- `test_golden_sealed`: fixtures copy the sealed directory; the fingerprint pin applies to
+  the pre-F2 items.
+- `provenance.update` checks the sealed freeze only when sealed items were loaded, as the
+  lint does.
+- Dataset tests: 98 passed.
+
+**Full backend suite: incomplete.** Docker Desktop stopped at about 44% of the run (swap
+near 8 GB), and every later database test errored: 1,513 passed, 10 failed, 1,208 errors.
+Before Docker stopped:
+- **Security:** every security metric was 0 for the golden answer run over the dev and
+  held-out items.
+- **Baseline compares:** the answer-baseline reproduction and the retrieval
+  compare-regression tests report INCOMPARABLE, because the golden set changed. This is
+  expected until F2e regenerates the baselines.
+- **Finding (D-11):** two of the new action requests are not recognised as action
+  requests by the answer pipeline. For example, "Book a call with Priscilla Vance for
+  Monday." returned `evidence_only` (egress policy) instead of `unsupported_request`.
+  `test_every_golden_item_passes_the_security_gate` asserts this for every refusal item,
+  so it fails. The request-kind detector misses these phrasings; the labels are right.
+
+The remaining failures are connection errors after Docker stopped. A clean rerun is still
+owed.
+
+**Limitation (evaluation-plan §3.2).** Engineering wrote the sealed questions. From this
+commit on, engineering opens `evals/golden-sealed/` and `docs/golden-review/S*.md` only
+through the dataset tools, until F5's final decision.
+
+**Next (F2d, owner):** review H5–H9 (70 held-out) and S1–S4 (51 sealed), as well as F1's
+H1–H4. Corrections are applied with `freeze-labels --reason`. After that comes F2e:
+baselines, and once only, if the F1 corrections arrive first (Q6).

@@ -14,11 +14,25 @@ approved items as `owner_reviewed` (and corrections in their own commit); held-o
 labels are frozen (`evals/golden/provenance/label-freeze.json`), so a correction is
 a recorded change.
 
-| Batch | Items | Phase 3 | Phase 13 | Approved | Pending |
-| ----- | ----: | ------: | -------: | -------: | ------: |
-| [H1](H1.md) | 14 | 6 | 8 | 0 | 14 |
-| [H2](H2.md) | 11 | 6 | 5 | 0 | 11 |
-| [H3](H3.md) | 15 | 13 | 2 | 0 | 15 |
-| [H4](H4.md) | 16 | 9 | 7 | 0 | 16 |
+Batches H5 onwards and S1 onwards come from the Phase 13 follow-ups (F2,
+`authored_f2`). S batches are the sealed split: evaluated only at a checkpoint's
+final decision, so review their labels with the same care and never ask for
+their results.
 
-Total: 56 held-out items.
+| Batch | Items | Phase 3 | Phase 13 | F2 | Approved | Pending |
+| ----- | ----: | ------: | -------: | -: | -------: | ------: |
+| [H1](H1.md) | 14 | 6 | 8 | 0 | 0 | 14 |
+| [H2](H2.md) | 11 | 6 | 5 | 0 | 0 | 11 |
+| [H3](H3.md) | 15 | 13 | 2 | 0 | 0 | 15 |
+| [H4](H4.md) | 16 | 9 | 7 | 0 | 0 | 16 |
+| [H5](H5.md) | 15 | 0 | 0 | 15 | 0 | 15 |
+| [H6](H6.md) | 14 | 0 | 0 | 14 | 0 | 14 |
+| [H7](H7.md) | 14 | 0 | 0 | 14 | 0 | 14 |
+| [H8](H8.md) | 14 | 0 | 0 | 14 | 0 | 14 |
+| [H9](H9.md) | 13 | 0 | 0 | 13 | 0 | 13 |
+| [S1](S1.md) | 13 | 0 | 0 | 13 | 0 | 13 |
+| [S2](S2.md) | 13 | 0 | 0 | 13 | 0 | 13 |
+| [S3](S3.md) | 13 | 0 | 0 | 13 | 0 | 13 |
+| [S4](S4.md) | 12 | 0 | 0 | 12 | 0 | 12 |
+
+Total: 126 held-out items, 51 sealed items.

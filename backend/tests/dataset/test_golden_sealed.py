@@ -27,6 +27,7 @@ from lattice.evals.retrieval import golden_version, held_out_cohorts
 REPO = Path(__file__).resolve().parents[3]
 DATA = REPO / "data" / "synthetic"
 GOLDEN = REPO / "evals" / "golden"
+PRE_F2_GOLDEN = "d5369dd975fb1fa046fd5ceca99df48e7cf6221b60b02f739c579ca7e6deb930"
 
 
 @pytest.fixture(scope="module")
@@ -73,7 +74,13 @@ def _yaml(items: list[GoldenItem]) -> str:
 def golden(tmp_path: Path) -> Path:
     target = tmp_path / "golden"
     shutil.copytree(GOLDEN, target)
+    shutil.copytree(sealed_dir_for(GOLDEN), sealed_dir_for(target))
     return target
+
+
+def _ids(golden: Path, *, everything: bool) -> set[str]:
+    data = load_all(DATA, golden) if everything else load_dataset(DATA, golden)
+    return {i.id for _, i in data.goldens}
 
 
 def _stage(golden: Path, items: list[GoldenItem], n: int) -> list[GoldenItem]:
@@ -91,17 +98,17 @@ def _problems(golden: Path) -> list[str]:
 def test_default_loads_never_see_sealed_or_staged_items(
     golden: Path, items: list[GoldenItem]
 ) -> None:
+    before = _ids(golden, everything=True) - _ids(golden, everything=False)  # committed sealed
     new = _stage(golden, items, 2)
     sealed_item = new[1].model_copy(
         update={"split": "sealed", "owner_review": OwnerReview(batch="S1")}
     )
-    sealed_dir_for(golden).mkdir()
     (sealed_dir_for(golden) / "probes.yaml").write_text(_yaml([sealed_item]), encoding="utf-8")
     (staging_dir_for(golden) / "probes.yaml").write_text(_yaml(new[:1]), encoding="utf-8")
-    default = {i.id for _, i in load_dataset(DATA, golden).goldens}
-    everything = {i.id for _, i in load_all(DATA, golden).goldens}
+    default = _ids(golden, everything=False)
+    everything = _ids(golden, everything=True)
     assert not default & {i.id for i in new}
-    assert everything - default == {i.id for i in new}
+    assert everything - default - before == {i.id for i in new}
     # The eval runners load sealed items only for --sealed, and only sealed ones then.
     plain = [i for _, i in sealed.load(DATA, golden, sealed=False).goldens]
     assert sealed_item.id not in {i.id for i in plain}
@@ -109,7 +116,7 @@ def test_default_loads_never_see_sealed_or_staged_items(
         [i for _, i in sealed.load(DATA, golden, sealed=True).goldens], sealed=True
     )
     assert problem is None
-    assert [i.id for i in chosen] == [sealed_item.id]
+    assert {i.id for i in chosen} == before | {sealed_item.id}
 
 
 def test_the_lint_keeps_items_in_the_directory_of_their_split(
@@ -127,7 +134,6 @@ def test_the_lint_keeps_items_in_the_directory_of_their_split(
         _yaml([staged_with_split]), encoding="utf-8"
     )
     (golden / "probes.yaml").write_text(_yaml([in_golden]), encoding="utf-8")
-    sealed_dir_for(golden).mkdir()
     (sealed_dir_for(golden) / "probes.yaml").write_text(_yaml([dev_in_sealed]), encoding="utf-8")
     problems = "\n".join(_problems(golden))
     assert "staged items get their split from `splits --propose`" in problems
@@ -162,14 +168,13 @@ def test_follow_up_provenance_rules(items: list[GoldenItem]) -> None:
     with pytest.raises(ValidationError, match="sealed review batches are named S"):
         GoldenItem.model_validate(wrong_batch)
     # A cohort is metadata: it never changes a label digest, and the golden fingerprint of
-    # items that leave it unset is the one the committed baselines record.
+    # items that leave it unset is the one the pre-F2 baselines record (adding the field did
+    # not move it; adding the F2 items does, and F2e regenerates the baselines).
     assert provenance.label_digest(_new(base, 1)) == provenance.label_digest(
         _new(base, 1, cohort=None, label_source="authored_phase13")
     )
-    assert (
-        golden_version(items)["sha256"]
-        == baseline.load(REPO / "evals" / "baselines" / "retrieval-A.json")["golden"]["sha256"]
-    )
+    before_f2 = [i for i in items if i.cohort is None]
+    assert golden_version(before_f2)["sha256"] == PRE_F2_GOLDEN
 
 
 def test_shares_divide_new_items_and_keep_units_whole(items: list[GoldenItem]) -> None:
@@ -205,7 +210,7 @@ def test_shares_are_validated(text: str, message: str) -> None:
 
 
 def test_new_review_batches_follow_the_reviewed_ones(items: list[GoldenItem]) -> None:
-    held = [i for i in items if i.split == "held_out"]
+    held = [i for i in items if i.split == "held_out" and i.cohort is None]
     batches = splits.assign_batches(held, prefix="S", start=3)
     assert {b[0] for b in batches.values()} == {"S"}
     assert min(int(b[1:]) for b in batches.values()) == 3
@@ -225,30 +230,32 @@ def test_write_moves_staged_items_and_the_freeze_and_packet_cover_them(
     placed = {i.id: (p.parent, i) for p, i in load_all(DATA, golden).goldens}
     splits_seen = Counter(placed[n.id][1].split for n in new)
     assert set(splits_seen) == {"dev", "held_out", "sealed"}, splits_seen
+    last = {"H": 9, "S": 4}  # batches already committed (H1-H9, S1-S4)
     for n in new:
         where, item = placed[n.id]
         assert where == (sealed_dir_for(golden) if item.split == "sealed" else golden)
         if item.split == "dev":
             assert item.owner_review is None
         else:
+            prefix = "S" if item.split == "sealed" else "H"
             assert item.owner_review is not None
             assert item.owner_review.status == "pending"
-            assert item.owner_review.batch == ("S1" if item.split == "sealed" else "H5")
+            assert item.owner_review.batch == f"{prefix}{last[prefix] + 1}"
     # Not yet frozen: the lint says so until freeze-labels records them.
     assert any("not in the sealed freeze" in p for p in _problems(golden))
     assert main(["dataset", "freeze-labels", "--reason", "F2 probes", *common]) == 0
     freeze = provenance.load_freeze(golden)
     assert freeze is not None
-    assert set(freeze.sealed) == {n.id for n in new if placed[n.id][1].split == "sealed"}
+    assert {n.id for n in new if placed[n.id][1].split == "sealed"} <= set(freeze.sealed)
     assert _problems(golden) == []
     # Without the sealed directory (every default load) the sealed freeze is not checked.
     assert [str(p) for p in lint(load_dataset(DATA, golden))] == []
     packet = render_packet(load_all(DATA, golden))
-    assert {"S1.md", "H5.md"} <= set(packet)
-    assert "sealed items)" in packet["S1.md"].splitlines()[0]
+    assert {"S5.md", "H10.md"} <= set(packet)
+    assert "sealed items)" in packet["S5.md"].splitlines()[0]
     assert packet["H1.md"] == (REPO / "docs" / "golden-review" / "H1.md").read_text()
     # A sealed label change is a recorded change, like a held-out one.
-    sealed_id = next(iter(freeze.sealed))
+    sealed_id = next(n.id for n in new if placed[n.id][1].split == "sealed")
     _, item = placed[sealed_id]
     edited = item.model_copy(update={"notes": item.notes + " Edited."})
     everything = [i for _, i in load_all(DATA, golden).goldens]

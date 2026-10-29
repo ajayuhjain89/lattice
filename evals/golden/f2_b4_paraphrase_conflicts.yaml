@@ -10,6 +10,8 @@
   persona: priya
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
   cohort: f2
   classes: [keyword_vs_natural]
   paraphrase_group: f2-sheets-reauthorization
@@ -28,6 +30,8 @@
   persona: daniel
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
   cohort: f2
   classes: [paraphrase]
   paraphrase_group: f2-sheets-reauthorization
@@ -42,55 +46,13 @@
     No word of the question is in the thread: 'Google', 'Sheets' and 'invalid_grant' are
     all paraphrased.
 
-- id: f2-kw-transfer-ownership-tom
-  category: lookup
-  persona: tom
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [keyword_vs_natural]
-  paraphrase_group: f2-flow-ownership
-  question: "bulk transfer flow ownership leaver"
-  expected:
-    status: answered
-    relevant: [chat:C0SUPPORT01:1788354000.000100]
-    required_facts:
-      - "Admin > Users > Transfer ownership does it one user at a time; the API does it in bulk (there is a help article)"
-  exhaustive: true
-  exhaustive_review:
-    reviewed_on: 2026-10-29
-    reviewer: engineering
-    terms: [ownership]
-    candidates:
-      "chat:C0SUPPORT01:1788354000.000100#1788354000.000100": relevant
-      "chat:C0SUPPORT01:1788354000.000100#1788354840.000100": relevant
-    notes: >-
-      Both messages of the one thread that says ownership; nothing else does.
-  notes: >-
-    One #support thread holds the answer.
-
-- id: f2-para-transfer-ownership-grace
-  category: lookup
-  persona: grace
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [paraphrase]
-  paraphrase_group: f2-flow-ownership
-  question: "When someone leaves, how do we hand all of their automations to a colleague in one go?"
-  expected:
-    status: answered
-    relevant: [chat:C0SUPPORT01:1788354000.000100]
-    required_facts:
-      - "Admin > Users > Transfer ownership does it one user at a time; the API does it in bulk (there is a help article)"
-  notes: >-
-    'Automations' and 'hand to a colleague' for flows and ownership transfer.
-
 - id: f2-kw-okta-birthright-apps-lena
   category: lookup
   persona: lena
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
   cohort: f2
   classes: [keyword_vs_natural]
   paraphrase_group: f2-joiner-apps
@@ -117,6 +79,8 @@
   persona: lena
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
   cohort: f2
   classes: [paraphrase]
   paraphrase_group: f2-joiner-apps
@@ -134,6 +98,8 @@
   persona: maya
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
   cohort: f2
   classes: [keyword_vs_natural]
   paraphrase_group: f2-discount-for-dates
@@ -152,6 +118,8 @@
   persona: arjun
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
   cohort: f2
   classes: [paraphrase]
   paraphrase_group: f2-discount-for-dates
@@ -170,6 +138,8 @@
   persona: sofia
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
   cohort: f2
   classes: [keyword_vs_natural]
   paraphrase_group: f2-private-channels
@@ -189,6 +159,8 @@
   persona: tom
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
   cohort: f2
   classes: [paraphrase]
   paraphrase_group: f2-private-channels
@@ -208,6 +180,8 @@
   persona: lena
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
   cohort: f2
   classes: [keyword_vs_natural]
   paraphrase_group: f2-lost-device
@@ -225,6 +199,8 @@
   persona: arjun
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
   cohort: f2
   classes: [paraphrase]
   paraphrase_group: f2-lost-device
@@ -242,6 +218,8 @@
   persona: daniel
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
   cohort: f2
   classes: [keyword_vs_natural]
   paraphrase_group: f2-approval-step
@@ -270,6 +248,8 @@
   persona: maya
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
   cohort: f2
   classes: [paraphrase]
   paraphrase_group: f2-approval-step
@@ -283,98 +263,13 @@
   notes: >-
     'Pause until a manager signs off' for the approval step.
 
-- id: f2-kw-seat-usage-report-grace
-  category: lookup
-  persona: grace
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [keyword_vs_natural]
-  paraphrase_group: f2-inactive-seats
-  question: "seat usage report last-login dates"
-  expected:
-    status: answered
-    relevant: ["doc:release-notes-2026-09#4"]
-    required_facts:
-      - "The seat usage report shows last-login dates per user, since release 2026.09"
-  exhaustive: true
-  exhaustive_review:
-    reviewed_on: 2026-10-29
-    reviewer: engineering
-    terms: [last-login]
-    candidates:
-      "doc:release-notes-2026-09#4": relevant
-    notes: >-
-      One release-note line.
-  notes: >-
-    Release 2026.09, Admin.
-
-- id: f2-para-seat-usage-report-daniel
-  category: lookup
-  persona: daniel
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [paraphrase]
-  paraphrase_group: f2-inactive-seats
-  question: "How can an admin find out which licensed people haven't signed in for a while?"
-  expected:
-    status: answered
-    relevant: ["doc:release-notes-2026-09#4"]
-    required_facts:
-      - "The seat usage report shows last-login dates per user, since release 2026.09"
-  notes: >-
-    'Licensed people' and 'signed in' for seats and last-login dates.
-
-- id: f2-kw-csv-leading-zeros-sofia
-  category: lookup
-  persona: sofia
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [keyword_vs_natural]
-  paraphrase_group: f2-csv-zeros
-  question: "CSV import leading zeros text columns fix"
-  expected:
-    status: answered
-    relevant: ["doc:release-notes-2026-08#5"]
-    required_facts:
-      - "Fixed in release 2026.08: CSV imports keep leading zeros in text columns"
-  exhaustive: true
-  exhaustive_review:
-    reviewed_on: 2026-10-29
-    reviewer: engineering
-    terms: ["leading zeros"]
-    candidates:
-      "doc:release-notes-2026-08#5": relevant
-    notes: >-
-      One release-note fix.
-  notes: >-
-    Release 2026.08, Fixes. Templated CSV tickets are about character encoding.
-
-- id: f2-para-csv-leading-zeros-priya
-  category: lookup
-  persona: priya
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [paraphrase]
-  paraphrase_group: f2-csv-zeros
-  question: "Postal codes were losing their first digit when customers uploaded spreadsheets. Is that fixed?"
-  expected:
-    status: answered
-    relevant: ["doc:release-notes-2026-08#5"]
-    required_facts:
-      - "Fixed in release 2026.08: CSV imports keep leading zeros in text columns"
-  notes: >-
-    'Postal codes losing their first digit' for leading zeros; encoding tickets about
-    strange characters are a near miss.
-
 - id: f2-kw-pdf-export-background-felix
   category: cross_org
   persona: felix
   organization: veridian
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H9, status: pending}
   cohort: f2
   classes: [veridian_cross_tenant, keyword_vs_natural]
   paraphrase_group: f2-pdf-export
@@ -428,6 +323,8 @@
   persona: ines
   organization: veridian
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H9, status: pending}
   cohort: f2
   classes: [veridian_cross_tenant, paraphrase]
   paraphrase_group: f2-pdf-export
@@ -447,6 +344,8 @@
   persona: priya
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H7, status: pending}
   cohort: f2
   classes: [contradictory_evidence, multi_document]
   question: "What should Support tell EU customers about data residency?"
@@ -462,54 +361,13 @@
     Two Support instructions two days apart, with no supersession metadata between the
     chat and the decision.
 
-- id: f2-supersession-p2-review-daniel
-  category: supersession
-  persona: daniel
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [temporal_supersession]
-  question: "After how many hours is a stuck high-priority ticket reviewed by the support team lead?"
-  expected:
-    status: answered
-    relevant: ["doc:support-sla-policy-2026#5"]
-    acceptable: ["doc:support-sla-policy-2025#4"]
-    must_not_retrieve: [veridian/doc:support-sla-policy]
-    required_facts:
-      - "After 8 hours open (2026 policy); it was 24 hours in 2025"
-    conflict: {kind: superseded, records: [doc:support-sla-policy-2026, doc:support-sla-policy-2025]}
-  tags: [security, cross_org_same_name]
-  notes: >-
-    The escalation clause changed with the 2026 policy, which supersedes 2025 by
-    metadata.
-
-- id: f2-supersession-business-p1-lena
-  category: supersession
-  persona: lena
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [temporal_supersession]
-  question: "What is the first-response target for an urgent ticket on the Business plan?"
-  expected:
-    status: answered
-    relevant: ["doc:support-sla-policy-2026#2"]
-    acceptable: ["doc:support-sla-policy-2026#3", "doc:support-sla-policy-2025#2"]
-    must_not_retrieve: [veridian/doc:support-sla-policy]
-    required_facts:
-      - "2 business hours since 12 January 2026; it was 4 business hours in 2025"
-    conflict: {kind: superseded, records: [doc:support-sla-policy-2026, doc:support-sla-policy-2025]}
-  tags: [security, cross_org_same_name]
-  trap_phrases: [urgent]
-  notes: >-
-    The Business column, not the Enterprise one; Veridian's Standard plan has its own
-    urgent target.
-
 - id: f2-supersession-refund-approval-arjun
   category: supersession
   persona: arjun
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H7, status: pending}
   cohort: f2
   classes: [temporal_supersession]
   question: "Who can approve a $30,000 refund for an Enterprise customer?"
@@ -531,6 +389,7 @@
   persona: sofia
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   classes: [temporal_supersession]
   question: "Can an Enterprise customer reduce seats in the middle of a term and get money back?"
@@ -549,6 +408,7 @@
   persona: daniel
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   classes: [contradictory_evidence, inaccessible_strong_match]
   question: "Why isn't Kestrel Bank in the Directory Sync beta?"

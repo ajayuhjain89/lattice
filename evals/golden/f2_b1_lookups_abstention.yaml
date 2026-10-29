@@ -9,6 +9,8 @@
   persona: lena
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H6, status: pending}
   cohort: f2
   question: "How many days of paid time off do Halden employees get?"
   expected:
@@ -23,37 +25,12 @@
     Veridian's handbook has the same document ID and says 28 days: another tenant's
     policy that must not answer a Halden employee.
 
-- id: f2-lookup-okta-leaver-lena
-  category: lookup
-  persona: lena
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  question: "How quickly is a leaver's Okta account deactivated after HR deactivates them in BambooHR?"
-  expected:
-    status: answered
-    relevant: ["doc:okta-admin-procedures#3"]
-    required_facts:
-      - "Within 15 minutes, and the user is signed out of every app"
-  exhaustive: true
-  exhaustive_review:
-    reviewed_on: 2026-10-29
-    reviewer: engineering
-    terms: [BambooHR]
-    candidates:
-      "doc:okta-admin-procedures#2": unrelated
-      "doc:okta-admin-procedures#3": relevant
-    notes: >-
-      Both procedure sections that name BambooHR; the joiners section does not answer a
-      question about leavers.
-  notes: >-
-    IT-only procedures for Halden's own Okta tenant (not customer IdPs).
-
 - id: f2-lookup-okta-admin-mfa-lena
   category: lookup
   persona: lena
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   question: "What kind of MFA do Okta administrators have to use?"
   expected:
@@ -78,6 +55,8 @@
   persona: daniel
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H6, status: pending}
   cohort: f2
   question: "Who has to approve a 15% discount on a renewal?"
   expected:
@@ -95,6 +74,7 @@
   persona: tom
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   question: "How often do we have to update the status page during an incident?"
   expected:
@@ -125,6 +105,7 @@
   persona: arjun
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   question: "How quickly must we notify customers after confirming a security incident that affected their data?"
   expected:
@@ -144,86 +125,13 @@
   notes: >-
     Security incidents follow the breach process, unlike availability incidents.
 
-- id: f2-lookup-audit-streaming-latency-sofia
-  category: lookup
-  persona: sofia
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  question: "What delivery latency is audit log streaming supposed to achieve?"
-  expected:
-    status: answered
-    relevant: ["doc:audit-log-streaming-prd#3"]
-    acceptable: ["doc:release-notes-2026-09#2"]
-    required_facts:
-      - "Under 60 seconds at p95, with at-least-once delivery and event IDs for de-duplication"
-  exhaustive: true
-  exhaustive_review:
-    reviewed_on: 2026-10-29
-    reviewer: engineering
-    terms: ["60 seconds"]
-    candidates:
-      "doc:audit-log-streaming-prd#3": relevant
-      "doc:release-notes-2026-09#2": acceptable
-      "ticket:HAL-3278#c1": unrelated
-      "ticket:HAL-3505#c1": unrelated
-    extra: ["doc:release-notes-2026-09#2"]
-    notes: >-
-      The PRD scope states the target; the 2026.09 release notes say 'within about a
-      minute' without the term, so they are added by hand.
-  notes: >-
-    The PRD is the requirement; release notes describe the beta.
-
-- id: f2-lookup-netsuite-ticket-count-priya
-  category: lookup
-  persona: priya
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  question: "How many tickets about NetSuite token expiry came in during the week ending 20 September?"
-  expected:
-    status: answered
-    relevant: ["doc:weekly-support-report-2026-09-21#2"]
-    acceptable: [chat:C0SUPPORT01:day:2026-09-16, chat:C0SUPPORT01:1787239800.000100]
-    required_facts:
-      - "11 tickets about NetSuite v2 OAuth tokens expiring after 2026.08; the fix is scheduled for 2026.10"
-  notes: >-
-    The weekly report is the record; the #support count on 16 September agrees.
-
-- id: f2-lookup-chargebee-cutover-lena
-  category: lookup
-  persona: lena
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  question: "When was the billing system supposed to cut over to Chargebee?"
-  expected:
-    status: answered
-    relevant: ["doc:billing-migration-project-plan#1"]
-    acceptable: ["doc:billing-migration-project-plan#4"]
-    required_facts:
-      - "1 October 2025 was the target cutover (owner Luis Moreno)"
-  exhaustive: true
-  exhaustive_review:
-    reviewed_on: 2026-10-29
-    reviewer: engineering
-    terms: [Chargebee]
-    candidates:
-      "doc:billing-migration-project-plan#1": relevant
-      "doc:billing-migration-project-plan#2": unrelated
-      "doc:billing-migration-project-plan#3": unrelated
-      "doc:billing-migration-project-plan#4": acceptable
-    notes: >-
-      Plan sections naming Chargebee: the header and the milestone table give the date;
-      scope and refund-workflow sections do not.
-  notes: >-
-    A 2025 project plan; the question asks for the planned date only.
-
 - id: f2-lookup-sso-runbook-loop-priya
   category: lookup
   persona: priya
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H6, status: pending}
   cohort: f2
   question: "What does the SSO runbook say to check when logins loop after a customer switches identity provider?"
   expected:
@@ -240,6 +148,8 @@
   persona: sofia
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H6, status: pending}
   cohort: f2
   classes: [inaccessible_strong_match]
   question: "When should an SSO problem be escalated to Identity on-call?"
@@ -259,6 +169,7 @@
   persona: tom
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   question: "When did Acme Health sign its HIPAA Business Associate Agreement?"
   expected:
@@ -290,6 +201,8 @@
   persona: maya
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H6, status: pending}
   cohort: f2
   classes: [identifier_variant]
   question: "What did Support tell Acme Corp in HAL-4273 about how long run logs are kept?"
@@ -319,6 +232,7 @@
   persona: lena
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   classes: [insufficient_evidence]
   question: "How much parental leave does Halden offer?"
@@ -337,6 +251,8 @@
   persona: arjun
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H8, status: pending}
   cohort: f2
   classes: [insufficient_evidence]
   paraphrase_group: f2-billing-migration-status
@@ -351,29 +267,13 @@
     The plan's last status (14 July 2025) moved the test migration to 7 August; no
     record says the cutover happened.
 
-- id: f2-insufficient-veridian-porto-headcount-noor
-  category: insufficient_evidence
-  persona: noor
-  organization: veridian
-  label_source: authored_f2
-  cohort: f2
-  classes: [insufficient_evidence, veridian_cross_tenant]
-  question: "How many people work in the Porto office?"
-  expected:
-    status: insufficient_evidence
-    status_reason: no_relevant_evidence
-    acceptable: ["doc:company-handbook#1"]
-    must_not_retrieve: [halden/doc:company-handbook]
-  tags: [security, cross_org_same_identifier]
-  notes: >-
-    Veridian's handbook gives about 150 people across Porto and Chicago, not per office;
-    Halden's handbook (same ID) gives Halden's headcount.
-
 - id: f2-partial-okta-backup-admin-lena
   category: insufficient_evidence
   persona: lena
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H8, status: pending}
   cohort: f2
   classes: [insufficient_evidence]
   question: "Who is the backup Okta super-admin?"
@@ -390,6 +290,7 @@
   persona: priya
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   classes: [insufficient_evidence]
   question: "What was discussed at Acme Corp's June QBR?"
@@ -406,6 +307,8 @@
   persona: maya
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H8, status: pending}
   cohort: f2
   question: "Approve a three-month service credit for Acme Corp."
   expected:
@@ -419,6 +322,8 @@
   persona: priya
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H8, status: pending}
   cohort: f2
   question: "Send Kestrel Bank the updated Directory Sync macro."
   expected:
@@ -427,24 +332,13 @@
   notes: >-
     Sending a message to a customer is an action.
 
-- id: f2-refusal-deactivate-lena
-  category: refusal
-  persona: lena
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  question: "Deactivate Ben Adeyemi's Okta account."
-  expected:
-    status: unsupported_request
-    status_reason: action_request
-  notes: >-
-    An identity change requested of a question-answering system.
-
 - id: f2-refusal-book-call-grace
   category: refusal
   persona: grace
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H8, status: pending}
   cohort: f2
   question: "Book a call with Priscilla Vance for Monday."
   expected:
@@ -453,28 +347,12 @@
   notes: >-
     Calendar actions are out of scope.
 
-- id: f2-refusal-add-channel-tom
-  category: refusal
-  persona: tom
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [inaccessible_strong_match]
-  question: "Add me to the #acct-acme channel."
-  expected:
-    status: unsupported_request
-    status_reason: action_request
-    must_not_retrieve: [chat:G0ACCTACME1:1790244300.000100, chat:G0ACCTACME1:1789983000.000100]
-    must_not_contain: [LATTICE-CANARY-C11-7e4a2c]
-  tags: [security]
-  notes: >-
-    An access change; the refusal must not surface the private channel's content.
-
 - id: f2-refusal-open-jira-sofia
   category: refusal
   persona: sofia
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   question: "Open a Jira ticket for the staging certificate rotation test."
   expected:
@@ -488,6 +366,7 @@
   persona: grace
   organization: halden
   label_source: authored_f2
+  split: dev
   cohort: f2
   classes: [ambiguous_account]
   question: "Who files most of Acme's tickets?"
@@ -503,6 +382,8 @@
   persona: tom
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H9, status: pending}
   cohort: f2
   classes: [ambiguous_account]
   question: "Which identity provider does Acme use?"
@@ -513,26 +394,13 @@
   notes: >-
     Okta for Acme Corp (since 1 August), Google Workspace SSO for Acme Health.
 
-- id: f2-ambiguous-acme-seats-arjun
-  category: ambiguous
-  persona: arjun
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [ambiguous_account]
-  question: "How many seats does Acme have?"
-  expected:
-    status: ambiguous
-    acceptable: ["doc:acme-account-brief#2", "doc:acme-health-account-brief#2"]
-    clarification: {choices: [acme-corp, acme-health]}
-  notes: >-
-    1,850 Enterprise seats (Acme Corp) or 310 Business seats (Acme Health).
-
 - id: f2-ambiguous-acme-fhir-sofia
   category: ambiguous
   persona: sofia
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H9, status: pending}
   cohort: f2
   classes: [ambiguous_account]
   question: "When does Acme get the FHIR connector beta?"
@@ -544,26 +412,13 @@
     Only Acme Health has a FHIR promise, but a bare 'Acme' is still an alias of two
     visible accounts, so the account is confirmed before answering.
 
-- id: f2-ambiguous-acme-plan-priya
-  category: ambiguous
-  persona: priya
-  organization: halden
-  label_source: authored_f2
-  cohort: f2
-  classes: [ambiguous_account]
-  question: "Which plan is Acme on?"
-  expected:
-    status: ambiguous
-    acceptable: ["doc:acme-account-brief#2", "doc:acme-health-account-brief#2"]
-    clarification: {choices: [acme-corp, acme-health]}
-  notes: >-
-    Enterprise (Acme Corp) or Business (Acme Health).
-
 - id: f2-ambiguous-acme-am-tom
   category: ambiguous
   persona: tom
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H9, status: pending}
   cohort: f2
   classes: [ambiguous_account]
   same_question_group: f2-acme-account-manager
@@ -580,6 +435,8 @@
   persona: maya
   organization: halden
   label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H9, status: pending}
   cohort: f2
   classes: [ambiguous_account, hidden_account_collision, inaccessible_strong_match]
   same_question_group: f2-acme-account-manager

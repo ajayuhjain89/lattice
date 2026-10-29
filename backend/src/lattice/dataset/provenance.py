@@ -218,7 +218,10 @@ def update(
         if item.split in ("held_out", "sealed") and item.id not in freeze.frozen(item.split):
             freeze.frozen(item.split)[item.id] = label_digest(item)
             changed.append(item.id)
-    for split in ("held_out", "sealed"):
+    # Like the lint, the sealed freeze is checked only when sealed items were loaded
+    # (``freeze-labels`` always loads them); some loaded and others missing is refused.
+    sealed_loaded = any(item.split == "sealed" for item in items)
+    for split in ("held_out", "sealed") if sealed_loaded else ("held_out",):
         name = "held-out" if split == "held_out" else "sealed"
         for item_id, digest in freeze.frozen(split).items():
             if item_id not in by_id:

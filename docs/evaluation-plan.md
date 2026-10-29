@@ -217,6 +217,10 @@ opt_in_confidential: …}`.
   author knows the sealed questions. Mitigations: splits are assigned by the proposer
   after authoring; after the freeze, engineering opens `evals/golden-sealed/` only
   through the dataset tools until F5's final run; and every sealed look is logged.
+- **State (2026-10-29, F2c).** 51 sealed items (42 with targets) are frozen, pending owner
+  review in S1-S4. No sealed look has been made yet, so `sealed-access.json` does not
+  exist. Held-out has 126 items (102 with targets): 56 from Phase 13, already seen, and
+  70 fresh items from F2 (phase-13-followups §9).
 
 Record keys: `doc:<front-matter id>#<n>` (part *n*: preamble, then one per H1/H2
 section), `ticket:<id>#c<n>` (comment *n*), `chat:<channel>:<thread ts>` or
