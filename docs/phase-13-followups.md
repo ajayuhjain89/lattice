@@ -24,6 +24,7 @@ checkpoint, as in every phase.
 | O9 | Citation completeness is measured, not enforced | Trace counts `decisive_in_prompt` / `decisive_cited` | As a rule it mislabelled 8/119 fake runs; real effect unknown | Answer status honesty |
 | O10 | Term statistics scan the reader's whole corpus | +1 statement per Ask, a few ms at 1,300 chunks; measured at 10× and 50× in F3 (§6) | Linear in the reader's permitted documents: the authorization predicate itself | Phase 14 scale (design options in §6) |
 | O11 | Local Node 23.7 cannot run the web unit tests after undici 8.12 | **Done in F3**: `engines` `^22.19.0 \|\| >=24`, README prerequisite | undici needs zlib zstd (Node ≥ 22.19 / ≥ 23.8) | — |
+| O12 | The answer pipeline misses some action requests (D-11) | Found at F2c (§9): two new refusal items, e.g. "Book a call with Priscilla Vance for Monday.", get `evidence_only` instead of `unsupported_request`; owner chose on 2026-10-29 to record it and not fix it now | The request-kind detector does not cover these phrasings | `test_every_golden_item_passes_the_security_gate` fails until fixed or decided |
 
 ## 2. Principles carried over
 
@@ -462,22 +463,19 @@ The conflict items include two inconsistencies found in the corpus while authori
   lint does.
 - Dataset tests: 98 passed.
 
-**Full backend suite: incomplete.** Docker Desktop stopped at about 44% of the run (swap
-near 8 GB), and every later database test errored: 1,513 passed, 10 failed, 1,208 errors.
-Before Docker stopped:
-- **Security:** every security metric was 0 for the golden answer run over the dev and
-  held-out items.
-- **Baseline compares:** the answer-baseline reproduction and the retrieval
-  compare-regression tests report INCOMPARABLE, because the golden set changed. This is
-  expected until F2e regenerates the baselines.
-- **Finding (D-11):** two of the new action requests are not recognised as action
-  requests by the answer pipeline. For example, "Book a call with Priscilla Vance for
-  Monday." returned `evidence_only` (egress policy) instead of `unsupported_request`.
-  `test_every_golden_item_passes_the_security_gate` asserts this for every refusal item,
-  so it fails. The request-kind detector misses these phrasings; the labels are right.
-
-The remaining failures are connection errors after Docker stopped. A clean rerun is still
-owed.
+**Full backend suite (rerun 2026-10-29, isolated database on port 5440):** 3,592 passed
+and 5 failed, in 22 minutes. An earlier run was cut short when Docker Desktop stopped at
+44%. Every failure is accounted for:
+- **Baseline compares (4).** The answer-A, retrieval-A and retrieval-B baseline
+  reproductions and the compare-regression test report INCOMPARABLE, because the golden
+  set changed from d5369dd975fb (159 items) to f6838d1b8a92 (254 items). This is expected
+  until F2e regenerates the baselines.
+- **D-11 (1, open item O12).** `test_every_golden_item_passes_the_security_gate`: two new
+  action requests, for example "Book a call with Priscilla Vance for Monday.", return
+  `evidence_only` instead of `unsupported_request`. Every security metric in that test was
+  0. On 2026-10-29 the owner chose to record the gap rather than fix it now.
+- **Withheld evidence.** The check that withheld evidence was a strong match passes with
+  the new items included.
 
 **Limitation (evaluation-plan §3.2).** Engineering wrote the sealed questions. From this
 commit on, engineering opens `evals/golden-sealed/` and `docs/golden-review/S*.md` only
