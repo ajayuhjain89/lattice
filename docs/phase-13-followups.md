@@ -482,5 +482,66 @@ commit on, engineering opens `evals/golden-sealed/` and `docs/golden-review/S*.m
 through the dataset tools, until F5's final decision.
 
 **Next (F2d, owner):** review H5–H9 (70 held-out) and S1–S4 (51 sealed), as well as F1's
-H1–H4. Corrections are applied with `freeze-labels --reason`. After that comes F2e:
+H1–H4. Decisions are recorded with `record-review` (§10). After that comes F2e:
 baselines, and once only, if the F1 corrections arrive first (Q6).
+
+## 10. Recording the owner's review (2026-10-29)
+
+No dataset command recorded an approval, and applying sealed decisions by hand would have
+meant editing sealed files outside the dataset tools. The owner authorized a tool for it
+on 2026-10-29: `lattice dataset record-review FILE [--phase3-correction] [--dry-run]`
+(`lattice.dataset.decisions`; evaluation-plan §3.1, §3.2).
+
+**The decisions file.**
+
+```yaml
+reviewed_on: 2026-10-30
+approve: [H5, H6]                  # batches approved in full, apart from the items below
+items:
+  <item id>:
+    decision: correct              # approve | correct | corrections_requested
+    note: what was wrong, and the record that shows it
+    add: {expected.relevant: ["doc:x#2"]}       # also set: and remove:
+```
+
+- **Held-out decisions** (F1 and H5–H9) go in `docs/golden-review/decisions/`.
+- **Sealed decisions** (S1–S4) that correct or query a label go in
+  `evals/golden-sealed/decisions/`; the tool refuses them anywhere else. Engineering
+  runs that file through the tool without opening it. Approving a sealed batch in full
+  carries no labels, so `approve: [S1]` may sit in the held-out file.
+
+**What it does.**
+- An approval sets `owner_review` to `approved` with the date and `label_source` to
+  `owner_reviewed`. The `cohort` stays, so the seen/fresh held-out slices survive review.
+- A correction changes only the keys it names, in the files' own style, approves the
+  item with the note in `owner_review.notes`, and records the new digest in the label
+  freeze with one change record per item. For a sealed item that reason names the batch
+  only, because the freeze lives outside the sealed directory. A Phase 3 item needs
+  `--phase3-correction`, and its correction needs its own commit.
+- `corrections_requested` records the note and changes no label.
+- **Safety.** Nothing is written unless every decision applies and, on a temporary copy,
+  every item reloads as planned and the whole lint passes. Rerunning the same file
+  changes nothing. The output counts sealed items per batch and never names one or
+  prints a label.
+
+**Tests.** `tests/dataset/test_owner_review.py` (17), on copies of the golden directories:
+- Batches and items are recorded, and only the review lines and the corrected keys change.
+- A rerun is a no-op.
+- Every kind of bad decision, and a correction the lint rejects, writes nothing.
+- A Phase 3 correction needs the flag.
+- Sealed corrections are refused outside the sealed decisions directory and are never
+  printed.
+
+All 115 dataset tests pass, and `ruff` and `mypy` are clean.
+
+**Known effect of approvals, for when they land.** An approved item leaves the
+`authored_phase3` and `authored_phase13` label sources. Some code keys on those values:
+- the golden retrieval test's Phase 3 set and its `by_label_source` counts;
+- `test_phase3_labels_are_frozen_as_they_were`;
+- the packet's Phase 3 and Phase 13 columns;
+- the reports' `by_label_source` breakdown.
+
+The commit that records the first approvals updates the tests to identify Phase 3 items
+by the Phase 3 freeze instead. The 56 seen held-out items are identified by `cohort`
+being unset, not by label source. Approvals also move the golden fingerprint, which F2e
+expects.

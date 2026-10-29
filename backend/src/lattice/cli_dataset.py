@@ -1,7 +1,7 @@
-"""``lattice dataset splits | freeze-labels | review-packet`` (P13.2; phase-13-plan EC-7,
-EC-8, D-41; phase-13-followups §7). Files only: no database, no model. Every command
-loads the sealed (``evals/golden-sealed``) and staging (``evals/golden-staging``) items
-too.
+"""``lattice dataset splits | freeze-labels | review-packet | record-review`` (P13.2;
+phase-13-plan EC-7, EC-8, D-41; phase-13-followups §7). Files only: no database, no
+model. Every command loads the sealed (``evals/golden-sealed``) and staging
+(``evals/golden-staging``) items too.
 
     lattice dataset splits [--propose [--shares dev=F,held_out=F,sealed=F] [--write]] [--json]
         The split report (denominators per stratum, class coverage, shared target
@@ -16,6 +16,9 @@ too.
     lattice dataset review-packet [--out DIR] [--check]
         Render the product owner's held-out review packet (one Markdown file per batch);
         --check fails if the committed packet differs from the labels.
+    lattice dataset record-review FILE [--phase3-correction] [--dry-run]
+        Record the owner's review decisions (lattice.dataset.decisions): approvals,
+        corrections as recorded label changes, and requested corrections.
 """
 
 import argparse
@@ -25,7 +28,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from lattice.dataset import provenance, review, splits
+from lattice.dataset import decisions, provenance, review, splits
 from lattice.dataset.distractors import DATA
 from lattice.dataset.lint import Dataset, load_all, sealed_dir_for
 from lattice.dataset.manifests import GoldenItem
@@ -49,7 +52,13 @@ def add_parsers(
     packet = dataset_commands.add_parser("review-packet", help="Render the owner review packet")
     packet.add_argument("--out", type=Path, default=PACKET)
     packet.add_argument("--check", action="store_true")
-    for command in (split_cmd, freeze, packet):
+    record = dataset_commands.add_parser(
+        "record-review", help="Record the owner's review decisions"
+    )
+    record.add_argument("decisions", type=Path)
+    record.add_argument("--phase3-correction", action="store_true")
+    record.add_argument("--dry-run", action="store_true")
+    for command in (split_cmd, freeze, packet, record):
         command.add_argument("--data", type=Path, default=DATA)
         command.add_argument("--golden", type=Path, default=GOLDEN)
 
@@ -65,6 +74,8 @@ def run(args: argparse.Namespace) -> int:
         return _splits(data.goldens, items, args)
     if args.dataset_command == "freeze-labels":
         return _freeze(items, args)
+    if args.dataset_command == "record-review":
+        return _record(data, args)
     return _packet(data, args)
 
 
@@ -178,6 +189,23 @@ def _freeze(items: list[GoldenItem], args: argparse.Namespace) -> int:
         f"label freeze: {len(freeze.phase3)} Phase 3, {len(freeze.held_out)} held-out, "
         f"{len(freeze.sealed)} sealed items; {len(changed)} recorded"
     )
+    return 0
+
+
+def _record(data: Dataset, args: argparse.Namespace) -> int:
+    try:
+        summary = decisions.record(
+            data,
+            args.decisions,
+            phase3_correction=args.phase3_correction,
+            dry_run=args.dry_run,
+            commit=provenance.current_commit(),
+        )
+    except ValueError as exc:
+        for line in str(exc).splitlines():
+            print(f"refused: {line}", file=sys.stderr)
+        return 1
+    print("\n".join(summary.lines()))
     return 0
 
 

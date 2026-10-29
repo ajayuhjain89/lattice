@@ -123,7 +123,7 @@ class Dataset:
         return record, part
 
 
-def _error_text(exc: ValidationError) -> str:
+def error_text(exc: ValidationError) -> str:
     return "; ".join(
         f"{'.'.join(str(p) for p in e['loc']) or '<root>'}: {e['msg']}"
         for e in exc.errors(include_input=False, include_url=False)
@@ -161,7 +161,7 @@ def load_dataset(
             )
             truth = GroundTruth.model_validate(load_yaml(folder / "ground-truth.yaml"))
         except ValidationError as exc:
-            data.problem(folder, f"invalid manifest: {_error_text(exc)}")
+            data.problem(folder, f"invalid manifest: {error_text(exc)}")
             continue
         except FileNotFoundError as exc:
             data.problem(folder, f"missing {Path(str(exc.filename)).name}")
@@ -191,7 +191,7 @@ def load_dataset(
     try:
         data.canaries = CanariesFile.model_validate(load_yaml(root / "canaries.yaml")).canaries
     except (ValidationError, FileNotFoundError) as exc:
-        detail = _error_text(exc) if isinstance(exc, ValidationError) else "missing"
+        detail = error_text(exc) if isinstance(exc, ValidationError) else "missing"
         data.problem(root / "canaries.yaml", detail)
     adapter = TypeAdapter(list[GoldenItem])
     golden_dirs = [d for d in (golden_dir, sealed_dir, staging_dir) if d is not None]
@@ -200,7 +200,7 @@ def load_dataset(
             for item in adapter.validate_python(load_yaml(path)):
                 data.goldens.append((path, item))
         except ValidationError as exc:
-            data.problem(path, _error_text(exc))
+            data.problem(path, error_text(exc))
     return data
 
 

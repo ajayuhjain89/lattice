@@ -182,11 +182,17 @@ opt_in_confidential: …}`.
   items are reviewed in batches of 10–16. The packet is rendered from the golden files
   and the synthetic sources (record keys, excerpts with canaries redacted, persona access,
   expected status, facts, prohibited evidence, open points, approve/correct boxes);
-  `--check` (and a test) fails when it differs from the labels. Applying a review: set
-  `owner_review.status` (`approved` with `reviewed_on`, and `label_source:
-  owner_reviewed`), or make the requested correction in its own commit and record it with
-  `freeze-labels`. Until a batch is approved its items stay `authored_phase*` and no
-  held-out quality gate that depends on owner approval is active.
+  `--check` (and a test) fails when it differs from the labels. Applying a review:
+  `lattice dataset record-review FILE` (`lattice.dataset.decisions`) reads the owner's
+  decisions (batches approved in full; per item `approve`, `correct` with a note and
+  `set`/`add`/`remove` on label fields, or `corrections_requested` with a note). It sets
+  `owner_review` (`approved` with `reviewed_on`, and `label_source: owner_reviewed`; the
+  `cohort` stays), applies each correction to the changed keys only, and records it in the
+  label freeze with the note as the reason (a Phase 3 item only with
+  `--phase3-correction`, in its own commit). Nothing is written unless every decision
+  applies and the whole lint passes on a temporary copy; `--dry-run` stops there.
+  Until a batch is approved its items stay `authored_*` and no held-out quality gate that
+  depends on owner approval is active.
 - **Exhaustive labels.** An item is exhaustive only with a documented candidate review;
   "the list looks complete" is not enough. Precision@10 is computed for those items only,
   never averaged with others; for every other item precision is unavailable, nDCG@10 stays
@@ -197,7 +203,7 @@ opt_in_confidential: …}`.
 - **Directories.** `evals/golden/` holds dev and held-out items; `evals/golden-sealed/`
   holds sealed items; `evals/golden-staging/` holds new items being authored, which have
   no split. Only the dataset tools (`lattice dataset lint|splits|freeze-labels|
-  review-packet`) load the sibling directories. Every evaluation run, baseline, `compare`
+  review-packet|record-review`) load the sibling directories. Every evaluation run, baseline, `compare`
   and golden test loads `evals/golden/` alone, so no default run touches a sealed or
   staged item, and the evaluation runners refuse any selected item without a split.
 - **Assignment.** `lattice dataset splits --propose --shares dev=…,held_out=…,sealed=…
@@ -208,6 +214,11 @@ opt_in_confidential: …}`.
 - **Freeze.** Sealed labels are frozen like held-out labels (`label-freeze.json`
   `sealed`). The lint checks that freeze whenever the sealed directory is loaded
   (`lattice dataset lint` always loads it).
+- **Review.** `record-review` counts sealed items per batch and never names one or
+  prints a label. A sealed correction carries labels, so its decisions file lives under
+  `evals/golden-sealed/decisions/` (not an item file: the loaders read `*.yaml` in the
+  directory itself), and its freeze reason names the batch only; the note stays in the
+  sealed item's `owner_review`. Approving a sealed batch may come from any file.
 - **Looking.** `lattice eval retrieval|answer --sealed --reason R` evaluates sealed items
   alone. It appends the look to `evals/golden/provenance/sealed-access.json` before the
   run starts and writes under `evals/reports/sealed/`. A sealed report never becomes a

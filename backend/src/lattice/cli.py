@@ -14,7 +14,9 @@
     lattice dataset splits [--propose [--write]] [--json]
     lattice dataset freeze-labels --reason R [--item ID ...] [--phase3-correction]
     lattice dataset review-packet [--out DIR] [--check]
-        Golden-set splits, label freezes and the owner review packet (cli_dataset).
+    lattice dataset record-review FILE [--phase3-correction] [--dry-run]
+        Golden-set splits, label freezes, the owner review packet and the owner's
+        review decisions (cli_dataset).
     lattice sync --org SLUG --sources FILE [--source KEY ...] [--mode full|acl_only]
                  [--dry-run] [--allow-mass-deletion] [--embedding none|fake|local|gemini|openai]
         Apply each source's Lattice configuration from FILE and sync it (ingestion).
@@ -397,7 +399,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "dataset":
         if args.dataset_command == "lint":
             return _dataset_lint(args.data, args.golden)
-        if args.dataset_command in ("splits", "freeze-labels", "review-packet"):
+        if args.dataset_command in ("splits", "freeze-labels", "review-packet", "record-review"):
             return cli_dataset.run(args)
         for path in write_bulk_tickets(args.data):
             print(f"wrote {path}")
