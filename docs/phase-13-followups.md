@@ -24,7 +24,7 @@ checkpoint, as in every phase.
 | O9 | Citation completeness is measured, not enforced | Trace counts `decisive_in_prompt` / `decisive_cited` | As a rule it mislabelled 8/119 fake runs; real effect unknown | Answer status honesty |
 | O10 | Term statistics scan the reader's whole corpus | +1 statement per Ask, a few ms at 1,300 chunks; measured at 10× and 50× in F3 (§6) | Linear in the reader's permitted documents: the authorization predicate itself | Phase 14 scale (design options in §6) |
 | O11 | Local Node 23.7 cannot run the web unit tests after undici 8.12 | **Done in F3**: `engines` `^22.19.0 \|\| >=24`, README prerequisite | undici needs zlib zstd (Node ≥ 22.19 / ≥ 23.8) | — |
-| O12 | The answer pipeline misses some action requests (D-11) | Found at F2c (§9): two new refusal items, e.g. "Book a call with Priscilla Vance for Monday.", get `evidence_only` instead of `unsupported_request`; owner chose on 2026-10-29 to record it and not fix it now | The request-kind detector does not cover these phrasings | `test_every_golden_item_passes_the_security_gate` fails until fixed or decided |
+| O12 | The answer pipeline misses some action requests (D-11) | Found at F2c (§9): two new refusal items, e.g. "Book a call with Priscilla Vance for Monday.", get `evidence_only` instead of `unsupported_request`; owner chose on 2026-10-29 to record it and fix it as an F5 step (§11) | The request-kind detector does not cover these phrasings | `test_every_golden_item_passes_the_security_gate` fails until fixed or decided |
 
 ## 2. Principles carried over
 
@@ -545,3 +545,104 @@ The commit that records the first approvals updates the tests to identify Phase 
 by the Phase 3 freeze instead. The 56 seen held-out items are identified by `cohort`
 being unset, not by label source. Approvals also move the golden fingerprint, which F2e
 expects.
+
+## 11. Owner decisions (2026-10-29)
+
+After F2c the owner accepted engineering's recommendation on four open points:
+
+| Point | Decision |
+| ----- | -------- |
+| Sealed shortfalls (§9: security share 34%, ten classes below 4 in sealed) | **Accepted as disclosed; no top-up.** The sealed split confirms, it does not measure precisely (§7.2) |
+| O12, the D-11 gap | **Parked; fixed as an F5 step**, shaped on dev and confirmed once on held-out. The failing items are F2 held-out or sealed items, so a fix made from them now would tune on them. The F2e baselines record the gap as current behaviour; `test_every_golden_item_passes_the_security_gate` fails until then |
+| Where this track lives | **Alongside Phase 14.** After F2e, one PR merges `phase/13-followups` (F3, F2, the review records, the new baselines) into main, so Phase 14 starts from them. F4–F6 continue as a separate track, one approved step at a time. F5 steps merge one by one, because Phase 14 also touches retrieval (O10) |
+| D-43, real-model answer evaluation | **Gemini free tier, synthetic organizations only**, subject to the estimate in §12, which must be approved before any call |
+
+## 12. F4 estimate (proposed 2026-10-29; no call made)
+
+**What is measured.** Real answer quality: status accuracy, citations, context recall,
+abstention and conflict reporting. Generation is `gemini-3.5-flash-lite` (the adapter's
+default, unpaid `data_use`), and retrieval is configuration A, which spends no embedding
+quota and loads no local model. Results describe an unpaid external provider under the
+egress policy. Synthetic data is acceptable for unpaid use (`data_use_acceptable`), but the
+egress level still withholds what the policy withholds, so this is not a best-case product
+figure.
+
+**Sizes.** These are measured on the committed golden set and the latest answer report:
+- **Runs.** A full pass is 136 dev and 135 held-out runs (items × egress configurations).
+- **Model calls.** Phase 13 called the model on 78% of dev runs and 70% of held-out runs;
+  the rest stop at a gate. That is about 106 calls per dev pass and 95 per held-out pass.
+- **Prompt size, at today's 12-item budget.** Median 5,964 characters, p90 7,528, maximum
+  8,913. That is about 1.8k input tokens per call by our own count; Gemini's tokenizer will
+  differ.
+- **Output.** Assumed at most about 500 tokens per call. The cap is 2,048.
+
+**Run plan.** Dev decides; held-out is looked at once per choice.
+
+| Stage | Runs | Model calls |
+| ----- | ---- | ----------: |
+| 0. Smoke test: 5 dev items (key, pacing, parsing) | — | 5 |
+| 1. Reference on dev, then the same run again to measure run-to-run noise (temperature 0 is not guaranteed deterministic) | 2 dev | ~212 |
+| 2. Variants on dev: answer-prompt-1 against -2; prompt budget 16 and 20 against 12 (O8); the conflict-candidate hint | 4 dev | ~424 |
+| 2b. Citation completeness as a status rule (O9): derived from stage 1's traces | 0 (1 dev run if it cannot be derived) | 0 (≤ 106) |
+| 3. Held-out once, after F1/F2d: reference and chosen candidate in one look | 2 held-out | ~190 |
+| **Total** | | **~830** (≤ ~1,130 if O9 needs a run and the choices need separate held-out looks) |
+
+**Tokens.** About 1.7M input and at most 0.4M output; the upper bound is about 2.4M input
+and 0.6M output. Budget-20 prompts are the largest, at roughly 2.8k tokens each.
+
+**Cost.** ₹0 on the free tier. The local machine carries one isolated database and HTTP
+calls; no model runs locally.
+
+**Time.** Google publishes no free-tier numbers. Its rate-limit page says to "view your
+active rate limits in AI Studio". The limits apply per project, RPD resets at midnight
+Pacific, and "actual capacity may vary". With the project's requests per day R and per
+minute M:
+- calendar days ≈ total calls / R;
+- one dev pass ≈ 106 / M minutes.
+
+As an illustration only (these are not Google's numbers), R = 1,000 gives about one day,
+R = 250 about four days, and R = 100 about nine to twelve days. Phase 5's embedding key
+hit a per-day free-tier quota of about 1,000 texts (evaluation-plan §10), so quotas are
+real and project-specific.
+
+**Engineering needed before the first call.** All of it is local and ₹0, and each item
+stops for review:
+- **E1, pacing.** `eval answer --rpm N` spaces the calls. A per-minute 429 waits and retries
+  once, in evaluation only. Today a 429 fails the item, and a per-day quota stops the run.
+- **E2, resume.** `--resume REPORT` runs only the items without a result and merges them
+  into one report that records it spanned several days. A quota stop then loses nothing.
+- **E3, evaluation-only switches.** The prompt version (1 or 2), the evidence budget (12,
+  16 or 20) and the conflict hint (on or off). These are constants today
+  (`PROMPT_VERSION`, `MAX_PROMPT_EVIDENCE`); the product defaults do not change.
+- **E4, preflight.** A `models.get` check that spends no quota, as Phase 5 did.
+
+**The judge (D-44) needs a decision.** `--judge` is refused for external providers by
+design, because the authored facts may be above the external egress level. The options:
+- **(a) No model judge in F4 (recommended).** The deterministic checks score every run.
+  The owner hand-labels about 40 stage-1 dev answers for correctness, and that subset
+  calibrates what the checks miss.
+- **(b) Allow an external judge for synthetic organizations only.** This is a code change
+  and a policy decision.
+
+**Data and terms (Gemini API Additional Terms, unpaid services, updated 2026-04-28).**
+- Prompts and responses may be used to improve Google's products and train its models, and
+  human reviewers may read them.
+- Do not submit sensitive, confidential or personal information. Only the synthetic
+  organizations are sent; the CLI refuses anything else.
+- Users must be 18 or older, in an available region. The owner confirms in AI Studio that
+  the region is available.
+- The key is created by the owner in AI Studio and set as `LATTICE_GEMINI_API_KEY` in the
+  local environment file. It is never committed or printed.
+
+**Order.**
+1. E1–E4.
+2. Stages 0–2 on dev, which can run while the review is pending: dev labels are not under
+   review.
+3. Stage 3 after F1/F2d.
+4. Report with denominators, deciding O8 and O9 on that evidence.
+
+**Approvals needed:**
+1. This estimate.
+2. E1–E4.
+3. Judge option (a) or (b).
+4. The key and the project's RPM/RPD for `gemini-3.5-flash-lite`, read in AI Studio.
