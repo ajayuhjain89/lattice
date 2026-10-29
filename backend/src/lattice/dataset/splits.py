@@ -1,6 +1,7 @@
-"""Development and held-out splits of the golden set (P13.2; phase-13-plan EC-7).
+"""Development, held-out and sealed splits of the golden set (P13.2; phase-13-plan EC-7;
+phase-13-followups §7).
 
-    lattice dataset splits [--propose] [--json]
+    lattice dataset splits [--propose [--shares dev=F,held_out=F,sealed=F] [--write]] [--json]
 
 **Units.** Items that ask for the same information need stay on one side: the split unit
 is a connected component of ``same_question_group`` (the identical question asked by
@@ -16,6 +17,12 @@ organization, persona, expected status, label source, number of target records,
 evaluation class, security tag. The committed ``split`` values are the source of truth;
 the proposal only fills items that have none, so adding items later never reshuffles
 the existing splits.
+
+**Shares** (``--shares``; F2). The new items alone are divided between the named splits
+in the given shares, stratified among themselves on the same strata: the committed
+splits are already balanced, and a split with no committed items (sealed) can only be
+balanced over the new ones. A new item in a unit with a committed item inherits that
+unit's split (a paraphrase of a dev item goes to dev) and is not counted in the shares.
 
 **Report.** Denominators per split for each stratum, class coverage, and the target
 records that appear on both sides (the same document can serve different information
@@ -34,7 +41,7 @@ from lattice.dataset.manifests import KEY_REF, GoldenItem
 
 HELD_OUT_SHARE = 0.35
 NEAR_DUPLICATE = 0.75
-SPLITS = ("dev", "held_out")
+SPLITS = ("dev", "held_out", "sealed")
 
 _WORD = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 _STOP = frozenset(
@@ -190,11 +197,18 @@ def _unit_key(unit: Sequence[GoldenItem]) -> tuple[int, str]:
     return (-len(unit), hashlib.sha256(ids.encode()).hexdigest())
 
 
+def _committed(unit: Sequence[GoldenItem]) -> str | None:
+    fixed = {i.split for i in unit if i.split is not None}
+    return next((s for s in reversed(SPLITS) if s in fixed), None)
+
+
 OVERALL_WEIGHT = 25.0  # the overall held-out share dominates any single stratum
 
 
-def propose(items: Sequence[GoldenItem]) -> dict[str, str]:
+def propose(items: Sequence[GoldenItem], shares: dict[str, float] | None = None) -> dict[str, str]:
     """A split for every item without one, keeping committed splits as they are."""
+    if shares is not None:
+        return _propose_shares(items, shares)
     totals: Counter[str] = Counter(s for item in items for s in strata(item))
     totals["overall"] = len(items)
     weight = {s: OVERALL_WEIGHT if s == "overall" else 1.0 for s in totals}
@@ -204,9 +218,8 @@ def propose(items: Sequence[GoldenItem]) -> dict[str, str]:
     for unit in sorted(units(items), key=_unit_key):
         counts = Counter(s for item in unit for s in strata(item))
         counts["overall"] = len(unit)
-        fixed = {i.split for i in unit if i.split is not None}
-        if fixed:
-            split = "held_out" if "held_out" in fixed else "dev"
+        split = _committed(unit)
+        if split is not None:
             for item in unit:
                 assigned[item.id] = split
             if split == "held_out":
@@ -248,22 +261,98 @@ def propose(items: Sequence[GoldenItem]) -> dict[str, str]:
     return assigned
 
 
+def parse_shares(text: str) -> dict[str, float]:
+    """``dev=0.17,held_out=0.48,sealed=0.35`` -> shares that sum to 1."""
+    shares: dict[str, float] = {}
+    for part in text.split(","):
+        name, _, value = part.partition("=")
+        name = name.strip()
+        if name not in SPLITS or name in shares:
+            raise ValueError(f"unknown or repeated split {name!r} (one of {', '.join(SPLITS)})")
+        try:
+            shares[name] = float(value)
+        except ValueError:
+            raise ValueError(f"share of {name} is not a number: {value!r}") from None
+        if shares[name] <= 0:
+            raise ValueError(f"share of {name} must be positive")
+    if abs(sum(shares.values()) - 1) > 1e-6:
+        raise ValueError(f"shares sum to {sum(shares.values()):.3f}, not 1")
+    return shares
+
+
+def _propose_shares(items: Sequence[GoldenItem], shares: dict[str, float]) -> dict[str, str]:
+    assigned: dict[str, str] = {}
+    free: list[tuple[list[GoldenItem], Counter[str]]] = []
+    for unit in sorted(units(items), key=_unit_key):
+        split = _committed(unit)
+        if split is not None:
+            for item in unit:
+                assigned[item.id] = split
+            continue
+        counts = Counter(s for item in unit for s in strata(item))
+        counts["overall"] = len(unit)
+        free.append((unit, counts))
+    totals: Counter[str] = Counter()
+    for _, counts in free:
+        totals.update(counts)
+    names = sorted(shares)
+    weight = {s: OVERALL_WEIGHT if s == "overall" else 1.0 for s in totals}
+    held: dict[str, Counter[str]] = {name: Counter() for name in names}
+
+    def delta(counts: Counter[str], name: str, sign: int) -> float:
+        # Change of sum_s w_s (n_s - share * total_s)^2 / total_s for split ``name`` when
+        # the unit moves into (sign 1) or out of (sign -1) it.
+        out = 0.0
+        for s, n in counts.items():
+            before = held[name][s] - shares[name] * totals[s]
+            after = before + sign * n
+            out += weight[s] * (after * after - before * before) / totals[s]
+        return out
+
+    where: list[str] = []
+    for _, counts in free:  # greedy, largest units first
+        best = min(names, key=lambda name: (delta(counts, name, 1), names.index(name)))
+        held[best].update(counts)
+        where.append(best)
+    for _ in range(100):  # then single-unit moves while the deviation falls
+        moved = False
+        for n, (_, counts) in enumerate(free):
+            here = where[n]
+            leave = delta(counts, here, -1)
+            gains = {name: leave + delta(counts, name, 1) for name in names if name != here}
+            target = min(gains, key=lambda name: (gains[name], names.index(name)), default=None)
+            if target is not None and gains[target] < -1e-9:
+                held[here].subtract(counts)
+                held[target].update(counts)
+                where[n] = target
+                moved = True
+        if not moved:
+            break
+    for n, (unit, _) in enumerate(free):
+        for item in unit:
+            assigned[item.id] = where[n]
+    return assigned
+
+
 @dataclass
 class SplitProblem:
     where: str
     message: str
 
 
-def check(items: Sequence[GoldenItem]) -> list[SplitProblem]:
+def check(items: Sequence[GoldenItem], unassigned_ok: Iterable[str] = ()) -> list[SplitProblem]:
+    """Split problems; items in ``unassigned_ok`` (staged, being authored) may have none."""
+    allowed = set(unassigned_ok)
     problems = []
     for item in items:
-        if item.split is None:
+        if item.split is None and item.id not in allowed:
             problems.append(SplitProblem(item.id, "no split (`lattice dataset splits --propose`)"))
     for unit in units(items):
         sides = {i.split for i in unit if i.split is not None}
         if len(sides) > 1:
             ids = ", ".join(sorted(i.id for i in unit))
-            problems.append(SplitProblem(ids, "one information need straddles dev and held_out"))
+            named = " and ".join(sorted(sides))
+            problems.append(SplitProblem(ids, f"one information need straddles {named}"))
     for a, b, score in near_duplicates(items):
         if a.split != b.split:
             problems.append(
@@ -293,7 +382,7 @@ def check(items: Sequence[GoldenItem]) -> list[SplitProblem]:
 
 
 def _table(items: Iterable[GoldenItem]) -> dict[str, dict[str, int]]:
-    table: dict[str, dict[str, int]] = defaultdict(lambda: {"dev": 0, "held_out": 0})
+    table: dict[str, dict[str, int]] = defaultdict(lambda: dict.fromkeys(SPLITS, 0))
     for item in items:
         for s in strata(item):
             table[s][item.split or "unassigned"] = table[s].get(item.split or "unassigned", 0) + 1
@@ -302,7 +391,7 @@ def _table(items: Iterable[GoldenItem]) -> dict[str, dict[str, int]]:
 
 def report(items: Sequence[GoldenItem]) -> dict[str, Any]:
     split_counts = Counter(item.split or "unassigned" for item in items)
-    records: dict[str, set[str]] = {"dev": set(), "held_out": set()}
+    records: dict[str, set[str]] = {split: set() for split in SPLITS}
     for item in items:
         if item.split in records:
             records[item.split] |= target_records(item)
@@ -312,6 +401,8 @@ def report(items: Sequence[GoldenItem]) -> dict[str, Any]:
     review = Counter(
         (i.owner_review.status if i.owner_review else "no review record") for i in held_items
     )
+    sealed_items = [i for i in items if i.split == "sealed"]
+    with_targets = Counter(i.split or "unassigned" for i in items if target_records(i))
     return {
         "items": len(items),
         "splits": dict(sorted(split_counts.items())),
@@ -322,17 +413,30 @@ def report(items: Sequence[GoldenItem]) -> dict[str, Any]:
             "largest": max((len(u) for u in unit_list), default=0),
         },
         "strata": _table(items),
+        "with_targets": dict(sorted(with_targets.items())),
         "target_records": {
             "dev": len(records["dev"]),
             "held_out": len(records["held_out"]),
+            "sealed": len(records["sealed"]),
             "shared": len(shared),
             "shared_records": shared,
+            # Decisive-record overlap (F2): sealed target records that dev items also target.
+            "sealed_shared_with_dev": len(records["dev"] & records["sealed"]),
         },
         "owner_review": {
             "held_out_items": len(held_items),
             "status": dict(sorted(review.items())),
             "batches": dict(
                 sorted(Counter(i.owner_review.batch for i in held_items if i.owner_review).items())
+            ),
+            "sealed_items": len(sealed_items),
+            "sealed_status": dict(
+                sorted(
+                    Counter(
+                        (i.owner_review.status if i.owner_review else "no review record")
+                        for i in sealed_items
+                    ).items()
+                )
             ),
         },
         "exhaustive": {
@@ -350,28 +454,35 @@ def render(data: dict[str, Any]) -> str:
         + f" (held-out share {data['held_out_share']}); {data['units']['total']} split units, "
         f"{data['units']['multi_item']} with several items (largest {data['units']['largest']}).",
         "",
-        "| Stratum | dev | held_out |",
-        "| ------- | --: | -------: |",
+        "| Stratum | dev | held_out | sealed |",
+        "| ------- | --: | -------: | -----: |",
     ]
     lines += [
-        f"| {name} | {row.get('dev', 0)} | {row.get('held_out', 0)} |"
+        f"| {name} | {row.get('dev', 0)} | {row.get('held_out', 0)} | {row.get('sealed', 0)} |"
         for name, row in data["strata"].items()
     ]
     t = data["target_records"]
     r = data["owner_review"]
     lines += [
         "",
-        f"Target records: dev {t['dev']}, held_out {t['held_out']}, on both sides {t['shared']} "
+        "Items with targets: "
+        + ", ".join(f"{k} {v}" for k, v in data["with_targets"].items())
+        + ".",
+        "",
+        f"Target records: dev {t['dev']}, held_out {t['held_out']}, sealed {t['sealed']}; "
+        f"dev and held_out share {t['shared']}, dev and sealed {t['sealed_shared_with_dev']} "
         "(the same record serving different information needs).",
         "",
         f"Owner review (D-41): {r['held_out_items']} held-out items; status "
         + ", ".join(f"{k} {v}" for k, v in r["status"].items())
         + "; batches "
         + ", ".join(f"{k} {v}" for k, v in r["batches"].items())
+        + f". Sealed: {r['sealed_items']} items"
+        + "".join(f", {k} {v}" for k, v in r["sealed_status"].items())
         + ".",
         "",
         f"Exhaustive items: dev {data['exhaustive']['dev']}, held_out "
-        f"{data['exhaustive']['held_out']}.",
+        f"{data['exhaustive']['held_out']}, sealed {data['exhaustive']['sealed']}.",
     ]
     return "\n".join(lines) + "\n"
 
@@ -395,9 +506,12 @@ _THEMES = (
 )
 
 
-def assign_batches(held_out: Sequence[GoldenItem]) -> dict[str, str]:
-    """Owner-review batches (``H1``, ``H2``, ...) for held-out items: units in theme order
-    (their first item's category), never split, as even as the units allow within
+def assign_batches(
+    held_out: Sequence[GoldenItem], *, prefix: str = "H", start: int = 1
+) -> dict[str, str]:
+    """Owner-review batches (``H1``, ``H2``, ...; ``S1``... for sealed items, numbered from
+    ``start`` so new batches follow the reviewed ones) for held-out items: units in theme
+    order (their first item's category), never split, as even as the units allow within
     ``BATCH_MIN``-``BATCH_MAX`` items."""
     ordered = sorted(
         units(held_out),
@@ -412,7 +526,7 @@ def assign_batches(held_out: Sequence[GoldenItem]) -> dict[str, str]:
         if size and number < count and (size + len(unit) > BATCH_MAX or size >= target):
             number, size = number + 1, 0
         for item in sorted(unit, key=lambda i: i.id):
-            batches[item.id] = f"H{number}"
+            batches[item.id] = f"{prefix}{start + number - 1}"
         size += len(unit)
         done += len(unit)
     return batches

@@ -7,7 +7,8 @@
     lattice check-db-role
         Run the API's startup safety check against LATTICE_DATABASE_URL and report.
     lattice dataset lint [--data DIR] [--golden DIR]
-        Validate the synthetic dataset and the golden set (no database, no model).
+        Validate the synthetic dataset and the golden set, sealed and staged items
+        included (no database, no model).
     lattice dataset generate [--data DIR]
         Regenerate the deterministic bulk distractor tickets.
     lattice dataset splits [--propose [--write]] [--json]
@@ -28,13 +29,15 @@
                    [--embedding none|fake|local|gemini|openai] [--text] [--pool] [--json] QUESTION
         Retrieve permitted evidence as that member (development/test only).
     lattice eval retrieval [--embedding none|fake|local|gemini|openai] [--category C ...]
-                           [--persona P ...] [--item ID ...] [--out DIR]
-        Retrieval metrics over the golden set (development/test only).
+                           [--persona P ...] [--item ID ...] [--out DIR] [--sealed --reason R]
+        Retrieval metrics over the golden set (development/test only); --sealed evaluates
+        the sealed split alone, logged (lattice.evals.sealed).
     lattice ask --org SLUG --as EMAIL [--account KEY] [--classification L] [--json] QUESTION
         Ask as that member (development/test only): retrieval, the invocation rule, the
         organization's own generation provider, validation; prints the answer.
     lattice eval answer [--generation fake|ollama|gemini] [--model M] [--embedding ...]
                         [--judge] [--category C ...] [--persona P ...] [--item ID ...]
+                        [--sealed --reason R]
         Generation and security metrics over the golden set (development/test only).
     lattice models list | fetch NAME | verify NAME
         Pinned local embedding models: cache state, explicit download, re-hash.
@@ -100,7 +103,7 @@ from lattice.config import (
     load_settings,
 )
 from lattice.dataset.distractors import DATA, write_bulk_tickets
-from lattice.dataset.lint import lint, load_dataset, summary
+from lattice.dataset.lint import lint, load_all, summary
 from lattice.db.engine import Database, create_engine
 from lattice.db.role_check import inspect_runtime_role
 from lattice.ingestion.lifecycle import SourceNotFound, disconnect_source
@@ -182,7 +185,7 @@ async def _check_db_role() -> int:
 
 
 def _dataset_lint(data_dir: Path, golden_dir: Path) -> int:
-    dataset = load_dataset(data_dir, golden_dir)
+    dataset = load_all(data_dir, golden_dir)
     problems = lint(dataset)
     for problem in problems:
         print(problem, file=sys.stderr)

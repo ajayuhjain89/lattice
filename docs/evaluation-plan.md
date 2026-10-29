@@ -147,12 +147,13 @@ opt_in_confidential: …}`.
 | `same_question_group` | Items asking the identical question as different personas |
 | `trap_phrases` | Words of the question that occur verbatim in `must_not_retrieve` evidence |
 | `tags` | e.g. `security`, `critical_scenario`, `cross_org_same_identifier`, `restricted_contains_answer` |
-| `label_source` | **Added P13.2** (EC-8), required: `authored_phase3`, `authored_phase13` or `owner_reviewed`. Engineering-authored labels are provisional expectations; `owner_reviewed` only with an approved `owner_review` |
-| `split` | **Added P13.2** (EC-7), required by the lint: `dev` (values may be chosen on it) or `held_out` (reported, never tuned against) |
+| `label_source` | **Added P13.2** (EC-8), required: `authored_phase3`, `authored_phase13`, `authored_f2` (Phase 13 follow-ups) or `owner_reviewed`. Engineering-authored labels are provisional expectations; `owner_reviewed` only with an approved `owner_review` |
+| `split` | **Added P13.2** (EC-7), required by the lint outside `evals/golden-staging/`: `dev` (values may be chosen on it), `held_out` (reported, never tuned against) or `sealed` (F2: evaluated only at a checkpoint's final decision; §3.2) |
 | `paraphrase_group` | **Added P13.2**: items asking for the same information need (the same decisive answer facts), whatever the wording or persona. With `same_question_group` it decides the split unit |
 | `classes` | **Added P13.2**: the phase-13-plan §10 evaluation classes the item exercises (`paraphrase`, `keyword_vs_natural`, `identifier_variant`, `ambiguous_account`, `hidden_account_collision`, `multi_document`, `multi_account_comparison`, `contradictory_evidence`, `temporal_supersession`, `insufficient_evidence`, `egress_withheld`, `inaccessible_strong_match`, `scoped_retrieval`, `injection_misleading`, `veridian_cross_tenant`); the lint checks each against the labels and requires ≥ 4 items per class |
 | `exhaustive`, `exhaustive_review` | **Added P13.2** (EC-3): labels cover every readable relevant part; the review lists every candidate part the persona can read (by `terms`, or `scope_all` inside a scope, plus `extra`), each classified `relevant`, `acceptable` or `unrelated`. The lint recomputes the candidates from the corpus. Only these items have Precision@10 |
-| `owner_review` | **Added P13.2** (D-41), required on held-out items: `{batch: H<n>, status: pending \| approved \| corrections_requested, reviewed_on, notes}` |
+| `owner_review` | **Added P13.2** (D-41), required on held-out and sealed items: `{batch: H<n> (held-out) or S<n> (sealed), status: pending \| approved \| corrections_requested, reviewed_on, notes}` |
+| `cohort` | **Added F2**: `f2` on items authored in the Phase 13 follow-ups (required with `authored_f2` and on sealed items); kept after owner review, so held-out results are reported for the Phase 13 (seen) and F2 (fresh) items separately. Metadata: no digest change, and omitted from the golden fingerprint while unset |
 
 ### 3.1 Label provenance, splits and owner review (P13.2)
 
@@ -190,6 +191,32 @@ opt_in_confidential: …}`.
   "the list looks complete" is not enough. Precision@10 is computed for those items only,
   never averaged with others; for every other item precision is unavailable, nDCG@10 stays
   an informational lower bound and Recall@k/MRR use the item's targets.
+
+### 3.2 The sealed split and follow-up authoring (phase-13-followups F2)
+
+- **Directories.** `evals/golden/` holds dev and held-out items; `evals/golden-sealed/`
+  holds sealed items; `evals/golden-staging/` holds new items being authored, which have
+  no split. Only the dataset tools (`lattice dataset lint|splits|freeze-labels|
+  review-packet`) load the sibling directories. Every evaluation run, baseline, `compare`
+  and golden test loads `evals/golden/` alone, so no default run touches a sealed or
+  staged item, and the evaluation runners refuse any selected item without a split.
+- **Assignment.** `lattice dataset splits --propose --shares dev=…,held_out=…,sealed=…
+  --write` divides the unassigned items in those shares, stratified among themselves and
+  group-aware. A new item that joins a committed unit inherits its split. Each item gets
+  its review batch (H or S, numbered after the existing ones) and moves into the
+  directory of its split. The author does not choose an item's split.
+- **Freeze.** Sealed labels are frozen like held-out labels (`label-freeze.json`
+  `sealed`). The lint checks that freeze whenever the sealed directory is loaded
+  (`lattice dataset lint` always loads it).
+- **Looking.** `lattice eval retrieval|answer --sealed --reason R` evaluates sealed items
+  alone. It appends the look to `evals/golden/provenance/sealed-access.json` before the
+  run starts and writes under `evals/reports/sealed/`. A sealed report never becomes a
+  baseline. The first sealed look is F5's final decision, with the reference and the
+  candidate configuration in the same run.
+- **Limitation.** Engineering authors every follow-up item, sealed ones included, so the
+  author knows the sealed questions. Mitigations: splits are assigned by the proposer
+  after authoring; after the freeze, engineering opens `evals/golden-sealed/` only
+  through the dataset tools until F5's final run; and every sealed look is logged.
 
 Record keys: `doc:<front-matter id>#<n>` (part *n*: preamble, then one per H1/H2
 section), `ticket:<id>#c<n>` (comment *n*), `chat:<channel>:<thread ts>` or

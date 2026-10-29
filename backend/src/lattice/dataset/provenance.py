@@ -9,13 +9,16 @@ split, groups, classes, owner review; ``manifests.METADATA_FIELDS``), so reviewi
 re-splitting an item never changes its digest, and the digest of a Phase 3 item equals
 the digest of the same item before P13.2 added those fields.
 
-``evals/golden/provenance/label-freeze.json`` holds two freezes, checked by the lint:
+``evals/golden/provenance/label-freeze.json`` holds three freezes, checked by the lint:
 
 * ``phase3`` -- the 89 items authored in Phase 3, as they were at 22fd800. Their labels
   are the historical benchmark: a factual correction is made in its own commit, with
   ``--phase3-correction``, the evidence in the reason, and a change record.
 * ``held_out`` -- every held-out item, frozen before any tuning (EC-7). Changing a
   frozen held-out label needs the product owner (D-41) and leaves a change record.
+* ``sealed`` -- every sealed item (phase-13-followups §7), frozen with the same rules as
+  held_out. Sealed items load only with the sealed directory, so the lint checks this
+  freeze only when it was loaded (``lattice dataset lint`` always loads it).
 
 The freeze is never rewritten silently: an item whose digest no longer matches is a lint
 problem until ``freeze-labels`` records the change and its reason.
@@ -23,6 +26,7 @@ problem until ``freeze-labels`` records the change and its reason.
 
 import hashlib
 import json
+import subprocess
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -30,7 +34,8 @@ from typing import Any
 
 from lattice.dataset.manifests import METADATA_FIELDS, GoldenItem
 
-SCHEMA = "lattice-golden-label-freeze/1"
+SCHEMA = "lattice-golden-label-freeze/2"
+_READABLE = (SCHEMA, "lattice-golden-label-freeze/1")  # /1 had no sealed freeze
 FREEZE_FILE = Path("provenance") / "label-freeze.json"
 
 
@@ -48,7 +53,12 @@ class Freeze:
     phase3_frozen_at: str = ""
     held_out: dict[str, str] = field(default_factory=dict)
     held_out_frozen_at: str = ""
+    sealed: dict[str, str] = field(default_factory=dict)
     changes: list[dict[str, str]] = field(default_factory=list)
+
+    def frozen(self, split: str) -> dict[str, str]:
+        """The freeze of a frozen split (``held_out`` or ``sealed``)."""
+        return self.held_out if split == "held_out" else self.sealed
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -61,8 +71,22 @@ class Freeze:
                 "frozen_at": self.held_out_frozen_at,
                 "items": dict(sorted(self.held_out.items())),
             },
+            "sealed": {"items": dict(sorted(self.sealed.items()))},
             "changes": self.changes,
         }
+
+
+def current_commit() -> str:
+    """The short commit of the working tree (recorded with freezes and sealed looks)."""
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
 
 
 def freeze_path(golden_dir: Path) -> Path:
@@ -74,13 +98,14 @@ def load_freeze(golden_dir: Path) -> Freeze | None:
     if not path.exists():
         return None
     raw = json.loads(path.read_text(encoding="utf-8"))
-    if raw.get("schema") != SCHEMA:
+    if raw.get("schema") not in _READABLE:
         raise ValueError(f"{path}: unknown schema {raw.get('schema')!r}")
     return Freeze(
         phase3=dict(raw["phase3"]["items"]),
         phase3_frozen_at=raw["phase3"]["frozen_at"],
         held_out=dict(raw["held_out"]["items"]),
         held_out_frozen_at=raw["held_out"]["frozen_at"],
+        sealed=dict(raw.get("sealed", {}).get("items", {})),
         changes=list(raw.get("changes", [])),
     )
 
@@ -91,8 +116,11 @@ def write_freeze(golden_dir: Path, freeze: Freeze) -> None:
     path.write_text(json.dumps(freeze.to_json(), indent=1) + "\n", encoding="utf-8")
 
 
-def check(items: list[GoldenItem], freeze: Freeze | None) -> list[tuple[str, str]]:
-    """(item or file, problem) for every item whose labels left their freeze."""
+def check(
+    items: list[GoldenItem], freeze: Freeze | None, *, sealed_loaded: bool = False
+) -> list[tuple[str, str]]:
+    """(item or file, problem) for every item whose labels left their freeze. The sealed
+    freeze is checked only when the sealed items were loaded."""
     if freeze is None:
         return [(str(FREEZE_FILE), "missing: run `lattice dataset freeze-labels`")]
     problems: list[tuple[str, str]] = []
@@ -102,8 +130,8 @@ def check(items: list[GoldenItem], freeze: Freeze | None) -> list[tuple[str, str
         if item is None:
             problems.append((item_id, "a Phase 3 item was removed (the benchmark keeps it)"))
             continue
-        if item.label_source == "authored_phase13":
-            problems.append((item_id, "a Phase 3 item cannot be labelled authored_phase13"))
+        if item.label_source in ("authored_phase13", "authored_f2"):
+            problems.append((item_id, f"a Phase 3 item cannot be labelled {item.label_source}"))
         if label_digest(item) != digest:
             problems.append(
                 (
@@ -115,24 +143,27 @@ def check(items: list[GoldenItem], freeze: Freeze | None) -> list[tuple[str, str
     for item in items:
         if item.label_source == "authored_phase3" and item.id not in freeze.phase3:
             problems.append((item.id, "authored_phase3 but not in the Phase 3 freeze"))
-    for item_id, digest in sorted(freeze.held_out.items()):
-        item = by_id.get(item_id)
-        if item is None:
-            problems.append((item_id, "a frozen held-out item was removed"))
-        elif item.split != "held_out":
-            problems.append((item_id, "a frozen held-out item moved out of held_out"))
-        elif label_digest(item) != digest:
-            problems.append(
-                (
-                    item_id,
-                    "frozen held-out labels changed: needs the product owner and "
-                    "`freeze-labels --item ... --reason ...`",
+    for split in ("held_out", "sealed") if sealed_loaded else ("held_out",):
+        name = "held-out" if split == "held_out" else "sealed"
+        frozen = freeze.frozen(split)
+        for item_id, digest in sorted(frozen.items()):
+            item = by_id.get(item_id)
+            if item is None:
+                problems.append((item_id, f"a frozen {name} item was removed"))
+            elif item.split != split:
+                problems.append((item_id, f"a frozen {name} item moved out of {split}"))
+            elif label_digest(item) != digest:
+                problems.append(
+                    (
+                        item_id,
+                        f"frozen {name} labels changed: needs the product owner and "
+                        "`freeze-labels --item ... --reason ...`",
+                    )
                 )
-            )
-    if freeze.held_out:
-        for item in items:
-            if item.split == "held_out" and item.id not in freeze.held_out:
-                problems.append((item.id, "held_out item not in the held-out freeze"))
+        if frozen or split == "sealed":
+            for item in items:
+                if item.split == split and item.id not in frozen:
+                    problems.append((item.id, f"{split} item not in the {name} freeze"))
     return problems
 
 
@@ -148,8 +179,9 @@ def update(
 ) -> tuple[Freeze, list[str]]:
     """Record new digests. With no freeze yet, freezes every Phase 3 and held-out item.
     Otherwise only ``item_ids`` may change (refusing anything else), each with a change
-    record; Phase 3 items only with ``phase3_correction``. Returns the freeze and what
-    changed."""
+    record; Phase 3 items only with ``phase3_correction``. Held-out and sealed items not
+    yet frozen are frozen. Returns the freeze and what changed. ``items`` must include
+    the sealed items (``lint.load_all``) once any are frozen."""
     if not reason.strip():
         raise ValueError("a label freeze change needs a reason")
     on = (today or date.today()).isoformat()
@@ -173,20 +205,26 @@ def update(
                 raise ValueError(f"{item_id} is a Phase 3 item: pass --phase3-correction")
             freeze.phase3[item_id] = label_digest(item)
             changed.append(item_id)
-        if item.split == "held_out":
-            freeze.held_out[item_id] = label_digest(item)
-            changed.append(item_id)
-        elif item_id in freeze.held_out:
-            del freeze.held_out[item_id]
-            changed.append(item_id)
-    # A held-out item frozen for the first time (added after the initial freeze).
+        for split in ("held_out", "sealed"):
+            frozen = freeze.frozen(split)
+            if item.split == split:
+                frozen[item_id] = label_digest(item)
+                changed.append(item_id)
+            elif item_id in frozen:
+                del frozen[item_id]
+                changed.append(item_id)
+    # Held-out and sealed items frozen for the first time (added after the first freeze).
     for item in items:
-        if item.split == "held_out" and item.id not in freeze.held_out:
-            freeze.held_out[item.id] = label_digest(item)
+        if item.split in ("held_out", "sealed") and item.id not in freeze.frozen(item.split):
+            freeze.frozen(item.split)[item.id] = label_digest(item)
             changed.append(item.id)
-    for item_id, digest in freeze.held_out.items():
-        if item_id not in item_ids and label_digest(by_id[item_id]) != digest:
-            raise ValueError(f"{item_id}: frozen held-out labels changed; name it with --item")
+    for split in ("held_out", "sealed"):
+        name = "held-out" if split == "held_out" else "sealed"
+        for item_id, digest in freeze.frozen(split).items():
+            if item_id not in by_id:
+                raise ValueError(f"{item_id}: frozen {name} item not loaded")
+            if item_id not in item_ids and label_digest(by_id[item_id]) != digest:
+                raise ValueError(f"{item_id}: frozen {name} labels changed; name it with --item")
     for item_id, digest in freeze.phase3.items():
         if item_id not in item_ids and label_digest(by_id[item_id]) != digest:
             raise ValueError(f"{item_id}: Phase 3 labels changed; name it with --item")

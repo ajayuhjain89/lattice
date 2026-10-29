@@ -1,11 +1,15 @@
 """``lattice dataset splits | freeze-labels | review-packet`` (P13.2; phase-13-plan EC-7,
-EC-8, D-41). Files only: no database, no model.
+EC-8, D-41; phase-13-followups §7). Files only: no database, no model. Every command
+loads the sealed (``evals/golden-sealed``) and staging (``evals/golden-staging``) items
+too.
 
-    lattice dataset splits [--propose [--write]] [--json]
+    lattice dataset splits [--propose [--shares dev=F,held_out=F,sealed=F] [--write]] [--json]
         The split report (denominators per stratum, class coverage, shared target
         records, owner-review workload). --propose prints a group-aware stratified split
-        for items that have none; --write records it in the golden files, with an
-        owner-review batch (status pending) for every new held-out item.
+        for items that have none (--shares: the new items divided in those shares);
+        --write records it, with an owner-review batch (status pending) for every new
+        held-out (H<n>) and sealed (S<n>) item, numbered after the existing batches, and
+        moves each staged or sealed item into the directory of its split.
     lattice dataset freeze-labels --reason R [--item ID ...] [--phase3-correction]
         Record label digests (lattice.dataset.provenance): the first run freezes the
         Phase 3 and held-out labels; later runs record the named items' changes only.
@@ -17,13 +21,13 @@ EC-8, D-41). Files only: no database, no model.
 import argparse
 import json
 import re
-import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 from lattice.dataset import provenance, review, splits
 from lattice.dataset.distractors import DATA
-from lattice.dataset.lint import Dataset, load_dataset
+from lattice.dataset.lint import Dataset, load_all, sealed_dir_for
 from lattice.dataset.manifests import GoldenItem
 
 GOLDEN = DATA.parents[1] / "evals" / "golden"
@@ -35,6 +39,7 @@ def add_parsers(
 ) -> None:
     split_cmd = dataset_commands.add_parser("splits", help="Golden dev/held-out split report")
     split_cmd.add_argument("--propose", action="store_true")
+    split_cmd.add_argument("--shares", help="e.g. dev=0.17,held_out=0.48,sealed=0.35")
     split_cmd.add_argument("--write", action="store_true")
     split_cmd.add_argument("--json", action="store_true")
     freeze = dataset_commands.add_parser("freeze-labels", help="Record golden label digests")
@@ -50,7 +55,7 @@ def add_parsers(
 
 
 def run(args: argparse.Namespace) -> int:
-    data = load_dataset(args.data, args.golden)
+    data = load_all(args.data, args.golden)
     if data.problems:
         for problem in data.problems:
             print(problem, file=sys.stderr)
@@ -77,21 +82,33 @@ def _splits(
     goldens: list[tuple[Path, GoldenItem]], items: list[GoldenItem], args: argparse.Namespace
 ) -> int:
     if args.propose:
-        proposed = {i: s for i, s in splits.propose(items).items() if i in _unassigned(items)}
+        try:
+            shares = splits.parse_shares(args.shares) if args.shares else None
+        except ValueError as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            return 1
+        unassigned = _unassigned(items)
+        proposed = {i: s for i, s in splits.propose(items, shares).items() if i in unassigned}
         if not args.write:
             for item_id, split in sorted(proposed.items()):
                 print(f"{item_id}: {split}")
+            print(f"proposed: {dict(sorted(Counter(proposed.values()).items()))}")
             return 0
-        held = [i for i in items if proposed.get(i.id, i.split) == "held_out"]
-        batches = splits.assign_batches(held)
+        batches = _new_batches(items, proposed)
+        sealed_dir = sealed_dir_for(args.golden)
         for path, item in goldens:
             if item.id not in proposed:
                 continue
-            lines = [f"  split: {proposed[item.id]}\n"]
-            if proposed[item.id] == "held_out" and item.owner_review is None:
+            split = proposed[item.id]
+            lines = [f"  split: {split}\n"]
+            if item.id in batches and item.owner_review is None:
                 lines.append(f"  owner_review: {{batch: {batches[item.id]}, status: pending}}\n")
             _set_fields(path, item.id, lines)
-        print(f"wrote splits for {len(proposed)} items")
+            home = sealed_dir if split == "sealed" else args.golden
+            if path.parent != home:
+                _move_item(path, home / path.name, item.id)
+        counts = dict(sorted(Counter(proposed.values()).items()))
+        print(f"wrote splits for {len(proposed)} items: {counts}")
         return 0
     data = splits.report(items)
     print(json.dumps(data, indent=1) if args.json else splits.render(data), end="")
@@ -105,16 +122,41 @@ def _unassigned(items: list[GoldenItem]) -> set[str]:
     return {i.id for i in items if i.split is None}
 
 
-def _commit() -> str:
-    try:
-        return subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
+def _new_batches(items: list[GoldenItem], proposed: dict[str, str]) -> dict[str, str]:
+    """Review batches for newly assigned held-out and sealed items, numbered after the
+    existing batches of their kind (reviewed batches are never reopened)."""
+    batches: dict[str, str] = {}
+    for split, prefix in (("held_out", "H"), ("sealed", "S")):
+        new = [i for i in items if proposed.get(i.id) == split and i.owner_review is None]
+        used = [
+            int(i.owner_review.batch[1:])
+            for i in items
+            if i.owner_review and i.owner_review.batch.startswith(prefix)
+        ]
+        if new:
+            batches |= splits.assign_batches(new, prefix=prefix, start=max(used, default=0) + 1)
+    return batches
+
+
+def _move_item(source: Path, target: Path, item_id: str) -> None:
+    """Move one item's block (``- id: ...`` up to the next item or top-level comment) to
+    the end of ``target``, which starts with ``source``'s header comment when new."""
+    text = source.read_text(encoding="utf-8")
+    block = re.search(rf"^- id: {re.escape(item_id)}\n(?:(?!- |#).*\n|\n)*", text, re.M)
+    if block is None:
+        raise ValueError(f"{source.name}: no block for {item_id}")
+    rest = text[: block.start()] + text[block.end() :]
+    if target.exists():
+        head = target.read_text(encoding="utf-8").rstrip("\n") + "\n\n"
+    else:
+        header = re.match(r"(?:#.*\n)*", text)
+        head = (header.group(0) if header else "") + "\n"
+        target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(head + block.group(0).rstrip("\n") + "\n", encoding="utf-8")
+    if re.search(r"^- id: ", rest, re.M):
+        source.write_text(rest.rstrip("\n") + "\n", encoding="utf-8")
+    else:
+        source.unlink()
 
 
 def _freeze(items: list[GoldenItem], args: argparse.Namespace) -> int:
@@ -126,15 +168,15 @@ def _freeze(items: list[GoldenItem], args: argparse.Namespace) -> int:
             reason=args.reason,
             item_ids=args.item,
             phase3_correction=args.phase3_correction,
-            commit=_commit(),
+            commit=provenance.current_commit(),
         )
     except ValueError as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 1
     provenance.write_freeze(args.golden, freeze)
     print(
-        f"label freeze: {len(freeze.phase3)} Phase 3, {len(freeze.held_out)} held-out items; "
-        f"{len(changed)} recorded"
+        f"label freeze: {len(freeze.phase3)} Phase 3, {len(freeze.held_out)} held-out, "
+        f"{len(freeze.sealed)} sealed items; {len(changed)} recorded"
     )
     return 0
 

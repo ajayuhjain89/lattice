@@ -360,11 +360,17 @@ async def load_corpus(owner: Database, org_ids: dict[str, uuid.UUID]) -> Corpus:
     return Corpus(chunks, embeddings, display_refs, fingerprint)
 
 
+_LATE_FIELDS = ("cohort",)  # phase-13-followups F2
+
+
 def golden_version(items: Sequence[GoldenItem]) -> dict[str, Any]:
-    """The golden items' content (labels included), independent of file layout."""
+    """The golden items' content (labels included), independent of file layout. Fields
+    added after the first baselines (``_LATE_FIELDS``) count only once set, so adding
+    them does not move the fingerprint of the items that leave them unset."""
     digest = hashlib.sha256()
     for item in sorted(items, key=lambda i: i.id):
-        digest.update(item.model_dump_json().encode() + b"\n")
+        unset = {name for name in _LATE_FIELDS if getattr(item, name) is None}
+        digest.update(item.model_dump_json(exclude=unset).encode() + b"\n")
     return {"sha256": digest.hexdigest(), "items": len(items)}
 
 
@@ -435,6 +441,7 @@ class ItemResult:
     tags: list[str]
     split: str | None = None
     label_source: str | None = None
+    cohort: str | None = None
     error: str | None = None
     semantic_status: str | None = None
     semantic_reason: str | None = None
@@ -598,6 +605,7 @@ async def evaluate_item(
         tags=list(item.tags),
         split=item.split,
         label_source=item.label_source,
+        cohort=item.cohort,
     )
     wanted = targets(item)
     out.targets = [t.label(item.organization) for t in wanted]
@@ -878,6 +886,15 @@ def _target_count(result: ItemResult) -> str:
     return "3+" if n >= 3 else str(n)
 
 
+def held_out_cohorts(results: Sequence[Any]) -> list[tuple[str, list[Any]]]:
+    """Held-out results per cohort (phase-13-followups §7.2): ``phase13`` items were seen
+    during Phase 13, ``f2`` items are the follow-up additions."""
+    groups: dict[str, list[Any]] = defaultdict(list)
+    for r in results:
+        groups[r.cohort or "phase13"].append(r)
+    return sorted(groups.items())
+
+
 def summarize(results: Sequence[ItemResult]) -> dict[str, Any]:
     violations = Counter(v["kind"] for r in results for v in r.violations)
     by_category: dict[str, list[ItemResult]] = defaultdict(list)
@@ -930,6 +947,9 @@ def summarize(results: Sequence[ItemResult]) -> dict[str, Any]:
         "by_persona": {p: _recall_block(rs) for p, rs in sorted(by_persona.items())},
         "by_target_count": {n: _recall_block(rs) for n, rs in sorted(by_target_count.items())},
         "by_split": {n: _recall_block(rs) for n, rs in sorted(by_split.items())},
+        "by_held_out_cohort": {
+            n: _recall_block(rs) for n, rs in held_out_cohorts(by_split.get("held_out", []))
+        },
         "by_split_category": {
             split: {
                 c: _recall_block([r for r in rs if r.category == c])
@@ -1142,6 +1162,7 @@ def render_markdown(report: RetrievalReport) -> str:
     lines += [row(n, b) for n, b in s["by_target_count"].items()]
     lines += ["", "### By split (EC-7: held_out is reported, never tuned against)", "", *header]
     lines += [row(n, b) for n, b in s.get("by_split", {}).items()]
+    lines += [row(f"held_out ({n})", b) for n, b in s.get("by_held_out_cohort", {}).items()]
     lines += ["", "### By label source (EC-8: engineering labels are provisional)", "", *header]
     lines += [row(n, b) for n, b in s.get("by_label_source", {}).items()]
 

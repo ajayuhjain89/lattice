@@ -2,7 +2,8 @@
 
     lattice dataset review-packet [--out docs/golden-review] [--check]
 
-One Markdown file per review batch (``H1.md``, ...) plus an index. Each item shows what a
+One Markdown file per review batch (``H1.md``, ...; ``S1.md``, ... for sealed items, which
+show labels only: no result of any run appears in a packet) plus an index. Each item shows what a
 reviewer needs without reading code: the question, the persona and what they may read,
 the expected status, the exact record keys with excerpts from the synthetic source, the
 required facts, what must stay out, open points, the proposed label decisions, and a
@@ -216,11 +217,11 @@ def render_item(data: Dataset, item: GoldenItem) -> str:
 
 
 def render_packet(data: Dataset) -> dict[str, str]:
-    held = [i for _, i in data.goldens if i.split == "held_out"]
+    held = [i for _, i in data.goldens if i.split in ("held_out", "sealed")]
     by_batch: dict[str, list[GoldenItem]] = defaultdict(list)
     for item in held:
         by_batch[item.owner_review.batch if item.owner_review else "unbatched"].append(item)
-    order = sorted(by_batch, key=lambda b: (len(b), b))
+    order = sorted(by_batch, key=lambda b: (b[0] != "H", int(b[1:]) if b[1:].isdigit() else 0, b))
     files = {}
     index = [
         "# Held-out golden labels: product-owner review (D-41)",
@@ -239,20 +240,36 @@ def render_packet(data: Dataset) -> dict[str, str]:
         "labels are frozen (`evals/golden/provenance/label-freeze.json`), so a correction is",
         "a recorded change.",
         "",
-        "| Batch | Items | Phase 3 | Phase 13 | Approved | Pending |",
-        "| ----- | ----: | ------: | -------: | -------: | ------: |",
     ]
+    follow_up = any(i.cohort for i in held)
+    if follow_up:
+        index += [
+            "Batches H5 onwards and S1 onwards come from the Phase 13 follow-ups (F2,",
+            "`authored_f2`). S batches are the sealed split: evaluated only at a checkpoint's",
+            "final decision, so review their labels with the same care and never ask for",
+            "their results.",
+            "",
+            "| Batch | Items | Phase 3 | Phase 13 | F2 | Approved | Pending |",
+            "| ----- | ----: | ------: | -------: | -: | -------: | ------: |",
+        ]
+    else:
+        index += [
+            "| Batch | Items | Phase 3 | Phase 13 | Approved | Pending |",
+            "| ----- | ----: | ------: | -------: | -------: | ------: |",
+        ]
     for batch in order:
         items = sorted(by_batch[batch], key=lambda i: i.id)
         approved = sum(1 for i in items if i.owner_review and i.owner_review.status == "approved")
         pending = sum(1 for i in items if i.owner_review and i.owner_review.status == "pending")
         p3 = sum(1 for i in items if i.label_source == "authored_phase3")
         p13 = sum(1 for i in items if i.label_source == "authored_phase13")
+        f2 = f" {sum(1 for i in items if i.cohort == 'f2')} |" if follow_up else ""
         index.append(
-            f"| [{batch}]({batch}.md) | {len(items)} | {p3} | {p13} | {approved} | {pending} |"
+            f"| [{batch}]({batch}.md) | {len(items)} | {p3} | {p13} |{f2} {approved} | {pending} |"
         )
+        kind = "sealed" if batch.startswith("S") else "held-out"
         body = [
-            f"# Review batch {batch} ({len(items)} held-out items)",
+            f"# Review batch {batch} ({len(items)} {kind} items)",
             "",
             "See [README.md](README.md) for how to review. Record keys: `doc:<id>#<section>`,",
             "`ticket:<id>#c<comment>`, `chat:<channel>:<thread or day>#<message>`; another",
@@ -261,8 +278,9 @@ def render_packet(data: Dataset) -> dict[str, str]:
             *(render_item(data, item) for item in sorted(items, key=_order)),
         ]
         files[f"{batch}.md"] = "\n".join(body).rstrip("\n-") + "\n"
-    total = len(held)
-    index += ["", f"Total: {total} held-out items.", ""]
+    sealed = sum(1 for i in held if i.split == "sealed")
+    total = f"{len(held) - sealed} held-out items" + (f", {sealed} sealed items" if sealed else "")
+    index += ["", f"Total: {total}.", ""]
     files["README.md"] = "\n".join(index)
     return files
 

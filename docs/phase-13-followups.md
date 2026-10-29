@@ -1,8 +1,8 @@
 # Phase 13 follow-ups: roadmap to finish what Phase 13 left open
 
 Status: **proposed 2026-10-28; F1 (owner review) and F3 (hygiene) authorized the same
-day; F3 delivered (§6). F2 authorized 2026-10-29; its plan (§7) awaits the owner's
-answers before any item is authored.** Phase 13 was accepted and merged
+day; F3 delivered (§6). F2 authorized 2026-10-29; the owner accepted the recommended answer
+to every F2 question the same day (§7.7); F2a (tooling) delivered (§8); F2b awaits the owner's go-ahead.** Phase 13 was accepted and merged
 (26bbd08) with completion criterion 3 unmet ([phase-13-plan.md](phase-13-plan.md) §27).
 This document lists everything Phase 13 left incomplete, why, and an ordered plan to
 close it. Nothing here starts without the product owner's go-ahead, checkpoint by
@@ -203,8 +203,8 @@ the sealed split once (it must not be tested on the old held-out again).
 
 ## 7. F2 plan (proposed 2026-10-29)
 
-The owner authorized F2 on 2026-10-29. This section is its plan. **No item is authored
-and no code is changed until the owner answers the questions in §7.7.**
+The owner authorized F2 on 2026-10-29. This section is its plan. The owner accepted the
+recommended answer to each question in §7.7 the same day.
 
 ### 7.1 Starting point (measured at 8db520d)
 
@@ -349,7 +349,42 @@ questions. Mitigations:
 | Q5 | Owner review scope | all new held-out and sealed items, ~9 batches · sealed in full plus a held-out sample |
 | Q6 | Baseline regeneration with F1 | once at F2e if F1 corrections arrive first · twice, as F1 defines |
 
+**Owner answers (2026-10-29): the first option for every question.** Q1: 130 new items
+(dev 22, held-out 62, sealed 46). Q2: the 56 held-out items stay in held-out, reported as
+the seen slice. Q3: a separate sealed directory, `--sealed --reason` and an access log.
+Q4: the corpus is unchanged. Q5: the owner reviews every new held-out and sealed item.
+Q6: if the F1 corrections arrive first, one baseline regeneration at F2e covers F1 and F2.
+
 **Cost:** ₹0. With the corpus unchanged there is no re-embed. Heavy runs happen only in
 F2a (one backend suite) and F2e (five baseline runs, one at a time). **Effort:** F2a about
 one session; F2b about five; F2c half a session; F2d is owner time (9 batches); F2e about
 one session.
+
+## 8. F2a delivery record (2026-10-29)
+
+Tooling for the sealed split and the follow-up authoring flow (§7.4 F2a), as planned;
+no golden item, label, corpus or retrieval behaviour changed. Reference: evaluation-plan
+§3.2; runbook "Grow the golden set with a sealed split (F2)".
+
+| Piece | Where |
+| ----- | ----- |
+| `split: sealed`, `label_source: authored_f2`, `cohort: f2` (metadata: no digest change; S review batches for sealed items) | `lattice.dataset.manifests` |
+| `evals/golden-sealed/` and `evals/golden-staging/`, loaded only by the dataset tools (`load_all`); the lint keeps every item in the directory of its split | `lattice.dataset.lint` |
+| `splits --propose --shares … --write`: shares over the new items, stratified and group-aware; committed units keep their split; H/S batches numbered after the existing ones; items moved to their split's directory | `lattice.dataset.splits`, `lattice.cli_dataset` |
+| Sealed freeze (`label-freeze.json` schema 2; schema 1 still read) | `lattice.dataset.provenance` |
+| S batches in the review packet (H1–H4 unchanged byte for byte) | `lattice.dataset.review` |
+| `eval retrieval|answer --sealed --reason`, access log before the run, reports under `evals/reports/sealed/`; runners refuse items without a split; a sealed report is never a baseline | `lattice.evals.sealed`, `lattice.evals.baseline` |
+| Held-out results per cohort (`by_held_out_cohort`: `phase13` seen, `f2` fresh) | `lattice.evals.retrieval`, `lattice.evals.answer` |
+| Tests (13) | `backend/tests/dataset/test_golden_sealed.py` |
+
+**The golden fingerprint did not move.** It hashes every field of every item, so a new
+field would have changed it for all 159 items and made every baseline compare (CI
+included) refuse. Fields added after the first baselines are therefore hashed only once
+set (`_LATE_FIELDS`). The fingerprint stays `d5369dd9…`, as in the committed baselines,
+and a test pins it.
+
+Verification: `lattice dataset lint` OK (159 items, dev 103 / held-out 56);
+`review-packet --check` OK; ruff and mypy (396 files) clean; full backend suite 3,478 passed (3,465 + 13 new; 19 min, isolated database on port 5440, project `lattice-p13fix`).
+
+Next (F2b, needs the owner's go-ahead): author the 130 items in `evals/golden-staging/`
+in five themed batches, each linted and committed locally, with no evaluation run.

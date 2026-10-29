@@ -240,9 +240,15 @@ class Clarification(_Strict):
 # Label provenance (phase-13-plan EC-8): who authored an item's labels, and whether the
 # product owner has reviewed them. Engineering-authored labels are the maintainers'
 # expectations, not independently verified ground truth.
-LabelSource = Literal["authored_phase3", "authored_phase13", "owner_reviewed"]
+LabelSource = Literal["authored_phase3", "authored_phase13", "authored_f2", "owner_reviewed"]
 # EC-7: values are chosen on dev only; held_out is reported and never tuned against.
-Split = Literal["dev", "held_out"]
+# sealed (phase-13-followups §7): kept out of every default run and evaluated only at a
+# checkpoint's final decision (``--sealed --reason``, logged).
+Split = Literal["dev", "held_out", "sealed"]
+# The follow-up authoring round an item came from; None for Phase 3 and Phase 13 items.
+# Unlike label_source it survives owner review, so held-out results can be reported for
+# the items seen during Phase 13 and the fresh ones separately.
+Cohort = Literal["f2"]
 # The evaluation classes of phase-13-plan §10 an item exercises (an item may exercise
 # several); the lint requires a minimum number of items per class.
 EvalClass = Literal[
@@ -269,7 +275,7 @@ class OwnerReview(_Strict):
     """D-41: the product owner reviews held-out items in batches. ``approved`` exists only
     once the owner has actually approved the item's labels."""
 
-    batch: str = Field(pattern=r"^H[0-9]+$")
+    batch: str = Field(pattern=r"^[HS][0-9]+$")  # H: held-out, S: sealed
     status: Literal["pending", "approved", "corrections_requested"] = "pending"
     reviewed_on: date | None = None
     notes: str | None = None
@@ -367,6 +373,7 @@ class GoldenItem(_Strict):
     exhaustive: bool = False
     exhaustive_review: ExhaustiveReview | None = None
     owner_review: OwnerReview | None = None
+    cohort: Cohort | None = None
 
     @model_validator(mode="after")
     def _provenance(self) -> Self:
@@ -375,6 +382,14 @@ class GoldenItem(_Strict):
         approved = self.owner_review is not None and self.owner_review.status == "approved"
         if (self.label_source == "owner_reviewed") != approved:
             raise ValueError("label_source owner_reviewed needs an approved owner_review")
+        if self.label_source == "authored_f2" and self.cohort != "f2":
+            raise ValueError("label_source authored_f2 needs cohort f2")
+        if self.split == "sealed" and self.cohort is None:
+            raise ValueError("only follow-up items (cohort f2 onwards) are sealed")
+        if self.owner_review is not None and self.split in ("held_out", "sealed"):
+            prefix = "S" if self.split == "sealed" else "H"
+            if not self.owner_review.batch.startswith(prefix):
+                raise ValueError(f"{self.split} review batches are named {prefix}<n>")
         return self
 
     @model_validator(mode="after")
@@ -406,5 +421,6 @@ METADATA_FIELDS = frozenset(
         "exhaustive",
         "exhaustive_review",
         "owner_review",
+        "cohort",
     }
 )

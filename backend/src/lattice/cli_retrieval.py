@@ -9,7 +9,9 @@ outside development and test, like the seed.
 
 ``search`` prints that member's permitted evidence (titles and, with ``--text``, chunk
 text). ``eval retrieval`` prints metrics and record keys, never chunk text, and writes
-``report.json`` + ``report.md`` under ``evals/reports/<timestamp>/`` (not committed).
+``report.json`` + ``report.md`` under ``evals/reports/<timestamp>/`` (not committed);
+with ``--sealed --reason`` it evaluates the sealed split alone, under
+``evals/reports/sealed/``, and records the look (``lattice.evals.sealed``).
 
 ``eval baseline`` turns a report into a compact committed baseline (``evals/baselines/``;
 never over an existing one without ``--replace`` and a reason) and ``eval compare``
@@ -32,10 +34,9 @@ from sqlalchemy import text
 
 from lattice.config import load_migration_settings, load_provider_settings, load_settings
 from lattice.dataset.distractors import DATA
-from lattice.dataset.lint import load_dataset
 from lattice.db.engine import Database, create_engine
 from lattice.errors import LatticeError
-from lattice.evals import baseline
+from lattice.evals import baseline, sealed
 from lattice.evals.retrieval import (
     ItemResult,
     config_overrides,
@@ -188,15 +189,23 @@ def _progress(result: ItemResult) -> None:
 async def eval_retrieval(args: argparse.Namespace) -> int:
     if not _impersonation_allowed():
         return _fail("the evaluation acts as members: it requires LATTICE_ENV=development or test")
-    dataset = load_dataset(args.data, args.golden)
+    problem = sealed.argument_problem(args)
+    if problem:
+        return _fail(problem)
+    dataset = sealed.load(args.data, args.golden, sealed=args.sealed)
     if dataset.problems:
         return _fail("the dataset does not lint; run `lattice dataset lint`")
-    items = select_items(
-        dataset,
-        categories=args.category or (),
-        personas=args.persona or (),
-        item_ids=args.item or (),
+    items, problem = sealed.restrict(
+        select_items(
+            dataset,
+            categories=args.category or (),
+            personas=args.persona or (),
+            item_ids=args.item or (),
+        ),
+        sealed=args.sealed,
     )
+    if problem:
+        return _fail(problem)
     provider = build_embedding_provider(args.embedding, load_provider_settings())
     app, owner = _databases("lattice-eval")
     try:
@@ -205,6 +214,19 @@ async def eval_retrieval(args: argparse.Namespace) -> int:
         )
     except (TypeError, ValueError) as exc:
         return _fail(str(exc))
+    if args.sealed:
+        sealed.record_access(
+            args.golden,
+            kind="retrieval",
+            reason=args.reason,
+            items=items,
+            settings={
+                "embedding": args.embedding,
+                "config": config.version,
+                "set": args.set or [],
+                "no_rerank": args.no_rerank,
+            },
+        )
     try:
         report = await evaluate_retrieval(
             app,
@@ -218,7 +240,9 @@ async def eval_retrieval(args: argparse.Namespace) -> int:
     finally:
         await app.dispose()
         await owner.dispose()
-    out = args.out / datetime.now().strftime("%Y%m%dT%H%M%S")
+    out = (args.out / "sealed" if args.sealed else args.out) / datetime.now().strftime(
+        "%Y%m%dT%H%M%S"
+    )
     out.mkdir(parents=True, exist_ok=True)
     (out / "report.json").write_text(json.dumps(report.to_json(), indent=2, default=str) + "\n")
     (out / "report.md").write_text(render_markdown(report))
@@ -247,6 +271,14 @@ async def eval_retrieval(args: argparse.Namespace) -> int:
             for name, b in s["by_split"].items()
         )
     )
+    if len(s.get("by_held_out_cohort", {})) > 1:
+        print(
+            "held_out by cohort: "
+            + "; ".join(
+                f"{name} {b['items_with_targets']} with targets, R@10 {b['recall@10']}"
+                for name, b in s["by_held_out_cohort"].items()
+            )
+        )
     print(f"database platform: {report.database_platform}; config {report.config_version}")
     if report.embedding_provider == "fake":
         print("note: the fake provider is a test double; recall here is not semantic quality")
@@ -376,6 +408,7 @@ def add_parsers(
         help="change one RetrievalConfig tunable for this run (VALUE as JSON); evaluation only",
     )
     add_compare_arguments(retrieval, required=False)
+    sealed.add_arguments(retrieval)
 
     compare = eval_commands.add_parser(
         "compare", help="Compare a run with a baseline, per item and category (files only)"

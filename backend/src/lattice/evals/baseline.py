@@ -227,6 +227,8 @@ def write_baseline(
     errors = report["summary"].get("errors") or {}
     if errors:
         raise BaselineError(f"a run with errors cannot become a baseline: {errors}")
+    if any(r.get("split") == "sealed" for r in report.get("items", [])):
+        raise BaselineError("a sealed run is never a baseline (phase-13-followups §7.4)")
     data = snapshot(report, label=label)
     data["created"] = {"on": date.today().isoformat(), "reason": reason.strip()}
     if path.exists():

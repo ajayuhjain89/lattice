@@ -34,9 +34,8 @@ from lattice.cli_retrieval import (
 )
 from lattice.config import Environment, load_provider_settings
 from lattice.dataset.distractors import DATA
-from lattice.dataset.lint import load_dataset
 from lattice.errors import LatticeError
-from lattice.evals import baseline
+from lattice.evals import baseline, sealed
 from lattice.evals.answer import (
     AnswerItemResult,
     GenerationSpec,
@@ -188,15 +187,23 @@ async def eval_answer(args: argparse.Namespace) -> int:
             "--judge is limited to local providers (authored facts may be above the "
             "external egress level)"
         )
-    dataset = load_dataset(args.data, args.golden)
+    problem = sealed.argument_problem(args)
+    if problem:
+        return _fail(problem)
+    dataset = sealed.load(args.data, args.golden, sealed=args.sealed)
     if dataset.problems:
         return _fail("the dataset does not lint; run `lattice dataset lint`")
-    items = select_items(
-        dataset,
-        categories=args.category or (),
-        personas=args.persona or (),
-        item_ids=args.item or (),
+    items, problem = sealed.restrict(
+        select_items(
+            dataset,
+            categories=args.category or (),
+            personas=args.persona or (),
+            item_ids=args.item or (),
+        ),
+        sealed=args.sealed,
     )
+    if problem:
+        return _fail(problem)
     try:
         retrieval_config = config_overrides(args.set or ())
     except (TypeError, ValueError) as exc:
@@ -204,6 +211,20 @@ async def eval_answer(args: argparse.Namespace) -> int:
     factory = DefaultGenerationFactory(_env())
     embedding = build_embedding_provider(args.embedding, load_provider_settings())
     app, owner = _databases("lattice-eval-answer")
+    if args.sealed:
+        sealed.record_access(
+            args.golden,
+            kind="answer",
+            reason=args.reason,
+            items=items,
+            settings={
+                "generation": spec.provider,
+                "model": spec.model,
+                "embedding": args.embedding,
+                "retrieval_config": retrieval_config.version,
+                "set": args.set or [],
+            },
+        )
     try:
         identities = await load_identities(owner, dataset)
         corpus = await load_corpus(owner, identities.org_ids)
@@ -226,7 +247,9 @@ async def eval_answer(args: argparse.Namespace) -> int:
     finally:
         await app.dispose()
         await owner.dispose()
-    out = args.out / f"answer-{datetime.now().strftime('%Y%m%dT%H%M%S')}"
+    out = (args.out / "sealed" if args.sealed else args.out) / (
+        f"answer-{datetime.now().strftime('%Y%m%dT%H%M%S')}"
+    )
     out.mkdir(parents=True, exist_ok=True)
     (out / "report.json").write_text(json.dumps(report.to_json(), indent=2, default=str) + "\n")
     (out / "report.md").write_text(render_markdown(report))
@@ -251,6 +274,14 @@ async def eval_answer(args: argparse.Namespace) -> int:
             for name, b in s["by_split"].items()
         )
     )
+    if len(s.get("by_held_out_cohort", {})) > 1:
+        print(
+            "held_out by cohort: "
+            + "; ".join(
+                f"{name} {b['ran']} runs, context recall {b['context_recall']['macro']}"
+                for name, b in s["by_held_out_cohort"].items()
+            )
+        )
     if s["judge"]:
         print(f"judge (uncalibrated): {s['judge']}")
     if spec.provider == "fake":
@@ -307,3 +338,4 @@ def add_parsers(
         help="change one RetrievalConfig tunable for this run (VALUE as JSON); evaluation only",
     )
     add_compare_arguments(answer, required=False)
+    sealed.add_arguments(answer)
