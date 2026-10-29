@@ -339,6 +339,7 @@
   label_source: authored_f2
   cohort: f2
   classes: [insufficient_evidence]
+  paraphrase_group: f2-billing-migration-status
   question: "Did the Chargebee billing cutover actually happen on 1 October 2025?"
   expected:
     status: insufficient_evidence

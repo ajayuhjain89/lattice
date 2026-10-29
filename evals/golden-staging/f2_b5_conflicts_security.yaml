@@ -95,6 +95,7 @@
   label_source: authored_f2
   cohort: f2
   classes: [contradictory_evidence]
+  same_question_group: f2-acme-account-health
   question: "Is the Acme Corp account healthy?"
   expected:
     status: answered
