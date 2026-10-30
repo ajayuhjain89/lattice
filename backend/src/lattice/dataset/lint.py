@@ -19,9 +19,11 @@ dataset is valid). Nothing here needs a database or a model. Checks, by area:
   persona, prohibited evidence not, egress levels, ambiguity choices, hidden accounts,
   D-8 metadata cases, trap phrases, same-question groups);
 * golden provenance and splits (P13.2): label sources and the label freezes (Phase 3
-  labels unchanged, held-out labels frozen; ``provenance``), every item in a split with
-  no information need straddling dev and held_out and no near-duplicate questions on
-  different sides (``splits``), owner-review records on held-out items, declared
+  labels unchanged, held-out and sealed labels frozen; ``provenance``), every item in a
+  split with no information need straddling two splits and no near-duplicate questions
+  on different sides (``splits``), every item in the directory of its split (sealed
+  items only in ``golden-sealed``, items without a split only in ``golden-staging``),
+  owner-review records on held-out and sealed items, declared
   evaluation classes that the labels really exercise (and a minimum per class),
   exhaustive reviews that cover every candidate the persona can read, and no
   contradictory or impossible constraints (evidence both wanted and prohibited, facts
@@ -88,6 +90,11 @@ class Problem:
 class Dataset:
     root: Path
     golden_dir: Path
+    # phase-13-followups F2: sealed items and items still being authored (no split) live
+    # in sibling directories that only the dataset tools load; every evaluation run,
+    # baseline and golden test loads ``golden_dir`` alone.
+    sealed_dir: Path | None = None
+    staging_dir: Path | None = None
     worlds: dict[str, OrgWorld] = field(default_factory=dict)
     ground_truth: dict[str, GroundTruth] = field(default_factory=dict)
     canaries: list[Canary] = field(default_factory=list)
@@ -116,15 +123,31 @@ class Dataset:
         return record, part
 
 
-def _error_text(exc: ValidationError) -> str:
+def error_text(exc: ValidationError) -> str:
     return "; ".join(
         f"{'.'.join(str(p) for p in e['loc']) or '<root>'}: {e['msg']}"
         for e in exc.errors(include_input=False, include_url=False)
     )
 
 
-def load_dataset(root: Path, golden_dir: Path) -> Dataset:
-    data = Dataset(root=root, golden_dir=golden_dir)
+def sealed_dir_for(golden_dir: Path) -> Path:
+    return golden_dir.with_name(f"{golden_dir.name}-sealed")
+
+
+def staging_dir_for(golden_dir: Path) -> Path:
+    return golden_dir.with_name(f"{golden_dir.name}-staging")
+
+
+def load_dataset(
+    root: Path,
+    golden_dir: Path,
+    *,
+    sealed_dir: Path | None = None,
+    staging_dir: Path | None = None,
+) -> Dataset:
+    """The dataset and the golden items of ``golden_dir`` -- plus, only when named, the
+    sealed and staging directories (``load_all`` names both)."""
+    data = Dataset(root=root, golden_dir=golden_dir, sealed_dir=sealed_dir, staging_dir=staging_dir)
     for slug in ORGANIZATIONS:
         folder = root / slug
         try:
@@ -138,7 +161,7 @@ def load_dataset(root: Path, golden_dir: Path) -> Dataset:
             )
             truth = GroundTruth.model_validate(load_yaml(folder / "ground-truth.yaml"))
         except ValidationError as exc:
-            data.problem(folder, f"invalid manifest: {_error_text(exc)}")
+            data.problem(folder, f"invalid manifest: {error_text(exc)}")
             continue
         except FileNotFoundError as exc:
             data.problem(folder, f"missing {Path(str(exc.filename)).name}")
@@ -168,16 +191,27 @@ def load_dataset(root: Path, golden_dir: Path) -> Dataset:
     try:
         data.canaries = CanariesFile.model_validate(load_yaml(root / "canaries.yaml")).canaries
     except (ValidationError, FileNotFoundError) as exc:
-        detail = _error_text(exc) if isinstance(exc, ValidationError) else "missing"
+        detail = error_text(exc) if isinstance(exc, ValidationError) else "missing"
         data.problem(root / "canaries.yaml", detail)
     adapter = TypeAdapter(list[GoldenItem])
-    for path in sorted(golden_dir.glob("*.yaml")):
+    golden_dirs = [d for d in (golden_dir, sealed_dir, staging_dir) if d is not None]
+    for path in [p for d in golden_dirs for p in sorted(d.glob("*.yaml"))]:
         try:
             for item in adapter.validate_python(load_yaml(path)):
                 data.goldens.append((path, item))
         except ValidationError as exc:
-            data.problem(path, _error_text(exc))
+            data.problem(path, error_text(exc))
     return data
+
+
+def load_all(root: Path, golden_dir: Path) -> Dataset:
+    """Every golden item, sealed and staged ones included: for the dataset tools only."""
+    return load_dataset(
+        root,
+        golden_dir,
+        sealed_dir=sealed_dir_for(golden_dir),
+        staging_dir=staging_dir_for(golden_dir),
+    )
 
 
 def lint(data: Dataset) -> list[Problem]:
@@ -520,6 +554,7 @@ def _check_goldens(data: Dataset) -> None:
         data.problem(data.golden_dir, "potential conflicts + supersession below minimum")
 
     golden_items = [item for _, item in data.goldens]
+    _check_placement(data)
     ambiguous_units = {
         item.id
         for unit in splits.units(golden_items)
@@ -551,6 +586,20 @@ def _check_goldens(data: Dataset) -> None:
     _check_provenance_and_splits(data, golden_items)
 
 
+def _check_placement(data: Dataset) -> None:
+    """Each item lives in the directory of its split (phase-13-followups §7.4)."""
+    for path, item in data.goldens:
+        where = f"{path}: {item.id}"
+        if data.staging_dir is not None and path.parent == data.staging_dir:
+            if item.split is not None:
+                data.problem(where, "staged items get their split from `splits --propose`")
+        elif data.sealed_dir is not None and path.parent == data.sealed_dir:
+            if item.split != "sealed":
+                data.problem(where, "only sealed items belong in the sealed directory")
+        elif item.split == "sealed":
+            data.problem(where, "sealed items belong in the sealed directory")
+
+
 def _check_provenance_and_splits(data: Dataset, items: list[GoldenItem]) -> None:
     try:
         freeze = provenance.load_freeze(data.golden_dir)
@@ -558,14 +607,21 @@ def _check_provenance_and_splits(data: Dataset, items: list[GoldenItem]) -> None
         data.problem(data.golden_dir / provenance.FREEZE_FILE, f"unreadable: {exc}")
         freeze = None
     else:
-        for where, message in provenance.check(items, freeze):
+        problems = provenance.check(items, freeze, sealed_loaded=data.sealed_dir is not None)
+        for where, message in problems:
             data.problem(f"{data.golden_dir}: {where}", message)
-    for problem in splits.check(items):
+    staged = {
+        item.id
+        for path, item in data.goldens
+        if data.staging_dir and path.parent == data.staging_dir
+    }
+    for problem in splits.check(items, unassigned_ok=staged):
         data.problem(f"{data.golden_dir}: {problem.where}", problem.message)
     for item in items:
         where = f"{data.golden_dir}: {item.id}"
-        if item.split == "held_out" and item.owner_review is None:
-            data.problem(where, "held-out items carry an owner_review record (D-41)")
+        if item.split in ("held_out", "sealed") and item.owner_review is None:
+            name = "held-out" if item.split == "held_out" else "sealed"
+            data.problem(where, f"{name} items carry an owner_review record (D-41)")
     counts: Counter[str] = Counter(c for item in items for c in item.classes)
     for name in EvalClass.__args__:  # type: ignore[attr-defined]
         if counts[name] < CLASS_MINIMUM:
@@ -953,5 +1009,8 @@ def summary(data: Dataset) -> dict[str, Any]:
         "slack_messages": messages,
         "canaries": len(data.canaries),
         "golden_items": len(data.goldens),
+        "golden_splits": dict(
+            sorted(Counter(i.split or "unassigned" for _, i in data.goldens).items())
+        ),
         "golden_categories": dict(sorted(Counter(i.category for _, i in data.goldens).items())),
     }

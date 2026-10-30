@@ -1,0 +1,200 @@
+# Phase 13 follow-ups F2, top-up batch (label_source authored_f2; no split until
+# `lattice dataset splits --propose`): items with targets added at F2c because the
+# first 130 left held-out and sealed short of their minimums (phase-13-followups §7.4),
+# and the stale and AI-egress categories without coverage in the sealed split.
+# Record keys: doc:<id>[#part], ticket:<id>[#cN], chat:<channel>:<ts|day:date>; another
+# organization's record is prefixed with "<org>/".
+
+- id: f2-stale-billing-migration-status-lena
+  category: stale
+  persona: lena
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H8, status: pending}
+  cohort: f2
+  classes: [temporal_supersession]
+  paraphrase_group: f2-billing-migration-status
+  question: "What's the latest status of the billing system migration?"
+  expected:
+    status: answered
+    relevant: ["doc:billing-migration-project-plan#6"]
+    acceptable: ["doc:billing-migration-project-plan#4", "doc:billing-migration-project-plan#1"]
+    required_facts:
+      - "The newest record (14 July 2025): sandbox configured and the test migration moved to 7 August; nothing later is recorded"
+    freshness: {stale: true, newest_evidence_on: 2025-07-14}
+  notes: >-
+    Grouped with the Chargebee go-live probe: the same need, answered from a fourteen-
+    month-old status line.
+
+- id: f2-stale-acme-health-tom
+  category: stale
+  persona: tom
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H7, status: pending}
+  cohort: f2
+  classes: [inaccessible_strong_match, temporal_supersession]
+  same_question_group: f2-acme-account-health
+  question: "Is the Acme Corp account healthy?"
+  expected:
+    status: answered
+    relevant: ["doc:acme-q3-success-plan#3", "doc:acme-account-brief#5"]
+    acceptable: ["doc:scim-ga-decision#4", "ticket:HAL-4821#c6"]
+    must_not_retrieve: [doc:renewal-risk-register-2026-q3, doc:acme-renewal-plan-2026, doc:acme-exec-escalation-notes]
+    required_facts:
+      - "The July success plan rated it green, but the September brief flags Directory Sync timing as the risk to the renewal"
+    must_not_contain: [LATTICE-CANARY-C07-5d2a18, LATTICE-CANARY-B-7f3a9c]
+  tags: [security]
+  trap_phrases: ["Acme Corp"]
+  notes: >-
+    Grace sees the September risk rating; Tom has only the older green rating and the
+    brief's risk note.
+
+- id: f2-egress-fy27-headcount-grace
+  category: ai_egress
+  persona: grace
+  organization: halden
+  label_source: authored_f2
+  split: dev
+  cohort: f2
+  classes: [egress_withheld]
+  question: "How many people will Halden have at the end of FY27?"
+  expected_by_egress:
+    default:
+      status: evidence_only
+      status_reason: egress_policy
+      acceptable: ["doc:company-handbook#1"]
+      not_used_for_answer: [doc:fy2027-headcount-plan]
+    opt_in_confidential:
+      status: answered
+      relevant: ["doc:fy2027-headcount-plan#1"]
+      acceptable: ["doc:fy2027-headcount-plan#2", "doc:company-handbook#1"]
+      required_facts:
+        - "426 at the end of FY27 in draft 2 of the plan, up from 381 today"
+  tags: [confidential]
+  notes: >-
+    Only a confidential draft answers; the handbook's 'about 380' is today's size.
+
+- id: f2-egress-enterprise-plus-arjun
+  category: ai_egress
+  persona: arjun
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H8, status: pending}
+  cohort: f2
+  classes: [egress_withheld]
+  question: "What would the proposed Enterprise Plus tier include?"
+  expected_by_egress:
+    default:
+      status: evidence_only
+      status_reason: egress_policy
+      not_used_for_answer: [doc:pricing-packaging-2027-draft]
+    opt_in_confidential:
+      status: answered
+      relevant: ["doc:pricing-packaging-2027-draft#2"]
+      acceptable: ["doc:pricing-packaging-2027-draft#4"]
+      required_facts:
+        - "Directory Sync, audit log streaming, EU residency and a 99.95% uptime SLA, at list price plus 22%"
+        - "It is a working draft, not approved"
+  tags: [confidential]
+  notes: >-
+    All evidence is confidential.
+
+- id: f2-ident-hal-4815-tom
+  category: lookup
+  persona: tom
+  organization: halden
+  label_source: authored_f2
+  split: dev
+  cohort: f2
+  classes: [identifier_variant]
+  question: "Did Acme Health need to do anything about the certificate banner in HAL-4815?"
+  expected:
+    status: answered
+    relevant: ["ticket:HAL-4815#c2", "ticket:HAL-4815#c3"]
+    acceptable: [chat:C0SUPPORT01:day:2026-08-13, "doc:release-notes-2026-08#2"]
+    required_facts:
+      - "No: their IdP (Google Workspace) reads Halden's metadata URL, so the overlap covers them; only manual certificate uploads need the new certificate"
+  notes: >-
+    An identifier lookup; the support chat summary agrees.
+
+- id: f2-scoped-brightwater-docs-daniel
+  category: account_visibility
+  persona: daniel
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H9, status: pending}
+  cohort: f2
+  classes: [scoped_retrieval]
+  question: "What documents do we have about Brightwater Health?"
+  scope: {account: brightwater-health, source_types: [doc]}
+  expected:
+    status: answered
+    relevant: [doc:brightwater-account-brief]
+    required_facts:
+      - "One: the Brightwater Health account brief (Enterprise, 2,200 seats, renewal 30 June 2027)"
+  notes: >-
+    Inside the account and document scope only the brief exists.
+
+- id: f2-xdoc-renewals-oct-mar-grace
+  category: cross_document
+  persona: grace
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H6, status: pending}
+  cohort: f2
+  classes: [multi_account_comparison, multi_document]
+  question: "Which renewals fall between October 2026 and March 2027?"
+  expected:
+    status: answered
+    relevant: ["doc:renewal-risk-register-2026-q3#1", "doc:acme-account-brief#2", "doc:kestrel-account-brief#2", "doc:northpeak-account-brief#2", "doc:acme-health-account-brief#2"]
+    acceptable: ["doc:acme-renewal-plan-2026#1", "doc:kestrel-renewal-risk-2026#1"]
+    required_facts:
+      - "Northpeak Logistics 31 October 2026, Acme Corp 15 December 2026, Kestrel Bank 31 January 2027 and Acme Health 1 March 2027"
+  notes: >-
+    Larkspur (30 April 2027) falls outside the window.
+
+- id: f2-xdoc-lisbon-hub-lena
+  category: cross_source
+  persona: lena
+  organization: halden
+  label_source: authored_f2
+  split: dev
+  cohort: f2
+  classes: [multi_document]
+  question: "What has been going on at the Lisbon hub?"
+  expected:
+    status: answered
+    relevant: [chat:C0GENERAL01:day:2026-08-03, chat:C0RANDOM001:day:2026-07-10, chat:C0RANDOM001:day:2026-08-07, chat:C0GENERAL01:day:2026-09-25]
+    acceptable: ["doc:company-handbook#1", chat:C0GENERAL01:day:2026-07-01]
+    required_facts:
+      - "Closed on Saturday 15 August for a public holiday"
+      - "The coffee machine was fixed in July and the good beans came back in August"
+      - "A Friday social on 25 September"
+  notes: >-
+    Small facts spread over two channels.
+
+- id: f2-xdoc-it-announcements-maya
+  category: cross_source
+  persona: maya
+  organization: halden
+  label_source: authored_f2
+  split: dev
+  cohort: f2
+  classes: [multi_document]
+  question: "What has IT announced to staff since July?"
+  expected:
+    status: answered
+    relevant: [chat:C0GENERAL01:day:2026-07-08, chat:C0GENERAL01:day:2026-09-08, chat:C0GENERAL01:1790247600.000100]
+    acceptable: [chat:C0ENGINEER1:day:2026-09-24]
+    required_facts:
+      - "Security awareness training due by 31 July"
+      - "A laptop refresh for 2022 machines from mid-September"
+      - "The Lattice pilot with 8 people, which shows only what each person can already access"
+  notes: >-
+    Three #general posts; the Postgres maintenance note is Engineering's.

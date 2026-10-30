@@ -45,8 +45,9 @@ small operational surface (product brief §7), with no hosting provider chosen.
 6. **A real staging deployment** of the same images under the same contract was required
    before Phase 11 closed (D-22). **Amended 2026-10-05 (zero paid infrastructure):** it is
    deferred, with the rest of the external validation (phase-11-plan §21.1), and becomes a
-   release gate for Phase 15 (v1 GA). The provider comparison (deployment.md Appendix A)
-   stays as the selected candidate for future staging validation — not provisioned or
+   release gate for Phase 15 (v1 GA). **Amended 2026-10-30 (D-46, a personal project):**
+   no longer a gate; the list stays explicit as never validated. The provider comparison
+   (deployment.md Appendix A) stays as the selected candidate for future staging validation — not provisioned or
    tested — and stays outside the application: nothing in the code knows where it runs.
 7. **The exact schema-revision guard is retained** (D-23). Releases with a schema change use
    **controlled downtime**: stop API traffic, stop every API instance and the worker, prove
@@ -75,7 +76,7 @@ small operational surface (product brief §7), with no hosting provider chosen.
   checkable.
 - The local stack carries the verification. Without a funded staging environment
   (D-22 amended), managed-PostgreSQL privileges, managed PITR, public TLS and external
-  OIDC callbacks remain unproven until Phase 15's release gate.
+  OIDC callbacks remain unproven (no longer a release gate since D-46, 2026-10-30).
 - Managed PostgreSQL usually has no superuser: the bootstrap gains a production variant
   (P11.2); the startup role checks stay the authority on role safety.
 

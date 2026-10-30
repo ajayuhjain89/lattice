@@ -2,8 +2,8 @@
 
 *Phase 12, P12.7 (2026-10-19). Verified on the local production-shaped reference stack
 (`make prod-onboard`) and in the backend suite (`backend/tests/onboarding`). Not yet
-verified on a cloud deployment: external staging remains a Phase 15 release gate
-([deployment.md](deployment.md) Appendix A, phase-11-plan §21.1).*
+verified on a cloud deployment, and not planned to be (D-46: a personal project;
+[deployment.md](deployment.md) Appendix A, phase-11-plan §21.1).*
 
 This guide takes a customer organization from nothing to a member's first answered
 question. It uses only the product and the operator commands that exist; there is no
@@ -212,7 +212,7 @@ sources, member lifecycle, logs) and then the same journey in the real web app
 
 **Re-running and resetting.** Each run is additive: it creates two new run-unique
 organizations (and their imports in the stack's `imports` volume) and never deletes the
-previous runs' — organization purge is not executable before Phase 15, so there is no
+previous runs' — organization purge is not executable (post-v1, D-37A), so there is no
 "clean up after the drill" command. The reference stack is disposable verification
 infrastructure: to start again from an empty database, `make prod-destroy` (deletes the
 `lattice-reference` Compose project's volumes only — its database, imports, backups and
@@ -238,7 +238,7 @@ IDP=1`. Nothing in the drill or the Makefile resets a development or production 
   operator's last `lattice sync` recorded; customers upload. No API takes a path.
 * **No live connectors.** The three source types are exports; nothing is fetched from
   Slack, a help desk or a document system.
-* **Organization purge** is decided (D-37A) but not executable before Phase 15.
+* **Organization purge** is decided (D-37A) but not executable; it is post-v1 (D-46).
 * **Uploads are single requests** (no resumable or chunked protocol); one per source at
   a time.
 * **Cloud deployment is not validated**: all of the above was verified on the local

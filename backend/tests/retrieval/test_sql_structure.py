@@ -33,6 +33,7 @@ from lattice.retrieval.exact import exact_statement
 from lattice.retrieval.lexical import LexicalWeights, lexical_statement
 from lattice.retrieval.models import RetrievalConfig
 from lattice.retrieval.permitted import DOCUMENTS, VISIBLE_ACCOUNT, ResolvedScope
+from lattice.retrieval.records import coverage_statement
 from lattice.retrieval.semantic import semantic_statement
 from lattice.retrieval.terms import question_statistics_statement, term_statistics_statement
 
@@ -47,6 +48,7 @@ PATHS = [
     "evidence_terms",
     "term_statistics",
     "question_statistics",
+    "record_coverage",
 ]
 WEIGHTED = RetrievalConfig(lexical_term_weights="idf", lexical_title_factor=0.5)
 
@@ -127,6 +129,10 @@ def statements(ctx: AuthorizationContext) -> dict[str, Select[tuple[object, ...]
         ),
         "question_statistics": question_statistics_statement(
             ctx, "refund window", "Acme Corp Acme", "english", [uuid.uuid4()]
+        ),
+        # F5.2: rerank_v2's lexeme coverage of the pooled chunks.
+        "record_coverage": coverage_statement(
+            ctx, [uuid.uuid4()], QuestionTerms("refund window", "Acme Corp Acme", "english")
         ),
     }
 

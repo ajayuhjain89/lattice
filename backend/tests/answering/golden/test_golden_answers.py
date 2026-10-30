@@ -110,14 +110,15 @@ async def test_the_answer_pipeline_reproduces_its_committed_baseline(
     result = baseline.compare(reference, baseline.normalize(report))
     assert result.verdict == "identical", baseline.render(result)
     f = report.summary["foundation"]
-    # P13.3 gate_v1: 15 of the 25 expected-abstain runs are stopped before the model (0
-    # in P13.2: G1); 10 of the 126 answerable runs are refused by the gate.
-    assert f["abstention"]["catch_before_model"]["count"] == 15
-    assert f["abstention"]["catch_before_model"]["n"] == 25
-    assert f["abstention"]["false_abstention"]["count"] == 10
-    # 0.7114 in P13.2: the refused runs carry no evidence to the prompt (evaluation-plan
-    # §17); no other run lost a target.
-    assert f["context_recall"]["macro"] == 0.6571
+    # P13.3 gate_v1 on the 171 pre-F2 runs: 15 of 25 expected-abstain runs stopped before
+    # the model, 10 of 126 answerable runs refused, context recall 0.6571 (0.7114 in
+    # P13.2: refused runs carry no evidence to the prompt, evaluation-plan §17). With the
+    # F2 items (F2e, 271 runs): 18 of 34 stopped, 26 of 207 refused.
+    assert f["abstention"]["catch_before_model"]["count"] == 18
+    assert f["abstention"]["catch_before_model"]["n"] == 34
+    assert f["abstention"]["false_abstention"]["count"] == 26
+    assert f["abstention"]["false_abstention"]["n"] == 207
+    assert f["context_recall"]["macro"] == 0.6527
     # Both splits are reported with their denominators (EC-7).
     by_split = report.summary["by_split"]
     assert set(by_split) == {"dev", "held_out"}

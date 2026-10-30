@@ -354,3 +354,41 @@ def test_the_retrieval_configuration_of_an_answer_run_is_declared() -> None:
         "retrieval_config_version: retrieval-6 -> retrieval-6+max_chunks_per_document=2"
     ]
     assert result.verdict == "identical"  # declared, and nothing moved
+
+
+def test_only_a_prompt_other_than_the_products_is_a_declared_change() -> None:
+    # phase-13-followups §12 (E3): reports record their prompt configuration; the
+    # product's prompt still compares identically with baselines from before the field.
+    base = _answer_report(_answer_run("nps"))
+    default = base | {"prompt_config": {"version": "answer-prompt-2", "max_evidence": 12}}
+    assert baseline.compare(base, default).verdict == "identical"
+    assert baseline.compare(base, default).intended == []
+    wider = base | {"prompt_config": {"version": "answer-prompt-2", "max_evidence": 16}}
+    result = baseline.compare(base, wider)
+    assert result.intended == [
+        "prompt_config: None -> {'version': 'answer-prompt-2', 'max_evidence': 16}"
+    ]
+
+
+def test_only_one_question_per_call_is_a_declared_query_embedding_change() -> None:
+    # phase-13-followups O13 (F5.0): batched runs compare with baselines from before the
+    # field; a local model embedding one question per call is declared.
+    local = {"embedding_provider": "local", "embedding_model": "mxbai@x"}
+    base = _report(**local)
+    batched = _report(**local, query_embedding="batched")
+    assert baseline.compare(base, batched).verdict == "identical"
+    assert baseline.compare(base, batched).intended == []
+    single = _moved(_report(**local, query_embedding="per_question"), "lookup-b", "doc:c#1", 4)
+    result = baseline.compare(base, single)
+    assert result.intended == ["query_embedding: None -> per_question"]
+    assert result.verdict == "changed"
+
+
+def test_a_new_action_request_detector_is_a_declared_change() -> None:
+    # O12: baselines from before the field have no detector version; its arrival is
+    # declared, so the refusal runs it changes are reported, never drift.
+    base = _answer_report(_answer_run("nps"))
+    run = base | {"request_kind_version": "request-kind-2"}
+    result = baseline.compare(base, run)
+    assert result.intended == ["request_kind_version: None -> request-kind-2"]
+    assert baseline.compare(run, run).verdict == "identical"

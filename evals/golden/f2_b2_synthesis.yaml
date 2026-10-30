@@ -1,0 +1,356 @@
+# Phase 13 follow-ups F2, batch 2 (label_source authored_f2; no split until
+# `lattice dataset splits --propose`): synthesis questions whose answer needs three or
+# more records, the stratum Phase 13 could not move.
+# Record keys: doc:<id>[#part], ticket:<id>[#cN], chat:<channel>:<ts|day:date>; another
+# organization's record is prefixed with "<org>/".
+
+- id: f2-xdoc-acme-identity-history-grace
+  category: cross_source
+  persona: grace
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H6, status: pending}
+  cohort: f2
+  classes: [multi_document]
+  question: "Summarize Acme Corp's identity setup with us from go-live to today."
+  expected:
+    status: answered
+    relevant: ["doc:acme-onboarding-plan-2024#3", "doc:acme-qbr-2026-03#4", "doc:acme-kickoff-call-notes#2", chat:C0EXTACME01:1785607200.000100, "ticket:HAL-4821#c1"]
+    acceptable: ["doc:acme-account-brief#4", "doc:acme-account-brief#6", ticket:HAL-4612, chat:G0ACCTACME1:day:2026-07-10, "doc:acme-q3-success-plan#2"]
+    must_not_retrieve: [veridian/doc:acme-account-plan]
+    required_facts:
+      - "Go-live in December 2024 on Azure AD SAML, with users created just in time and leavers deactivated by hand"
+      - "Acme moved Halden SSO to Okta on 1 August 2026"
+      - "After the cutover, Okta deactivations did not remove Halden access (HAL-4821), which made automated deprovisioning (SCIM) the open ask"
+  tags: [security, cross_org_same_name]
+  trap_phrases: ["Acme Corp"]
+  notes: >-
+    Five records across two years; Veridian's plan for the same company is another
+    tenant's.
+
+- id: f2-xdoc-acme-user-growth-tom
+  category: cross_document
+  persona: tom
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H6, status: pending}
+  cohort: f2
+  classes: [multi_document]
+  question: "How has the number of Acme Corp users grown since go-live?"
+  expected:
+    status: answered
+    relevant: ["doc:acme-onboarding-plan-2024#2", "doc:acme-qbr-2026-03#2", "doc:acme-q3-success-plan#3", "doc:acme-account-brief#2"]
+    required_facts:
+      - "About 1,200 users at go-live in December 2024"
+      - "1,640 active users in March 2026 and 1,790 in June 2026"
+      - "1,850 Enterprise seats now"
+  notes: >-
+    Four documents each give one point of the curve; the onboarding plan and the QBR
+    differ slightly on go-live (1,200 vs 1,210).
+
+- id: f2-xdoc-eu-residency-evolution-sofia
+  category: cross_source
+  persona: sofia
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H7, status: pending}
+  cohort: f2
+  classes: [multi_document]
+  question: "How has the EU data residency plan developed since the H2 roadmap?"
+  expected:
+    status: answered
+    relevant: ["doc:roadmap-2026-h2#5", "doc:eu-data-residency-decision#2", "doc:engineering-all-hands-2026-09#3"]
+    acceptable: [chat:C0SUPPORT01:day:2026-08-04, chat:C0SUPPORT01:day:2026-08-06, chat:C0ANNOUNC01:day:2026-08-05, "doc:eu-data-residency-decision#5", "doc:acme-security-questionnaire-2026#5", chat:C0GENERAL01:day:2026-09-17]
+    required_facts:
+      - "July roadmap: exploring, with a decision due in August"
+      - "5 August decision: a Frankfurt (eu-central-1) region, GA planned for Q1 2027"
+      - "Build-out has started; the first internal workspace is planned for November"
+  notes: >-
+    Planning document, decision record and engineering update in time order.
+
+- id: f2-xdoc-netsuite-token-sofia
+  category: cross_source
+  persona: sofia
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H7, status: pending}
+  cohort: f2
+  classes: [multi_document]
+  question: "What do we know about the NetSuite connector token expiry problem?"
+  expected:
+    status: answered
+    relevant: [chat:C0SUPPORT01:1787239800.000100, ticket:HAL-4903, "doc:weekly-support-report-2026-09-21#2"]
+    acceptable: ["doc:release-notes-2026-08#4", chat:C0SUPPORT01:day:2026-09-16]
+    required_facts:
+      - "A refresh-token rotation bug in the NetSuite v2 connector (2026.08): tokens expire after about a week"
+      - "The fix is in release 2026.10 (13 October); until then, reconnecting the connection restores it"
+      - "11 tickets by the week ending 20 September"
+  notes: >-
+    Support chat, a customer ticket and the weekly report each add a fact.
+
+- id: f2-xdoc-larkspur-year-priya
+  category: cross_source
+  persona: priya
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H7, status: pending}
+  cohort: f2
+  classes: [multi_document]
+  question: "How has the year gone with Larkspur Retail?"
+  expected:
+    status: answered
+    relevant: [ticket:HAL-4480, ticket:HAL-4533, ticket:HAL-4704, chat:C0CSTEAM001:day:2026-08-10]
+    acceptable: [chat:C0SALES0001:day:2026-07-30, chat:C0SUPPORT01:day:2026-07-09, "doc:postmortem-inc-2026-031#2", ticket:HAL-4189, ticket:HAL-4379, ticket:HAL-4429, ticket:HAL-4764, chat:C0INCIDENT1:1784621160.000100]
+    required_facts:
+      - "May: Shopify 429 errors during a sale, fixed by switching to the webhook trigger"
+      - "May: a refund request was first answered with the old 30-day rule, then corrected to the 14-day policy and settled with a three-month credit"
+      - "July: affected by the 21 July SSO incident"
+      - "August check-in: usage up 20% since the webhook change"
+  notes: >-
+    Routine how-to tickets from the year are acceptable, not required.
+
+- id: f2-xdoc-acme-health-promises-tom
+  category: cross_source
+  persona: tom
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H6, status: pending}
+  cohort: f2
+  classes: [multi_document]
+  question: "What have we promised Acme Health, and where does each promise stand?"
+  expected:
+    status: answered
+    relevant: ["doc:acme-health-account-brief#4", ticket:HAL-4777, chat:C0CSTEAM001:1787752800.000100, chat:C0SALES0001:day:2026-09-23]
+    acceptable: ["doc:acme-health-account-brief#5", "doc:roadmap-2026-h2#4"]
+    required_facts:
+      - "FHIR connector beta in Q4 2026: still planned; onboarding booked for 14 October"
+      - "Priority support during the Epic migration (June-August 2026): delivered"
+      - "No SCIM or Directory Sync commitment"
+  notes: >-
+    Named explicitly, so no clarifying question is needed.
+
+- id: f2-xdoc-identity-roadmap-delivery-arjun
+  category: cross_document
+  persona: arjun
+  organization: halden
+  label_source: authored_f2
+  split: dev
+  cohort: f2
+  classes: [multi_document]
+  question: "Which items on the April identity roadmap have been delivered, and which slipped?"
+  expected:
+    status: answered
+    relevant: ["doc:identity-roadmap-2026-04#3", "doc:release-notes-2026-08#2", "doc:scim-ga-decision#2"]
+    acceptable: ["doc:roadmap-2026-h2#2", "doc:release-notes-2026-09#5", "doc:identity-roadmap-2026-04#4"]
+    required_facts:
+      - "SAML signing certificate auto-rollover (Q3): shipped in 2026.08"
+      - "Directory Sync (Q3): slipped; GA now targeted for 8 December 2026"
+      - "Break-glass admin MFA (Q4) and session policies (2027) are not due yet"
+  notes: >-
+    Roadmap row by row against release notes and the decision record.
+
+- id: f2-xdoc-incident-policy-compliance-grace
+  category: cross_source
+  persona: grace
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H7, status: pending}
+  cohort: f2
+  classes: [multi_document]
+  question: "Did we follow our incident communication policy during the July SSO incident?"
+  expected:
+    status: answered
+    relevant: ["doc:incident-customer-communication-policy#2", "doc:incident-customer-communication-policy#3", "ticket:HAL-4711#c3", chat:C0GENERAL01:day:2026-07-21]
+    acceptable: [ticket:HAL-4702, chat:C0INCIDENT1:1784621160.000100, "doc:kestrel-sso-incident-customer-rca#1", ticket:HAL-4704]
+    required_facts:
+      - "Kestrel's customer-specific RCA was shared on 28 July, within the 10 business days the policy allows"
+      - "Staff were told not to discuss affected customers outside #incidents and the account channels, as the policy requires"
+      - "No public incident summary is on record, although the incident lasted more than an hour"
+  notes: >-
+    The policy against what the records show; the missing public summary is a gap to
+    report, not to invent.
+
+- id: f2-xdoc-acme-sox-dates-grace
+  category: cross_source
+  persona: grace
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H6, status: pending}
+  cohort: f2
+  classes: [egress_withheld, multi_document]
+  question: "When is Acme Corp's SOX audit fieldwork, and how does it line up with our Directory Sync dates?"
+  expected_by_egress:
+    default:
+      status: answered
+      relevant: ["ticket:HAL-4821#c6", chat:C0EXTACME01:1790173800.000100, "doc:scim-ga-decision#2"]
+      acceptable: ["ticket:HAL-4821#c4", "doc:scim-beta-program-plan#2"]
+      not_used_for_answer: [doc:acme-exec-escalation-notes]
+      required_facts:
+        - "Fieldwork starts on 16 November"
+        - "Acme's beta starts on 9 November; GA is targeted for 8 December, after fieldwork begins"
+    opt_in_confidential:
+      status: answered
+      relevant: ["ticket:HAL-4821#c6", "doc:scim-ga-decision#2", "doc:acme-exec-escalation-notes#2"]
+      acceptable: [chat:C0EXTACME01:1790173800.000100, "doc:acme-exec-escalation-notes#3", "doc:scim-beta-program-plan#2"]
+      required_facts:
+        - "Fieldwork starts on 16 November"
+        - "Acme's beta starts on 9 November; GA is targeted for 8 December, after fieldwork begins"
+        - "Acme planned fieldwork around the October date Support had quoted"
+  tags: [confidential]
+  notes: >-
+    Internal records answer the dates; the executive notes add why it matters and stay
+    out of the payload by default.
+
+- id: f2-xdoc-frankfurt-consequences-tom
+  category: cross_document
+  persona: tom
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H6, status: pending}
+  cohort: f2
+  classes: [multi_document]
+  question: "What does the Frankfurt region decision mean for connectors, support and existing workspaces?"
+  expected:
+    status: answered
+    relevant: ["doc:eu-data-residency-decision#2", "doc:eu-data-residency-decision#4", "doc:weekly-support-report-2026-09-21#3", "doc:engineering-all-hands-2026-09#3"]
+    acceptable: ["doc:eu-data-residency-decision#5", chat:C0ANNOUNC01:day:2026-08-05]
+    required_facts:
+      - "Existing workspaces can migrate on request after GA (planned for Q1 2027)"
+      - "EU workspaces will not support the Salesforce Marketing Cloud connector at launch"
+      - "Support needs EU-hours coverage; it starts in January"
+  notes: >-
+    Consequences, not timing: the decision record plus two operational updates.
+
+- id: f2-xdoc-marcus-feld-grace
+  category: cross_source
+  persona: grace
+  organization: halden
+  label_source: authored_f2
+  split: dev
+  cohort: f2
+  classes: [multi_account_comparison, multi_document]
+  question: "What has Marcus Feld done for our customers and prospects recently?"
+  expected:
+    status: answered
+    relevant: ["doc:acme-kickoff-call-notes#4", "doc:acme-security-questionnaire-2026#1", "doc:orbital-freight-opportunity-brief#3", "doc:acme-renewal-plan-2026#5"]
+    acceptable: [ticket:HAL-4870, chat:G0ACCTACME1:1790348400.000100, "doc:acme-q3-success-plan#1", "doc:acme-account-brief#3", "doc:acme-kickoff-call-notes#3"]
+    required_facts:
+      - "Acme Corp: SP metadata and a test plan for the Okta preview tenant, the interim bulk-deactivation script, and the 2026 security questionnaire responses"
+      - "Orbital Freight trial: set up Okta SSO for 40 users"
+      - "Estimated 3 days of Tilburg rollout services for Acme's renewal"
+  notes: >-
+    Grace can read the Orbital brief and the Acme renewal plan, which most personas
+    cannot.
+
+- id: f2-xdoc-support-staffing-arjun
+  category: cross_source
+  persona: arjun
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H7, status: pending}
+  cohort: f2
+  classes: [egress_withheld, multi_document]
+  question: "What changes are planned for Support staffing?"
+  expected_by_egress:
+    default:
+      status: answered
+      relevant: ["doc:weekly-support-report-2026-09-21#3", "doc:eu-data-residency-decision#4"]
+      acceptable: [chat:C0SUPPORT01:1790071200.000100]
+      not_used_for_answer: [doc:fy2027-headcount-plan, doc:exec-offsite-notes-2026-09]
+      required_facts:
+        - "Ben Adeyemi moves to Tier 2 on 1 October"
+        - "EU-hours coverage starts in January (needed for the Frankfurt region)"
+    opt_in_confidential:
+      status: answered
+      relevant: ["doc:weekly-support-report-2026-09-21#3", "doc:fy2027-headcount-plan#2", "doc:exec-offsite-notes-2026-09#5"]
+      acceptable: ["doc:eu-data-residency-decision#4", chat:C0SUPPORT01:1790071200.000100]
+      required_facts:
+        - "Ben Adeyemi moves to Tier 2 on 1 October"
+        - "Support grows from 31 to 38 by the end of FY27, for EU-hours coverage from January"
+        - "Support EU-hours hiring is an exception to the non-engineering hiring freeze"
+  tags: [confidential]
+  notes: >-
+    The numbers and the freeze exception are confidential; the internal records give the
+    people move and the January start.
+
+- id: f2-xdoc-rachel-kim-grace
+  category: cross_source
+  persona: grace
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H7, status: pending}
+  cohort: f2
+  classes: [multi_account_comparison, multi_document]
+  question: "Which accounts does Rachel Kim work on, and what has she raised recently?"
+  expected:
+    status: answered
+    relevant: ["doc:acme-q3-success-plan#1", "doc:kestrel-account-brief#1", chat:C0ACCTKES01:1789143600.000100, chat:G0ACCTACME1:1786723800.000100]
+    acceptable: ["doc:acme-onboarding-plan-2024#1", "doc:acme-qbr-2026-03#1", "doc:acme-kickoff-call-notes#1", "doc:scim-beta-program-plan#1", "doc:acme-account-brief#3"]
+    required_facts:
+      - "CSM for Acme Corp and Kestrel Bank"
+      - "11 September: Kestrel's risk committee wants a vendor review and a competing quote"
+      - "14 August: flagged that Support told Acme October while Q3 had been said in June"
+  notes: >-
+    Two accounts and two channels; Grace can read the private #acct-acme.
+
+- id: f2-xdoc-chloe-martin-tom
+  category: cross_source
+  persona: tom
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H6, status: pending}
+  cohort: f2
+  classes: [inaccessible_strong_match, multi_account_comparison, multi_document]
+  question: "Which customers does Chloe Martin look after, and what is going on with each?"
+  expected:
+    status: answered
+    relevant: ["doc:acme-health-account-brief#1", "doc:brightwater-account-brief#1", "ticket:HAL-4533#c6", chat:C0CSTEAM001:1787752800.000100]
+    acceptable: [chat:C0CSTEAM001:1787135400.000100, "doc:scim-beta-program-plan#1", ticket:HAL-4777, chat:C0SALES0001:day:2026-09-23, "doc:acme-health-account-brief#5"]
+    must_not_retrieve: [doc:renewal-risk-register-2026-q3]
+    required_facts:
+      - "Account manager for Acme Health: the FHIR beta onboarding is in October"
+      - "CSM for Brightwater Health"
+      - "Account manager for Larkspur Retail: agreed a three-month credit after the May refund dispute"
+  tags: [security]
+  trap_phrases: ["Chloe Martin"]
+  notes: >-
+    The renewal risk register lists Chloe's renewals too, but only Leadership and
+    Customer Success leadership can read it.
+
+- id: f2-xdoc-kofi-mensah-tom
+  category: cross_source
+  persona: tom
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H7, status: pending}
+  cohort: f2
+  classes: [inaccessible_strong_match, multi_document]
+  question: "What is Kofi Mensah working on?"
+  expected:
+    status: answered
+    relevant: [chat:G0PRODIDEN1:1788430500.000100, "doc:directory-sync-rewrite-rfc#4", "doc:scim-beta-program-plan#2"]
+    acceptable: ["doc:identity-roadmap-2026-04#1", "doc:identity-roadmap-2026-04#4", chat:G0PRODIDEN1:day:2026-08-28, chat:C0ACCTBRW01:day:2026-09-22, "doc:scim-beta-program-plan#1"]
+    must_not_retrieve: [doc:acme-exec-escalation-notes]
+    required_facts:
+      - "Building the dedicated provisioning service from the September RFC (with Wei Chen), about eight weeks"
+      - "Dedicated engineer for Acme Corp's Directory Sync beta from 9 November"
+      - "Ran the load tests that showed the v1 design could not ship"
+    must_not_contain: [LATTICE-CANARY-B-7f3a9c]
+  tags: [security]
+  trap_phrases: ["Kofi Mensah"]
+  notes: >-
+    The executive notes promise Acme Kofi as a dedicated engineer with daily check-ins;
+    Tom cannot read them, and the beta plan says the same in internal terms.

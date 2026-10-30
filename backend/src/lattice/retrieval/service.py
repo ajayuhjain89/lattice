@@ -15,7 +15,8 @@ Order of work::
     exact, lexical (SQL with the predicate)
     semantic (SQL with the predicate), if the query vector exists
     E4: assert_all_readable(every candidate's document)    ← abort, never filter
-    RRF fusion → rerank_v1 → selection
+    RRF fusion → rerank_v1 → [rerank_v2: the pool's lexeme coverage, SQL with the
+                              predicate; evaluation tunable, off] → selection
     hydrate evidence (SQL with the predicate)
     E4: assert_all_readable(every evidence document)
     trace, log line
@@ -69,6 +70,7 @@ from lattice.retrieval.query import (
     mentioned_accounts,
     normalize,
 )
+from lattice.retrieval.records import pool_coverage, rerank_records
 from lattice.retrieval.rerank import rerank, select_evidence
 from lattice.retrieval.semantic import (
     embed_query,
@@ -249,7 +251,9 @@ async def retrieve_with_context(
         {scope.account_id} if scope.account_id is not None else set()
     )
 
-    def fuse_and_select(
+    record_counts: dict[str, int] = {}
+
+    async def fuse_and_select(
         lists: tuple[list[Candidate], ...],
     ) -> tuple[list[FusedCandidate], list[RankedCandidate], list[RankedCandidate]]:
         fused = fuse(lists, k=config.rrf_k, pool=config.fused_pool, weights=config.rrf_weights)
@@ -260,12 +264,27 @@ async def retrieve_with_context(
             now=now,
             config=config,
         )
+        if config.record_aware:
+            # F5.2 rerank_v2: reorders the pool by record coverage; adds and removes nothing.
+            coverage_started = time.perf_counter()
+            matched, question = await pool_coverage(session, ctx, ranked, terms)
+            timings["record_coverage"] = timings.get("record_coverage", 0.0) + (
+                (time.perf_counter() - coverage_started) * 1000
+            )
+            ranked = rerank_records(ranked, matched, question, config)
+            record_counts["records_lifted"] = len(
+                {
+                    r.fused.candidate.document_id
+                    for r in ranked
+                    if r.features.get("record_gain", 0.0) > 0
+                }
+            )
         selected = select_evidence(
             ranked, limit=query.limit, per_document=config.max_chunks_per_document
         )
         return fused, ranked, selected
 
-    fused, ranked, selected = fuse_and_select((exact, lexical, semantic))
+    fused, ranked, selected = await fuse_and_select((exact, lexical, semantic))
     timings["fuse_rerank"] = (time.perf_counter() - fusion_started) * 1000
 
     if config.expansion:
@@ -296,7 +315,7 @@ async def retrieve_with_context(
             on_candidates({"expansion": list(expansion)})
         await assert_all_readable(session, ctx, {c.document_id for c in expansion})
         refused_started = time.perf_counter()
-        fused, ranked, selected = fuse_and_select((exact, lexical, semantic, expansion))
+        fused, ranked, selected = await fuse_and_select((exact, lexical, semantic, expansion))
         timings["fuse_rerank"] += (time.perf_counter() - refused_started) * 1000
 
     evidence, question_terms = await _timed(
@@ -317,6 +336,7 @@ async def retrieve_with_context(
         ranked=ranked,
         final_count=len(evidence),
         timings_ms=timings,
+        record_counts=record_counts,
     )
     log_trace(trace)
     return RetrievalResult(

@@ -9,7 +9,7 @@ import pytest
 
 from lattice.cli import main
 from lattice.dataset import provenance, splits
-from lattice.dataset.lint import Dataset, load_dataset
+from lattice.dataset.lint import Dataset, load_all, load_dataset
 from lattice.dataset.manifests import EvalClass, GoldenItem
 
 REPO = Path(__file__).resolve().parents[3]
@@ -63,8 +63,23 @@ def test_the_set_is_large_and_covers_every_class_in_both_splits(items: list[Gold
 
 
 def test_the_held_out_share_is_about_a_third(items: list[GoldenItem]) -> None:
-    share = sum(1 for i in items if i.split == "held_out") / len(items)
+    # P13.2 split its items about a third held-out; F2 added items in its own shares.
+    before = [i for i in items if i.cohort is None]
+    share = sum(1 for i in before if i.split == "held_out") / len(before)
     assert 0.30 <= share <= 0.40
+
+
+def test_f2_meets_its_held_out_and_sealed_minimums() -> None:
+    """phase-13-followups §7.2: held-out >= 100 items with targets, sealed >= 40, and the
+    F2 items divided dev 25 / held-out 70 / sealed 51 (130 approved plus 16 top-ups)."""
+    everything = [i for _, i in load_all(DATA, GOLDEN).goldens]
+    f2 = Counter(i.split for i in everything if i.cohort == "f2")
+    assert f2 == {"dev": 25, "held_out": 70, "sealed": 51}
+    with_targets = Counter(i.split for i in everything if splits.target_records(i))
+    assert with_targets["held_out"] >= 100
+    assert with_targets["sealed"] >= 40
+    sealed_categories = Counter(i.category for i in everything if i.split == "sealed")
+    assert all(sealed_categories[c] >= 2 for c in {i.category for i in everything})
 
 
 def test_proposals_keep_committed_splits_and_are_deterministic(items: list[GoldenItem]) -> None:
@@ -100,13 +115,22 @@ def test_units_follow_both_kinds_of_group(items: list[GoldenItem]) -> None:
     assert unit_of["lookup-hal-4821-priority"] == unit_of["cross-org-hal-4821-felix"]
 
 
-def test_review_batches_are_the_right_size(items: list[GoldenItem]) -> None:
-    batches = Counter(i.owner_review.batch for i in items if i.owner_review)
+def test_review_batches_are_the_right_size() -> None:
+    everything = [i for _, i in load_all(DATA, GOLDEN).goldens]
+    batches = Counter(i.owner_review.batch for i in everything if i.owner_review)
     assert batches
     assert all(10 <= n <= 16 for n in batches.values()), batches
-    assert splits.assign_batches([i for i in items if i.split == "held_out"]) == {
-        i.id: i.owner_review.batch for i in items if i.owner_review
-    }
+    # Each round's batches are assigned over that round's items, numbered after the
+    # batches already under review (H1-H4 from P13.2; H5 onwards and S1 onwards from F2).
+    rounds = [
+        ([i for i in everything if i.split == "held_out" and i.cohort is None], "H", 1),
+        ([i for i in everything if i.split == "held_out" and i.cohort == "f2"], "H", 5),
+        ([i for i in everything if i.split == "sealed"], "S", 1),
+    ]
+    for members, prefix, start in rounds:
+        assert splits.assign_batches(members, prefix=prefix, start=start) == {
+            i.id: i.owner_review.batch for i in members if i.owner_review
+        }
 
 
 def test_the_committed_review_packet_matches_the_labels() -> None:

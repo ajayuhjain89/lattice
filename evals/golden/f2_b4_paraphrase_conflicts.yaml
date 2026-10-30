@@ -1,0 +1,429 @@
+# Phase 13 follow-ups F2, batch 4 (label_source authored_f2; no split until
+# `lattice dataset splits --propose`): ten paraphrase pairs (keyword wording, and
+# wording that shares no specific word with the evidence) and six conflict or
+# supersession items with both sides labelled.
+# Record keys: doc:<id>[#part], ticket:<id>[#cN], chat:<channel>:<ts|day:date>; another
+# organization's record is prefixed with "<org>/".
+
+- id: f2-kw-sheets-invalid-grant-priya
+  category: lookup
+  persona: priya
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
+  cohort: f2
+  classes: [keyword_vs_natural]
+  paraphrase_group: f2-sheets-reauthorization
+  question: "Google Sheets connector invalid_grant cause"
+  expected:
+    status: answered
+    relevant: [chat:C0SUPPORT01:1785342000.000100]
+    acceptable: [ticket:HAL-3536, ticket:HAL-4156]
+    required_facts:
+      - "Usually the Google account that authorized the connection changed its password (or lost access); reconnecting with a service account avoids it"
+  notes: >-
+    The #support thread names the error; templated tickets give the same cause.
+
+- id: f2-para-sheets-invalid-grant-daniel
+  category: lookup
+  persona: daniel
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
+  cohort: f2
+  classes: [paraphrase]
+  paraphrase_group: f2-sheets-reauthorization
+  question: "A spreadsheet integration suddenly says its authorization is no longer valid. What usually causes that?"
+  expected:
+    status: answered
+    relevant: [chat:C0SUPPORT01:1785342000.000100]
+    acceptable: [ticket:HAL-4015, ticket:HAL-4286]
+    required_facts:
+      - "Usually the Google account that authorized the connection changed its password (or lost access); reconnecting with a service account avoids it"
+  notes: >-
+    No word of the question is in the thread: 'Google', 'Sheets' and 'invalid_grant' are
+    all paraphrased.
+
+- id: f2-kw-okta-birthright-apps-lena
+  category: lookup
+  persona: lena
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
+  cohort: f2
+  classes: [keyword_vs_natural]
+  paraphrase_group: f2-joiner-apps
+  question: "Okta birthright apps by department"
+  expected:
+    status: answered
+    relevant: ["doc:okta-admin-procedures#2"]
+    required_facts:
+      - "HR creates the worker in BambooHR; Okta imports it nightly and assigns birthright apps by department: Google Workspace, Slack, Zoom and Halden's internal tools"
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-29
+    reviewer: engineering
+    terms: [birthright]
+    candidates:
+      "doc:okta-admin-procedures#2": relevant
+    notes: >-
+      Only the joiners section says birthright.
+  notes: >-
+    IT-only procedures.
+
+- id: f2-para-okta-birthright-apps-lena
+  category: lookup
+  persona: lena
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
+  cohort: f2
+  classes: [paraphrase]
+  paraphrase_group: f2-joiner-apps
+  question: "What tools does a new starter get automatically on their first day?"
+  expected:
+    status: answered
+    relevant: ["doc:okta-admin-procedures#2"]
+    required_facts:
+      - "HR creates the worker in BambooHR; Okta imports it nightly and assigns birthright apps by department: Google Workspace, Slack, Zoom and Halden's internal tools"
+  notes: >-
+    'New starter' and 'tools' for joiners and birthright apps.
+
+- id: f2-kw-discount-roadmap-maya
+  category: lookup
+  persona: maya
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
+  cohort: f2
+  classes: [keyword_vs_natural]
+  paraphrase_group: f2-discount-for-dates
+  question: "discount in exchange for roadmap date"
+  expected:
+    status: answered
+    relevant: ["doc:discounting-guidelines#4"]
+    acceptable: ["doc:customer-commitments-policy#3"]
+    required_facts:
+      - "No: the discounting guidelines say not to trade discounts for roadmap dates"
+  notes: >-
+    A rule in the discounting guidelines.
+
+- id: f2-para-discount-roadmap-arjun
+  category: lookup
+  persona: arjun
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
+  cohort: f2
+  classes: [paraphrase]
+  paraphrase_group: f2-discount-for-dates
+  question: "Can I offer a customer a lower price to make up for a feature arriving late?"
+  expected:
+    status: answered
+    relevant: ["doc:discounting-guidelines#4"]
+    acceptable: ["doc:customer-commitments-policy#3"]
+    required_facts:
+      - "No: the discounting guidelines say not to trade discounts for roadmap dates"
+  notes: >-
+    'Lower price' and 'feature arriving late' for discount and roadmap date.
+
+- id: f2-kw-private-channels-sofia
+  category: lookup
+  persona: sofia
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
+  cohort: f2
+  classes: [keyword_vs_natural]
+  paraphrase_group: f2-private-channels
+  question: "handbook private channels policy"
+  expected:
+    status: answered
+    relevant: ["doc:company-handbook#2"]
+    must_not_retrieve: [veridian/doc:company-handbook]
+    required_facts:
+      - "Default to open channels; private channels are for customer-confidential or personnel topics"
+  tags: [security, cross_org_same_identifier]
+  notes: >-
+    Veridian's handbook (same ID) has its own rule about customer names.
+
+- id: f2-para-private-channels-tom
+  category: lookup
+  persona: tom
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
+  cohort: f2
+  classes: [paraphrase]
+  paraphrase_group: f2-private-channels
+  question: "When should a conversation be kept out of the rooms everyone can see?"
+  expected:
+    status: answered
+    relevant: ["doc:company-handbook#2"]
+    must_not_retrieve: [veridian/doc:company-handbook]
+    required_facts:
+      - "Default to open channels; private channels are for customer-confidential or personnel topics"
+  tags: [security, cross_org_same_identifier]
+  notes: >-
+    'Rooms everyone can see' for open channels.
+
+- id: f2-kw-lost-device-lena
+  category: lookup
+  persona: lena
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
+  cohort: f2
+  classes: [keyword_vs_natural]
+  paraphrase_group: f2-lost-device
+  question: "report lost laptop IT one hour"
+  expected:
+    status: answered
+    relevant: ["doc:company-handbook#5"]
+    required_facts:
+      - "Report a lost or stolen device to IT within one hour"
+  notes: >-
+    Handbook security section.
+
+- id: f2-para-lost-device-arjun
+  category: lookup
+  persona: arjun
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
+  cohort: f2
+  classes: [paraphrase]
+  paraphrase_group: f2-lost-device
+  question: "My work computer was stolen on the train. How soon do I need to tell someone?"
+  expected:
+    status: answered
+    relevant: ["doc:company-handbook#5"]
+    required_facts:
+      - "Report a lost or stolen device to IT within one hour"
+  notes: >-
+    'Work computer stolen' for lost devices.
+
+- id: f2-kw-wait-for-approval-daniel
+  category: lookup
+  persona: daniel
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
+  cohort: f2
+  classes: [keyword_vs_natural]
+  paraphrase_group: f2-approval-step
+  question: "Wait for approval step Slack email approvers"
+  expected:
+    status: answered
+    relevant: ["doc:release-notes-2026-08#3"]
+    acceptable: [chat:C0ANNOUNC01:day:2026-08-18]
+    required_facts:
+      - "Yes: the 'Wait for approval' step, with Slack and email approvers, since release 2026.08 (18 August)"
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-29
+    reviewer: engineering
+    terms: ["Wait for approval"]
+    candidates:
+      "chat:C0ANNOUNC01:day:2026-08-18#1787036400.000100": acceptable
+      "doc:release-notes-2026-08#3": relevant
+    notes: >-
+      The release notes and the release announcement; the notes are the record.
+  notes: >-
+    Release 2026.08.
+
+- id: f2-para-wait-for-approval-maya
+  category: lookup
+  persona: maya
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H5, status: pending}
+  cohort: f2
+  classes: [paraphrase]
+  paraphrase_group: f2-approval-step
+  question: "Can a workflow pause until a manager signs off, and since when?"
+  expected:
+    status: answered
+    relevant: ["doc:release-notes-2026-08#3"]
+    acceptable: [chat:C0ANNOUNC01:day:2026-08-18]
+    required_facts:
+      - "Yes: the 'Wait for approval' step, with Slack and email approvers, since release 2026.08 (18 August)"
+  notes: >-
+    'Pause until a manager signs off' for the approval step.
+
+- id: f2-kw-pdf-export-background-felix
+  category: cross_org
+  persona: felix
+  organization: veridian
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H9, status: pending}
+  cohort: f2
+  classes: [veridian_cross_tenant, keyword_vs_natural]
+  paraphrase_group: f2-pdf-export
+  question: "large PDF export timeout background"
+  expected:
+    status: answered
+    relevant: [ticket:HAL-4702]
+    must_not_retrieve: [halden/ticket:HAL-4702]
+    required_facts:
+      - "Large PDF exports run in the background and arrive as an emailed link: tick 'Export in background'"
+  tags: [security, cross_org_same_identifier]
+  exhaustive: true
+  exhaustive_review:
+    reviewed_on: 2026-10-29
+    reviewer: engineering
+    terms: [PDF]
+    candidates:
+      "chat:C0VPRODUCT1:day:2026-09-10#1789048800.000100": unrelated
+      "ticket:HAL-4123#c1": unrelated
+      "ticket:HAL-4123#c2": unrelated
+      "ticket:HAL-4123#c3": unrelated
+      "ticket:HAL-4123#c4": unrelated
+      "ticket:HAL-4146#c1": unrelated
+      "ticket:HAL-4146#c2": unrelated
+      "ticket:HAL-4146#c3": unrelated
+      "ticket:HAL-4146#c4": unrelated
+      "ticket:HAL-4282#c1": unrelated
+      "ticket:HAL-4282#c2": unrelated
+      "ticket:HAL-4282#c3": unrelated
+      "ticket:HAL-4282#c4": unrelated
+      "ticket:HAL-4396#c1": unrelated
+      "ticket:HAL-4396#c2": unrelated
+      "ticket:HAL-4396#c3": unrelated
+      "ticket:HAL-4396#c4": unrelated
+      "ticket:HAL-4617#c1": unrelated
+      "ticket:HAL-4617#c2": unrelated
+      "ticket:HAL-4617#c3": unrelated
+      "ticket:HAL-4617#c4": unrelated
+      "ticket:HAL-4702#c1": relevant
+      "ticket:HAL-4702#c2": relevant
+      "ticket:HAL-4702#c3": relevant
+    extra: ["ticket:HAL-4702#c3"]
+    notes: >-
+      The export ticket's three comments (the confirmation has no term, added by hand);
+      the release announcement of scheduled PDF exports is unrelated.
+  notes: >-
+    Halden's HAL-4702 is the Kestrel SSO outage: same ID, other tenant.
+
+- id: f2-para-pdf-export-background-ines
+  category: cross_org
+  persona: ines
+  organization: veridian
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H9, status: pending}
+  cohort: f2
+  classes: [veridian_cross_tenant, paraphrase]
+  paraphrase_group: f2-pdf-export
+  question: "A big report keeps failing to download because it takes too long. Is there a way around that?"
+  expected:
+    status: answered
+    relevant: [ticket:HAL-4702]
+    must_not_retrieve: [halden/ticket:HAL-4702]
+    required_facts:
+      - "Large PDF exports run in the background and arrive as an emailed link: tick 'Export in background'"
+  tags: [security, cross_org_same_identifier]
+  notes: >-
+    'Big report failing to download' for a PDF export timing out.
+
+- id: f2-conflict-eu-messaging-priya
+  category: potential_conflicts
+  persona: priya
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H7, status: pending}
+  cohort: f2
+  classes: [contradictory_evidence, multi_document]
+  question: "What should Support tell EU customers about data residency?"
+  expected:
+    status: answered
+    relevant: ["doc:support-macros#4", "doc:eu-data-residency-decision#5", chat:C0SUPPORT01:day:2026-08-06]
+    acceptable: [chat:C0SUPPORT01:day:2026-08-04, chat:C0ANNOUNC01:day:2026-08-05, "doc:eu-data-residency-decision#2"]
+    required_facts:
+      - "'Planned for Q1 2027' (a Frankfurt region), without giving a month"
+      - "The 4 August guidance ('evaluating options, no date yet') came before the 5 August decision and no longer applies"
+    conflict: {kind: potential_conflict, records: [chat:C0SUPPORT01:day:2026-08-04, doc:eu-data-residency-decision]}
+  notes: >-
+    Two Support instructions two days apart, with no supersession metadata between the
+    chat and the decision.
+
+- id: f2-supersession-refund-approval-arjun
+  category: supersession
+  persona: arjun
+  organization: halden
+  label_source: authored_f2
+  split: held_out
+  owner_review: {batch: H7, status: pending}
+  cohort: f2
+  classes: [temporal_supersession]
+  question: "Who can approve a $30,000 refund for an Enterprise customer?"
+  expected:
+    status: answered
+    relevant: ["doc:refund-policy-v2#4"]
+    acceptable: ["doc:refund-policy-v1#5", "doc:refund-policy-v2#3"]
+    must_not_retrieve: [veridian/doc:refund-policy-v2, veridian/doc:refund-policy-v1]
+    required_facts:
+      - "The CFO: Finance Operations approves refunds and credits up to $25,000, and account managers and support engineers cannot approve them"
+    conflict: {kind: superseded, records: [doc:refund-policy-v2, doc:refund-policy-v1]}
+  tags: [security, cross_org_same_identifier]
+  trap_phrases: [refund]
+  notes: >-
+    v1 had no approval limits (account managers submitted to Finance); v2 added them.
+
+- id: f2-supersession-seat-reduction-sofia
+  category: supersession
+  persona: sofia
+  organization: halden
+  label_source: authored_f2
+  split: dev
+  cohort: f2
+  classes: [temporal_supersession]
+  question: "Can an Enterprise customer reduce seats in the middle of a term and get money back?"
+  expected:
+    status: answered
+    relevant: ["doc:refund-policy-v2#5"]
+    acceptable: ["doc:refund-policy-v1#4"]
+    required_facts:
+      - "No: seats can be reduced only at renewal and mid-term reductions are not refunded (unchanged from v1)"
+    conflict: {kind: superseded, records: [doc:refund-policy-v2, doc:refund-policy-v1]}
+  notes: >-
+    A clause that survived the policy change; the current version is the source.
+
+- id: f2-conflict-kestrel-beta-reason-daniel
+  category: potential_conflicts
+  persona: daniel
+  organization: halden
+  label_source: authored_f2
+  split: dev
+  cohort: f2
+  classes: [contradictory_evidence, inaccessible_strong_match]
+  question: "Why isn't Kestrel Bank in the Directory Sync beta?"
+  expected:
+    status: answered
+    relevant: ["doc:scim-beta-program-plan#2", "ticket:HAL-4930#c4"]
+    acceptable: [chat:C0ACCTKES01:day:2026-09-22, "ticket:HAL-4930#c3", "doc:scim-ga-decision#4"]
+    must_not_retrieve: [doc:kestrel-renewal-risk-2026]
+    required_facts:
+      - "The beta plan leaves Kestrel out until its SAML issues are closed"
+      - "Support told Martin the November beta is full, which is a different reason"
+    must_not_contain: [LATTICE-CANARY-C02-8c41f0]
+    conflict: {kind: potential_conflict, records: [ticket:HAL-4930, doc:scim-beta-program-plan]}
+  tags: [security]
+  trap_phrases: [beta]
+  notes: >-
+    Two internal statements give different reasons; the confidential renewal assessment
+    also says Kestrel is not in the beta.

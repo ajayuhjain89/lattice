@@ -27,7 +27,7 @@ from lattice.db.engine import Database
 from lattice.evals.retrieval import Corpus, Identities, select_items
 from lattice.providers.embedding import FakeEmbeddingProvider
 from lattice.retrieval import RetrievalQuery, RetrievalScope, retrieve_with_context
-from lattice.retrieval.models import Candidate
+from lattice.retrieval.models import Candidate, RetrievalConfig
 from lattice.retrieval.permitted import CHANNEL_OPTION
 
 ITEMS = [
@@ -106,3 +106,52 @@ async def test_the_database_returns_only_permitted_rows_and_retrieval_keeps_them
             assert set(chunk_ids) == {e.chunk_id for e in result.evidence}
         else:
             assert chunk_ids == [c.chunk_id for c in observed[channel]], channel
+
+
+RECORD_AWARE = RetrievalConfig(record_mode="soft", record_weight=0.5, record_within=True)
+
+
+@pytest.mark.parametrize("item_id", ITEMS)
+async def test_record_coverage_reads_only_the_pooled_permitted_chunks(
+    item_id: str,
+    app_db: Database,
+    dataset: Dataset,
+    identities: Identities,
+    corpus: Corpus,
+) -> None:
+    """F5.2 rerank_v2: its coverage statement, re-executed alone, returns only chunks the
+    reader may read, and exactly the reranked pool's."""
+    item = next(i for i in select_items(dataset) if i.id == item_id)
+    org_id = identities.org_ids[item.organization]
+    membership = identities.memberships[(item.organization, item.persona)]
+    world = dataset.worlds[item.organization]
+    with capture(app_db) as captured:
+        async with app_db.tenant_snapshot(org_id) as session:
+            ctx = await resolve_authorization_context(
+                session, organization_id=org_id, membership_id=membership
+            )
+            result = await retrieve_with_context(
+                session,
+                ctx,
+                RetrievalQuery(
+                    text=item.question,
+                    scope=RetrievalScope(
+                        account=item.scope.account, source_types=tuple(item.scope.source_types)
+                    ),
+                    limit=20,
+                ),
+                FakeEmbeddingProvider(),
+                config=RECORD_AWARE,
+                now=AS_OF,
+            )
+    coverage = [(st, params) for channel, st, params in captured if channel == "record_coverage"]
+    assert len(coverage) == 1
+    statement, parameters = coverage[0]
+    async with app_db.tenant_snapshot(org_id) as session:
+        conn = await session.connection()
+        rows = (await conn.exec_driver_sql(statement, parameters)).mappings().all()
+    for row in rows:
+        ref = corpus.chunks[row["chunk_id"]]
+        assert ref.organization == item.organization, ref
+        assert world.can_read(item.persona, world.raw.records[ref.record]), ref
+    assert {row["chunk_id"] for row in rows} == {r.chunk_id for r in result.trace.reranked}

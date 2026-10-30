@@ -38,12 +38,13 @@ from lattice.answering import assemble, gate
 from lattice.answering.models import ANSWER_SCHEMA, Answer, AskRequest, Claim, EvidenceItem
 from lattice.answering.policy import GenerationAccess, recheck_generation, resolve_generation
 from lattice.answering.prompt import (
+    DEFAULT_PROMPT,
     MAX_OUTPUT_TOKENS,
-    PROMPT_VERSION,
-    SYSTEM_INSTRUCTIONS,
     Prompt,
+    PromptConfig,
     budget,
     build_prompt,
+    system_instructions,
     with_feedback,
 )
 from lattice.answering.request_kind import is_action_request
@@ -144,7 +145,7 @@ async def _generate(
         metrics.GENERATION_CALLS.labels(provider=provider, outcome="deadline_exceeded").inc()
         return None
     request = GenerationRequest(
-        system=SYSTEM_INSTRUCTIONS,
+        system=system_instructions(prompt.version),
         prompt=prompt.text if feedback is None else with_feedback(prompt, feedback),
         schema=ANSWER_SCHEMA,
         max_output_tokens=MAX_OUTPUT_TOKENS,
@@ -249,9 +250,11 @@ async def answer_question(
     gate_config: gate.GateConfig = gate.DEFAULT_GATE,
     now: datetime | None = None,
     nonce: str | None = None,
+    prompt_config: PromptConfig = DEFAULT_PROMPT,
 ) -> AskOutcome:
     """The whole pipeline, without persisting the trace (``ask`` persists it). Both IDs
-    must come from the server-side session."""
+    must come from the server-side session. ``prompt_config`` is for answer evaluation only
+    (``lattice.answering.prompt``); the API never passes it."""
     started = time.perf_counter()
     now = now or datetime.now(UTC)
     trace_id = uuid.uuid4()
@@ -320,7 +323,7 @@ async def answer_question(
     excluded = (
         [e for e in candidates if not access.permits(e)] if access.level and not action else []
     )
-    fits, _ = budget(permitted)
+    fits, _ = budget(permitted, prompt_config.max_evidence)
     decisive_in_prompt = relevance.decisive & {e.chunk_id for e in fits}
     calls = _Calls()
     validation: Validation | None = None
@@ -348,7 +351,9 @@ async def answer_question(
         # not drafted from.
         status, reason = "evidence_only", "egress_policy"
     else:
-        prompt = build_prompt(normalize(request.question), fits, nonce=nonce)
+        prompt = build_prompt(
+            normalize(request.question), fits, nonce=nonce, version=prompt_config.version
+        )
         prompt_documents = {e.document_id for e in prompt.by_handle.values()}
         generation_started = time.perf_counter()
         deadline = generation_started + deps.generation_deadline_seconds
@@ -485,7 +490,7 @@ async def answer_question(
             "excluded_by_prompt_budget": len(permitted) - len(fits),
             # Evidence the relevance gate kept from the prompt (as the asker's list says).
             "below_relevance_floor": sum(i.not_used_reason == "relevance_floor" for i in items),
-            "prompt_version": PROMPT_VERSION if prompt else None,
+            "prompt_version": prompt.version if prompt else None,
         },
         "validation": {
             "generation_calls": calls.count,
@@ -551,6 +556,7 @@ async def ask(
     config: RetrievalConfig = DEFAULT_CONFIG,
     gate_config: gate.GateConfig = gate.DEFAULT_GATE,
     now: datetime | None = None,
+    prompt_config: PromptConfig = DEFAULT_PROMPT,
 ) -> AskOutcome:
     outcome = await answer_question(
         db,
@@ -561,6 +567,7 @@ async def ask(
         config=config,
         gate_config=gate_config,
         now=now,
+        prompt_config=prompt_config,
     )
     await record_trace(db, outcome.trace)
     return outcome

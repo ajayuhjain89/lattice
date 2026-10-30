@@ -17,7 +17,10 @@ and x86-64; evaluation-plan §15). An injected regression must be caught.
 """
 
 import json
+import math
+from collections.abc import Sequence
 from dataclasses import replace
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -32,14 +35,18 @@ from lattice.evals.retrieval import (
     Corpus,
     Identities,
     ItemResult,
+    PrefetchedQueries,
     RetrievalReport,
     database_platform,
     evaluate_item,
+    evaluate_retrieval,
     golden_version,
     select_items,
     summarize,
 )
-from lattice.providers.embedding import FakeEmbeddingProvider
+from lattice.providers.embedding import FakeEmbeddingProvider, Purpose
+from lattice.providers.local_embedding import LocalEmbeddingProvider
+from lattice.providers.local_models import spec_for
 from lattice.retrieval import DEFAULT_CONFIG, RetrievalConfig
 
 from ...ingestion.conftest import DATA, GOLDEN
@@ -405,7 +412,8 @@ async def test_configuration_b_reproduces_the_baseline_of_this_database_architec
 
 def test_configuration_b_differs_between_architectures_only_where_recorded() -> None:
     """The two B baselines differ in ranking (exact ties ordered by float32 rounding),
-    and in exactly one target outcome; nothing else (evaluation-plan §15)."""
+    and in exactly one target outcome; nothing else (evaluation-plan §15). Since F2e three
+    F2 items also move a target's rank within one k bucket (no target gained or lost)."""
     arm = baseline.load(BASELINES / "retrieval-B-aarch64.json")
     x86 = baseline.load(BASELINES / "retrieval-B-x86_64.json")
     result = baseline.compare(arm, x86, cross_platform=True)
@@ -415,6 +423,9 @@ def test_configuration_b_differs_between_architectures_only_where_recorded() -> 
         ("xsrc-kestrel-outage-daniel", "target_gained@10"),
         ("xsrc-kestrel-outage-daniel", "target_rank_changed"),
         ("xsrc-kestrel-outage-daniel", "document_gained@10"),
+        ("f2-acct-acme-priscilla-tom", "target_rank_changed"),
+        ("f2-egress-enterprise-plus-arjun", "target_rank_changed"),
+        ("f2-xdoc-rachel-kim-grace", "target_rank_changed"),
     }, baseline.render(result)
     assert not baseline.compare(arm, x86).findings  # refused without --cross-platform
     assert baseline.compare(arm, x86).verdict == "incomparable"
@@ -546,3 +557,90 @@ async def test_a_hidden_strong_match_changes_nothing_the_persona_receives(
         assert after.violations == []
         assert after.evidence == before.evidence, item_id
         assert after.counts == before.counts, item_id
+
+
+# --- query embedding independent of the run's other questions (O13, F5.0) -------------------
+
+
+class _Padded(FakeEmbeddingProvider):
+    """The fake model, but a question's vector depends on which questions share its call,
+    as a local model's does when it pads a batch to its longest text. Registered like
+    the fake model (external), so the organizations' egress policy lets it run."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls: list[int] = []
+
+    async def embed(self, texts: Sequence[str], purpose: Purpose) -> list[list[float]]:
+        self.calls.append(len(texts))
+        padding = max(len(t) for t in texts) if len(texts) > 1 else 0
+        out = []
+        for t in texts:
+            v = self.vector(t)
+            v[padding % self.dimensions] += 0.5 if padding else 0.0
+            norm = math.sqrt(sum(x * x for x in v))
+            out.append([x / norm for x in v])
+        return out
+
+
+def test_only_a_local_model_is_asked_one_question_per_call() -> None:
+    spec = spec_for("mxbai-embed-large-v1")
+    encoder = SimpleNamespace(dimensions=spec.dimensions, encode=None)  # never called
+    local = LocalEmbeddingProvider(spec, encoder)
+    assert PrefetchedQueries(local).per_question
+    assert not PrefetchedQueries(FakeEmbeddingProvider()).per_question
+
+
+async def test_one_question_per_call_makes_rankings_independent_of_the_selection(
+    app_db: Database,
+    owner_db: Database,
+    dataset: Dataset,
+    corpus: Corpus,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """O13: a run over a subset ranks each item exactly as a run over more items does
+    once questions are embedded one per call; batched, the same model does not."""
+    items = [i for i in select_items(dataset) if i.split == "dev"][:12]
+
+    async def rankings(selection: list[Any], per_question: bool) -> dict[str, Any]:
+        monkeypatch.setattr(PrefetchedQueries, "per_question", property(lambda _: per_question))
+        provider = _Padded()
+        report = await evaluate_retrieval(app_db, owner_db, dataset, provider, items=selection)
+        assert (set(provider.calls) == {1}) is per_question
+        assert report.query_embedding == ("per_question" if per_question else "batched")
+        assert report.security_failures == 0
+        assert {r.semantic_status for r in report.items} == {"matched"}
+        return {r.id: r.evidence for r in report.items}
+
+    full, subset = await rankings(items, True), await rankings(items[:4], True)
+    assert all(subset[i] == full[i] for i in subset)
+    full, subset = await rankings(items, False), await rankings(items[:4], False)
+    assert any(subset[i] != full[i] for i in subset)  # the dependence this removes
+
+
+# --- rerank_v2, record-aware ranking (F5.2), an evaluation tunable ---------------------------
+
+
+async def test_record_aware_ranking_only_reorders_what_was_retrieved(
+    app_db: Database,
+    dataset: Dataset,
+    identities: Identities,
+    corpus: Corpus,
+    with_semantic: dict[str, ItemResult],
+) -> None:
+    """Every item, at the strongest setting: security 0, and the reranked pool is the one
+    rerank_v1 ranked -- rerank_v2 adds and removes nothing (phase-13-followups §17.4)."""
+    config = RetrievalConfig(
+        rerank_version="rerank_v2", record_mode="soft", record_weight=0.5, record_within=True
+    )
+    results = await _run(app_db, dataset, identities, corpus, FakeEmbeddingProvider(), config)
+    assert all(v == 0 for v in summarize(list(results.values()))["security"].values())
+    moved = 0
+    for item_id, result in results.items():
+        before = with_semantic[item_id]
+        assert result.error is None, item_id
+        assert result.violations == [], item_id
+        assert result.counts["reranked"] == before.counts["reranked"], item_id
+        assert result.counts["merged"] == before.counts["merged"], item_id
+        moved += result.evidence != before.evidence
+    assert moved > 0  # the stage ran

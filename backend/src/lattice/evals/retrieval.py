@@ -196,6 +196,12 @@ class PrefetchedQueries:
     "query")`` exactly as in the product and gets the identical vector (same normalized
     text, same purpose); anything not prefetched goes to the provider.
 
+    A local model is asked one question per call, as the product asks it once per Ask
+    (phase-13-followups O13, F5.0): it pads a batch to its longest text, so a batched
+    vector depends on which questions share the batch, and a run over a subset of the
+    items would rank differently. Local calls cost nothing; external providers keep
+    their batches, which their per-request quotas need.
+
     A question is prefetched only if the product's own egress decision
     (``question_policy`` + ``query_egress_block``, as that organization, with no
     declaration -- how the harness retrieves) would send it. Prefetching never sends
@@ -232,6 +238,10 @@ class PrefetchedQueries:
     def max_batch(self) -> int:
         return self.inner.max_batch
 
+    @property
+    def per_question(self) -> bool:
+        return self.inner.deployment == "local"
+
     async def prefetch(
         self, app: Database, identities: "Identities", items: Sequence[GoldenItem]
     ) -> None:
@@ -253,7 +263,7 @@ class PrefetchedQueries:
                 if await query_egress_block(session, ctx, self.inner, sensitivity, org):
                     continue
             pending = sorted(q for q in questions if q and q not in self.cache)
-            size = max(1, self.inner.max_batch)
+            size = 1 if self.per_question else max(1, self.inner.max_batch)
             for start in range(0, len(pending), size):
                 batch = pending[start : start + size]
                 try:
@@ -360,11 +370,17 @@ async def load_corpus(owner: Database, org_ids: dict[str, uuid.UUID]) -> Corpus:
     return Corpus(chunks, embeddings, display_refs, fingerprint)
 
 
+_LATE_FIELDS = ("cohort",)  # phase-13-followups F2
+
+
 def golden_version(items: Sequence[GoldenItem]) -> dict[str, Any]:
-    """The golden items' content (labels included), independent of file layout."""
+    """The golden items' content (labels included), independent of file layout. Fields
+    added after the first baselines (``_LATE_FIELDS``) count only once set, so adding
+    them does not move the fingerprint of the items that leave them unset."""
     digest = hashlib.sha256()
     for item in sorted(items, key=lambda i: i.id):
-        digest.update(item.model_dump_json().encode() + b"\n")
+        unset = {name for name in _LATE_FIELDS if getattr(item, name) is None}
+        digest.update(item.model_dump_json(exclude=unset).encode() + b"\n")
     return {"sha256": digest.hexdigest(), "items": len(items)}
 
 
@@ -408,6 +424,8 @@ def config_overrides(
             changes[name] = json.loads(raw)
         except json.JSONDecodeError:
             changes[name] = raw
+    if changes.get("record_mode", "off") != "off" or changes.get("record_within"):
+        changes["rerank_version"] = "rerank_v2"  # F5.2: a new ranking stage runs
     return replace(config, version=f"{config.version}+{','.join(sorted(pairs))}", **changes)
 
 
@@ -435,6 +453,7 @@ class ItemResult:
     tags: list[str]
     split: str | None = None
     label_source: str | None = None
+    cohort: str | None = None
     error: str | None = None
     semantic_status: str | None = None
     semantic_reason: str | None = None
@@ -598,6 +617,7 @@ async def evaluate_item(
         tags=list(item.tags),
         split=item.split,
         label_source=item.label_source,
+        cohort=item.cohort,
     )
     wanted = targets(item)
     out.targets = [t.label(item.organization) for t in wanted]
@@ -831,6 +851,9 @@ class RetrievalReport:
     corpus_fingerprint: dict[str, Any] = field(default_factory=dict)
     golden_version: dict[str, Any] = field(default_factory=dict)
     database_platform: str = "unknown"
+    # How the questions were embedded: "per_question" or "batched" (O13, F5.0); None
+    # without a provider. Reports from before F5.0 have none: they batched.
+    query_embedding: str | None = None
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
@@ -876,6 +899,15 @@ def _precision_block(results: Sequence[ItemResult]) -> dict[str, Any]:
 def _target_count(result: ItemResult) -> str:
     n = len(result.targets)
     return "3+" if n >= 3 else str(n)
+
+
+def held_out_cohorts(results: Sequence[Any]) -> list[tuple[str, list[Any]]]:
+    """Held-out results per cohort (phase-13-followups §7.2): ``phase13`` items were seen
+    during Phase 13, ``f2`` items are the follow-up additions."""
+    groups: dict[str, list[Any]] = defaultdict(list)
+    for r in results:
+        groups[r.cohort or "phase13"].append(r)
+    return sorted(groups.items())
 
 
 def summarize(results: Sequence[ItemResult]) -> dict[str, Any]:
@@ -930,6 +962,9 @@ def summarize(results: Sequence[ItemResult]) -> dict[str, Any]:
         "by_persona": {p: _recall_block(rs) for p, rs in sorted(by_persona.items())},
         "by_target_count": {n: _recall_block(rs) for n, rs in sorted(by_target_count.items())},
         "by_split": {n: _recall_block(rs) for n, rs in sorted(by_split.items())},
+        "by_held_out_cohort": {
+            n: _recall_block(rs) for n, rs in held_out_cohorts(by_split.get("held_out", []))
+        },
         "by_split_category": {
             split: {
                 c: _recall_block([r for r in rs if r.category == c])
@@ -1056,6 +1091,13 @@ async def evaluate_retrieval(
         corpus_fingerprint=corpus.fingerprint,
         golden_version=golden_version(selected),
         database_platform=platform,
+        query_embedding=(
+            None
+            if queries is None
+            else "per_question"
+            if queries.per_question or not prefetch
+            else "batched"
+        ),
     )
 
 
@@ -1100,7 +1142,8 @@ def render_markdown(report: RetrievalReport) -> str:
             else []
         ),
         f"Query embedding usage: {report.provider_usage or 'none'}; deployment "
-        f"`{report.embedding_deployment or '-'}`.",
+        f"`{report.embedding_deployment or '-'}`; questions "
+        f"`{report.query_embedding or '-'}`.",
         "",
         f"Corpus `{report.corpus_fingerprint.get('sha256', '-')[:12]}` "
         f"({report.corpus_fingerprint.get('chunks', {})}); golden "
@@ -1142,6 +1185,7 @@ def render_markdown(report: RetrievalReport) -> str:
     lines += [row(n, b) for n, b in s["by_target_count"].items()]
     lines += ["", "### By split (EC-7: held_out is reported, never tuned against)", "", *header]
     lines += [row(n, b) for n, b in s.get("by_split", {}).items()]
+    lines += [row(f"held_out ({n})", b) for n, b in s.get("by_held_out_cohort", {}).items()]
     lines += ["", "### By label source (EC-8: engineering labels are provisional)", "", *header]
     lines += [row(n, b) for n, b in s.get("by_label_source", {}).items()]
 

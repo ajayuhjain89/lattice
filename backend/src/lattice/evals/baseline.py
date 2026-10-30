@@ -45,6 +45,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from lattice.answering.prompt import DEFAULT_PROMPT
+
 SCHEMA = "lattice-eval-baseline/1"
 KS = (1, 5, 10, 20)
 PRIMARY_K = 10
@@ -106,6 +108,12 @@ def _retrieval_configuration(report: Mapping[str, Any]) -> dict[str, Any]:
         "config_version": report.get("config_version"),
         "rerank_version": report.get("rerank_version"),
         "limit": report.get("limit"),
+        # phase-13-followups O13 (F5.0): batching was the only mode before the field, so
+        # only one question per call is a declared change; batched runs compare with
+        # baselines from before it.
+        "query_embedding": (
+            "per_question" if report.get("query_embedding") == "per_question" else None
+        ),
     }
 
 
@@ -119,9 +127,20 @@ def _answer_configuration(report: Mapping[str, Any]) -> dict[str, Any]:
         "judge": report.get("judge"),
         # P13.3; reports and baselines from before the gate have none.
         "gate_version": report.get("gate_version"),
+        # O12; reports and baselines from before it have none.
+        "request_kind_version": report.get("request_kind_version"),
         # P13.5; reports and baselines from before it have none.
         "retrieval_config_version": report.get("retrieval_config_version"),
+        # phase-13-followups §12 (E3): only another prompt than the product's is a declared
+        # change, so the product's prompt compares with baselines from before the field.
+        "prompt_config": _prompt_config(report),
     }
+
+
+def _prompt_config(report: Mapping[str, Any]) -> dict[str, Any] | None:
+    config = report.get("prompt_config")
+    default = {"version": DEFAULT_PROMPT.version, "max_evidence": DEFAULT_PROMPT.max_evidence}
+    return None if config in (None, default) else dict(config)
 
 
 def snapshot(report: Mapping[str, Any], *, label: str) -> dict[str, Any]:
@@ -227,6 +246,8 @@ def write_baseline(
     errors = report["summary"].get("errors") or {}
     if errors:
         raise BaselineError(f"a run with errors cannot become a baseline: {errors}")
+    if any(r.get("split") == "sealed" for r in report.get("items", [])):
+        raise BaselineError("a sealed run is never a baseline (phase-13-followups §7.4)")
     data = snapshot(report, label=label)
     data["created"] = {"on": date.today().isoformat(), "reason": reason.strip()}
     if path.exists():

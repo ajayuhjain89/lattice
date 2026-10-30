@@ -9,7 +9,15 @@ from typing import Any
 
 import pytest
 
-from lattice.answering.prompt import SYSTEM_INSTRUCTIONS, budget, build_prompt, with_feedback
+from lattice.answering.prompt import (
+    DEFAULT_PROMPT,
+    SYSTEM_INSTRUCTIONS,
+    PromptConfig,
+    budget,
+    build_prompt,
+    system_instructions,
+    with_feedback,
+)
 from lattice.answering.validate import locate, validate_draft
 from lattice.providers.generation import FakeGenerationProvider
 from lattice.retrieval import Evidence, VisibleAccount
@@ -227,6 +235,49 @@ def test_a_records_chunks_are_adjacent_and_supersession_is_named_by_handle() -> 
     assert f'superseded_by="{handle[policy_v2]}">' in prompt.text  # not the absent record
     assert f'supersedes="{handle[policy_v1]}">' in prompt.text
     assert prompt.text.count("supersedes=") == 1
+
+
+def test_answer_prompt_1_is_date_order_without_links_for_evaluation() -> None:
+    # phase-13-followups §12 (E3): the P13.6 prompt, measurable again; the product's
+    # default stays answer-prompt-2.
+    doc, policy_v1, policy_v2 = (uuid.uuid4() for _ in range(3))
+    early = ev("First part.", "Plan", rank=4, document=doc, when=datetime(2026, 9, 1, tzinfo=UTC))
+    late = ev("Third part.", "Plan", rank=1, document=doc, when=datetime(2026, 9, 3, tzinfo=UTC))
+    late = late.model_copy(update={"ordinal": 2})
+    middle = ev("Between.", "Chat", rank=2, when=datetime(2026, 9, 2, tzinfo=UTC))
+    v2 = ev("Refunds within 14 days.", "Refund v2", rank=5, document=policy_v2).model_copy(
+        update={"supersedes_document_id": policy_v1}
+    )
+    evidence = [late, middle, early, v2]
+    old = build_prompt("q?", evidence, nonce=NONCE, version="answer-prompt-1")
+    new = build_prompt("q?", evidence, nonce=NONCE)
+    assert [i.evidence.text for i in old.items][:3] == ["First part.", "Between.", "Third part."]
+    assert [i.evidence.text for i in new.items][:3] == ["First part.", "Third part.", "Between."]
+    assert (old.version, new.version, DEFAULT_PROMPT.version) == (
+        "answer-prompt-1",
+        "answer-prompt-2",
+        "answer-prompt-2",
+    )
+    assert "supersedes=" not in old.text
+    records = "Consecutive blocks with the same title and reference are parts of one record."
+    assert records in SYSTEM_INSTRUCTIONS == system_instructions()
+    assert records not in system_instructions("answer-prompt-1")
+    assert system_instructions("answer-prompt-1") == SYSTEM_INSTRUCTIONS.replace(
+        SYSTEM_INSTRUCTIONS[
+            SYSTEM_INSTRUCTIONS.index("- Consecutive") : SYSTEM_INSTRUCTIONS.index(
+                "- If evidence items disagree"
+            )
+        ],
+        "",
+    )
+
+
+def test_the_evidence_budget_is_configurable_for_evaluation_only() -> None:
+    items = [ev("short text", rank=i) for i in range(1, 25)]
+    assert len(budget(items)[0]) == DEFAULT_PROMPT.max_evidence == 12
+    assert len(budget(items, PromptConfig(max_evidence=20).max_evidence)[0]) == 20
+    with pytest.raises(ValueError, match="between 1 and 40"):
+        PromptConfig(max_evidence=0)
 
 
 def test_account_attribute_only_when_visible() -> None:

@@ -147,12 +147,13 @@ opt_in_confidential: …}`.
 | `same_question_group` | Items asking the identical question as different personas |
 | `trap_phrases` | Words of the question that occur verbatim in `must_not_retrieve` evidence |
 | `tags` | e.g. `security`, `critical_scenario`, `cross_org_same_identifier`, `restricted_contains_answer` |
-| `label_source` | **Added P13.2** (EC-8), required: `authored_phase3`, `authored_phase13` or `owner_reviewed`. Engineering-authored labels are provisional expectations; `owner_reviewed` only with an approved `owner_review` |
-| `split` | **Added P13.2** (EC-7), required by the lint: `dev` (values may be chosen on it) or `held_out` (reported, never tuned against) |
+| `label_source` | **Added P13.2** (EC-8), required: `authored_phase3`, `authored_phase13`, `authored_f2` (Phase 13 follow-ups) or `owner_reviewed`. Engineering-authored labels are provisional expectations; `owner_reviewed` only with an approved `owner_review` |
+| `split` | **Added P13.2** (EC-7), required by the lint outside `evals/golden-staging/`: `dev` (values may be chosen on it), `held_out` (reported, never tuned against) or `sealed` (F2: evaluated only at a checkpoint's final decision; §3.2) |
 | `paraphrase_group` | **Added P13.2**: items asking for the same information need (the same decisive answer facts), whatever the wording or persona. With `same_question_group` it decides the split unit |
 | `classes` | **Added P13.2**: the phase-13-plan §10 evaluation classes the item exercises (`paraphrase`, `keyword_vs_natural`, `identifier_variant`, `ambiguous_account`, `hidden_account_collision`, `multi_document`, `multi_account_comparison`, `contradictory_evidence`, `temporal_supersession`, `insufficient_evidence`, `egress_withheld`, `inaccessible_strong_match`, `scoped_retrieval`, `injection_misleading`, `veridian_cross_tenant`); the lint checks each against the labels and requires ≥ 4 items per class |
 | `exhaustive`, `exhaustive_review` | **Added P13.2** (EC-3): labels cover every readable relevant part; the review lists every candidate part the persona can read (by `terms`, or `scope_all` inside a scope, plus `extra`), each classified `relevant`, `acceptable` or `unrelated`. The lint recomputes the candidates from the corpus. Only these items have Precision@10 |
-| `owner_review` | **Added P13.2** (D-41), required on held-out items: `{batch: H<n>, status: pending \| approved \| corrections_requested, reviewed_on, notes}` |
+| `owner_review` | **Added P13.2** (D-41), required on held-out and sealed items: `{batch: H<n> (held-out) or S<n> (sealed), status: pending \| approved \| corrections_requested, reviewed_on, notes}` |
+| `cohort` | **Added F2**: `f2` on items authored in the Phase 13 follow-ups (required with `authored_f2` and on sealed items); kept after owner review, so held-out results are reported for the Phase 13 (seen) and F2 (fresh) items separately. Metadata: no digest change, and omitted from the golden fingerprint while unset |
 
 ### 3.1 Label provenance, splits and owner review (P13.2)
 
@@ -181,15 +182,69 @@ opt_in_confidential: …}`.
   items are reviewed in batches of 10–16. The packet is rendered from the golden files
   and the synthetic sources (record keys, excerpts with canaries redacted, persona access,
   expected status, facts, prohibited evidence, open points, approve/correct boxes);
-  `--check` (and a test) fails when it differs from the labels. Applying a review: set
-  `owner_review.status` (`approved` with `reviewed_on`, and `label_source:
-  owner_reviewed`), or make the requested correction in its own commit and record it with
-  `freeze-labels`. Until a batch is approved its items stay `authored_phase*` and no
-  held-out quality gate that depends on owner approval is active.
+  `--check` (and a test) fails when it differs from the labels. Applying a review:
+  `lattice dataset record-review FILE` (`lattice.dataset.decisions`) reads the owner's
+  decisions (batches approved in full; per item `approve`, `correct` with a note and
+  `set`/`add`/`remove` on label fields, or `corrections_requested` with a note). It sets
+  `owner_review` (`approved` with `reviewed_on`, and `label_source: owner_reviewed`; the
+  `cohort` stays), applies each correction to the changed keys only, and records it in the
+  label freeze with the note as the reason (a Phase 3 item only with
+  `--phase3-correction`, in its own commit). Nothing is written unless every decision
+  applies and the whole lint passes on a temporary copy; `--dry-run` stops there.
+  Until a batch is approved its items stay `authored_*` and no held-out quality gate that
+  depends on owner approval is active.
 - **Exhaustive labels.** An item is exhaustive only with a documented candidate review;
   "the list looks complete" is not enough. Precision@10 is computed for those items only,
   never averaged with others; for every other item precision is unavailable, nDCG@10 stays
   an informational lower bound and Recall@k/MRR use the item's targets.
+
+### 3.2 The sealed split and follow-up authoring (phase-13-followups F2)
+
+- **Directories.** `evals/golden/` holds dev and held-out items; `evals/golden-sealed/`
+  holds sealed items; `evals/golden-staging/` holds new items being authored, which have
+  no split. Only the dataset tools (`lattice dataset lint|splits|freeze-labels|
+  review-packet|record-review`) load the sibling directories. Every evaluation run, baseline, `compare`
+  and golden test loads `evals/golden/` alone, so no default run touches a sealed or
+  staged item, and the evaluation runners refuse any selected item without a split.
+- **Assignment.** `lattice dataset splits --propose --shares dev=…,held_out=…,sealed=…
+  --write` divides the unassigned items in those shares, stratified among themselves and
+  group-aware. A new item that joins a committed unit inherits its split. Each item gets
+  its review batch (H or S, numbered after the existing ones) and moves into the
+  directory of its split. The author does not choose an item's split.
+- **Freeze.** Sealed labels are frozen like held-out labels (`label-freeze.json`
+  `sealed`). The lint checks that freeze whenever the sealed directory is loaded
+  (`lattice dataset lint` always loads it).
+- **Review.** `record-review` counts sealed items per batch and never names one or
+  prints a label. A sealed correction carries labels, so its decisions file lives under
+  `evals/golden-sealed/decisions/` (not an item file: the loaders read `*.yaml` in the
+  directory itself), and its freeze reason names the batch only; the note stays in the
+  sealed item's `owner_review`. Approving a sealed batch may come from any file.
+- **Looking.** `lattice eval retrieval|answer --sealed --reason R` evaluates sealed items
+  alone. It appends the look to `evals/golden/provenance/sealed-access.json` before the
+  run starts and writes under `evals/reports/sealed/`. A sealed report never becomes a
+  baseline. The first sealed look is F5's final decision, with the reference and the
+  candidate configuration in the same run.
+- **Limitation.** Engineering authors every follow-up item, sealed ones included, so the
+  author knows the sealed questions. Mitigations: splits are assigned by the proposer
+  after authoring; after the freeze, engineering opens `evals/golden-sealed/` only
+  through the dataset tools until F5's final run; and every sealed look is logged.
+- **State (2026-10-29, F2c).** 51 sealed items (42 with targets) are frozen, pending owner
+  review in S1-S4. No sealed look has been made yet, so `sealed-access.json` does not
+  exist. Held-out has 126 items (102 with targets): 56 from Phase 13, already seen, and
+  70 fresh items from F2 (phase-13-followups §9).
+- **Baselines (2026-10-30, F2e).** All five baselines are regenerated on the 254 dev and
+  held-out items, with 0 item-level findings on the pre-F2 items. The one C ranking change
+  beyond the top 10 comes from question batching (phase-13-followups §13, O13). They are
+  regenerated once more after the owner's review corrections.
+- **No owner review (2026-10-30, D-41 amended).** The owner chose not to review the
+  held-out and sealed labels: they stay `authored_*`, every held-out and sealed figure is
+  reported as **engineering-labelled, not owner-reviewed**, and the baselines need no
+  second regeneration (phase-13-followups §21).
+- **One question per call (2026-10-30, F5.0).** The evaluation now asks a local model one
+  question per call, as the product does, so a C run over a subset ranks each item as the
+  full run does. External providers keep their batches. Reports record `query_embedding`,
+  and the C baseline was regenerated under that declared change, with identical metrics
+  and two rankings changed (phase-13-followups §16).
 
 Record keys: `doc:<front-matter id>#<n>` (part *n*: preamble, then one per H1/H2
 section), `ticket:<id>#c<n>` (comment *n*), `chat:<channel>:<thread ts>` or
@@ -323,6 +378,17 @@ computed (no paid provider is configured; D-43).
   content above an external provider's egress level) and is uncalibrated (§6: no
   30-item human calibration exists), so its scores gate nothing. No cost estimate is
   printed (no paid provider is configured).
+- Quota-bound answer runs (**built, phase-13-followups §12, E1–E4**):
+  - `--rpm N` spaces the generation calls. A Gemini run is always paced: a per-minute 429
+    waits 60 s and retries once, and a per-day quota stops the run after that item.
+  - `--resume REPORT` continues a stopped run of the same configuration. It keeps the
+    finished runs, asks the missing and provider-failed ones, and writes one report that
+    records what it resumed. A stopped run exits 3.
+  - Before a Gemini run sends anything, a preflight (`GET /models/{model}`: no
+    generation, no quota) checks the key and model. `--preflight-only` stops there.
+  - `--prompt-version answer-prompt-1|2` and `--prompt-evidence N` evaluate another
+    prompt. The product keeps `answer-prompt-2` and 12 items. A non-default prompt is a
+    declared change to `eval compare`; the default compares with older baselines.
 - `--no-rerank` (retrieval, **built, P13.1**): the rerank ablation, every rerank_v1
   weight 0 so evidence follows the RRF order; its configuration version is
   `retrieval-6+rrf-only`, never the product's.
@@ -1805,3 +1871,68 @@ counts and chunk IDs (S10). Mutation checks (not committed): seed predicate remo
 failures; chunk predicate removed → 4. Every security metric 0 in every run above.
 Retrieval A, B (aarch64), C and answer A compare identical with their baselines with the
 code present (off).
+
+## 24. Record-aware ranking, rerank_v2 (F5.2, 2026-10-30)
+
+**Outcome: built, not adopted.** No variant met the bar on dev in A and C, so **held-out
+was not used**. `rerank_v2` (`lattice.retrieval.records`) stays as an evaluation tunable,
+off: `--set record_mode=soft|interleave --set record_weight=W --set record_within=true`.
+These settings name `rerank_v2` in the run's configuration. Design: phase-13-followups
+§17; results: §18 there.
+
+Dev screening (128 items, 100 with targets; R@10 change in points; targets gained / lost
+at 10):
+
+| Variant | A R@10 | A MRR | C R@10 | C MRR | Category down > 2 points |
+| ------- | -----: | ----: | -----: | ----: | ------------------------ |
+| reference (`retrieval-6`) | 0.745 | 0.660 | 0.761 | 0.652 | |
+| soft, w 0.15 | +1.2 (2/1) | −0.6 | 0.0 (0/0) | −1.5 | A cross_document −3.0 |
+| soft, w 0.3 | +1.2 (2/1) | −1.8 | 0.0 (0/0) | −4.2 | A cross_document −3.0 |
+| soft, w 0.5 | +1.4 (3/1) | −3.3 | −0.3 (1/2) | −5.1 | C cross_source −4.4 |
+| interleave, any w | −7.3 (15/24) | −2.7 to −5.0 | −11.6 (13/32) | −6.9 to −9.7 | lookup, prompt_injection, supersession and more |
+| within-record order only | 0.0 (0/0) | −0.2 | +0.5 (1/0) | +0.2 | none |
+| soft + within, w 0.15 / 0.3 / 0.5 | +1.2 / +1.2 / +1.4 | −0.7 / −2.0 / −3.4 | +0.5 / +0.5 / +0.2 | −1.2 / −3.9 / −4.7 | as soft |
+
+Reading:
+- **The signal is sparse.** About one record per question has any complementary
+  coverage. The question's content lexemes are few, and a record's best chunk usually
+  holds most of them. The soft lift moves at most three targets.
+- **Where it moves, it costs MRR.** A lifted record's weaker chunks pass stronger
+  single-chunk evidence.
+- **Interleaving fails like ≤ 1 chunk per document first (§19)**, for the same reason:
+  targets are often several chunks of one record.
+- **Within-record order is neutral:** one C target gained, nothing lost.
+
+Cost: one statement over the pool, p50 7 ms in A and 9 ms in C, p95 12 and 13 ms.
+
+Security: every metric 0 in every run.
+- `test_sql_structure.py` covers the coverage statement (predicate, tenant, lifecycle,
+  visible-account join).
+- `test_sql_capture.py` re-executes it as the reader: only permitted chunks, exactly the
+  reranked pool.
+- The golden suite runs every item at the strongest setting: security 0, and the same
+  merged and reranked counts as rerank_v1.
+- Mutation check (not committed): with the predicate removed, 2 tests fail.
+
+With the code present and off, retrieval A, B (aarch64), C (all 254 items) and answer A
+compare identical with their baselines.
+
+## 25. Phase 13 follow-ups closure (F6, 2026-10-30)
+
+Final runs compare IDENTICAL with every baseline: retrieval A, B (aarch64 and x86-64) and
+C, and answer A. Security was 0 in all of them and in the one logged sealed look (A, C
+and answer A).
+
+R@10 by split (held-out and sealed are engineering-labelled, D-41 amended):
+
+| Configuration | Dev | Held-out | Sealed |
+| ------------- | --: | -------: | -----: |
+| A | 0.745 | 0.653 | 0.735 |
+| C | 0.761 | 0.726 | 0.749 |
+
+Answer A (fake generator): status accuracy 0.801, and 0.722 on sealed. Context recall is
+0.653, with conflict coverage 26 of 46.
+
+The sealed look found one action request not refused: open item O14. The full record,
+the budgets and the completion criteria are in phase-13-followups §22.
+

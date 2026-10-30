@@ -50,6 +50,7 @@ def build_trace(
     ranked: Sequence[RankedCandidate],
     final_count: int,
     timings_ms: Mapping[str, float],
+    record_counts: Mapping[str, int] | None = None,
 ) -> RetrievalTrace:
     return RetrievalTrace(
         request_id=request_id,
@@ -75,6 +76,7 @@ def build_trace(
             "merged": len(fused),
             "reranked": len(ranked),
             "final": final_count,
+            **(record_counts or {}),
         },
         timings_ms={k: round(v, 2) for k, v in timings_ms.items()},
         stages={name: _stage(candidates) for name, candidates in stages.items()}

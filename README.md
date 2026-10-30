@@ -22,8 +22,8 @@ and the frontend product-design overhaul (D0–D7,
 [design direction](docs/design-direction.md)) is merged; [design system
 v2](docs/design-system.md) is canonical. Phase 11 (Production Deployment, Identity
 Operations & Reliability) was verified on a local production-shaped stack only: real
-external staging validation is deferred and gates v1 GA ([plan](docs/phase-11-plan.md)
-§21.1). Phase 11 is merged (143392f). Phase 12 (Organization Setup, Identity
+external staging validation is deferred ([plan](docs/phase-11-plan.md) §21.1) and, since
+Lattice is a personal project (D-46), not planned. Phase 11 is merged (143392f). Phase 12 (Organization Setup, Identity
 Configuration & Integrations) delivered: P12.1 foundations are built (encrypted
 credentials, the outbound-target policy, `lattice org create`, the backend-owned setup
 record and the Organization page) and P12.2 members and administrators (members added by
@@ -91,8 +91,9 @@ audit, and an isolation sweep over every route. See the
 ## Local setup
 
 Prerequisites: Docker with Compose v2, [`uv`](https://docs.astral.sh/uv/), `make`,
-`git`; for the web app, Node.js 22+ and [`pnpm`](https://pnpm.io/). `uv` installs
-Python 3.12 itself.
+`git`; for the web app, Node.js 22.19+ or 24+ and [`pnpm`](https://pnpm.io/) (Node 23
+before 23.8 lacks the zlib zstd API the unit-test tooling needs: its tests do not start).
+`uv` installs Python 3.12 itself.
 
 ```bash
 git clone <this repository> lattice && cd lattice
@@ -423,8 +424,8 @@ Releases go through `deploy/deploy.sh` (rolling without a schema change; stop-th
 rollback by image ID), and `lattice check-deployment` compares a database with what the
 build requires, including a committed privilege snapshot. CI publishes images to GHCR
 only from `main`, `v*` tags and manual dispatch. No cloud staging exists: real external
-validation is deferred for lack of a deployment budget and gates v1 GA
-([plan](docs/phase-11-plan.md) §21.1). P11.3 added identity operations: SSO disable
+validation is deferred for lack of a deployment budget and not planned (D-46;
+[plan](docs/phase-11-plan.md) §21.1). P11.3 added identity operations: SSO disable
 revokes the connection's sessions, the connection can be re-enabled and updated in place,
 and suspension, reinstatement, session revocation and an organization stop are audited
 operator commands (runbook §2, §9), verified across both API instances with a
@@ -443,8 +444,9 @@ a performance sanity check (`make prod-perf`), recorded in runbook §8.
 **What is not proven.** Everything above ran on one laptop. Real cloud staging, managed
 PostgreSQL privileges, managed backup/PITR, public TLS and origin, a real external OIDC
 callback, provider-specific deploy/rollback and cloud RPO/RTO are deferred for lack of a
-deployment budget ([plan](docs/phase-11-plan.md) §21.1); they gate v1 GA (Phase 15), and
-until then Lattice is not described as production-proven.
+deployment budget ([plan](docs/phase-11-plan.md) §21.1). Lattice is a personal project
+(D-46, 2026-10-30): these are not planned, and Lattice is not described as
+production-proven.
 
 ## Repository layout
 

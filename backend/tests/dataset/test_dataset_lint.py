@@ -88,6 +88,23 @@ def _golden(golden: Path, name: str, old: str, new: str) -> None:
     _edit(golden / name, old, new)
 
 
+def _without_f2(golden: Path, edit: Callable[[str], str]) -> None:
+    """Apply ``edit`` to every F2 golden file, so a minimum mutation still reaches its
+    threshold once the F2 items count too (phase-13-followups F2)."""
+    for path in golden.glob("f2_*.yaml"):
+        path.write_text(edit(path.read_text(encoding="utf-8")), encoding="utf-8")
+
+
+def _no_prompt_injection(data: Path, golden: Path) -> None:
+    (golden / "prompt_injection.yaml").unlink()
+    _without_f2(golden, lambda t: t.replace("category: prompt_injection", "category: lookup"))
+
+
+def _keyword_class_below_minimum(data: Path, golden: Path) -> None:
+    _golden(golden, "lookup.yaml", "  classes: [keyword_vs_natural]\n", "")
+    _without_f2(golden, lambda t: re.sub(r",? ?keyword_vs_natural,? ?", "", t))
+
+
 MUTATIONS: dict[str, tuple[Mutation, str]] = {
     # canaries
     "canary duplicated": (
@@ -398,7 +415,7 @@ MUTATIONS: dict[str, tuple[Mutation, str]] = {
         "answered needs relevant evidence",
     ),
     "golden category below its minimum": (
-        lambda d, g: (g / "prompt_injection.yaml").unlink(),
+        _no_prompt_injection,
         "category prompt_injection: 0 items (minimum 4)",
     ),
     "golden undeclared canary": (
@@ -485,7 +502,7 @@ MUTATIONS: dict[str, tuple[Mutation, str]] = {
         "kw-eu-region-maya: class scoped_retrieval is not exercised",
     ),
     "golden class below its minimum": (
-        lambda d, g: _golden(g, "lookup.yaml", "  classes: [keyword_vs_natural]\n", ""),
+        _keyword_class_below_minimum,
         "class keyword_vs_natural: 3 items (minimum 4)",
     ),
     "golden exhaustive review missing a candidate": (
