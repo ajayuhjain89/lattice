@@ -368,3 +368,17 @@ def test_only_a_prompt_other_than_the_products_is_a_declared_change() -> None:
     assert result.intended == [
         "prompt_config: None -> {'version': 'answer-prompt-2', 'max_evidence': 16}"
     ]
+
+
+def test_only_one_question_per_call_is_a_declared_query_embedding_change() -> None:
+    # phase-13-followups O13 (F5.0): batched runs compare with baselines from before the
+    # field; a local model embedding one question per call is declared.
+    local = {"embedding_provider": "local", "embedding_model": "mxbai@x"}
+    base = _report(**local)
+    batched = _report(**local, query_embedding="batched")
+    assert baseline.compare(base, batched).verdict == "identical"
+    assert baseline.compare(base, batched).intended == []
+    single = _moved(_report(**local, query_embedding="per_question"), "lookup-b", "doc:c#1", 4)
+    result = baseline.compare(base, single)
+    assert result.intended == ["query_embedding: None -> per_question"]
+    assert result.verdict == "changed"

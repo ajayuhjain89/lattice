@@ -236,6 +236,11 @@ opt_in_confidential: …}`.
   held-out items, with 0 item-level findings on the pre-F2 items. The one C ranking change
   beyond the top 10 comes from question batching (phase-13-followups §13, O13). They are
   regenerated once more after the owner's review corrections.
+- **One question per call (2026-10-30, F5.0).** The evaluation now asks a local model one
+  question per call, as the product does, so a C run over a subset ranks each item as the
+  full run does. External providers keep their batches. Reports record `query_embedding`,
+  and the C baseline was regenerated under that declared change, with identical metrics
+  and two rankings changed (phase-13-followups §16).
 
 Record keys: `doc:<front-matter id>#<n>` (part *n*: preamble, then one per H1/H2
 section), `ticket:<id>#c<n>` (comment *n*), `chat:<channel>:<thread ts>` or

@@ -108,6 +108,12 @@ def _retrieval_configuration(report: Mapping[str, Any]) -> dict[str, Any]:
         "config_version": report.get("config_version"),
         "rerank_version": report.get("rerank_version"),
         "limit": report.get("limit"),
+        # phase-13-followups O13 (F5.0): batching was the only mode before the field, so
+        # only one question per call is a declared change; batched runs compare with
+        # baselines from before it.
+        "query_embedding": (
+            "per_question" if report.get("query_embedding") == "per_question" else None
+        ),
     }
 
 

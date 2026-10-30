@@ -25,7 +25,7 @@ checkpoint, as in every phase.
 | O10 | Term statistics scan the reader's whole corpus | +1 statement per Ask, a few ms at 1,300 chunks; measured at 10× and 50× in F3 (§6) | Linear in the reader's permitted documents: the authorization predicate itself | Phase 14 scale (design options in §6) |
 | O11 | Local Node 23.7 cannot run the web unit tests after undici 8.12 | **Done in F3**: `engines` `^22.19.0 \|\| >=24`, README prerequisite | undici needs zlib zstd (Node ≥ 22.19 / ≥ 23.8) | — |
 | O12 | The answer pipeline misses some action requests (D-11) | Found at F2c (§9): two new refusal items, e.g. "Book a call with Priscilla Vance for Monday.", get `evidence_only` instead of `unsupported_request`; owner chose on 2026-10-29 to record it and fix it as an F5 step (§11) | The request-kind detector does not cover these phrasings | `test_every_golden_item_passes_the_security_gate` fails until fixed or decided |
-| O13 | Configuration C's query embeddings depend on which questions share a batch | Found at F2e (§13): the local model pads each batch of questions to its longest member, so the numerics of one question's vector change slightly with its batch; with the golden set grown, one pre-F2 item ranks differently beyond the top 10. The same 159 items reproduce the old baseline exactly | Ties beyond rank 10 can move when a run selects a different set of items | C comparisons on a subset (`--item`, F5 screens): compare like with like, or embed questions one at a time (to decide in F5) |
+| O13 | Configuration C's query embeddings depend on which questions share a batch | **Done in F5.0** (§16): the evaluation asks a local model one question per call, as the product does. Found at F2e (§13): the local model padded each batch of questions to its longest member | External providers keep their batches (per-request quotas); the fake model's vectors are per text anyway | — |
 
 ## 2. Principles carried over
 
@@ -906,3 +906,45 @@ still be re-tested later.
 **Next (needs the owner's go-ahead):** F5.0, per-question query embedding in evaluation
 (O13). Then F5.2, record-aware ranking: a design note first.
 
+## 16. F5.0 delivery record (2026-10-30): one question per call (O13)
+
+**Change.** `PrefetchedQueries` (`lattice.evals.retrieval`) now asks a local model one
+question per call, as the product does once per Ask. External providers keep their
+batches, which their per-request quotas need. The fake model (B) is unaffected: its
+vectors depend on the text alone. Retrieval reports record `query_embedding`
+(`per_question` or `batched`). A baseline records it only when it is `per_question`, so
+a batched run still compares with the baselines from before the field. Code only in
+evaluation; the product is unchanged.
+
+**Tests.**
+- `test_baseline.py`: only `per_question` is a declared change.
+- `test_golden_retrieval.py`:
+  - only a local provider is asked one question per call;
+  - with a stand-in model whose vectors depend on their batch, a 4-item run ranks
+    exactly as a 12-item run when questions go one per call;
+  - the batched control does not, which shows the test catches O13.
+
+**Measurement on C (mxbai, the C snapshot, aarch64).**
+- **All 254 items:** 226 calls, one per distinct question (8 before). `eval compare`
+  against the F2e baseline reads CHANGED under the declared `query_embedding` change, with
+  no regression. Every metric is identical (R@10 dev 0.761, held-out 0.726). Two rankings
+  changed:
+  - `f2-xorg-veridian-quarry-refund-ines`: two non-target chunks swap places at ranks 8
+    and 9;
+  - `para-sla-p2-sofia`: below the stored top 10.
+- **The 159 pre-F2 items alone:** every ranking is identical to the full run. The subset
+  dependence is gone.
+- Security 0 in both runs. The watchdog stopped nothing; its memory figures were not kept.
+
+**Baseline regenerated:** `retrieval-C-aarch64.json` (`--replace`, with the reason). A, both
+B and answer A are unchanged.
+
+**Checks.** Retrieval, eval and local-provider tests: 622 passed. mypy and ruff are clean.
+
+**Consequence for F5.** C screens on a subset (dev only, `--item`) now rank each item as
+the full run does, so a dev screen and a held-out look use the same vectors. F5.1's
+verdict stands: its runs embedded the same batches on both sides, and its gain was below
+the bar in A, which has no embeddings.
+
+**Next (needs the owner's go-ahead):** F5.2, record-aware ranking, starting with a design
+note.

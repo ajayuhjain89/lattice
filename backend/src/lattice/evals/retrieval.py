@@ -196,6 +196,12 @@ class PrefetchedQueries:
     "query")`` exactly as in the product and gets the identical vector (same normalized
     text, same purpose); anything not prefetched goes to the provider.
 
+    A local model is asked one question per call, as the product asks it once per Ask
+    (phase-13-followups O13, F5.0): it pads a batch to its longest text, so a batched
+    vector depends on which questions share the batch, and a run over a subset of the
+    items would rank differently. Local calls cost nothing; external providers keep
+    their batches, which their per-request quotas need.
+
     A question is prefetched only if the product's own egress decision
     (``question_policy`` + ``query_egress_block``, as that organization, with no
     declaration -- how the harness retrieves) would send it. Prefetching never sends
@@ -232,6 +238,10 @@ class PrefetchedQueries:
     def max_batch(self) -> int:
         return self.inner.max_batch
 
+    @property
+    def per_question(self) -> bool:
+        return self.inner.deployment == "local"
+
     async def prefetch(
         self, app: Database, identities: "Identities", items: Sequence[GoldenItem]
     ) -> None:
@@ -253,7 +263,7 @@ class PrefetchedQueries:
                 if await query_egress_block(session, ctx, self.inner, sensitivity, org):
                     continue
             pending = sorted(q for q in questions if q and q not in self.cache)
-            size = max(1, self.inner.max_batch)
+            size = 1 if self.per_question else max(1, self.inner.max_batch)
             for start in range(0, len(pending), size):
                 batch = pending[start : start + size]
                 try:
@@ -839,6 +849,9 @@ class RetrievalReport:
     corpus_fingerprint: dict[str, Any] = field(default_factory=dict)
     golden_version: dict[str, Any] = field(default_factory=dict)
     database_platform: str = "unknown"
+    # How the questions were embedded: "per_question" or "batched" (O13, F5.0); None
+    # without a provider. Reports from before F5.0 have none: they batched.
+    query_embedding: str | None = None
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
@@ -1076,6 +1089,13 @@ async def evaluate_retrieval(
         corpus_fingerprint=corpus.fingerprint,
         golden_version=golden_version(selected),
         database_platform=platform,
+        query_embedding=(
+            None
+            if queries is None
+            else "per_question"
+            if queries.per_question or not prefetch
+            else "batched"
+        ),
     )
 
 
@@ -1120,7 +1140,8 @@ def render_markdown(report: RetrievalReport) -> str:
             else []
         ),
         f"Query embedding usage: {report.provider_usage or 'none'}; deployment "
-        f"`{report.embedding_deployment or '-'}`.",
+        f"`{report.embedding_deployment or '-'}`; questions "
+        f"`{report.query_embedding or '-'}`.",
         "",
         f"Corpus `{report.corpus_fingerprint.get('sha256', '-')[:12]}` "
         f"({report.corpus_fingerprint.get('chunks', {})}); golden "
