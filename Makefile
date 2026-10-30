@@ -10,10 +10,13 @@ MANIFESTS := --manifest ../data/synthetic/halden/org.yaml --manifest ../data/syn
 EMBEDDING ?= fake
 ORGS := halden veridian
 
-.PHONY: help setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer eval-compare models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits prod-authz prod-drills prod-perf prod-onboard prod-backup alerts-test privilege-snapshot
+.PHONY: help demo setup db-up db-down db-bootstrap db-destroy migrate seed api test lint format typecheck audit check-db-role worker dataset-lint dataset-generate sync sync-dry-run admin-grants eval eval-answer eval-compare models-fetch web-setup web web-build web-check web-e2e api-contract prod-env prod-build prod-up prod-smoke prod-ps prod-down prod-destroy prod-migrate prod-check prod-seed prod-identity prod-limits prod-authz prod-drills prod-perf prod-onboard prod-backup alerts-test privilege-snapshot
 
 help:
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
+
+demo: ## One command to try Lattice: install, start Postgres, load the synthetic data, run the API + web app (scripts/demo.sh)
+	@scripts/demo.sh
 
 setup: ## Install backend dependencies (Python 3.12 via uv) from the lockfile, incl. the local-inference runtime
 	cd backend && uv sync --locked --extra local
