@@ -13,6 +13,7 @@ import { record } from "@/components/record/RecordPage";
 import { questionStatus, traceHref } from "@/components/activity/questions";
 import { sourceKind } from "@/components/sources/sync-model";
 import { formatCount, formatDay } from "@/lib/format";
+import { syncLabel } from "@/lib/scope";
 
 import styles from "./AskDesk.module.css";
 
@@ -82,7 +83,6 @@ function Reach({ sources, failed }: { sources: readonly MemberSource[] | undefin
         <ul className={styles.rows}>
           {sources.map((s) => {
             const Glyph = SOURCE_GLYPHS[sourceKind(s.connector_type)];
-            const synced = formatDay(s.last_succeeded_at);
             return (
               <li key={s.id} className={styles.source}>
                 <span className={styles.glyph}>
@@ -90,7 +90,7 @@ function Reach({ sources, failed }: { sources: readonly MemberSource[] | undefin
                 </span>
                 <span className={styles.sourceName}>{s.name}</span>
                 <span className={styles.sourceMeta}>
-                  {formatCount(s.readable_documents, "document", "documents")} you can read · {synced ? `synced ${synced}` : "not synced yet"}
+                  {formatCount(s.readable_documents, "document", "documents")} you can read · {syncLabel(s)}
                 </span>
               </li>
             );
