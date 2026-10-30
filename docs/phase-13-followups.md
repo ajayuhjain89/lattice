@@ -1317,9 +1317,6 @@ items, with a sealed split. The track also delivered:
 
 None blocks the personal v1 (D-46).
 
-**Next (owner's approval for each):**
-1. Push `phase/13-followups`.
-2. Open the PR to `main`, where CI runs once.
-3. Merge.
-4. Phase 14: the personal v1 release.
+**Next (owner's approval for each):** done. `phase/13-followups` was merged to `main`
+(a80e706, 2026-10-30), and Phase 14, the personal v1 release, followed (2a43b6d).
 
