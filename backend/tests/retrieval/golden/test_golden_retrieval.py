@@ -405,7 +405,8 @@ async def test_configuration_b_reproduces_the_baseline_of_this_database_architec
 
 def test_configuration_b_differs_between_architectures_only_where_recorded() -> None:
     """The two B baselines differ in ranking (exact ties ordered by float32 rounding),
-    and in exactly one target outcome; nothing else (evaluation-plan §15)."""
+    and in exactly one target outcome; nothing else (evaluation-plan §15). Since F2e three
+    F2 items also move a target's rank within one k bucket (no target gained or lost)."""
     arm = baseline.load(BASELINES / "retrieval-B-aarch64.json")
     x86 = baseline.load(BASELINES / "retrieval-B-x86_64.json")
     result = baseline.compare(arm, x86, cross_platform=True)
@@ -415,6 +416,9 @@ def test_configuration_b_differs_between_architectures_only_where_recorded() -> 
         ("xsrc-kestrel-outage-daniel", "target_gained@10"),
         ("xsrc-kestrel-outage-daniel", "target_rank_changed"),
         ("xsrc-kestrel-outage-daniel", "document_gained@10"),
+        ("f2-acct-acme-priscilla-tom", "target_rank_changed"),
+        ("f2-egress-enterprise-plus-arjun", "target_rank_changed"),
+        ("f2-xdoc-rachel-kim-grace", "target_rank_changed"),
     }, baseline.render(result)
     assert not baseline.compare(arm, x86).findings  # refused without --cross-platform
     assert baseline.compare(arm, x86).verdict == "incomparable"

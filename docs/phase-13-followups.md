@@ -25,6 +25,7 @@ checkpoint, as in every phase.
 | O10 | Term statistics scan the reader's whole corpus | +1 statement per Ask, a few ms at 1,300 chunks; measured at 10× and 50× in F3 (§6) | Linear in the reader's permitted documents: the authorization predicate itself | Phase 14 scale (design options in §6) |
 | O11 | Local Node 23.7 cannot run the web unit tests after undici 8.12 | **Done in F3**: `engines` `^22.19.0 \|\| >=24`, README prerequisite | undici needs zlib zstd (Node ≥ 22.19 / ≥ 23.8) | — |
 | O12 | The answer pipeline misses some action requests (D-11) | Found at F2c (§9): two new refusal items, e.g. "Book a call with Priscilla Vance for Monday.", get `evidence_only` instead of `unsupported_request`; owner chose on 2026-10-29 to record it and fix it as an F5 step (§11) | The request-kind detector does not cover these phrasings | `test_every_golden_item_passes_the_security_gate` fails until fixed or decided |
+| O13 | Configuration C's query embeddings depend on which questions share a batch | Found at F2e (§13): the local model pads each batch of questions to its longest member, so the numerics of one question's vector change slightly with its batch; with the golden set grown, one pre-F2 item ranks differently beyond the top 10. The same 159 items reproduce the old baseline exactly | Ties beyond rank 10 can move when a run selects a different set of items | C comparisons on a subset (`--item`, F5 screens): compare like with like, or embed questions one at a time (to decide in F5) |
 
 ## 2. Principles carried over
 
@@ -726,4 +727,74 @@ the plan is **~725 calls** (≤ ~1,020).
 3. Confirm the region is available.
 
 Then, on the owner's go-ahead: `--preflight-only`, then stage 0 (5 dev items).
+
+## 13. F2e delivery record (2026-10-30)
+
+Run before the owner's review, per the revised Q6 (§11.1). There will be one more
+regeneration after the review's corrections. One database at a time on port 5440:
+`lattice-p13fix` (aarch64), `lattice-p13fx86` (amd64 under emulation) and
+`lattice-p13fc` (C). The local model ran under a watchdog: the lowest free memory was
+22%, and the largest swap growth in one run was 1.6 GB.
+
+**Pre-F2 items unchanged.** Each configuration was compared with its P13 baseline using
+`--allow-golden-change`:
+
+| Configuration | Item-level findings on pre-F2 items | Security |
+| ------------- | ----------------------------------: | -------: |
+| Retrieval A | 0 | 0 |
+| Retrieval B aarch64 | 0 | 0 |
+| Retrieval B x86-64 | 0 | 0 |
+| Answer A (171 pre-F2 runs of 271) | 0 | 0 |
+| Retrieval C | 1: `cross-org-refund-window-felix`, ranking changed beyond the stored top 10; no target moved | 0 |
+
+**The C finding, explained (open item O13).**
+- **Deterministic.** Two full C runs are identical.
+- **Not the code.** The P13.4, P13.9 and P13.6 code (git worktrees) gives the same result.
+- **Not the database.** A fresh restore of the C snapshot gives the same result.
+- **Not the model or the OS.** The model files verify, and the OS was last updated on
+  30 September, before the baseline.
+- **The cause is the evaluation's question batches.** Questions are embedded 32 at a time
+  and padded to the longest in the batch. The 95 new items change which questions share a
+  batch, which nudges the vector's numerics and reorders ties below rank 10.
+- **Confirmed.** Running the 159 pre-F2 items alone, so the batches are the old ones,
+  reproduces the old C baseline exactly (IDENTICAL, 0 findings).
+
+**Baselines regenerated** (`--replace`, with reasons): `retrieval-A.json`,
+`retrieval-B-aarch64.json`, `retrieval-B-x86_64.json`, `retrieval-C-aarch64.json` (254
+items each) and `answer-A.json` (271 runs). Golden version `f6838d1b8a92`; corpus
+`7f914a8ce283`, or `277fb9ff8982` for C's local vectors. No sealed item was run.
+
+**New figures (R@10; items with targets in parentheses).** "Seen" is the 56 held-out items
+from Phase 13 (44 with targets); "fresh" is the 70 F2 held-out items (58 with targets).
+
+| Configuration | Dev (100) | Held-out (102) | Seen (44) | Fresh (58) | Overall MRR |
+| ------------- | --------: | -------------: | --------: | ---------: | ----------: |
+| A | 0.745 | 0.653 | 0.598 | 0.695 | 0.634 |
+| B aarch64 | 0.574 | 0.576 | 0.477 | 0.652 | 0.502 |
+| B x86-64 | 0.574 | 0.579 | 0.484 | 0.652 | 0.502 |
+| C | 0.761 | 0.726 | 0.649 | 0.784 | 0.652 |
+
+Answer A (fake generator: plumbing, not quality), 271 runs:
+
+| Measure | Dev | Held-out |
+| ------- | --: | -------: |
+| Status accuracy | 0.853 | 0.733 |
+| Context recall | 0.737 | 0.572 |
+
+Held-out context recall by slice: fresh 0.595 (74 runs), seen 0.541 (61 runs). The gate
+stopped 18 of 34 expected-abstain runs before the model and refused 26 of 207 answerable
+runs.
+
+**Reading.** The fresh held-out items score higher than the seen ones in every
+configuration: R@10 is 0.784 against 0.649 on C. The seen slice is the hard Phase 13
+residue that P13.3–P13.6 failed to move. The fresh slice includes the lookups that F2
+added. Do not read the gap as improvement.
+
+**Tests updated with the measured values.**
+- The answer-A pins: 18 of 34 caught, 26 of 207 refused, context recall 0.6527.
+- The B cross-architecture set: still the one Phase 13 outcome, plus three F2 rank
+  changes within one k bucket. 64 items now rank differently.
+
+Retrieval golden, answer golden, eval and dataset packages: 527 passed and 1 failed. The
+failure is O12, as recorded.
 

@@ -232,6 +232,10 @@ opt_in_confidential: …}`.
   review in S1-S4. No sealed look has been made yet, so `sealed-access.json` does not
   exist. Held-out has 126 items (102 with targets): 56 from Phase 13, already seen, and
   70 fresh items from F2 (phase-13-followups §9).
+- **Baselines (2026-10-30, F2e).** All five baselines are regenerated on the 254 dev and
+  held-out items, with 0 item-level findings on the pre-F2 items. The one C ranking change
+  beyond the top 10 comes from question batching (phase-13-followups §13, O13). They are
+  regenerated once more after the owner's review corrections.
 
 Record keys: `doc:<front-matter id>#<n>` (part *n*: preamble, then one per H1/H2
 section), `ticket:<id>#c<n>` (comment *n*), `chat:<channel>:<thread ts>` or
