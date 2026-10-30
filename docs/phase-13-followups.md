@@ -110,7 +110,7 @@ tries the approaches Phase 13 did not, each needing its own decision where noted
 | ---- | -------- | --------------- |
 | F5.1 | Re-test the strongest Phase 13 dev candidates (lexical ×1.25–1.5, RRF k 30; gate variants (b)/(c) of §21) on the new dev, then the sealed split once | none |
 | F5.2 | Record-aware ranking: score documents first (best chunk + coverage of the question across its chunks), then order chunks within the top documents | none (deterministic; replaces a ranking stage, so A/B/C baselines change) |
-| F5.3 | Embedding input with title and heading context for every chunk | **D-45** (re-embed: ~6 min local per corpus version; external providers re-embed at their cost) |
+| F5.3 | Embedding input with title and heading context for every chunk (corrected in §14.1: `embed-input-1` already carries them) | **D-45** (re-embed: ~6 min local per corpus version; external providers re-embed at their cost) |
 | F5.4 | Another local embedding model already cached (Snowflake arctic, Alibaba gte) as C2, compared with mxbai on dev | D-38 amendment (a second reference model) |
 | F5.5 | Gate: recalibrate on the new dev for the two refusal patterns (paraphrase, large accounts); confirm on sealed | none (bumps `GateConfig.version`) |
 | F5.6 | Conflict coverage: re-measure after F5.2–F5.3 (it is bound by retrieval) | none |
@@ -797,4 +797,79 @@ added. Do not read the gap as improvement.
 
 Retrieval golden, answer golden, eval and dataset packages: 527 passed and 1 failed. The
 failure is O12, as recorded.
+
+## 14. F5 plan (proposed 2026-10-30)
+
+F5 starts from the F2e baselines (§13). Every step follows the same protocol, and stops
+for the owner after each (§11.1):
+
+**Protocol.**
+1. **Dev decides.** 100 dev items have targets; one item is about 1 point of R@10. A change
+   qualifies when:
+   - dev R@10 (or the step's own metric) rises by at least 2 points, in both A and C where
+     both apply;
+   - no category falls by more than 2 points (or more than one item, in categories with
+     fewer than 10 items);
+   - every security metric is 0.
+2. **Held-out once per choice.** A qualifying change is reported on held-out, which has
+   102 items with targets, in the seen and fresh slices. It is adopted only if held-out
+   moves in the same direction beyond one-item noise. The look is recorded whatever the
+   result.
+3. **Sealed once, at F5's final decision.** `--sealed --reason` runs the reference and the
+   final candidate in the same run, and the run is logged. It confirms the direction and
+   no regression; it chooses nothing.
+4. **Adoption** bumps the configuration version and regenerates the affected baselines with
+   reasons.
+
+**Steps, in order:**
+
+| Step | What | Decision needed | Notes |
+| ---- | ---- | --------------- | ----- |
+| F5.0 | **O13: embed evaluation questions one at a time** | none (evaluation only) | The product embeds one question per Ask, so batched pre-embedding in the evaluation measures something the product never does. One question per call removes the subset dependence. C's numbers move slightly once: a declared change, and `retrieval-C-aarch64.json` is regenerated. Cost: C runs take longer (254 model calls instead of 8) |
+| F5.1 | **Parked candidate**: `rrf_weight_lexical=1.5`, `rrf_k=30` (`--set`) | none | Screened on the new dev in A and C; then one held-out look (its first on these items) |
+| F5.2 | **Record-aware ranking**: score documents (best chunk plus coverage of the question across its chunks), then order the chunks within the top documents | none | A new ranking stage (`rerank_v2`), so A, B and C baselines change if adopted. Design note first, then build, then dev |
+| O12 | **D-11 detector gap** | none | The verbs come from D-11's definition (act on a calendar, ticket or record: book, open, file, set up, add, invite, post, submit, …), not from the two failing items' wording. Unit tests in `tests/answering/test_request_kind.py` hold authored phrasings, and a no-false-positive check runs over every dev question. Then the golden security test confirms on all items. Answer baselines change for the refusal runs only |
+| F5.5 | **Gate recalibration** for the two refusal patterns (paraphrase without a shared specific word; large-account questions) | none | Uses the F2 dev items in those themes; bumps `GateConfig.version`; answer A and C |
+| F5.6 | **Conflict coverage**, re-measured after F5.2 (it is bound by retrieval) | none | Measurement only, unless a step above changes it |
+| F5.3 | **Chunking or embedding-input change**, chosen by a dev diagnostic first | **D-45**, only once the diagnostic names a change (brief below) | The diagnostic costs nothing; a change re-embeds the C corpus |
+| F5.4 | **A second local embedding model** as C2 | **D-38 amendment** (brief below) | Compared with mxbai on dev |
+| Final | Reference against the adopted candidate on held-out, then one sealed look | owner go-ahead | Then F6 |
+
+### 14.1 Brief: D-45, a chunking or embedding-input change
+
+- **A correction to F5.3.** F5.3 assumed chunks are embedded without their title and
+  heading context. They are not: `embed-input-1` (`lattice.ingestion.embedding_input`)
+  already embeds the kind label, the document title and the chunk's heading path in front
+  of every chunk's text. Adding them again would change nothing.
+- **What remains open under D-45:** what else a chunk's input could carry, or how chunks
+  are cut. Candidates:
+  - the document's opening lines as a short context line;
+  - the record's date, for temporal questions;
+  - smaller or overlapping chunks.
+  Which one could help depends on why C's misses are missed.
+- **Proposed first step (no decision needed, ₹0).** A diagnostic on the dev misses of C.
+  For each missed target chunk, record whether its embedding input lacks something that
+  the question's decisive terms need: the subject only named in another chunk, a date, or
+  a split across chunks. It measures nothing new and changes nothing.
+- **Then D-45, if the diagnostic names a change.** Approve one re-embed for evaluation,
+  with the product default following only if it qualifies under §14's protocol.
+  - Cost: one local re-embed of the 1,325 chunks under the watchdog (about 7 minutes and
+    up to about 1.5 GB of swap growth at P13.2), and a new C snapshot.
+  - The corpus fingerprint changes, so the C baseline and, through the fake vectors, both
+    B baselines are regenerated. A is unaffected unless chunking changes.
+
+### 14.2 Brief: D-38 amendment, a second local reference model
+
+- **What.** One more cached model is evaluated as C2 beside mxbai: Snowflake arctic-embed
+  or Alibaba gte, both already in `~/.cache/lattice/models`. Only one runs at a time.
+- **Cost (₹0).**
+  - One corpus embed per model, about 7 minutes under the watchdog, and a snapshot per
+    model.
+  - A C2 baseline, used as a reference and not gated in CI.
+  - Licence and model-card checks before any adoption.
+- **Risk.** Memory on the M1 8 GB: one model at a time, never alongside tests.
+- **Choice:**
+  - (a) approve C2 for evaluation, with mxbai staying the product default unless C2
+    qualifies on dev and held-out;
+  - (b) not now.
 
