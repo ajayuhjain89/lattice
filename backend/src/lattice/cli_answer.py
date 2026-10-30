@@ -10,6 +10,14 @@ configuration through the audited configuration functions (reason "answer
 evaluation"), so it belongs on an evaluation database, never on one with real data.
 An external provider (``--generation gemini``) needs ``--allow-external`` and a
 synthetic organization: it spends quota and sends synthetic content to a third party.
+
+Quota-bound runs (phase-13-followups §12, E1-E4; ``lattice.evals.answer``):
+``--rpm N`` spaces the calls; a Gemini run is always paced, retries a per-minute 429 once
+after a wait and stops at a per-day quota, and ``--resume REPORT`` then continues it.
+Before a Gemini run sends anything, a preflight (``GET /models/{model}``, no generation,
+no quota) checks the key and the model; ``--preflight-only`` stops there.
+``--prompt-version`` and ``--prompt-evidence`` evaluate another prompt (never the
+product's setting).
 """
 
 import argparse
@@ -18,10 +26,12 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from pydantic import ValidationError
 
 from lattice.answering.models import Answer, AskRequest
+from lattice.answering.prompt import DEFAULT_PROMPT, PromptConfig
 from lattice.answering.service import OFFLINE_GENERATION_DEADLINE_SECONDS, AskDependencies, ask
 from lattice.cli_retrieval import (
     GOLDEN,
@@ -40,16 +50,19 @@ from lattice.evals.answer import (
     AnswerItemResult,
     GenerationSpec,
     Judge,
+    Pacer,
     evaluate_answers,
     render_markdown,
 )
 from lattice.evals.retrieval import config_overrides, load_corpus, load_identities, select_items
+from lattice.outbound import OutboundPolicy
 from lattice.providers.egress import ProviderRecord
 from lattice.providers.factory import PROVIDER_NAMES, build_embedding_provider
 from lattice.providers.generation_factory import DefaultGenerationFactory
 from lattice.providers.ollama_generation import DEFAULT_ENDPOINT, OllamaGenerationProvider
 from lattice.providers.records import GenerationConfig
 from lattice.providers.secrets import EnvironmentSecretStore
+from lattice.providers.tester import ProviderTester
 
 
 def _impersonation_allowed() -> bool:
@@ -190,6 +203,26 @@ async def eval_answer(args: argparse.Namespace) -> int:
     problem = sealed.argument_problem(args)
     if problem:
         return _fail(problem)
+    try:
+        prompt_config = PromptConfig(
+            version=args.prompt_version or DEFAULT_PROMPT.version,
+            max_evidence=DEFAULT_PROMPT.max_evidence
+            if args.prompt_evidence is None
+            else args.prompt_evidence,
+        )
+        pacer = Pacer(args.rpm) if spec.provider == "gemini" or args.rpm else None
+        previous, previous_name = _previous(args.resume)
+    except ValueError as exc:
+        return _fail(str(exc))
+    if spec.provider == "gemini":
+        verdict = await preflight(spec)
+        if verdict != "valid":
+            return _fail(f"preflight: {verdict}; nothing was sent for generation")
+        print(f"preflight: {spec.model} valid (no generation, no quota)")
+        if args.preflight_only:
+            return 0
+    elif args.preflight_only:
+        return _fail("--preflight-only checks an external provider (--generation gemini)")
     dataset = sealed.load(args.data, args.golden, sealed=args.sealed)
     if dataset.problems:
         return _fail("the dataset does not lint; run `lattice dataset lint`")
@@ -243,7 +276,13 @@ async def eval_answer(args: argparse.Namespace) -> int:
             judge=judge,
             progress=None if args.quiet else _progress,
             retrieval_config=retrieval_config,
+            prompt_config=prompt_config,
+            pacer=pacer,
+            previous=previous,
+            previous_name=previous_name,
         )
+    except ValueError as exc:
+        return _fail(str(exc))
     finally:
         await app.dispose()
         await owner.dispose()
@@ -286,13 +325,50 @@ async def eval_answer(args: argparse.Namespace) -> int:
         print(f"judge (uncalibrated): {s['judge']}")
     if spec.provider == "fake":
         print("note: the fake provider is a test double; these numbers are not answer quality")
+    if report.resumed_from:
+        print(f"resumed from: {', '.join(report.resumed_from)}")
+    pacing = report.pacing or {}
+    if pacing:
+        print(
+            f"pacing: {pacing['rpm'] or 'unspaced'} rpm, {pacing['retries']} retries after a "
+            f"per-minute limit, {pacing['waited_seconds']} s waited"
+        )
     print(f"report: {out}")
     if report.security_failures:
         print("SECURITY FAILURE: see the report", file=sys.stderr)
         return 1
+    if pacing.get("stopped") or pacing.get("not_run"):
+        print(
+            f"INCOMPLETE: {pacing.get('stopped') or 'stopped'}; {pacing.get('not_run')} runs not "
+            f"asked. Continue later with --resume {out}",
+            file=sys.stderr,
+        )
+        return 3
     if args.compare is not None:
         return compare_into(baseline.normalize(report), args, out)
     return 0
+
+
+def _previous(path: Path | None) -> tuple[dict[str, Any] | None, str | None]:
+    """The report a run resumes (``--resume``: a report directory or its report.json)."""
+    if path is None:
+        return None, None
+    file = path / "report.json" if path.is_dir() else path
+    if not file.is_file():
+        raise ValueError(f"--resume: no report at {file}")
+    data = json.loads(file.read_text(encoding="utf-8"))
+    if data.get("kind") != "answer":
+        raise ValueError("--resume: not an answer report")
+    return data, file.parent.name
+
+
+async def preflight(spec: GenerationSpec, tester: ProviderTester | None = None) -> str:
+    """E4: ``GET /models/{model}`` with the key -- authenticates it and checks the model
+    without generating anything (``lattice.providers.tester``). Public targets only."""
+    key = load_provider_settings().gemini_api_key
+    if key is None:
+        return "credential_missing"
+    return await (tester or ProviderTester()).gemini(OutboundPolicy(), spec.model, key)
 
 
 def _judge_config(spec: GenerationSpec) -> GenerationConfig:
@@ -324,6 +400,20 @@ def add_parsers(
     answer.add_argument("--allow-external", action="store_true")
     answer.add_argument("--embedding", choices=list(PROVIDER_NAMES), default="fake")
     answer.add_argument("--judge", action="store_true", help="local providers only; uncalibrated")
+    answer.add_argument("--rpm", type=float, help="at most N generation calls a minute")
+    answer.add_argument("--resume", type=Path, metavar="REPORT", help="continue a stopped run")
+    answer.add_argument("--preflight-only", action="store_true")
+    answer.add_argument(
+        "--prompt-version",
+        choices=["answer-prompt-1", "answer-prompt-2"],
+        help="evaluation only; default the product's",
+    )
+    answer.add_argument(
+        "--prompt-evidence",
+        type=int,
+        metavar="N",
+        help="prompt evidence item budget; evaluation only; default the product's",
+    )
     answer.add_argument("--category", action="append")
     answer.add_argument("--persona", action="append")
     answer.add_argument("--item", action="append")

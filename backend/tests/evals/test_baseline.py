@@ -354,3 +354,17 @@ def test_the_retrieval_configuration_of_an_answer_run_is_declared() -> None:
         "retrieval_config_version: retrieval-6 -> retrieval-6+max_chunks_per_document=2"
     ]
     assert result.verdict == "identical"  # declared, and nothing moved
+
+
+def test_only_a_prompt_other_than_the_products_is_a_declared_change() -> None:
+    # phase-13-followups §12 (E3): reports record their prompt configuration; the
+    # product's prompt still compares identically with baselines from before the field.
+    base = _answer_report(_answer_run("nps"))
+    default = base | {"prompt_config": {"version": "answer-prompt-2", "max_evidence": 12}}
+    assert baseline.compare(base, default).verdict == "identical"
+    assert baseline.compare(base, default).intended == []
+    wider = base | {"prompt_config": {"version": "answer-prompt-2", "max_evidence": 16}}
+    result = baseline.compare(base, wider)
+    assert result.intended == [
+        "prompt_config: None -> {'version': 'answer-prompt-2', 'max_evidence': 16}"
+    ]

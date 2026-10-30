@@ -646,3 +646,74 @@ design, because the authored facts may be above the external egress level. The o
 2. E1–E4.
 3. Judge option (a) or (b).
 4. The key and the project's RPM/RPD for `gemini-3.5-flash-lite`, read in AI Studio.
+
+### 12.1 E1–E4 delivery (2026-10-30)
+
+The owner approved the estimate, judge option (a) and E1–E4 on 2026-10-29. No Gemini
+call has been made, the preflight included.
+
+- **E1, pacing** (`lattice.evals.answer.Pacer`).
+  - `--rpm N` spaces calls. A per-minute 429 waits 60 s and is retried once.
+  - A per-day quota latches for the whole run, and the run stops after that item. The
+    adapter's own latch lives on one provider instance, and the evaluation builds one per
+    Ask, so without this every remaining item would still have sent one request.
+  - A Gemini run is always paced; other providers are paced only with `--rpm`.
+- **E2, resume** (`--resume REPORT`).
+  - The configuration must match: corpus, golden items, generation, gate, retrieval and
+    prompt configuration.
+  - Kept: every run with a status that is not `failed`/`provider_unavailable`.
+  - Asked again: errors, provider failures and runs never reached.
+  - Results come out in run order. The report records `resumed_from` and `pacing`
+    (retries, seconds waited, `stopped`, `not_run`). A stopped run exits 3 and prints the
+    resume command.
+- **E3, prompt switches** (`PromptConfig`).
+  - `--prompt-version answer-prompt-1|2` and `--prompt-evidence N` (1–40).
+  - `answer-prompt-1` is rebuilt from P13.6. Its instructions match the P13.6 text byte for
+    byte; checked against the file at `2ec9324^` when it was built.
+  - The product's path passes no configuration and is unchanged.
+  - The report records `prompt_config`. `eval compare` declares it only when it is not
+    the product's, so default runs still compare with baselines written before the field.
+- **E4, preflight.**
+  - The Phase 12 `ProviderTester.gemini` (`GET /models/{model}`, public targets only)
+    runs before a Gemini evaluation sends anything; `--preflight-only` stops there.
+  - Without a key it returns `credential_missing` and sends nothing.
+
+**Change to the estimate.** The conflict-candidate hint (stage 2's fourth variant) has no
+code. It was built in P13.7, measured as firing on 86% of dev prompts without a labelled
+conflict, and removed (evaluation-plan §20). A hint "with a precision floor" needs a new
+design and a decision of its own. Without it, stage 2 is three dev runs (~318 calls), and
+the plan is **~725 calls** (≤ ~1,020).
+
+**Verification.**
+- **New tests:**
+  - `tests/evals/test_quota_bound.py`: pacing, the single retry, the per-day latch,
+    pass-through of other failures, what a resume keeps and refuses, and the preflight
+    (only a GET of the model; nothing without a key).
+  - `tests/answering/golden/test_quota_bound_run.py`: over the real corpus, a run stopped
+    by a per-day quota sends nothing more, and its resume ends with the uninterrupted
+    run's outcomes.
+  - Prompt-version and budget tests, and the compare-key test.
+- **Results:**
+  - Evaluation, answering, provider and CLI tests: 513 passed.
+  - Golden answer package: 6 passed and 2 failed, both known before this change. One is
+    O12. The other is the answer-A reproduction, INCOMPARABLE because of the golden-set
+    change only.
+- **Identity check.** A fake answer run (configuration A) compared with `answer-A.json`
+  using `--allow-golden-change` showed:
+  - the 171 pre-F2 runs unchanged, with **0 item-level findings**;
+  - every security metric 0;
+  - one declared change, `retrieval_config_version: None -> retrieval-6`. It predates
+    this work: the baseline was written before P13.5 added that field.
+
+  This check was verification only; no baseline was written, and F2e still needs its own
+  go-ahead.
+- `ruff` and `mypy` are clean.
+
+**Next for F4, from the owner:**
+1. Create a key in AI Studio and set `LATTICE_GEMINI_API_KEY` in the local environment
+   file.
+2. Read the project's RPM and RPD for `gemini-3.5-flash-lite` there.
+3. Confirm the region is available.
+
+Then, on the owner's go-ahead: `--preflight-only`, then stage 0 (5 dev items).
+

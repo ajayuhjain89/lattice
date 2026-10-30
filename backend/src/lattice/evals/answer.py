@@ -61,8 +61,24 @@ beyond the configured generator):
   egress), counted per chunk.
 
 With a fake or scripted generator these measure the pipeline, never answer quality.
+
+**Quota-bound runs** (phase-13-followups §12, E1-E3; evaluation only):
+
+* *pacing* (``Pacer``) -- at most ``rpm`` generation calls a minute; a per-minute 429
+  (``rate_limited``) waits ``retry_wait`` seconds and sends the call once more; a
+  per-day quota (``quota_exhausted``) stops the run after that item. The adapter's own
+  latch lives on one provider instance and the evaluation builds one per Ask, so without
+  the pacer every remaining item would still send one request;
+* *resume* -- a run continued from an earlier report of the same configuration (corpus,
+  golden items, generation, gate, retrieval and prompt configuration) keeps that
+  report's runs and asks only the ones it lacks or that failed for want of the provider
+  (``failed``/``provider_unavailable``, or an error), then reports them all as one run
+  that records what it was resumed from;
+* *prompt configuration* (``PromptConfig``) -- the prompt version and evidence budget,
+  recorded in the report and, when not the product's, declared to ``eval compare``.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -70,17 +86,22 @@ import statistics
 import time
 import uuid
 from collections import Counter, defaultdict
-from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass, field
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
-from typing import Any, get_args
+from typing import Any, TypeVar, get_args
 
 from pydantic import SecretStr
 from sqlalchemy import text
 
 from lattice.answering.gate import DEFAULT_GATE
 from lattice.answering.models import Answer, AnswerStatus, AskRequest
-from lattice.answering.prompt import MAX_PROMPT_CHARS, MAX_PROMPT_EVIDENCE
+from lattice.answering.prompt import (
+    DEFAULT_PROMPT,
+    MAX_PROMPT_CHARS,
+    MAX_PROMPT_EVIDENCE,
+    PromptConfig,
+)
 from lattice.answering.service import OFFLINE_GENERATION_DEADLINE_SECONDS, AskDependencies, ask
 from lattice.dataset.access import EGRESS_LEVEL
 from lattice.dataset.lint import Dataset
@@ -101,8 +122,10 @@ from lattice.evals.stats import distribution, percentile, proportion
 from lattice.providers import configuration
 from lattice.providers.embedding import EmbeddingProvider
 from lattice.providers.generation import (
+    GenerationError,
     GenerationProvider,
     GenerationRequest,
+    GenerationResult,
     RecordingGenerationProvider,
 )
 from lattice.providers.generation_factory import Declaration, GenerationFactory
@@ -141,11 +164,90 @@ class GenerationSpec:
     retention_mode: str = "none"
 
 
-class RecordingFactory:
-    """The product's factory, with every provider it builds wrapped in a recorder."""
+_T = TypeVar("_T")
+RATE_LIMITED = "generation_failed:rate_limited"
+QUOTA_EXHAUSTED = "generation_failed:quota_exhausted"
 
-    def __init__(self, inner: GenerationFactory) -> None:
+
+class Pacer:
+    """Spaces generation calls and handles quota answers for one evaluation run (module
+    docstring, *quota-bound runs*). ``clock`` and ``sleep`` are replaceable for tests."""
+
+    def __init__(
+        self,
+        rpm: float | None = None,
+        *,
+        retry_wait: float = 60.0,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
+        if rpm is not None and rpm <= 0:
+            raise ValueError("--rpm must be positive")
+        self.rpm = rpm
+        self.interval = 60.0 / rpm if rpm else 0.0
+        self.retry_wait = retry_wait
+        self._clock = clock
+        self._sleep = sleep
+        self._last: float | None = None
+        self.exhausted = False
+        self.retries = 0
+        self.waited_seconds = 0.0
+
+    async def send(self, call: Callable[[], Awaitable[_T]]) -> _T:
+        if self.exhausted:
+            raise GenerationError(QUOTA_EXHAUSTED)  # nothing more is sent this run
+        retried = False
+        while True:
+            await self._space()
+            try:
+                return await call()
+            except GenerationError as exc:
+                if exc.code == QUOTA_EXHAUSTED:
+                    self.exhausted = True
+                if exc.code != RATE_LIMITED or retried:
+                    raise
+            retried = True
+            self.retries += 1
+            await self._wait(self.retry_wait)
+
+    async def _space(self) -> None:
+        if self._last is not None:
+            gap = self.interval - (self._clock() - self._last)
+            if gap > 0:
+                await self._wait(gap)
+        self._last = self._clock()
+
+    async def _wait(self, seconds: float) -> None:
+        self.waited_seconds += seconds
+        await self._sleep(seconds)
+
+    def record(self) -> dict[str, Any]:
+        return {
+            "rpm": self.rpm,
+            "retries": self.retries,
+            "waited_seconds": round(self.waited_seconds, 1),
+            "stopped": "quota_exhausted" if self.exhausted else None,
+        }
+
+
+@dataclass
+class PacedGenerationProvider(RecordingGenerationProvider):
+    """A recorder whose calls go through the run's ``Pacer``."""
+
+    pacer: Pacer = field(default_factory=Pacer)
+
+    async def generate(self, request: GenerationRequest) -> GenerationResult:
+        record = super().generate
+        return await self.pacer.send(lambda: record(request))
+
+
+class RecordingFactory:
+    """The product's factory, with every provider it builds wrapped in a recorder (and,
+    for a quota-bound run, paced)."""
+
+    def __init__(self, inner: GenerationFactory, pacer: Pacer | None = None) -> None:
         self.inner = inner
+        self.pacer = pacer
         self.requests: list[GenerationRequest] = []
         self.secrets: list[SecretStr] = []
 
@@ -157,7 +259,12 @@ class RecordingFactory:
     ) -> GenerationProvider:
         if secret is not None:
             self.secrets.append(secret)
-        recorder = RecordingGenerationProvider(self.inner.build(config, credential, secret))
+        built = self.inner.build(config, credential, secret)
+        recorder = (
+            RecordingGenerationProvider(built)
+            if self.pacer is None
+            else PacedGenerationProvider(built, pacer=self.pacer)
+        )
         recorder.requests = self.requests
         return recorder
 
@@ -338,6 +445,7 @@ async def evaluate_item(
     recorder: RecordingFactory,
     judge: "Judge | None",
     retrieval_config: RetrievalConfig = DEFAULT_CONFIG,
+    prompt_config: PromptConfig = DEFAULT_PROMPT,
 ) -> AnswerItemResult:
     out = AnswerItemResult(
         id=item.id,
@@ -383,6 +491,7 @@ async def evaluate_item(
             deps=deps,
             config=retrieval_config,
             now=AS_OF,
+            prompt_config=prompt_config,
         )
     except LatticeError as exc:
         out.error = exc.code.value
@@ -710,6 +819,10 @@ class AnswerReport:
     gate_version: str = DEFAULT_GATE.version
     # P13.5: the retrieval configuration the Asks ran with (``--set`` names overrides).
     retrieval_config_version: str = DEFAULT_CONFIG.version
+    # phase-13-followups §12 (E1-E3): the prompt configuration, pacing and resumption.
+    prompt_config: dict[str, Any] = field(default_factory=lambda: prompt_record(DEFAULT_PROMPT))
+    pacing: dict[str, Any] | None = None
+    resumed_from: list[str] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
@@ -723,7 +836,9 @@ def _rate(values: Sequence[bool]) -> float | None:
     return round(sum(values) / len(values), 4) if values else None
 
 
-def foundation(ran: Sequence[AnswerItemResult]) -> dict[str, Any]:
+def foundation(
+    ran: Sequence[AnswerItemResult], max_items: int = MAX_PROMPT_EVIDENCE
+) -> dict[str, Any]:
     """The P13.1 pipeline metrics (module docstring), every rate with its denominator."""
     confusion: dict[str, dict[str, int]] = {}
     for r in ran:
@@ -790,11 +905,9 @@ def foundation(ran: Sequence[AnswerItemResult]) -> dict[str, Any]:
                 [float(r.prompt_evidence_chars) for r in called]
             ),
             "budget": {
-                "max_items": MAX_PROMPT_EVIDENCE,
+                "max_items": max_items,
                 "max_chars": MAX_PROMPT_CHARS,
-                "prompts_at_item_limit": sum(
-                    1 for r in called if r.prompt_items >= MAX_PROMPT_EVIDENCE
-                ),
+                "prompts_at_item_limit": sum(1 for r in called if r.prompt_items >= max_items),
                 "prompts_over_80pct_chars": sum(
                     1 for r in called if r.prompt_evidence_chars > 0.8 * MAX_PROMPT_CHARS
                 ),
@@ -804,7 +917,9 @@ def foundation(ran: Sequence[AnswerItemResult]) -> dict[str, Any]:
     }
 
 
-def summarize(results: Sequence[AnswerItemResult]) -> dict[str, Any]:
+def summarize(
+    results: Sequence[AnswerItemResult], max_items: int = MAX_PROMPT_EVIDENCE
+) -> dict[str, Any]:
     ran = [r for r in results if r.status is not None]
     violations = Counter(v["kind"] for r in results for v in r.violations)
     security = {k: violations.get(k, 0) for k in SECURITY_KINDS}
@@ -908,7 +1023,7 @@ def summarize(results: Sequence[AnswerItemResult]) -> dict[str, Any]:
             "input": sum(r.usage.get("input_tokens", 0) for r in ran),
             "output": sum(r.usage.get("output_tokens", 0) for r in ran),
         },
-        "foundation": foundation(ran),
+        "foundation": foundation(ran, max_items),
     }
 
 
@@ -932,10 +1047,37 @@ async def evaluate_answers(
     judge: Judge | None = None,
     progress: Callable[[AnswerItemResult], None] | None = None,
     retrieval_config: RetrievalConfig = DEFAULT_CONFIG,
+    prompt_config: PromptConfig = DEFAULT_PROMPT,
+    pacer: Pacer | None = None,
+    previous: Mapping[str, Any] | None = None,
+    previous_name: str | None = None,
 ) -> AnswerReport:
+    """``previous`` (a report's JSON, named ``previous_name``) resumes that run: its kept
+    runs are not asked again (module docstring, *quota-bound runs*). A previous report of
+    another configuration raises ValueError before anything is asked."""
     texts = await load_texts(owner, identities.org_ids)
     platform = await database_platform(owner)
-    recorder = RecordingFactory(factory)
+    identity = {
+        "kind": "answer",
+        "generation": _generation_identity(asdict(spec)),
+        "embedding_provider": None if embedding is None else embedding.provider,
+        "embedding_model": None if embedding is None else embedding.model,
+        "judge": None if judge is None else f"{judge.provider.provider}/{judge.provider.model}",
+        "gate_version": DEFAULT_GATE.version,
+        "retrieval_config_version": retrieval_config.version,
+        "prompt_config": prompt_record(prompt_config),
+        "corpus_fingerprint": corpus.fingerprint,
+        "golden_version": golden_version(items),
+    }
+    kept: dict[tuple[str, str], AnswerItemResult] = {}
+    resumed_from: list[str] = []
+    if previous is not None:
+        problems = resume_problems(previous, identity)
+        if problems:
+            raise ValueError("cannot resume: " + "; ".join(problems))
+        kept = {(r.id, r.egress_config): r for r in kept_runs(previous)}
+        resumed_from = [*previous.get("resumed_from", []), previous_name or "previous report"]
+    recorder = RecordingFactory(factory, pacer)
     deps = AskDependencies(
         embedding=embedding,
         generation=recorder,
@@ -946,10 +1088,15 @@ async def evaluate_answers(
     for item in items:
         for config, expected in item.expectations():
             runs[(item.organization, config)].append((item, expected))
-    results: list[AnswerItemResult] = []
+    order = [(item.id, egress) for (_, egress), batch in sorted(runs.items()) for item, _ in batch]
+    results: list[AnswerItemResult] = list(kept.values())
+    stopped = False
     for (org, egress), batch in sorted(runs.items()):
+        todo = [(item, expected) for item, expected in batch if (item.id, egress) not in kept]
+        if stopped or not todo:
+            continue
         await configure(owner, identities.org_ids[org], spec, egress)
-        for item, expected in batch:
+        for item, expected in todo:
             result = await evaluate_item(
                 app,
                 item,
@@ -963,10 +1110,16 @@ async def evaluate_answers(
                 recorder=recorder,
                 judge=judge,
                 retrieval_config=retrieval_config,
+                prompt_config=prompt_config,
             )
             results.append(result)
             if progress is not None:
                 progress(result)
+            if pacer is not None and pacer.exhausted:
+                stopped = True  # the per-day quota: resume this report later
+                break
+    position = {key: n for n, key in enumerate(order)}
+    results.sort(key=lambda r: position.get((r.id, r.egress_config), len(position)))
     for org_id in identities.org_ids.values():
         await configure(owner, org_id, spec, "default")  # leave the safe default
     return AnswerReport(
@@ -977,14 +1130,59 @@ async def evaluate_answers(
         judge=None
         if judge is None
         else f"{judge.provider.provider}/{judge.provider.model} {JUDGE_VERSION}",
-        summary=summarize(results),
+        summary=summarize(results, prompt_config.max_evidence),
         items=results,
         embedding_model=None if embedding is None else embedding.model,
         corpus_fingerprint=corpus.fingerprint,
         golden_version=golden_version(items),
         database_platform=platform,
         retrieval_config_version=retrieval_config.version,
+        prompt_config=prompt_record(prompt_config),
+        pacing=None if pacer is None else pacer.record() | {"not_run": len(order) - len(results)},
+        resumed_from=resumed_from,
     )
+
+
+def prompt_record(config: PromptConfig) -> dict[str, Any]:
+    return {"version": config.version, "max_evidence": config.max_evidence}
+
+
+def _generation_identity(generation: Mapping[str, Any]) -> dict[str, Any]:
+    return {k: generation.get(k) for k in ("provider", "model", "deployment", "data_use")}
+
+
+def resume_problems(previous: Mapping[str, Any], identity: Mapping[str, Any]) -> list[str]:
+    """What differs between a previous report and the run that would resume it."""
+    found = {
+        "kind": previous.get("kind"),
+        "generation": _generation_identity(previous.get("generation", {})),
+        "embedding_provider": previous.get("embedding_provider"),
+        "embedding_model": previous.get("embedding_model"),
+        "judge": (previous.get("judge") or "").rsplit(" ", 1)[0] or None,
+        "gate_version": previous.get("gate_version"),
+        "retrieval_config_version": previous.get("retrieval_config_version"),
+        "prompt_config": previous.get("prompt_config"),
+        "corpus_fingerprint": previous.get("corpus_fingerprint"),
+        "golden_version": previous.get("golden_version"),
+    }
+    return [f"{key} differs" for key, value in identity.items() if found[key] != value]
+
+
+def kept_runs(previous: Mapping[str, Any]) -> list[AnswerItemResult]:
+    """The previous report's runs that need no new Ask: not an error, and not failed for
+    want of the provider."""
+    names = {f.name for f in fields(AnswerItemResult)}
+    runs = [
+        AnswerItemResult(**{k: v for k, v in row.items() if k in names})
+        for row in previous["items"]
+    ]
+    return [
+        r
+        for r in runs
+        if r.error is None
+        and r.status is not None
+        and not (r.status == "failed" and r.status_reason == "provider_unavailable")
+    ]
 
 
 def render_markdown(report: AnswerReport) -> str:

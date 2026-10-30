@@ -45,6 +45,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from lattice.answering.prompt import DEFAULT_PROMPT
+
 SCHEMA = "lattice-eval-baseline/1"
 KS = (1, 5, 10, 20)
 PRIMARY_K = 10
@@ -121,7 +123,16 @@ def _answer_configuration(report: Mapping[str, Any]) -> dict[str, Any]:
         "gate_version": report.get("gate_version"),
         # P13.5; reports and baselines from before it have none.
         "retrieval_config_version": report.get("retrieval_config_version"),
+        # phase-13-followups §12 (E3): only another prompt than the product's is a declared
+        # change, so the product's prompt compares with baselines from before the field.
+        "prompt_config": _prompt_config(report),
     }
+
+
+def _prompt_config(report: Mapping[str, Any]) -> dict[str, Any] | None:
+    config = report.get("prompt_config")
+    default = {"version": DEFAULT_PROMPT.version, "max_evidence": DEFAULT_PROMPT.max_evidence}
+    return None if config in (None, default) else dict(config)
 
 
 def snapshot(report: Mapping[str, Any], *, label: str) -> dict[str, Any]:

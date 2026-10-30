@@ -365,6 +365,17 @@ computed (no paid provider is configured; D-43).
   content above an external provider's egress level) and is uncalibrated (§6: no
   30-item human calibration exists), so its scores gate nothing. No cost estimate is
   printed (no paid provider is configured).
+- Quota-bound answer runs (**built, phase-13-followups §12, E1–E4**):
+  - `--rpm N` spaces the generation calls. A Gemini run is always paced: a per-minute 429
+    waits 60 s and retries once, and a per-day quota stops the run after that item.
+  - `--resume REPORT` continues a stopped run of the same configuration. It keeps the
+    finished runs, asks the missing and provider-failed ones, and writes one report that
+    records what it resumed. A stopped run exits 3.
+  - Before a Gemini run sends anything, a preflight (`GET /models/{model}`: no
+    generation, no quota) checks the key and model. `--preflight-only` stops there.
+  - `--prompt-version answer-prompt-1|2` and `--prompt-evidence N` evaluate another
+    prompt. The product keeps `answer-prompt-2` and 12 items. A non-default prompt is a
+    declared change to `eval compare`; the default compares with older baselines.
 - `--no-rerank` (retrieval, **built, P13.1**): the rerank ablation, every rerank_v1
   weight 0 so evidence follows the RRF order; its configuration version is
   `retrieval-6+rrf-only`, never the product's.

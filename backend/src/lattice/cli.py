@@ -39,7 +39,8 @@
         organization's own generation provider, validation; prints the answer.
     lattice eval answer [--generation fake|ollama|gemini] [--model M] [--embedding ...]
                         [--judge] [--category C ...] [--persona P ...] [--item ID ...]
-                        [--sealed --reason R]
+                        [--sealed --reason R] [--rpm N] [--resume REPORT] [--preflight-only]
+                        [--prompt-version V] [--prompt-evidence N]
         Generation and security metrics over the golden set (development/test only).
     lattice models list | fetch NAME | verify NAME
         Pinned local embedding models: cache state, explicit download, re-hash.
