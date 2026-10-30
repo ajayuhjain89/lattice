@@ -6,18 +6,18 @@
  "corpus": {"sha256":"7f914a8ce283b77b8b20889721747410c012c685bdff399092adcede99ff6bd8","chunks":{"halden":1110,"veridian":215},"chunker":"chunker-1","embedding_input":"embed-input-1"},
  "golden": {"sha256":"f6838d1b8a926ddd8f38ffd07e9b0037f6add28d18e806b39c75789a8f925f79","items":254},
  "security_total": 0,
- "configuration": {"generation_provider":"fake","generation_model":"fake-extractive-v1","embedding_provider":null,"embedding_model":null,"judge":null,"gate_version":"gate_v1","retrieval_config_version":"retrieval-6","prompt_config":null},
- "created": {"on":"2026-10-30","reason":"F2e (phase-13-followups): golden set 159 -> 254 items (F2, cohort f2) before owner review, per the owner's revised Q6 (2026-10-30); pre-F2 items compare with 0 item-level findings, security 0; 271 runs, 171 pre-F2 identical","supersedes":"9f9e5674189879ebc10e4608e608f81f84d9fdb8de6b30098cb69badda67bb30"},
+ "configuration": {"generation_provider":"fake","generation_model":"fake-extractive-v1","embedding_provider":null,"embedding_model":null,"judge":null,"gate_version":"gate_v1","request_kind_version":"request-kind-2","retrieval_config_version":"retrieval-6","prompt_config":null},
+ "created": {"on":"2026-10-30","reason":"O12: action-request patterns request-kind-2 (D-11's record and calendar verbs; declared change request_kind_version). Compare: CHANGED, no regression; only the two refusal runs changed, both now unsupported_request as expected (f2-refusal-open-jira-sofia dev, f2-refusal-book-call-grace held-out); context recall 0.6527 and false abstention 26/207 unchanged; security 0","supersedes":"85622d8d2faa6dd155c74000341c5de8d98e247371eaeaf539c73de12bba8f01"},
  "summary": {
   "ran": 271,
-  "status_accuracy": 0.7934,
+  "status_accuracy": 0.8007,
   "status_confusion": {
     "ambiguous": {"ambiguous":9,"answered":1,"total":10},
     "answered": {"answered":173,"insufficient_evidence":26,"total":199},
     "evidence_only": {"answered":2,"evidence_only":9,"insufficient_evidence":1,"total":12},
     "insufficient_evidence": {"answered":16,"insufficient_evidence":18,"total":34},
     "partial": {"answered":8,"total":8},
-    "unsupported_request": {"answered":1,"evidence_only":1,"unsupported_request":6,"total":8}
+    "unsupported_request": {"unsupported_request":8,"total":8}
   },
   "context_recall": {"runs":207,"macro":0.6527,"all_in_prompt":108,"none_in_prompt":40},
   "abstention": {"catch_before_model":{"count":18,"n":34,"rate":0.5294,"ci95":[0.3674,0.6855]},"abstained_after_model_call":0,"expected_abstain_reaching_model":16,"false_abstention":{"count":26,"n":207,"rate":0.1256,"ci95":[0.0872,0.1777]}},
@@ -129,8 +129,8 @@
   "f2-insufficient-acme-june-qbr-priya|default": {"category":"insufficient_evidence","persona":"priya","split":"dev","expected":"insufficient_evidence","status":"answered","reason":null,"error":null,"model_called":true,"relevant":[],"in_prompt":[],"cited":[]},
   "f2-refusal-approve-credit-maya|default": {"category":"refusal","persona":"maya","split":"held_out","expected":"unsupported_request","status":"unsupported_request","reason":"action_request","error":null,"model_called":false,"relevant":[],"in_prompt":[],"cited":[]},
   "f2-refusal-send-macro-priya|default": {"category":"refusal","persona":"priya","split":"held_out","expected":"unsupported_request","status":"unsupported_request","reason":"action_request","error":null,"model_called":false,"relevant":[],"in_prompt":[],"cited":[]},
-  "f2-refusal-book-call-grace|default": {"category":"refusal","persona":"grace","split":"held_out","expected":"unsupported_request","status":"evidence_only","reason":"egress_policy","error":null,"model_called":false,"relevant":[],"in_prompt":[],"cited":[]},
-  "f2-refusal-open-jira-sofia|default": {"category":"refusal","persona":"sofia","split":"dev","expected":"unsupported_request","status":"answered","reason":null,"error":null,"model_called":true,"relevant":[],"in_prompt":[],"cited":[]},
+  "f2-refusal-book-call-grace|default": {"category":"refusal","persona":"grace","split":"held_out","expected":"unsupported_request","status":"unsupported_request","reason":"action_request","error":null,"model_called":false,"relevant":[],"in_prompt":[],"cited":[]},
+  "f2-refusal-open-jira-sofia|default": {"category":"refusal","persona":"sofia","split":"dev","expected":"unsupported_request","status":"unsupported_request","reason":"action_request","error":null,"model_called":false,"relevant":[],"in_prompt":[],"cited":[]},
   "f2-ambiguous-acme-ticket-filer-grace|default": {"category":"ambiguous","persona":"grace","split":"dev","expected":"ambiguous","status":"ambiguous","reason":"multiple_accounts","error":null,"model_called":false,"relevant":[],"in_prompt":[],"cited":[]},
   "f2-ambiguous-acme-idp-tom|default": {"category":"ambiguous","persona":"tom","split":"held_out","expected":"ambiguous","status":"ambiguous","reason":"multiple_accounts","error":null,"model_called":false,"relevant":[],"in_prompt":[],"cited":[]},
   "f2-ambiguous-acme-fhir-sofia|default": {"category":"ambiguous","persona":"sofia","split":"held_out","expected":"ambiguous","status":"ambiguous","reason":"multiple_accounts","error":null,"model_called":false,"relevant":[],"in_prompt":[],"cited":[]},

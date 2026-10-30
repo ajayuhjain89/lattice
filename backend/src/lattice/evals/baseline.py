@@ -127,6 +127,8 @@ def _answer_configuration(report: Mapping[str, Any]) -> dict[str, Any]:
         "judge": report.get("judge"),
         # P13.3; reports and baselines from before the gate have none.
         "gate_version": report.get("gate_version"),
+        # O12; reports and baselines from before it have none.
+        "request_kind_version": report.get("request_kind_version"),
         # P13.5; reports and baselines from before it have none.
         "retrieval_config_version": report.get("retrieval_config_version"),
         # phase-13-followups §12 (E3): only another prompt than the product's is a declared

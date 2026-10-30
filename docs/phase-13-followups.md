@@ -24,7 +24,7 @@ checkpoint, as in every phase.
 | O9 | Citation completeness is measured, not enforced | Trace counts `decisive_in_prompt` / `decisive_cited` | As a rule it mislabelled 8/119 fake runs; real effect unknown | Answer status honesty |
 | O10 | Term statistics scan the reader's whole corpus | +1 statement per Ask, a few ms at 1,300 chunks; measured at 10× and 50× in F3 (§6) | Linear in the reader's permitted documents: the authorization predicate itself | Phase 14 scale (design options in §6) |
 | O11 | Local Node 23.7 cannot run the web unit tests after undici 8.12 | **Done in F3**: `engines` `^22.19.0 \|\| >=24`, README prerequisite | undici needs zlib zstd (Node ≥ 22.19 / ≥ 23.8) | — |
-| O12 | The answer pipeline misses some action requests (D-11) | Found at F2c (§9): two new refusal items, e.g. "Book a call with Priscilla Vance for Monday.", get `evidence_only` instead of `unsupported_request`; owner chose on 2026-10-29 to record it and fix it as an F5 step (§11) | The request-kind detector does not cover these phrasings | `test_every_golden_item_passes_the_security_gate` fails until fixed or decided |
+| O12 | The answer pipeline misses some action requests (D-11) | **Done (§20)**: the detector recognises D-11's record and calendar verbs (`request-kind-2`); both refusal items now get `unsupported_request`, and no other status changed | — | — |
 | O13 | Configuration C's query embeddings depend on which questions share a batch | **Done in F5.0** (§16): the evaluation asks a local model one question per call, as the product does. Found at F2e (§13): the local model padded each batch of questions to its longest member | External providers keep their batches (per-request quotas); the fake model's vectors are per text anyway | — |
 
 ## 2. Principles carried over
@@ -1160,4 +1160,41 @@ local production-shaped stack (implementation-plan D-46):
 
 Unchanged: tune on dev only, security 0 in every run, never push or merge without the
 owner's go-ahead, and zero paid infrastructure.
+
+## 20. O12 delivery record (2026-10-30): the D-11 detector gap closed
+
+**Change** (`lattice.answering.request_kind`, version `request-kind-2`).
+- **New verbs.** The detector now recognises imperatives that act on a calendar, ticket
+  or record, taken from D-11's definition: book, open, file, raise, log, submit, post,
+  add, set (up), arrange, mark, move, link, attach, archive, merge and issue. It also
+  covers sharing with someone else; inviting, pinging or adding a person; and "remind
+  me to …".
+- **Guard against nouns.** Each verb counts only with an object an imperative takes: an
+  article, a pronoun or a ticket key. "Open" counts only with one that creates something
+  ("Open a ticket", never "Open the …"). This keeps "Open issues?", "Book of business?",
+  "Mark Chen's renewal?", "Share the latest on Acme" and "Remind me what …" answerable.
+- **Declared version.** Answer reports and baselines record `request_kind_version`, so
+  the change is a declared one for `eval compare`.
+
+**How it was shaped (dev only).**
+- `tests/answering/test_request_kind.py` holds 23 authored action phrasings and 23 authored
+  noun-first questions that must stay answerable.
+- A new test classifies **every dev question** exactly as labelled. The dev split had one
+  miss of this kind: "Open a Jira ticket …".
+- The held-out item that found the gap was not used to write the patterns.
+
+**Confirmation on all items: answer A, 271 runs.**
+- `eval compare` reads CHANGED under the declared change, with no regression. Only two
+  runs changed, both refusal items, now `unsupported_request` as expected:
+  - `f2-refusal-open-jira-sofia` (dev): was answered by the model;
+  - `f2-refusal-book-call-grace` (held-out): was `evidence_only`.
+
+  This is the held-out item's one look.
+- Status accuracy rose from 0.793 to 0.801. Context recall (0.6527) and false abstention
+  (26 of 207) are unchanged, so no answerable question became a refusal. Security 0.
+- `answer-A.json` is regenerated with the reason. The retrieval baselines are untouched,
+  because the detector does not affect retrieval.
+- `test_every_golden_item_passes_the_security_gate` now passes.
+
+**Next:** the owner's choice on the label review (§19), then F6.
 

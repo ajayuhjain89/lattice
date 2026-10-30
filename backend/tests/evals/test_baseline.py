@@ -382,3 +382,13 @@ def test_only_one_question_per_call_is_a_declared_query_embedding_change() -> No
     result = baseline.compare(base, single)
     assert result.intended == ["query_embedding: None -> per_question"]
     assert result.verdict == "changed"
+
+
+def test_a_new_action_request_detector_is_a_declared_change() -> None:
+    # O12: baselines from before the field have no detector version; its arrival is
+    # declared, so the refusal runs it changes are reported, never drift.
+    base = _answer_report(_answer_run("nps"))
+    run = base | {"request_kind_version": "request-kind-2"}
+    result = baseline.compare(base, run)
+    assert result.intended == ["request_kind_version: None -> request-kind-2"]
+    assert baseline.compare(run, run).verdict == "identical"

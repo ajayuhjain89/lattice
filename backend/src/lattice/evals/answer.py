@@ -102,6 +102,7 @@ from lattice.answering.prompt import (
     MAX_PROMPT_EVIDENCE,
     PromptConfig,
 )
+from lattice.answering.request_kind import REQUEST_KIND_VERSION
 from lattice.answering.service import OFFLINE_GENERATION_DEADLINE_SECONDS, AskDependencies, ask
 from lattice.dataset.access import EGRESS_LEVEL
 from lattice.dataset.lint import Dataset
@@ -817,6 +818,8 @@ class AnswerReport:
     database_platform: str = "unknown"
     # P13.3: the relevance gate's version (a declared change for ``eval compare``).
     gate_version: str = DEFAULT_GATE.version
+    # O12: the action-request patterns' version (a declared change for ``eval compare``).
+    request_kind_version: str = REQUEST_KIND_VERSION
     # P13.5: the retrieval configuration the Asks ran with (``--set`` names overrides).
     retrieval_config_version: str = DEFAULT_CONFIG.version
     # phase-13-followups §12 (E1-E3): the prompt configuration, pacing and resumption.
@@ -1064,6 +1067,7 @@ async def evaluate_answers(
         "embedding_model": None if embedding is None else embedding.model,
         "judge": None if judge is None else f"{judge.provider.provider}/{judge.provider.model}",
         "gate_version": DEFAULT_GATE.version,
+        "request_kind_version": REQUEST_KIND_VERSION,
         "retrieval_config_version": retrieval_config.version,
         "prompt_config": prompt_record(prompt_config),
         "corpus_fingerprint": corpus.fingerprint,
@@ -1160,6 +1164,7 @@ def resume_problems(previous: Mapping[str, Any], identity: Mapping[str, Any]) ->
         "embedding_model": previous.get("embedding_model"),
         "judge": (previous.get("judge") or "").rsplit(" ", 1)[0] or None,
         "gate_version": previous.get("gate_version"),
+        "request_kind_version": previous.get("request_kind_version"),
         "retrieval_config_version": previous.get("retrieval_config_version"),
         "prompt_config": previous.get("prompt_config"),
         "corpus_fingerprint": previous.get("corpus_fingerprint"),
