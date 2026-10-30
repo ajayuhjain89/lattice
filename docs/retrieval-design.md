@@ -203,7 +203,11 @@ Per-channel weights (`rrf_weight_*`, P13.5) exist as evaluation tunables at 1.0;
 weighting improved the held-out split (evaluation-plan §19). A second hop,
 `expansion_v1` (`retrieval.expansion`, P13.6, D-40), can add a fourth list from the best
 selected chunks' neighbours, named records and readable links; it is an evaluation
-tunable, off, because no setting improved dev (evaluation-plan §23).
+tunable, off, because no setting improved dev (evaluation-plan §23). After rerank_v1,
+`rerank_v2` (`retrieval.records`, F5.2) can reorder the pool by how much of the
+question's content lexemes a record's other pooled chunks add to its best one (one
+extra statement with the predicate; order only). It is an evaluation tunable, off,
+because no setting met the bar on dev (evaluation-plan §24).
 
 **rerank_v1** (`retrieval.rerank`, deterministic, versioned):
 

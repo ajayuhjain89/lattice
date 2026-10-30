@@ -616,3 +616,31 @@ async def test_one_question_per_call_makes_rankings_independent_of_the_selection
     assert all(subset[i] == full[i] for i in subset)
     full, subset = await rankings(items, False), await rankings(items[:4], False)
     assert any(subset[i] != full[i] for i in subset)  # the dependence this removes
+
+
+# --- rerank_v2, record-aware ranking (F5.2), an evaluation tunable ---------------------------
+
+
+async def test_record_aware_ranking_only_reorders_what_was_retrieved(
+    app_db: Database,
+    dataset: Dataset,
+    identities: Identities,
+    corpus: Corpus,
+    with_semantic: dict[str, ItemResult],
+) -> None:
+    """Every item, at the strongest setting: security 0, and the reranked pool is the one
+    rerank_v1 ranked -- rerank_v2 adds and removes nothing (phase-13-followups §17.4)."""
+    config = RetrievalConfig(
+        rerank_version="rerank_v2", record_mode="soft", record_weight=0.5, record_within=True
+    )
+    results = await _run(app_db, dataset, identities, corpus, FakeEmbeddingProvider(), config)
+    assert all(v == 0 for v in summarize(list(results.values()))["security"].values())
+    moved = 0
+    for item_id, result in results.items():
+        before = with_semantic[item_id]
+        assert result.error is None, item_id
+        assert result.violations == [], item_id
+        assert result.counts["reranked"] == before.counts["reranked"], item_id
+        assert result.counts["merged"] == before.counts["merged"], item_id
+        moved += result.evidence != before.evidence
+    assert moved > 0  # the stage ran

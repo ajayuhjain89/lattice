@@ -1867,3 +1867,48 @@ counts and chunk IDs (S10). Mutation checks (not committed): seed predicate remo
 failures; chunk predicate removed → 4. Every security metric 0 in every run above.
 Retrieval A, B (aarch64), C and answer A compare identical with their baselines with the
 code present (off).
+
+## 24. Record-aware ranking, rerank_v2 (F5.2, 2026-10-30)
+
+**Outcome: built, not adopted.** No variant met the bar on dev in A and C, so **held-out
+was not used**. `rerank_v2` (`lattice.retrieval.records`) stays as an evaluation tunable,
+off: `--set record_mode=soft|interleave --set record_weight=W --set record_within=true`.
+These settings name `rerank_v2` in the run's configuration. Design: phase-13-followups
+§17; results: §18 there.
+
+Dev screening (128 items, 100 with targets; R@10 change in points; targets gained / lost
+at 10):
+
+| Variant | A R@10 | A MRR | C R@10 | C MRR | Category down > 2 points |
+| ------- | -----: | ----: | -----: | ----: | ------------------------ |
+| reference (`retrieval-6`) | 0.745 | 0.660 | 0.761 | 0.652 | |
+| soft, w 0.15 | +1.2 (2/1) | −0.6 | 0.0 (0/0) | −1.5 | A cross_document −3.0 |
+| soft, w 0.3 | +1.2 (2/1) | −1.8 | 0.0 (0/0) | −4.2 | A cross_document −3.0 |
+| soft, w 0.5 | +1.4 (3/1) | −3.3 | −0.3 (1/2) | −5.1 | C cross_source −4.4 |
+| interleave, any w | −7.3 (15/24) | −2.7 to −5.0 | −11.6 (13/32) | −6.9 to −9.7 | lookup, prompt_injection, supersession and more |
+| within-record order only | 0.0 (0/0) | −0.2 | +0.5 (1/0) | +0.2 | none |
+| soft + within, w 0.15 / 0.3 / 0.5 | +1.2 / +1.2 / +1.4 | −0.7 / −2.0 / −3.4 | +0.5 / +0.5 / +0.2 | −1.2 / −3.9 / −4.7 | as soft |
+
+Reading:
+- **The signal is sparse.** About one record per question has any complementary
+  coverage. The question's content lexemes are few, and a record's best chunk usually
+  holds most of them. The soft lift moves at most three targets.
+- **Where it moves, it costs MRR.** A lifted record's weaker chunks pass stronger
+  single-chunk evidence.
+- **Interleaving fails like ≤ 1 chunk per document first (§19)**, for the same reason:
+  targets are often several chunks of one record.
+- **Within-record order is neutral:** one C target gained, nothing lost.
+
+Cost: one statement over the pool, p50 7 ms in A and 9 ms in C, p95 12 and 13 ms.
+
+Security: every metric 0 in every run.
+- `test_sql_structure.py` covers the coverage statement (predicate, tenant, lifecycle,
+  visible-account join).
+- `test_sql_capture.py` re-executes it as the reader: only permitted chunks, exactly the
+  reranked pool.
+- The golden suite runs every item at the strongest setting: security 0, and the same
+  merged and reranked counts as rerank_v1.
+- Mutation check (not committed): with the predicate removed, 2 tests fail.
+
+With the code present and off, retrieval A, B (aarch64), C (all 254 items) and answer A
+compare identical with their baselines.

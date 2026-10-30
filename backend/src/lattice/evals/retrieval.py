@@ -424,6 +424,8 @@ def config_overrides(
             changes[name] = json.loads(raw)
         except json.JSONDecodeError:
             changes[name] = raw
+    if changes.get("record_mode", "off") != "off" or changes.get("record_within"):
+        changes["rerank_version"] = "rerank_v2"  # F5.2: a new ranking stage runs
     return replace(config, version=f"{config.version}+{','.join(sorted(pairs))}", **changes)
 
 

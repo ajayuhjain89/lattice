@@ -1087,3 +1087,48 @@ channels already returned, so it adds and removes nothing.
 - **Effect on the gate.** The relevance gate (P13.3) judges each returned item by its own
   signals, so a different top 12 can change its decisions. Answer A re-measures them at
   step 3.
+
+## 18. F5.2 delivery record (2026-10-30): rerank_v2 built, does not qualify
+
+**Built as §17 designed**, behind evaluation tunables, off:
+- `lattice.retrieval.records`: the coverage statement, record gains, and the soft,
+  interleave and within-record orders;
+- `RetrievalConfig.record_mode`, `record_weight` (at most 0.5) and `record_within`.
+  `--set` names `rerank_v2` when any of them is on;
+- the trace gains `record_gain` per reranked chunk and a `records_lifted` count: numbers
+  only.
+
+**Dev screening (128 dev items), A then C:** 11 runs each, the reference included.
+Details are in evaluation-plan §24.
+- **Best in A:** soft, w 0.5: +1.4 points (3 targets gained, 1 lost), MRR −3.3.
+- **Best in C:** within-record order (alone or with soft, w 0.15 or 0.3): +0.5 points
+  (1 target gained).
+- **Interleave:** −7.3 in A and −11.6 in C.
+- Security was 0 in all 22 runs. The watchdog recorded the lowest free memory at 26% and
+  the largest swap growth at 1.3 GB, on the full C run.
+
+**Verdict: no variant qualifies.** No variant gains +2 points in both A and C, and the
+gains in A cost MRR. **No held-out look was made**, so the held-out items stay unseen for
+this change. `retrieval-6` and `rerank_v1` stay the product's.
+
+**Why the §17.1 ceiling was not reached.** 35 C targets sit in the pool while their record
+misses the top 10, but complementary coverage reaches about one record per question. The
+question's content lexemes are few, and a record's best chunk usually holds them. The
+evidence that would lift those targets is not lexical coverage. The misses are ordering
+among chunks that share the topic, as Phase 13 found, and no deterministic signal tried
+so far separates them.
+
+**Checks.**
+- New tests: `test_record_rank.py` (7 tests), the coverage statement in
+  `test_sql_structure.py`, `test_sql_capture.py` (6 items) and a golden test over every
+  item.
+- Retrieval, eval and answer-golden packages: 622 passed and 1 failed. The failure is O12,
+  as recorded.
+- A, B and answer A compare identical with the code present. C over all 254 items
+  compares IDENTICAL.
+- mypy and ruff are clean.
+
+**Next (needs the owner's go-ahead):** O12, the D-11 detector gap, shaped on dev (§14).
+F5.5 (gate recalibration) and F5.6 (conflict re-measure) follow. F5.3 waits on its free
+diagnostic, then D-45.
+

@@ -68,7 +68,7 @@ class QuestionTerms:
     text_search_config: str
 
 
-def _coverage_columns(terms: QuestionTerms | None) -> tuple[Any, Any]:
+def coverage_columns(terms: QuestionTerms | None) -> tuple[Any, Any]:
     if terms is None:
         empty = literal([], ARRAY(Text))
         return empty.label("terms_matched"), empty.label("question_terms")
@@ -131,7 +131,7 @@ def evidence_statement(
             VISIBLE_ACCOUNT.c.name.label("account_name"),
             predecessor.c.id.label("supersedes_document_id"),
             successors.label("superseded_by"),
-            *_coverage_columns(terms),
+            *coverage_columns(terms),
         )
         .select_from(
             chunks_with_documents(ctx)

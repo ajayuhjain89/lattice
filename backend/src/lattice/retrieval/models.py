@@ -112,6 +112,15 @@ class RetrievalConfig:
     weight_recency: float = 0.20
     weight_identifier: float = 0.50
     recency_scale_days: float = 60.0
+    # F5.2 rerank_v2 (phase-13-followups §17): record-aware ranking after rerank_v1, an
+    # evaluation tunable, off. soft: every chunk of a record is lifted by the share of the
+    # question's content lexemes its other pooled chunks add to its best one; interleave:
+    # records ordered by that lifted best score, their chunks taken in turns.
+    record_mode: Literal["off", "soft", "interleave"] = "off"
+    record_weight: float = 0.3
+    # Within a record, a chunk adding a question lexeme its higher siblings lack moves
+    # ahead of one adding none (the record keeps its positions).
+    record_within: bool = False
 
     def __post_init__(self) -> None:
         # Rendered into SQL as a constant: never anything but a known configuration.
@@ -128,6 +137,10 @@ class RetrievalConfig:
         for name in ("k_seed", "k_expand", "max_references"):
             if not 1 <= getattr(self, name) <= MAX_LIMIT:
                 raise ValueError(f"{name} out of range")
+        if self.record_mode not in ("off", "soft", "interleave"):
+            raise ValueError("unknown record_mode")
+        if not 0.0 < self.record_weight <= 0.5:
+            raise ValueError("record_weight out of range")
         for name in (
             "rrf_weight_exact",
             "rrf_weight_lexical",
@@ -145,6 +158,11 @@ class RetrievalConfig:
             "semantic": self.rrf_weight_semantic,
             "expansion": self.rrf_weight_expansion,
         }
+
+    @property
+    def record_aware(self) -> bool:
+        """Whether rerank_v2 runs (and so needs the pool's lexeme coverage)."""
+        return self.record_mode != "off" or self.record_within
 
     @property
     def lexical_weighted(self) -> bool:
