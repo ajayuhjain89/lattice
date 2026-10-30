@@ -6,9 +6,9 @@
 # the web app together until Ctrl-C. Every step is an existing `make` target and is safe
 # to re-run: migrations, seed and sync change nothing the second time.
 #
-# Answers are drafted by the development-only `fake` provider (it quotes the cited
-# evidence; no model, no key, nothing leaves the machine). It is recorded only for an
-# organization with no generation provider, so a real one you configured stays in place.
+# No answer model is configured, so each question shows the evidence the person may see,
+# with its sources, freshness and supersession (`evidence_only`). Nothing leaves the
+# machine. Drafted answers need a real model: docs/demo.md, "Drafted answers".
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -52,19 +52,8 @@ say "Applying migrations"
 make --no-print-directory migrate
 say "Loading the synthetic organizations, people and accounts"
 make --no-print-directory seed
-say "Ingesting their documents, tickets and chat (fake embeddings)"
+say "Ingesting their documents, tickets and chat (test embeddings: no model download)"
 make --no-print-directory sync
-
-say "Answer drafting"
-for org in halden veridian; do
-  if (cd backend && uv run --env-file ../.env lattice provider list --org "$org") | grep -q '^generation'; then
-    echo "$org: a generation provider is already configured; left as it is"
-  else
-    (cd backend && uv run --env-file ../.env lattice provider configure --org "$org" \
-      --purpose generation --provider fake --model fake --deployment external_api \
-      --reason "make demo: local answers without a model")
-  fi
-done
 
 say "Installing web dependencies"
 make --no-print-directory web-setup
