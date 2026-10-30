@@ -1198,3 +1198,26 @@ owner's go-ahead, and zero paid infrastructure.
 
 **Next:** the owner's choice on the label review (§19), then F6.
 
+## 21. Owner decision (2026-10-30): engineering-labelled, no review
+
+The owner chose option (b) of §19: **no owner review** of the held-out and sealed labels
+(D-41 amended).
+- **Labels.** The 126 held-out and 51 sealed labels stay `authored_*`; none becomes
+  `owner_reviewed`. Batches H1–H9 and S1–S4 stay `pending`. The engineering pre-check
+  (`docs/golden-review/precheck/H1-H9.md`) stands as the only check beyond the lint. Its
+  two flagged items keep their labels, and the flags are noted as open in F6's report.
+- **Reporting.** Every held-out and sealed figure, in F6 and afterwards, is reported as
+  **engineering-labelled, not owner-reviewed**.
+- **Follow-on work removed.** No `record-review` run, no packet regeneration, no
+  `label_source` test updates, and no second baseline regeneration: the F2e baselines (and
+  the F5.0 and O12 regenerations since) are the current ones. The planned re-report of
+  P13.3–P13.6 held-out results on the 56 old items is dropped, because no label changed.
+
+**Next:** F6, the closure checkpoint. It needs the owner's go-ahead because it includes
+the one logged sealed look.
+- Final A, B (aarch64; x86-64 by emulation) and C retrieval runs, and an answer-A run, on
+  dev and held-out, compared with the baselines.
+- One `--sealed --reason` look for A, C and answer A, logged.
+- Conflict coverage (from F5.6), latency and prompt budgets, and the full backend suite.
+- A closure record, then one push and a merge PR, each on the owner's approval.
+

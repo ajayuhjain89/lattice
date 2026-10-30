@@ -236,6 +236,10 @@ opt_in_confidential: …}`.
   held-out items, with 0 item-level findings on the pre-F2 items. The one C ranking change
   beyond the top 10 comes from question batching (phase-13-followups §13, O13). They are
   regenerated once more after the owner's review corrections.
+- **No owner review (2026-10-30, D-41 amended).** The owner chose not to review the
+  held-out and sealed labels: they stay `authored_*`, every held-out and sealed figure is
+  reported as **engineering-labelled, not owner-reviewed**, and the baselines need no
+  second regeneration (phase-13-followups §21).
 - **One question per call (2026-10-30, F5.0).** The evaluation now asks a local model one
   question per call, as the product does, so a C run over a subset ranks each item as the
   full run does. External providers keep their batches. Reports record `query_embedding`,
