@@ -557,6 +557,16 @@ After F2c the owner accepted engineering's recommendation on four open points:
 | Where this track lives | **Alongside Phase 14.** After F2e, one PR merges `phase/13-followups` (F3, F2, the review records, the new baselines) into main, so Phase 14 starts from them. F4–F6 continue as a separate track, one approved step at a time. F5 steps merge one by one, because Phase 14 also touches retrieval (O10) |
 | D-43, real-model answer evaluation | **Gemini free tier, synthetic organizations only**, subject to the estimate in §12, which must be approved before any call |
 
+### 11.1 Owner decisions (2026-10-30)
+
+The owner asked for every remaining step except F4 to go ahead, and chose:
+
+| Point | Decision |
+| ----- | -------- |
+| F1/F2d review | **Stays the owner's (D-41).** Engineering pre-checks the held-out labels (H1–H9 only; S1–S4 stay unread) and flags suspect labels with the record that shows it. Approval is the owner's alone; no item is marked `owner_reviewed` by engineering |
+| F2e timing | **Revises Q6: regenerate the baselines now, and once more after the review's corrections.** Both regenerations are recorded with reasons, and the compare check on pre-F2 items runs first |
+| F5 pacing | **Stop after each step.** Each step is built and measured on dev, then reported; the held-out look and the next step wait for the owner. F5.3 and F5.4 still need D-45 and the D-38 amendment |
+
 ## 12. F4 estimate (proposed 2026-10-29; no call made)
 
 **What is measured.** Real answer quality: status accuracy, citations, context recall,
