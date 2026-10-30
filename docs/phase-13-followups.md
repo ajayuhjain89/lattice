@@ -25,6 +25,7 @@ checkpoint, as in every phase.
 | O10 | Term statistics scan the reader's whole corpus | +1 statement per Ask, a few ms at 1,300 chunks; measured at 10× and 50× in F3 (§6) | Linear in the reader's permitted documents: the authorization predicate itself | Phase 14 scale (design options in §6) |
 | O11 | Local Node 23.7 cannot run the web unit tests after undici 8.12 | **Done in F3**: `engines` `^22.19.0 \|\| >=24`, README prerequisite | undici needs zlib zstd (Node ≥ 22.19 / ≥ 23.8) | — |
 | O12 | The answer pipeline misses some action requests (D-11) | **Done (§20)**: the detector recognises D-11's record and calendar verbs (`request-kind-2`); both refusal items now get `unsupported_request`, and no other status changed | — | — |
+| O14 | One sealed refusal request is not recognised as an action request (D-11) | Found at F6's sealed look (§22): 1 of the 2 sealed `unsupported_request` items was answered (`no_claims_for_unsupported_request` 0.5 on sealed) | The sealed item may not shape the patterns, so it was not inspected; a future fix needs new authored phrasings from D-11's definition, confirmed on a fresh held-out | Nothing gated; the model's rubric is the remaining defence |
 | O13 | Configuration C's query embeddings depend on which questions share a batch | **Done in F5.0** (§16): the evaluation asks a local model one question per call, as the product does. Found at F2e (§13): the local model padded each batch of questions to its longest member | External providers keep their batches (per-request quotas); the fake model's vectors are per text anyway | — |
 
 ## 2. Principles carried over
@@ -1220,4 +1221,105 @@ the one logged sealed look.
 - One `--sealed --reason` look for A, C and answer A, logged.
 - Conflict coverage (from F5.6), latency and prompt budgets, and the full backend suite.
 - A closure record, then one push and a merge PR, each on the owner's approval.
+
+## 22. F6 closure record (2026-10-30)
+
+**Phase 13 and its follow-ups are engineering-complete.** The product configuration is
+unchanged from Phase 13 except for the D-11 detector:
+- retrieval `retrieval-6` / `rerank_v1`;
+- gate `gate_v1`;
+- action-request detector `request-kind-2` (O12).
+
+Labels on held-out and sealed are **engineering-labelled, not owner-reviewed** (§21).
+
+**Final runs against the baselines** (every one compared item by item):
+
+| Run | Items / runs | Compare | Security |
+| --- | ------------ | ------- | -------: |
+| Retrieval A | 254 | IDENTICAL | 0 |
+| Retrieval B, aarch64 | 254 | IDENTICAL | 0 |
+| Retrieval B, x86-64 (amd64 emulation) | 254 | IDENTICAL | 0 |
+| Retrieval C (local mxbai) | 254 | IDENTICAL | 0 |
+| Answer A (fake generator) | 271 | IDENTICAL | 0 |
+
+**Figures (R@10; items with targets).** "Seen" is the 56 Phase 13 held-out items; "fresh"
+is the 70 F2 held-out items. Held-out and sealed are engineering-labelled.
+
+| Configuration | Dev | Held-out | Seen | Fresh | Sealed (42) |
+| ------------- | --: | -------: | ---: | ----: | ----------: |
+| A | 0.745 | 0.653 | 0.598 | 0.695 | 0.735 |
+| B (fake, aarch64) | 0.574 | 0.576 | 0.476 | 0.652 | — |
+| C (local mxbai) | 0.761 | 0.726 | 0.648 | 0.784 | 0.749 |
+
+**Answer A (fake generator: pipeline figures, not answer quality).**
+
+| Measure | Dev + held-out (271 runs) | Sealed (54 runs) |
+| ------- | ------------------------: | ---------------: |
+| Status accuracy | 0.801 | 0.722 |
+| Context recall | 0.653 | 0.622 |
+| Abstention caught before the model | 18 / 34 | 2 / 5 |
+| False abstention | 26 / 207 | 9 / 44 |
+| Conflict coverage, all (F5.6) | 26 / 46 = 0.565 | 4 / 6 |
+| Potential conflicts / superseded | 12 / 28, 14 / 18 | 2 / 3, 2 / 3 |
+| Action requests refused | 8 / 8 | 1 / 2 (O14) |
+
+**The sealed look.** It was made once, at this checkpoint, for A, C and answer A, and is
+logged three times in `evals/golden/provenance/sealed-access.json`. Only aggregate figures
+were read; no sealed item was opened.
+- **It confirms the dev and held-out picture.** Sealed R@10 (A 0.735, C 0.749) sits
+  between dev and held-out, and security is 0.
+- **It found one miss: O14.** One of the two sealed action requests was answered rather
+  than refused. It stays open: fixing it from the sealed item would tune on it.
+
+**Budgets (phase-13-plan §13).**
+- **Prompts:** at most 12 items and 8,948 characters of the 24,000 allowed; none over
+  80%. 180 of 200 prompts reach the 12-item limit (O8).
+- **Retrieval p95:** A 33 ms and B 81 ms, within the 150 ms budget. C 246 ms is over it:
+  its semantic statement scans 1,325 real vectors exactly, at p95 215 ms on the M1. C was
+  already above the budget at F2e (356 ms), so this is not a regression of this track.
+- **Answer pipeline p95 with the fake generator:** 57 ms.
+
+**Phase 13 completion criteria (phase-13-plan §16), re-assessed:**
+
+| # | Criterion | State |
+| - | --------- | ----- |
+| 1 | Security 0 everywhere; new statements tested | **Met**: every run above, the sealed runs included; the F5.2 coverage statement is in the SQL-structure and capture suites |
+| 2 | Held-out reported for A and C per item | **Met**: per item against the baselines, the seen and fresh slices reported |
+| 3 | G1 at D-39, G2–G5 improved, G6 ≥ 0.8, G7 ≥ baseline | **Not met.** G1 was accepted at P13.3 without meeting D-39 on held-out; no ranking change survived (P13.4–P13.6, F5.1, F5.2); G6 conflict coverage is 0.565 |
+| 4 | Validator suite; claim-level fail-closed | **Met** (P13.7, unchanged) |
+| 5 | Latency and prompt budgets | **Met for prompts, A and B; C over the retrieval p95 budget**, as before this track |
+| 6 | Golden set ≥ 150 with provenance and splits; owner review per D-41 | **Met as amended**: 305 items (128 dev, 126 held-out, 51 sealed); not owner-reviewed (D-41 amended) |
+| 7 | Real answer quality measured, or recorded as not measured | **Recorded as not measured.** F4 is optional under D-46, and no key was provided |
+| 8 | Docs as built; suites green; CI once at closure | **Met locally**: backend 3,703 tests green in two parts (below); web 35 files, 278 tests (Node 24.13); CI runs once with the closure push |
+
+**Suites.**
+- The full backend suite ran alone under the watchdog. It was stopped at 85% (3,203
+  tests, all passed) when swap grew 2.3 GB past the 2 GB limit; free memory was 45%.
+- The remaining 14 files ran on their own: 572 passed, swap growth 0.65 GB.
+- All 3,703 tests pass. O12's failure is gone, so this is the first green full suite
+  since F2c.
+
+**What the track delivered.** The engineering-labelled golden set grew from 159 to 305
+items, with a sealed split. The track also delivered:
+- label freeze, review and sealed-access tooling;
+- item-level baselines and comparison;
+- quota-bound answer-run tooling (E1–E4), ready for a key;
+- per-question query embedding (O13);
+- the D-11 detector fix (O12);
+- two retrieval experiments, recorded and left off (F5.1, F5.2).
+
+**Still open:**
+- O14 (above);
+- O5 and O6: retrieval and conflict quality not improved;
+- O7: real answer quality not measured;
+- O8: the prompt item limit binds;
+- the two pre-check flags of §21.
+
+None blocks the personal v1 (D-46).
+
+**Next (owner's approval for each):**
+1. Push `phase/13-followups`.
+2. Open the PR to `main`, where CI runs once.
+3. Merge.
+4. Phase 14: the personal v1 release.
 

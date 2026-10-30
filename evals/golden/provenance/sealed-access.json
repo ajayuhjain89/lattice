@@ -1,0 +1,45 @@
+{
+ "schema": "lattice-sealed-access/1",
+ "looks": [
+  {
+   "at": "2026-10-30T10:47:11+00:00",
+   "commit": "fbefd8c",
+   "kind": "retrieval",
+   "reason": "F6 closure (phase-13-followups \u00a721): the one sealed look of the Phase 13 follow-ups; product configuration retrieval-6 / gate_v1 / request-kind-2, no candidate adopted; labels engineering-labelled (D-41 amended)",
+   "items": 51,
+   "settings": {
+    "embedding": "none",
+    "config": "retrieval-6",
+    "set": [],
+    "no_rerank": false
+   }
+  },
+  {
+   "at": "2026-10-30T10:47:15+00:00",
+   "commit": "fbefd8c",
+   "kind": "answer",
+   "reason": "F6 closure (phase-13-followups \u00a721): the one sealed look of the Phase 13 follow-ups; product configuration retrieval-6 / gate_v1 / request-kind-2, no candidate adopted; labels engineering-labelled (D-41 amended)",
+   "items": 51,
+   "settings": {
+    "generation": "fake",
+    "model": "fake-extractive-v1",
+    "embedding": "none",
+    "retrieval_config": "retrieval-6",
+    "set": []
+   }
+  },
+  {
+   "at": "2026-10-30T10:48:33+00:00",
+   "commit": "fbefd8c",
+   "kind": "retrieval",
+   "reason": "F6 closure (phase-13-followups \u00a721): the one sealed look of the Phase 13 follow-ups; product configuration retrieval-6 / gate_v1 / request-kind-2, no candidate adopted; labels engineering-labelled (D-41 amended)",
+   "items": 51,
+   "settings": {
+    "embedding": "local",
+    "config": "retrieval-6",
+    "set": [],
+    "no_rerank": false
+   }
+  }
+ ]
+}

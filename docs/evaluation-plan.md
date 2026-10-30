@@ -1916,3 +1916,23 @@ Security: every metric 0 in every run.
 
 With the code present and off, retrieval A, B (aarch64), C (all 254 items) and answer A
 compare identical with their baselines.
+
+## 25. Phase 13 follow-ups closure (F6, 2026-10-30)
+
+Final runs compare IDENTICAL with every baseline: retrieval A, B (aarch64 and x86-64) and
+C, and answer A. Security was 0 in all of them and in the one logged sealed look (A, C
+and answer A).
+
+R@10 by split (held-out and sealed are engineering-labelled, D-41 amended):
+
+| Configuration | Dev | Held-out | Sealed |
+| ------------- | --: | -------: | -----: |
+| A | 0.745 | 0.653 | 0.735 |
+| C | 0.761 | 0.726 | 0.749 |
+
+Answer A (fake generator): status accuracy 0.801, and 0.722 on sealed. Context recall is
+0.653, with conflict coverage 26 of 46.
+
+The sealed look found one action request not refused: open item O14. The full record,
+the budgets and the completion criteria are in phase-13-followups §22.
+
