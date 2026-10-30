@@ -835,10 +835,10 @@ for the owner after each (§11.1):
 | F5.1 | **Parked candidate**: `rrf_weight_lexical=1.5`, `rrf_k=30` (`--set`) | none | Screened on the new dev in A and C; then one held-out look (its first on these items) |
 | F5.2 | **Record-aware ranking**: score documents (best chunk plus coverage of the question across its chunks), then order the chunks within the top documents | none | A new ranking stage (`rerank_v2`), so A, B and C baselines change if adopted. Design note first, then build, then dev |
 | O12 | **D-11 detector gap** | none | The verbs come from D-11's definition (act on a calendar, ticket or record: book, open, file, set up, add, invite, post, submit, …), not from the two failing items' wording. Unit tests in `tests/answering/test_request_kind.py` hold authored phrasings, and a no-false-positive check runs over every dev question. Then the golden security test confirms on all items. Answer baselines change for the refusal runs only |
-| F5.5 | **Gate recalibration** for the two refusal patterns (paraphrase without a shared specific word; large-account questions) | none | Uses the F2 dev items in those themes; bumps `GateConfig.version`; answer A and C |
-| F5.6 | **Conflict coverage**, re-measured after F5.2 (it is bound by retrieval) | none | Measurement only, unless a step above changes it |
-| F5.3 | **Chunking or embedding-input change**, chosen by a dev diagnostic first | **D-45**, only once the diagnostic names a change (brief below) | The diagnostic costs nothing; a change re-embeds the C corpus |
-| F5.4 | **A second local embedding model** as C2 | **D-38 amendment** (brief below) | Compared with mxbai on dev |
+| F5.5 | ~~**Gate recalibration**~~ **Dropped (D-46, §19).** for the two refusal patterns (paraphrase without a shared specific word; large-account questions) | none | Uses the F2 dev items in those themes; bumps `GateConfig.version`; answer A and C |
+| F5.6 | **Conflict coverage** (folded into F6's final runs, §19), re-measured after F5.2 (it is bound by retrieval) | none | Measurement only, unless a step above changes it |
+| F5.3 | ~~**Chunking or embedding-input change**~~ **Dropped (D-46, §19).**, chosen by a dev diagnostic first | **D-45**, only once the diagnostic names a change (brief below) | The diagnostic costs nothing; a change re-embeds the C corpus |
+| F5.4 | ~~**A second local embedding model**~~ **Dropped (D-46, §19).** as C2 | **D-38 amendment** (brief below) | Compared with mxbai on dev |
 | Final | Reference against the adopted candidate on held-out, then one sealed look | owner go-ahead | Then F6 |
 
 ### 14.1 Brief: D-45, a chunking or embedding-input change
@@ -1131,4 +1131,33 @@ so far separates them.
 **Next (needs the owner's go-ahead):** O12, the D-11 detector gap, shaped on dev (§14).
 F5.5 (gate recalibration) and F5.6 (conflict re-measure) follow. F5.3 waits on its free
 diagnostic, then D-45.
+
+## 19. Re-scope (2026-10-30, D-46): a personal v1
+
+**The owner's decision.** Lattice is a personal project, not built for enterprise use, and
+there is no infrastructure budget. v1 is therefore a **personal release** verified on the
+local production-shaped stack (implementation-plan D-46):
+- **Phase 14 becomes the personal v1 release:** an honest README (what Lattice does, its
+  measured quality, what was never validated), one-command local setup and a demo
+  walkthrough.
+- **Phase 15 is removed.** External staging validation (D-22) is no longer a release gate;
+  it stays listed as never validated, and Lattice is never described as
+  production-proven. Enterprise-scale hardening and executable organization purge
+  (D-37A) are post-v1.
+
+**What changes for this track (the lean path):**
+
+| Item | Before | Now |
+| ---- | ------ | --- |
+| O12, the D-11 detector gap | F5 step | **Finish** (in progress) |
+| F5.3 chunking or embedding input (D-45) | after a diagnostic | **Dropped.** No ranking change has cleared the bar in Phase 13 or F5 |
+| F5.4 second local model (D-38 amendment) | needs approval | **Dropped** |
+| F5.5 gate recalibration | F5 step | **Dropped.** The gate stays `gate_v1`, as accepted in P13.3 |
+| F5.6 conflict coverage | measurement | **Folded into F6:** its final answer runs report conflict coverage |
+| F4 real-model answers (Gemini free tier) | on hold for the owner's key | **Optional.** Only if the owner provides a key; the E1–E4 tooling stays ready |
+| F1 / F2d label review (126 held-out, 51 sealed) | owner review of every batch | **The owner chooses one** (the last open item before F6): (a) a light pass over the batches, recorded with `record-review`; or (b) no owner review: the labels stay `authored_*`, and every held-out and sealed figure is reported as engineering-labelled, not owner-reviewed |
+| F6 closure | after F5 | **Next after O12 and the review choice:** final A, B, C and answer-A runs on dev and held-out, one logged sealed look, the full backend suite, then one push and merge on the owner's approval |
+
+Unchanged: tune on dev only, security 0 in every run, never push or merge without the
+owner's go-ahead, and zero paid infrastructure.
 

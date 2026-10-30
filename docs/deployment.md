@@ -30,8 +30,9 @@ application must never depend on it.
 > available, and **not** claimed done: real cloud staging deployment; managed PostgreSQL
 > privilege verification; managed backup/PITR verification; public TLS/origin validation;
 > real external OIDC callback validation; provider-specific deploy/rollback validation;
-> cloud RPO/RTO measurement. These are a release gate for Phase 15 (v1 GA)
-> ([phase-11-plan.md](phase-11-plan.md) §21.1).
+> cloud RPO/RTO measurement ([phase-11-plan.md](phase-11-plan.md) §21.1). Since
+> 2026-10-30 (D-46, a personal project) they are no longer a release gate: they stay
+> listed as never validated.
 
 ---
 
@@ -326,7 +327,7 @@ with `LATTICE_DB_POOL_SIZE=3` and leaves almost no operational headroom, so **st
 the 2 GiB plan (47 usable connections; D-22 as accepted for P11.1)**, which fits the
 defaults with room for operators and drills; a plan with ~100 (Render) also fits. The
 reference stack runs `LATTICE_DB_POOL_SIZE=3` per API instance on its own PostgreSQL
-(default `max_connections` 100). No pooler is added (Phase 14 revisits).
+(default `max_connections` 100). No pooler is added (post-v1, D-46).
 `lattice check-deployment` computes it (P11.2): `max_connections` minus
 `superuser_reserved_connections` and `reserved_connections` must cover `api instances × 2
 × pool + worker × 4 + 3 operators + 10 headroom` (`--api-instances`, `--api-pool-size`,
