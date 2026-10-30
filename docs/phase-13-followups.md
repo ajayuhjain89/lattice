@@ -947,4 +947,143 @@ verdict stands: its runs embedded the same batches on both sides, and its gain w
 the bar in A, which has no embeddings.
 
 **Next (needs the owner's go-ahead):** F5.2, record-aware ranking, starting with a design
-note.
+note (§17).
+
+## 17. F5.2 design note (proposed 2026-10-30): record-aware ranking, `rerank_v2`
+
+Status: **proposed; nothing built.** Building starts on the owner's go-ahead. No decision
+record is needed: the change is deterministic, adds no model or provider, and is adopted
+only under §14's protocol.
+
+### 17.1 What the dev misses say
+
+These figures come from the existing reports, on **dev items only**: configuration A from
+F2e, and configuration C from F5.0. There are 100 dev items with targets, holding 212
+targets. "Record" means a document, ticket or chat thread.
+
+| Where a target missed at 10 is | A | C |
+| ------------------------------ | -: | -: |
+| Missed at 10, all causes | 76 | 70 |
+| Its record is in the top 10 through another chunk (a sibling outranks it) | 21 | 20 |
+| Its record is not in the top 10, but the target is in the ranked pool (ranks 11–40) | 37 | 35 |
+| Its record is not in the top 10, and the target is not in the pool | 18 | 15 |
+
+- **The middle row is F5.2's target.** About half the misses are already retrieved and
+  ranked. They lose to chunks of other records, and nothing in the ranking asks whether a
+  record as a whole answers the question.
+- **The second row is a different problem:** ordering within one record. F5.2 addresses it
+  only as a variant (17.3 c).
+- **The last row is reach.** F5.2 cannot change it; that is F5.3 and F5.4 territory.
+- **Targets spread over several records.** Of the 100 items, 46 have one target record, 25
+  have two and 29 have three or more. Any record-first ordering must not crowd out a second
+  or third record.
+- **The top 10 already mixes records:** on average 6.8 distinct records, and at most 2.7
+  chunks of the most frequent one.
+
+### 17.2 What Phase 13 already ruled out (and why this differs)
+
+- **≤ 1 chunk per document first** (P13.5, evaluation-plan §19). Document R@10 rose, but
+  chunk R@10 fell 7 to 12 points, because targets are often several chunks of one record.
+  F5.2 does not cap; it reorders.
+- **Nudging a record's neighbours** (P13.6, §23). Even at weight 0.1 it displaced
+  targets: a record's other chunks are, on average, less relevant than the chunk the
+  question matched. That nudge followed adjacency and links. F5.2 lifts a record only for
+  the *question's own terms* its pooled chunks cover together, which no single chunk does.
+- **Lexical weighting** (P13.4, §18). It did not transfer from dev to held-out. F5.2
+  leaves each channel's order unchanged and works after fusion.
+
+### 17.3 Design
+
+`rerank_v2` runs after `rerank_v1`. It works only on the fused pool of 40 candidates the
+channels already returned, so it adds and removes nothing.
+
+1. **Which question terms each pooled chunk covers.** One statement over the pool's chunk
+   IDs returns, per chunk, the question's *content* lexemes that chunk contains. It reuses
+   `content_terms_matched` (`lattice.retrieval.lexical`), the P13.3 definition: framing
+   words and the names of the visible accounts named are excluded, because an account
+   name appears in every chunk of that account. Chunks found only by semantic search get
+   their lexemes too. The statement carries the shared tenant, lifecycle and authorization
+   conditions, like every retrieval statement, even though the pool was already
+   authorized.
+2. **Record coverage.**
+   - Let *Q* be the question's content lexemes and *best(d)* the highest `rerank_v1`
+     score among record *d*'s pooled chunks.
+   - Let *cov_best(d)* be the share of *Q* covered by that best chunk, and *cov(d)* the
+     share covered by the union of *d*'s pooled chunks.
+   - The record's **complementary coverage** is *gain(d) = cov(d) − cov_best(d)*: what
+     the record's other chunks add to its best one. It is 0 for a record with one pooled
+     chunk, and 0 for a question with fewer than two content lexemes.
+3. **Variants**, each an evaluation tunable (`rerank_version=rerank_v2`,
+   `record_mode=…`, `record_weight=…`):
+   - **(a) Soft lift (recommended first).** Every chunk of *d* is multiplied by
+     *(1 + w · gain(d))*, then the pool is re-sorted. The order within a record is kept,
+     and other records' chunks interleave by score. The factor is bounded (*w* ≤ 0.5, at
+     most 1.5 times), so it reorders like `rerank_v1` and never buries a strong single
+     chunk.
+   - **(b) Record first (the F5 plan's literal wording).** Records are ordered by
+     *best(d) · (1 + w · gain(d))*, then their chunks are emitted round-robin: each
+     record's best chunk, then each one's second, and so on. A strict grouping (all of
+     record 1, then record 2) is not offered, because 54 of the 100 dev items need two or
+     more records.
+   - **(c) Within-record order.** Within a record, a chunk that adds a question lexeme its
+     higher-ranked siblings lack moves ahead of one that adds none. This is aimed at the 20
+     sibling-outranked misses. It combines with (a) or (b) and is screened separately.
+4. **Selection** (`select_evidence`) is unchanged: deduplication by content hash, at most 3
+   chunks per record first, the rest deferred, and the limit.
+
+### 17.4 Security
+
+- **Order only.** Like `rerank_v1`, it reorders candidates that were already authorized.
+  Nothing is added to the pool, and E4 runs on the same set (S1, S2).
+- **The new statement** reads only chunk IDs from the pool, repeats the predicate, and
+  returns lexemes of the question, never chunk text. It joins the SQL-structure suite
+  (predicate, tenant, lifecycle), with a mutation check: removing the predicate must fail
+  the tests.
+- **No hidden account.** The excluded account names are those of *visible* accounts only,
+  as in P13.3 (D-8, D-10).
+- **Trace:** per record, counts and factor values only: no lexemes and no text (S10).
+- **Evaluation:** every security metric must be 0 in every run.
+
+### 17.5 Cost
+
+- One extra SQL statement per Ask, over at most 40 rows and at most 32 lexemes, as with
+  the gate's statistics: a few milliseconds, measured at the build step. The product pays
+  it only if F5.2 is adopted.
+- No model calls and no re-embedding. Screening the variants on dev in A and C is a few
+  minutes of local runs, one at a time, under the watchdog.
+
+### 17.6 How it is decided (the §14 protocol)
+
+1. **Build** behind the tunables, off by default. With the code present, A, B, C and
+   answer A must still compare identical with their baselines.
+2. **Dev screening**, A then C, on the 128 dev items with `--item`, reference and
+   candidate on the same selection:
+   - (a) with *w* ∈ {0.15, 0.3, 0.5};
+   - (b) with the best *w* from (a);
+   - (c) on top of the better of the two.
+
+   The variant is chosen on dev only. It qualifies only with **at least +2 points of R@10
+   in both A and C, no category down more than 2 points, and security 0.** Churn (targets
+   gained and lost) is reported beside the net figure.
+3. **One held-out look** for the qualifying choice only, reported in the seen and fresh
+   slices, with context recall from answer A. It is adopted only if held-out moves the same
+   way beyond one-item noise.
+4. **Adoption** means `rerank_v2` and `retrieval-7` become the product default, and the A,
+   B (both architectures), C and answer A baselines are regenerated with reasons. The
+   retrieval design (§6) and the evaluation plan are updated.
+5. **If nothing qualifies,** the code stays as an evaluation tunable, as P13.4 to P13.6
+   did, and the result is recorded.
+
+### 17.7 Honest expectation
+
+- **The ceiling is the 35 to 37 targets in the pool whose record misses the top 10.**
+  Moving one of them in pushes another chunk out, which may itself be a target, so the net
+  gain is smaller.
+- **Phase 13 fell short of the same +2-point bar** with ordering changes that each looked
+  plausible on paper. Complementary coverage is a new signal, not a reweighting, but it
+  may still be noise at 100 dev items. The likeliest place for it to help is cross_document
+  and cross_source; the likeliest place for it to hurt is lookup, where one chunk answers
+  the question.
+- **Effect on the gate.** The relevance gate (P13.3) judges each returned item by its own
+  signals, so a different top 12 can change its decisions. Answer A re-measures them at
+  step 3.
