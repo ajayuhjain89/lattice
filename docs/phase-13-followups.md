@@ -798,6 +798,12 @@ added. Do not read the gap as improvement.
 Retrieval golden, answer golden, eval and dataset packages: 527 passed and 1 failed. The
 failure is O12, as recorded.
 
+**Full backend suite after F2e** (isolated database on port 5440, 2026-10-30): 3,634 passed
+and 1 failed, in 19.6 minutes. The failure is O12
+(`test_every_golden_item_passes_the_security_gate`). The four baseline-compare failures
+recorded at F2c (§9) are gone. Docker stayed up throughout, with the lowest free memory
+at 29%.
+
 ## 14. F5 plan (proposed 2026-10-30)
 
 F5 starts from the F2e baselines (§13). Every step follows the same protocol, and stops
@@ -872,4 +878,31 @@ for the owner after each (§11.1):
   - (a) approve C2 for evaluation, with mxbai staying the product default unless C2
     qualifies on dev and held-out;
   - (b) not now.
+
+## 15. F5.1 delivery record (2026-10-30): the parked candidate does not qualify
+
+The parked candidate was `--set rrf_weight_lexical=1.5 --set rrf_k=30` (P13.5, dev only).
+It was screened on the **128 dev items alone** (100 with targets), reference and candidate
+over the same selection. Both runs therefore embed the same question batches (O13).
+
+| Configuration | R@10 reference → candidate | MRR reference → candidate | Categories down more than 2 points | Targets gained / lost at 10 |
+| ------------- | -------------------------- | ------------------------- | ---------------------------------- | --------------------------- |
+| A | 0.745 → 0.748 (+0.3) | 0.660 → 0.668 | cross_org −5.0, cross_document −3.0 | 3 / 2 |
+| C | 0.761 → 0.778 (+1.7) | 0.652 → 0.679 | none (cross_document −1.5) | 7 / 4 |
+
+Security was 0 in all four runs. The watchdog recorded the lowest free memory at 28% and
+the largest swap growth at 1.4 GB.
+
+**Verdict under the §14 protocol: does not qualify.**
+- The gain is below 2 points in both configurations.
+- A loses more than 2 points in two categories.
+- The C gain (+1.7) is under two items' worth, and its movement is churn: 7 targets gained
+  and 4 lost.
+
+**No held-out look was made, and nothing changes:** `retrieval-6` stays, and the
+tunables stay evaluation-only. The candidate's held-out set remains unseen, so it can
+still be re-tested later.
+
+**Next (needs the owner's go-ahead):** F5.0, per-question query embedding in evaluation
+(O13). Then F5.2, record-aware ranking: a design note first.
 
